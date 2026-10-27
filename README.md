@@ -74,10 +74,11 @@ Los informes se reconstruyen mediante código; no requieren abrir los PDF
 originales de ejemplo. El recurso gráfico de la cabecera se encuentra en
 [iconos/report_header_logo.png](iconos/report_header_logo.png).
 
-Si hay un presupuesto BC3 en la carpeta de la aplicación, se carga al arrancar.
-Los BC3 cuyo nombre empieza por `BCCA` se consideran bases de referencia. Para
-evitar la carga automática, guarda los datos en otra carpeta e impórtalos desde
-**Archivo**.
+La aplicación arranca siempre vacía, aunque haya BC3 o proyectos JSON en su
+carpeta. Abre un proyecto desde **Archivo → Recientes** o **Abrir proyecto (JSON)**,
+o utiliza **Importar presupuesto BC3**. Las bases se añaden mediante
+**Archivo → Añadir base de referencia BCCA**. El historial y la configuración
+guardada se conservan, pero no se abre ningún proyecto automáticamente.
 
 ## Pruebas y documentación del código
 

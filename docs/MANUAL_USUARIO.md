@@ -23,6 +23,10 @@ los módulos Python y la carpeta `iconos`.
 
 ## 2. Crear o abrir un proyecto
 
+La aplicación arranca siempre sin proyecto ni bases cargadas, aunque conserve
+archivos de ejemplo en su carpeta. El historial de recientes y la configuración
+guardada se mantienen; los datos se rellenan al elegir un proyecto.
+
 - **Archivo → Nuevo proyecto**: introduce un nombre y comienza un presupuesto vacío.
 - **Archivo → Importar presupuesto BC3…**: selecciona un BC3 de trabajo.
 - **Archivo → Abrir proyecto (JSON)…**: recupera un proyecto guardado.

@@ -400,7 +400,6 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.root.withdraw()
         self.addCleanup(self.root.destroy)
         with (
-            patch("bc3_gui.find_bc3_files", return_value=(None, None)),
             patch.object(BudgetApp, "_read_recent_projects", return_value=[]),
             patch.object(self.root, "state"),
         ):

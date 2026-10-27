@@ -524,15 +524,13 @@ def find_reference_files(folder: Path) -> list[Path]:
 
 class BudgetApp:
     def __init__(self, root: tk.Tk):
-        """Prepara el estado de la aplicación, la interfaz y los archivos iniciales."""
+        """Inicia la interfaz sin proyecto ni bases, conservando preferencias y recientes."""
         self.root = root
         self.root.title(APPLICATION_NAME)
         self.root.geometry("1400x820")
         self.root.minsize(1100, 650)
         self.root.state("zoomed")
         apply_theme(self.root)
-
-        self.bcca_path, self.default_budget = find_bc3_files(Path(__file__).resolve().parent)
 
         self.reference_bases: list[Bc3Dataset] = []
         self.budget_dataset: Bc3Dataset | None = None
@@ -571,11 +569,6 @@ class BudgetApp:
 
         self._build_ui()
         self.root.protocol("WM_DELETE_WINDOW", self._close_application)
-        if self.bcca_path is not None:
-            for path in find_reference_files(self.bcca_path.parent) or [self.bcca_path]:
-                self._load_bcca_file(path)
-        if self.default_budget is not None:
-            self._load_budget_file(self.default_budget)
 
     def _build_ui(self) -> None:
         """Construye menús, controles, paneles y árboles de la ventana principal."""
