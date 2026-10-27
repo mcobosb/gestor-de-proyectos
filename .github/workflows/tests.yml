@@ -1,0 +1,21 @@
+name: Pruebas
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Instalar dependencias
+        run: python -m pip install -r requirements-test.txt
+      - name: Comprobar compilacion
+        run: python -m compileall -q bc3_gui.py planning.py certifications.py budget_reports.py report_layout.py ui_theme.py figura_gantt.py bc3_to_xlsx_plan.py
+      - name: Ejecutar pruebas
+        run: python -m unittest discover -v

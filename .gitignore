@@ -1,0 +1,45 @@
+# Entornos y archivos generados por Python.
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Configuración local del editor y del sistema.
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Credenciales y configuración privada.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Presupuestos, bases de precios, proyectos y preferencias locales.
+*.bc3
+*.BC3
+*.json
+
+# Plantillas originales y documentos e informes de trabajo.
+plantillas/
+*.pdf
+*.xlsx
+*.xls
+*.csv
+
+# Resultados de pruebas y archivos temporales.
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.log
+*.tmp
+*.bak
+~$*
