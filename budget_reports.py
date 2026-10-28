@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from bc3_gui import BudgetApp, Concept, ProjectItem
+    from bc3_gui import BudgetApp
 
 
 REPORT_NAMES = (
@@ -42,6 +42,8 @@ class ReportSettings:
     signature: str = "(Fecha y firma electrónicas)"
     contractor: str = ""
     contractor_representative: str = ""
+    use_certification_template: bool = True
+    output_format: str = "pdf"
     general_expenses: float = 13.0
     industrial_profit: float = 6.0
     vat: float = 21.0
@@ -67,6 +69,14 @@ class ReportSettings:
                 if not isfinite(number) or not 0 <= number <= 100:
                     raise ValueError(f"El porcentaje {key} debe estar entre 0 y 100.")
                 values[key] = number
+            elif key == "use_certification_template":
+                if not isinstance(value, bool):
+                    raise ValueError("El campo use_certification_template debe ser booleano.")
+                values[key] = value
+            elif key == "output_format":
+                if not isinstance(value, str) or value.lower() not in {"pdf", "odt"}:
+                    raise ValueError("El formato de informes debe ser PDF u ODT.")
+                values[key] = value.lower()
             else:
                 if not isinstance(value, str):
                     raise ValueError(f"El campo {key} debe ser texto.")
@@ -158,6 +168,55 @@ def amount_in_words(value: Decimal | float) -> str:
     return (("menos " if negative else "") + text).upper()
 
 
+def _collect_report_resources(app):
+    """Acumula auxiliares y materiales usados con sus cantidades y precios actuales."""
+    from bc3_gui import Concept
+
+    auxiliaries: dict[tuple, tuple] = {}
+    materials: dict[tuple, list] = {}
+
+    def walk(item, concept, quantity: Decimal, price: float, stack=(), kind=None):
+        """Recorre una descomposición y comprueba recursos auxiliares circulares o ausentes."""
+        if concept.code in stack:
+            raise ValueError(f"Descomposición circular: {' → '.join((*stack, concept.code))}")
+        if concept.children:
+            dataset = app._component_dataset(item)
+            children = []
+            for code, factor in concept.children:
+                child = dataset.concepts.get(code) if dataset else None
+                if child is None:
+                    raise ValueError(f"No se dispone del recurso {code} del auxiliar {concept.code}.")
+                children.append((child, factor, child.price))
+            key = (concept.code, price, tuple((c.code, q, p) for c, q, p in children))
+            auxiliaries[key] = (concept, price, children)
+            for child, factor, child_price in children:
+                walk(item, child, quantity * Decimal(str(factor)), child_price,
+                     (*stack, concept.code))
+        elif kind == "aux":
+            raise ValueError(f"No se dispone de la descomposición del auxiliar {concept.code}.")
+        elif (kind or concept.ctype) == "3":
+            key = (concept.code, concept.unit, concept.summary, price)
+            if key not in materials:
+                materials[key] = [concept, Decimal(0), price]
+            materials[key][1] += quantity
+
+    for item in app.budget_items:
+        if item.decomposition:
+            for concept, quantity, price in app._report_components(item):
+                walk(item, concept, Decimal(str(item.measurement)) * Decimal(str(quantity)),
+                     price, kind=app._budget_concept_type(item, concept.code))
+        else:
+            dataset = app._component_dataset(item)
+            concept = dataset.concepts.get(item.code) if dataset else None
+            concept = concept or Concept(
+                item.code, item.unit, item.summary, item.unit_price,
+                app._budget_concept_type(item), item.text,
+            )
+            walk(item, concept, Decimal(str(item.measurement)), item.unit_price,
+                 kind=app._budget_concept_type(item))
+    return auxiliaries, materials
+
+
 def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
     """Genera tablas paginadas; solo recorre los auxiliares usados en la obra."""
     from reportlab.lib.pagesizes import A4
@@ -166,7 +225,7 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
         KeepTogether, PageBreak, SimpleDocTemplate, Spacer, Flowable,
     )
     from reportlab.platypus.doctemplate import LayoutError
-    from bc3_gui import Concept, fmt_number, format_chapter_code
+    from bc3_gui import fmt_number, format_chapter_code
     from report_layout import CONTENT_WIDTH, LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
 
     if report not in REPORT_NAMES:
@@ -254,50 +313,10 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
     groups = [(code, items) for code, items in grouped_items() if items]
     pem = sum((money(i.import_total) for i in app.budget_items), Decimal(0))
 
-    # Un auxiliar puede repetirse con precios editados diferentes en cada partida.
-    auxiliaries: dict[tuple, tuple[Concept, float, list]] = {}
-    materials: dict[tuple, list] = {}
-
-    def walk(item: ProjectItem, concept: Concept, quantity: Decimal, price: float,
-             stack: tuple[str, ...] = (), kind: str | None = None):
-        """Recorre auxiliares usados, acumula materiales y detecta descomposiciones circulares."""
-        if concept.code in stack:
-            raise ValueError(f"Descomposición circular: {' → '.join((*stack, concept.code))}")
-        if concept.children:
-            dataset = app._component_dataset(item)
-            children = []
-            for code, factor in concept.children:
-                child = dataset.concepts.get(code) if dataset else None
-                if child is None:
-                    raise ValueError(f"No se dispone del recurso {code} del auxiliar {concept.code}.")
-                children.append((child, factor, child.price))
-            key = (concept.code, price, tuple((c.code, q, p) for c, q, p in children))
-            auxiliaries[key] = (concept, price, children)
-            for child, factor, child_price in children:
-                walk(item, child, quantity * Decimal(str(factor)), child_price, (*stack, concept.code))
-        elif kind == "aux":
-            raise ValueError(f"No se dispone de la descomposición del auxiliar {concept.code}.")
-        elif (kind or concept.ctype) == "3":
-            key = (concept.code, concept.unit, concept.summary, price)
-            if key not in materials:
-                materials[key] = [concept, Decimal(0), price]
-            materials[key][1] += quantity
-
     if report in {"Materiales", "Precios Auxiliares"}:
-        for item in app.budget_items:
-            if item.decomposition:
-                for concept, quantity, price in components(item):
-                    walk(item, concept, Decimal(str(item.measurement)) * Decimal(str(quantity)), price,
-                         kind=app._budget_concept_type(item, concept.code))
-            else:
-                dataset = app._component_dataset(item)
-                concept = dataset.concepts.get(item.code) if dataset else None
-                concept = concept or Concept(
-                    item.code, item.unit, item.summary, item.unit_price,
-                    app._budget_concept_type(item), item.text,
-                )
-                walk(item, concept, Decimal(str(item.measurement)), item.unit_price,
-                     kind=app._budget_concept_type(item))
+        auxiliaries, materials = _collect_report_resources(app)
+    else:
+        auxiliaries, materials = {}, {}
 
     if report == "Presupuesto resumen":
         rows = []
@@ -496,8 +515,11 @@ def write_certification_pdf(
     if not certified:
         raise ValueError("No hay partidas con importe certificado en el mes seleccionado.")
 
-    heading = "CERTIFICACIÓN Y MEDICIONES" if detail else "RESUMEN DE CERTIFICACIÓN"
-    layout = ReportLayout(certification=True)
+    report_heading = "CERTIFICACIÓN Y MEDICIONES" if detail else "RESUMEN DE CERTIFICACIÓN"
+    heading = f"{report_heading} · Certificación {certification_number} · {month_label}"
+    layout = ReportLayout(
+        certification=True, use_personal_template=settings.use_certification_template,
+    )
     text = layout.text
     table = layout.table
     story = []

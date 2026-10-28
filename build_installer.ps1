@@ -50,6 +50,7 @@ $distributionDirectory = Join-Path $nuitkaOutput "GestorDeProyectos.dist"
     --output-dir=$nuitkaOutput `
     --output-filename=GestorDeProyectos.exe `
     --include-data-dir=iconos=iconos `
+    --include-data-dir=plantillas=plantillas `
     --include-package-data=matplotlib `
     bc3_gui.py
 if ($LASTEXITCODE -ne 0) {

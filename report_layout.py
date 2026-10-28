@@ -8,20 +8,79 @@ from __future__ import annotations
 
 import os
 import re
+from io import BytesIO
 from html import escape
 from pathlib import Path
+from xml.etree import ElementTree
+from zipfile import BadZipFile, ZipFile
 
 from app_paths import application_directory
 
 LOGO_PATH = application_directory(__file__) / "iconos" / "report_header_logo.png"
+CERTIFICATION_TEMPLATE_PATH = application_directory(__file__) / "plantillas" / "plantilla.odt"
 LEFT_MARGIN = 68.0
 RIGHT_MARGIN = 17.0
 PAGE_WIDTH = 595.2755905511812
 CONTENT_WIDTH = PAGE_WIDTH - LEFT_MARGIN - RIGHT_MARGIN
 
 
+def _template_length_to_points(value: str) -> float:
+    """Convierte una longitud ODF en puntos PDF."""
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)(cm|mm|in|pt|pc)", value)
+    if not match:
+        raise ValueError(f"Longitud no válida en la plantilla ODT: {value!r}.")
+    number = float(match.group(1))
+    return number * {"cm": 72 / 2.54, "mm": 72 / 25.4, "in": 72, "pt": 1, "pc": 12}[
+        match.group(2)
+    ]
+
+
+def _read_certification_template():
+    """Carga la imagen de cabecera y el texto del pie de la plantilla ODT."""
+    namespaces = {
+        "style": "urn:oasis:names:tc:opendocument:xmlns:style:1.0",
+        "draw": "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0",
+        "svg": "urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0",
+        "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
+        "xlink": "http://www.w3.org/1999/xlink",
+    }
+    try:
+        with ZipFile(CERTIFICATION_TEMPLATE_PATH) as archive:
+            styles = ElementTree.fromstring(archive.read("styles.xml"))
+            master_page = styles.find(".//style:master-page", namespaces)
+            if master_page is None:
+                raise ValueError("La plantilla ODT no contiene una página maestra.")
+            header = master_page.find("style:header", namespaces)
+            frame = header.find(".//draw:frame", namespaces) if header is not None else None
+            image = frame.find(".//draw:image", namespaces) if frame is not None else None
+            if image is None:
+                raise ValueError("La plantilla ODT no contiene una imagen en la cabecera.")
+            image_path = image.get(f"{{{namespaces['xlink']}}}href", "")
+            if not image_path or image_path.startswith("/") or ".." in Path(image_path).parts:
+                raise ValueError("La ruta de la imagen de cabecera ODT no es válida.")
+            image_data = archive.read(image_path)
+            image_width = _template_length_to_points(
+                frame.get(f"{{{namespaces['svg']}}}width", "")
+            )
+            image_height = _template_length_to_points(
+                frame.get(f"{{{namespaces['svg']}}}height", "")
+            )
+            footer = master_page.find("style:footer", namespaces)
+            footer_text = " ".join(
+                " ".join("".join(paragraph.itertext()).split())
+                for paragraph in footer.findall(".//text:p", namespaces)
+            ) if footer is not None else ""
+            if not footer_text:
+                raise ValueError("La plantilla ODT no contiene texto en el pie de página.")
+    except (OSError, KeyError, BadZipFile, ElementTree.ParseError) as exc:
+        raise ValueError(
+            f"No se pudo leer la plantilla de certificación {CERTIFICATION_TEMPLATE_PATH}: {exc}"
+        ) from exc
+    return image_data, image_path, image_width, image_height, footer_text
+
+
 class ReportLayout:
-    def __init__(self, *, certification: bool = False):
+    def __init__(self, *, certification: bool = False, use_personal_template: bool = True):
         """Carga el logo y configura fuentes, sangrías y estilos del modelo elegido."""
         from reportlab.lib.enums import TA_CENTER, TA_RIGHT
         from reportlab.lib.styles import ParagraphStyle
@@ -73,8 +132,20 @@ class ReportLayout:
             "report-project", parent=self.bold, fontSize=8, leading=9,
         )
         self.certification = certification
-        # La lectura al iniciar permite informar de un logo ausente o corrupto.
-        self.logo = ImageReader(str(LOGO_PATH))
+        self.use_personal_template = certification and use_personal_template
+        self.template_footer = ""
+        if self.use_personal_template:
+            (
+                image_data, self.template_image_path, self.logo_width, self.logo_height,
+                self.template_footer,
+            ) = _read_certification_template()
+            self.logo = ImageReader(BytesIO(image_data))
+        elif certification:
+            self.logo = None
+            self.logo_width = self.logo_height = 0
+        else:
+            # La lectura al iniciar permite informar de un logo ausente o corrupto.
+            self.logo = ImageReader(str(LOGO_PATH))
 
     def text(self, value, style=None):
         """Escapa texto para un párrafo PDF y conserva sus saltos de línea."""
@@ -204,17 +275,19 @@ class ReportLayout:
         canvas.saveState()
         top = A4[1]
         if self.certification:
-            logo_width = 220
-            logo_y = top - 122
+            logo_width = self.logo_width
+            logo_y = top - 50 - self.logo_height
             heading_y = top - 124
         else:
             logo_width = 160
             logo_y = top - 83
             heading_y = top - 60
-        canvas.drawImage(
-            self.logo, LEFT_MARGIN, logo_y, width=logo_width,
-            height=logo_width * 552 / 1434, preserveAspectRatio=True, mask="auto",
-        )
+        if self.logo is not None:
+            canvas.drawImage(
+                self.logo, LEFT_MARGIN, logo_y, width=logo_width,
+                height=self.logo_height if self.certification else logo_width * 552 / 1434,
+                preserveAspectRatio=True, mask="auto",
+            )
         heading = self.text(title, self.title_style)
         heading_width = CONTENT_WIDTH if self.certification else CONTENT_WIDTH - 170
         _, height = heading.wrap(heading_width, 100)
@@ -230,9 +303,14 @@ class ReportLayout:
         else:
             canvas.setLineWidth(0.5)
             canvas.line(LEFT_MARGIN, project_y - 4, PAGE_WIDTH - RIGHT_MARGIN, project_y - 4)
-        canvas.setLineWidth(0.5)
-        canvas.line(LEFT_MARGIN, 26, PAGE_WIDTH - RIGHT_MARGIN, 26)
-        canvas.setFont(self.regular_font, 7)
-        canvas.drawString(LEFT_MARGIN, 16, footer)
-        canvas.drawRightString(PAGE_WIDTH - RIGHT_MARGIN, 16, str(document.page))
+        if self.use_personal_template:
+            canvas.setFont(self.regular_font, 6)
+            canvas.drawCentredString(PAGE_WIDTH / 2, 16, self.template_footer)
+            canvas.drawRightString(PAGE_WIDTH - RIGHT_MARGIN, 16, str(document.page))
+        elif not self.certification:
+            canvas.setLineWidth(0.5)
+            canvas.line(LEFT_MARGIN, 26, PAGE_WIDTH - RIGHT_MARGIN, 26)
+            canvas.setFont(self.regular_font, 7)
+            canvas.drawString(LEFT_MARGIN, 16, footer)
+            canvas.drawRightString(PAGE_WIDTH - RIGHT_MARGIN, 16, str(document.page))
         canvas.restoreState()

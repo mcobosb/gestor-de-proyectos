@@ -28,7 +28,8 @@ Desktop.ini
 *.json
 
 # Plantillas originales y documentos e informes de trabajo.
-plantillas/
+plantillas/*
+!plantillas/plantilla.odt
 *.pdf
 *.xlsx
 *.xls

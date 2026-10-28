@@ -8,6 +8,8 @@ from tkinter import font as tkfont
 from tkinter import ttk
 import unittest
 from unittest.mock import patch
+from xml.etree import ElementTree
+from zipfile import ZipFile
 
 import planning
 
@@ -40,6 +42,30 @@ from budget_reports import (
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 BCCA_PATH, BUDGET_PATH = find_bc3_files(BASE_DIR)
+
+
+def read_ods_rows(path: Path, sheet_index: int = 0) -> list[list[object]]:
+    """Lee valores de una hoja ODS para comprobar las exportaciones."""
+    from odf.opendocument import load
+    from odf.table import Table, TableCell, TableRow
+    from odf.text import P
+
+    document = load(str(path))
+    tables = document.spreadsheet.getElementsByType(Table)
+    rows = []
+    for row in tables[sheet_index].getElementsByType(TableRow):
+        values = []
+        for cell in row.getElementsByType(TableCell):
+            if cell.getAttribute("valuetype") == "float":
+                values.append(float(cell.getAttribute("value")))
+            else:
+                paragraphs = cell.getElementsByType(P)
+                values.append("".join(
+                    child.data for paragraph in paragraphs for child in paragraph.childNodes
+                    if child.nodeType == child.TEXT_NODE
+                ))
+        rows.append(values)
+    return rows
 
 
 class ParseFloatTests(unittest.TestCase):
@@ -657,8 +683,6 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
 
     def test_measurement_exports_include_k_and_adjusted_partial(self):
         """Verify measurement exports include k and adjusted partial."""
-        from openpyxl import load_workbook
-
         self.set_measurement_item()
         self.app._commit_measurement_cell("0", "#6", "1.2")
         csv_path = self.directory / "k-measurements.csv"
@@ -671,14 +695,14 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.assertTrue(all(len(row) == len(rows[0]) for row in rows))
         self.assertEqual(rows[2][-2], "")
 
-        xlsx_path = self.directory / "k-budget.xlsx"
-        with patch("bc3_gui.filedialog.asksaveasfilename", return_value=str(xlsx_path)):
-            self.app.export_budget_excel()
-        workbook = load_workbook(xlsx_path)
-        self.addCleanup(workbook.close)
-        sheet = list(workbook["Mediciones"].values)
-        self.assertEqual(sheet[0][-2:], ("K", "Parcial"))
-        self.assertEqual(sheet[1][-2:], (1.2, 12))
+        selected_path = self.directory / "k-budget.xlsx"
+        ods_path = selected_path.with_suffix(".ods")
+        with patch("bc3_gui.filedialog.asksaveasfilename", return_value=str(selected_path)):
+            self.app.export_budget_ods()
+        self.assertTrue(ods_path.is_file())
+        sheet = read_ods_rows(ods_path, sheet_index=1)
+        self.assertEqual(sheet[0][-2:], ["K", "Parcial"])
+        self.assertEqual(sheet[1][-2:], [1.2, 12.0])
 
     def test_recent_menu_is_first_and_retains_five_unique_absolute_paths(self):
         """Verify recent menu is first and retains five unique absolute paths."""
@@ -743,6 +767,28 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
                 menu.invoke(index)
                 generate.assert_called_with(name)
 
+    def test_spreadsheet_export_menu_uses_open_ods_format(self):
+        """Verify all spreadsheet exports in the app menu use ODS."""
+        toolbar = self.root.grid_slaves(row=0, column=0)[0]
+        button = next(
+            child for child in toolbar.winfo_children()
+            if child.cget("text") == "Imprimir y exportar"
+        )
+        menu = self.root.nametowidget(button.cget("menu"))
+        labels = [
+            menu.entrycget(index, "label")
+            for index in range(menu.index("end") + 1)
+            if menu.type(index) == "command"
+        ]
+        self.assertEqual(
+            [label for label in labels if "ODS" in label],
+            [
+                "Exportar presupuesto a ODS…",
+                "Exportar recursos a ODS…",
+                "Exportar descompuestos a ODS…",
+            ],
+        )
+
     def test_settings_validate_save_reload_and_follow_the_project(self):
         """Verify settings validate save reload and follow the project."""
         self.set_report_items()
@@ -777,12 +823,24 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         entries = [child for child in reports_tab.winfo_children() if isinstance(child, ttk.Entry)]
         entries[0].delete(0, "end")
         entries[0].insert(0, "Autor desde ventana")
+        format_selector = next(
+            child for child in reports_tab.winfo_children()
+            if isinstance(child, ttk.Combobox)
+        )
+        format_selector.set("ODT")
+        next(
+            child for child in reports_tab.winfo_children()
+            if isinstance(child, ttk.Checkbutton)
+        ).invoke()
         next(
             child for child in reports_tab.winfo_children()
             if isinstance(child, ttk.Button) and child.cget("text") == "Guardar informes"
         ).invoke()
         self.assertFalse(window.winfo_exists())
-        self.assertEqual(self.app._read_report_settings().author, "Autor desde ventana")
+        saved = self.app._read_report_settings()
+        self.assertEqual(saved.author, "Autor desde ventana")
+        self.assertEqual(saved.output_format, "odt")
+        self.assertFalse(saved.use_certification_template)
 
     def test_language_preference_is_saved_and_applied_immediately(self):
         """Save the application language globally and update the visible interface."""
@@ -871,6 +929,51 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
             error.assert_called_once()
         self.assertEqual(target.read_bytes(), original)
         self.assertEqual(list(self.directory.glob("tmp*.pdf")), [])
+
+    def test_budget_reports_use_the_saved_odt_format(self):
+        """Verify budget report generation follows the saved ODT format."""
+        self.set_report_items()
+        self.app.report_settings = ReportSettings(output_format="odt")
+        target = self.directory / "resumen.odt"
+        with (
+            patch("bc3_gui.filedialog.asksaveasfilename", return_value=str(target)) as dialog,
+            patch("bc3_gui.os.startfile") as open_odt,
+        ):
+            self.app.generate_report("Presupuesto resumen")
+            self.assertEqual(dialog.call_args.kwargs["defaultextension"], ".odt")
+            open_odt.assert_called_once_with(str(target))
+        with ZipFile(target) as archive:
+            self.assertEqual(
+                archive.read("mimetype").decode(),
+                "application/vnd.oasis.opendocument.text",
+            )
+            content = ElementTree.fromstring(archive.read("content.xml"))
+            report_text = " ".join(content.itertext())
+            self.assertIn("RESUMEN DE PRESUPUESTO", report_text)
+            self.assertIn("4.648,00", report_text)
+
+    def test_budget_odt_exports_include_current_resources_and_item_details(self):
+        """Verify ODT reports contain decompositions, materials and measurements."""
+        self.set_report_items()
+        from odt_reports import write_report_odt
+
+        expectations = {
+            "Cuadro de precios 1 y 2 por capitulos": ("Partida <uno>", "TREINTA Y DOS"),
+            "Descompuestos": ("Operario", "14,00"),
+            "Materiales": ("Material", "303,00"),
+            "Precios Auxiliares": ("No hay precios auxiliares",),
+            "Presupuesto mediciones": ("3.228,00", "TOTAL EJECUCIÓN MATERIAL"),
+            "Presupuesto resumen": ("4.648,00", "PRESUPUESTO BASE DE LICITACIÓN"),
+        }
+        for index, name in enumerate(REPORT_NAMES):
+            with self.subTest(name=name):
+                target = self.directory / f"editable-{index}.odt"
+                write_report_odt(self.app, name, target)
+                with ZipFile(target) as archive:
+                    content = ElementTree.fromstring(archive.read("content.xml"))
+                    report_text = " ".join(content.itertext())
+                for expected in expectations[name]:
+                    self.assertIn(expected, report_text)
 
     @unittest.skipUnless(BUDGET_PATH, "Requiere el presupuesto BC3 local, no distribuido.")
     def test_all_pdf_models_generate_with_actual_budget_data(self):
@@ -991,6 +1094,30 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
                 else:
                     self.assertIn("9,91", report)
                     self.assertIn("414,69", report)
+
+    def test_certification_reports_use_the_saved_odt_format(self):
+        """Verify certification report generation follows the saved ODT format."""
+        window = self.certification_window()
+        item = self.app.budget_items[0]
+        month = window.months[0]
+        item.certifications[month.key] = 100
+        self.app.report_settings = ReportSettings(output_format="odt")
+        window.selected_certification_month = 0
+        target = self.directory / "certification.odt"
+        with (
+            patch("certifications.filedialog.asksaveasfilename", return_value=str(target)) as dialog,
+            patch("certifications.os.startfile") as open_odt,
+        ):
+            window.generate_template_report(CERTIFICATION_REPORT_NAMES[1])
+            self.assertEqual(dialog.call_args.kwargs["defaultextension"], ".odt")
+            open_odt.assert_called_once_with(str(target))
+        with ZipFile(target) as archive:
+            self.assertEqual(
+                archive.read("mimetype").decode(),
+                "application/vnd.oasis.opendocument.text",
+            )
+            content = ElementTree.fromstring(archive.read("content.xml"))
+            self.assertIn("Partida", " ".join(content.itertext()))
 
     def test_certification_pdf_selection_empty_cancel_and_errors(self):
         """Verify certification pdf selection empty cancel and errors."""
@@ -1169,18 +1296,19 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.assertIsNone(self.app.budget_dataset)
         self.assertEqual(self.app.recent_projects, [project])
 
-    def test_resources_excel_has_only_its_sheet_and_preserves_price_variants(self):
-        """Verify resources excel has only its sheet and preserves price variants."""
-        from openpyxl import load_workbook
-
+    def test_resources_ods_has_only_its_sheet_and_preserves_price_variants(self):
+        """Verify resources ODS has only its sheet and preserves price variants."""
         self.set_report_items()
-        target = self.directory / "resources.xlsx"
+        target = self.directory / "resources.ods"
         with patch("bc3_gui.filedialog.asksaveasfilename", return_value=str(target)):
             self.app.export_resource_report("Recursos")
-        workbook = load_workbook(target)
-        self.addCleanup(workbook.close)
-        self.assertEqual(workbook.sheetnames, ["Recursos"])
-        rows = list(workbook.active.values)
+        from odf.opendocument import load
+        from odf.table import Table
+
+        workbook = load(str(target))
+        tables = workbook.spreadsheet.getElementsByType(Table)
+        self.assertEqual([table.getAttribute("name") for table in tables], ["Recursos"])
+        rows = read_ods_rows(target)
         self.assertEqual(len(rows), 4)
         self.assertEqual({row[4] for row in rows[1:] if row[0] == "MO"}, {10, 14})
         self.assertEqual(rows[0][6], "Medición")
@@ -1188,46 +1316,33 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
             {(row[0], row[4]): row[6] for row in rows[1:]},
             {("MO", 14): 200, ("MO", 10): 2, ("MAT", 3): 101},
         )
-        self.assertEqual(workbook.active.freeze_panes, "A2")
-        self.assertTrue(all(cell.data_type != "f" for row in workbook.active for cell in row))
 
     def test_resource_measurements_sum_all_occurrences_without_early_rounding(self):
-        """Verify resource measurements sum all occurrences without early rounding."""
-        from openpyxl import load_workbook
-
+        """Verify resource ODS measurements sum without early rounding."""
         self.set_report_items()
         first, second = self.app.budget_items[:2]
         first.measurement = 0.12345
         first.decomposition = [("MAT", 0.1), ("MAT", 0.2)]
         second.measurement = 0.2
         second.decomposition = [("MAT", 0.3), ("MO", 0)]
-        target = self.directory / "measurements.xlsx"
+        target = self.directory / "measurements.ods"
         with patch("bc3_gui.filedialog.asksaveasfilename", return_value=str(target)):
             self.app.export_resource_report("Recursos")
-        workbook = load_workbook(target)
-        self.addCleanup(workbook.close)
-        rows = list(workbook.active.values)
+        rows = read_ods_rows(target)
         self.assertEqual(len(rows), 3)
         self.assertAlmostEqual(rows[1][6], 0.097035, places=12)
         self.assertEqual(rows[2][6], 0)
-        self.assertEqual(workbook.active["G2"].number_format, '#,##0.0000')
-        self.assertEqual(workbook.active.auto_filter.ref, "A1:G3")
+        self.assertEqual(rows[1][4], 3.0)
 
-    def test_decompositions_excel_uses_current_rendimientos_and_prices(self):
-        """Verify decompositions excel uses current rendimientos and prices."""
-        from openpyxl import load_workbook
-
+    def test_decompositions_ods_uses_current_rendimientos_and_prices(self):
+        """Verify decompositions ODS uses current yields and prices."""
         self.set_report_items()
-        target = self.directory / "decompositions.xlsx"
+        target = self.directory / "decompositions.ods"
         with patch("bc3_gui.filedialog.asksaveasfilename", return_value=str(target)):
             self.app.export_resource_report("Descompuestos")
-        workbook = load_workbook(target)
-        self.addCleanup(workbook.close)
-        self.assertEqual(workbook.sheetnames, ["Descompuestos"])
-        rows = list(workbook.active.values)
-        self.assertEqual(rows[1], ("P1", "MO", "MO", "h", "Operario", 2, 14, 28, "BC3"))
-        self.assertEqual(rows[3][6:8], (10, 20))
-        self.assertTrue(all(cell.data_type != "f" for row in workbook.active for cell in row))
+        rows = read_ods_rows(target)
+        self.assertEqual(rows[1], ["P1", "MO", "MO", "h", "Operario", 2.0, 14.0, 28.0, "BC3"])
+        self.assertEqual(rows[3][6:8], [10, 20])
 
     def test_price_reports_escape_text_and_use_unit_not_budget_totals(self):
         """Verify price reports escape text and use unit not budget totals."""
@@ -1262,11 +1377,15 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         browser.assert_called_once_with(files[0].as_uri())
         self.assertIn("Cuadro de precios Nº2", files[0].read_text(encoding="utf-8"))
 
-    def test_excel_write_failure_is_reported(self):
-        """Verify excel write failure is reported."""
+    def test_ods_write_failure_is_reported(self):
+        """Verify ODS write failure is reported."""
         self.set_report_items()
         with (
-            patch("bc3_gui.filedialog.asksaveasfilename", return_value=str(self.directory)),
+            patch(
+                "bc3_gui.filedialog.asksaveasfilename",
+                return_value=str(self.directory / "resources.ods"),
+            ),
+            patch("ods_export.write_ods", side_effect=OSError("disk full")),
             patch("bc3_gui.messagebox.showerror") as error,
         ):
             self.app.export_resource_report("Recursos")
@@ -1278,7 +1397,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.app.budget_dataset = None
         with self.assertRaisesRegex(ValueError, "MAT"):
             self.app._price_report_html(2)
-        target = self.directory / "missing_resources.xlsx"
+        target = self.directory / "missing_resources.ods"
         with (
             patch("bc3_gui.filedialog.asksaveasfilename", return_value=str(target)),
             patch("bc3_gui.messagebox.showerror") as error,

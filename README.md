@@ -51,10 +51,13 @@ El archivo [requirements.txt](requirements.txt) contiene las dependencias de uso
 | Paquete | Uso |
 |---|---|
 | Pillow | Icono e imágenes de la interfaz |
-| openpyxl | Lectura y escritura de Excel |
+| odfpy | Exportación de hojas de cálculo ODS |
+| openpyxl | Conversión independiente de planificación a XLSX |
 | ReportLab | Informes PDF |
 | Matplotlib | Diagramas de Gantt |
 
+Los informes también se generan como ODT editable con los módulos estándar de Python.
+El formato se elige en **Archivo → Configuración…** y, de inicio, es PDF.
 Tkinter y los módulos restantes forman parte de Python. Si `python -m tkinter`
 no abre una ventana, revisa la instalación de Python antes de iniciar la app.
 
@@ -67,10 +70,13 @@ no abre una ventana, revisa la instalación de Python antes de iniciar la app.
 | [certifications.py](certifications.py) | Previsiones y certificaciones mensuales |
 | [budget_reports.py](budget_reports.py) | Configuración, cálculos e informes |
 | [report_layout.py](report_layout.py) | Estilos y maquetación PDF compartida |
+| [odt_reports.py](odt_reports.py) | Exportación editable de informes ODT |
+| [ods_export.py](ods_export.py) | Exportación editable de hojas de cálculo ODS |
 | [ui_theme.py](ui_theme.py) | Tema de la interfaz |
 | [figura_gantt.py](figura_gantt.py) | Dibujo del Gantt; utilizado por planificación |
-| [bc3_to_xlsx_plan.py](bc3_to_xlsx_plan.py) | Parámetros usados por planificación y conversor Excel independiente |
+| [bc3_to_xlsx_plan.py](bc3_to_xlsx_plan.py) | Conversor independiente de planificación a XLSX |
 | [iconos/](iconos/) | Icono de la aplicación y logo institucional de los informes |
+| [plantillas/plantilla.odt](plantillas/plantilla.odt) | Cabecera y pie personal de los informes de certificación |
 | [docs/](docs/) | Manual de usuario |
 
 Los conversores antiguos de imágenes y las imágenes que no utiliza la aplicación
@@ -83,8 +89,11 @@ plantillas PDF originales, historial ni configuración personal**.
 El programa funciona con los archivos que aporte cada usuario.
 
 Los informes se reconstruyen mediante código; no requieren abrir los PDF
-originales de ejemplo. El recurso gráfico de la cabecera se encuentra en
-[iconos/report_header_logo.png](iconos/report_header_logo.png).
+originales de ejemplo. El recurso gráfico de la cabecera de los informes
+generales se encuentra en [iconos/report_header_logo.png](iconos/report_header_logo.png).
+Los informes de certificación pueden usar la cabecera y el pie de
+[plantillas/plantilla.odt](plantillas/plantilla.odt), opción que se controla
+desde **Archivo → Configuración…**. La plantilla se incluye en el instalador.
 
 La aplicación arranca siempre vacía, aunque haya BC3 o proyectos JSON en su
 carpeta. Abre un proyecto desde **Archivo → Recientes** o **Abrir proyecto (JSON)**,

@@ -23,6 +23,7 @@ from bc3_gui import APPLICATION_NAME, ToolTip, fmt_eur, format_chapter_code, par
 from localization import filedialog, localize_widget_tree, messagebox, translate
 from planning import PlanParams, apply_saved_plan_state, build_activities, schedule
 from budget_reports import CERTIFICATION_REPORT_NAMES, ReportSettings, write_certification_pdf
+from odt_reports import write_certification_odt
 
 
 MONTHS_IN_PLAN = 24
@@ -495,7 +496,7 @@ class CertificationWindow(tk.Toplevel):
         )
 
     def generate_template_report(self, report: str) -> None:
-        """Guarda y abre el PDF mensual elegido, conservando el destino si la generación falla."""
+        """Guarda y abre el informe mensual, conservando el destino si falla."""
         if self.selected_certification_month is None:
             messagebox.showwarning(
                 "Informe de certificación",
@@ -518,21 +519,33 @@ class CertificationWindow(tk.Toplevel):
                 parent=self,
             )
             return
+        settings = self._report_settings()
+        is_odt = settings.output_format == "odt"
+        extension = ".odt" if is_odt else ".pdf"
+        filetype = ("Documento ODT", "*.odt") if is_odt else ("Documento PDF", "*.pdf")
         file_path = filedialog.asksaveasfilename(
-            parent=self, title=f"Generar {report}", defaultextension=".pdf",
-            initialfile=f"{report} {index + 1} {month.key}.pdf", filetypes=[("Documento PDF", "*.pdf")],
+            parent=self, title=f"Generar {report}", defaultextension=extension,
+            initialfile=f"{report} {index + 1} {month.key}{extension}", filetypes=[filetype],
         )
         if not file_path:
             return
         target = Path(file_path)
+        if target.suffix.lower() != extension:
+            target = target.with_suffix(extension)
         temporary_path: Path | None = None
         try:
-            with tempfile.NamedTemporaryFile(suffix=".pdf", dir=target.parent, delete=False) as handle:
+            with tempfile.NamedTemporaryFile(suffix=extension, dir=target.parent, delete=False) as handle:
                 temporary_path = Path(handle.name)
-            write_certification_pdf(
-                self.items, self.chapter_title, self.project_title, self._report_settings(),
-                report, temporary_path, month.key, index + 1, month.label,
-            )
+            if is_odt:
+                write_certification_odt(
+                    self.items, self.chapter_title, self.project_title, settings,
+                    report, temporary_path, month.key, index + 1, month.label,
+                )
+            else:
+                write_certification_pdf(
+                    self.items, self.chapter_title, self.project_title, settings,
+                    report, temporary_path, month.key, index + 1, month.label,
+                )
             temporary_path.replace(target)
         except ImportError as exc:
             messagebox.showerror(

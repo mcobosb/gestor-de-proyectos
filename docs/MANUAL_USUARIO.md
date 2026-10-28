@@ -89,6 +89,10 @@ Abre **Archivo → Configuración…** y completa:
 - Empresa contratista y representante.
 - Gastos generales, beneficio industrial e IVA.
 - Baja de adjudicación para certificaciones.
+- Formato de salida de los informes: PDF (predeterminado) u ODT editable.
+- Si se usa la plantilla personal ODT en la cabecera y el pie de los informes
+  de certificación. Al desactivarla, esos elementos quedan en blanco; las
+  partidas y los datos del informe se siguen generando.
 
 Los porcentajes deben estar entre 0 y 100. **Guardar** conserva los valores como
 configuración inicial para nuevos proyectos y dentro del proyecto actual.
@@ -131,8 +135,9 @@ con la aplicación asociada. Si no puede abrirlo, indica dónde ha quedado guard
 Puedes imprimirlo desde el visor PDF.
 
 El menú **Imprimir y exportar** conserva la vista HTML del presupuesto,
-la impresión, la exportación del presupuesto y recursos a Excel y las mediciones
-a CSV. La vista HTML es una salida adicional, no el modelo PDF maquetado.
+la impresión, la exportación del presupuesto, recursos y descompuestos a hojas
+ODS editables y las mediciones a CSV. La vista HTML es una salida adicional,
+no el modelo PDF maquetado.
 
 Los informes no inventan precios ausentes. Si falta un recurso, carga su base de
 referencia o completa los precios necesarios antes de volver a generarlo.

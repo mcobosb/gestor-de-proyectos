@@ -22,6 +22,7 @@ from localization import (
 )
 from ui_theme import COLORS, apply_theme
 from budget_reports import REPORT_NAMES, ReportSettings, write_pdf
+from odt_reports import write_report_odt
 
 
 APPLICATION_NAME = "Gestor de Proyectos (v1.0.0)"
@@ -617,7 +618,7 @@ class BudgetApp:
         export_menu.add_command(label="Vista previa del presupuesto…", command=self.preview_budget)
         export_menu.add_command(label="Imprimir presupuesto", command=self.print_budget)
         export_menu.add_separator()
-        export_menu.add_command(label="Exportar presupuesto a Excel…", command=self.export_budget_excel)
+        export_menu.add_command(label="Exportar presupuesto a ODS…", command=self.export_budget_ods)
         export_menu.add_command(label="Exportar mediciones a CSV…", command=self.export_measurements_csv)
         self.export_menubutton["menu"] = export_menu
         self.export_menubutton.pack(side="left", padx=(0, 8))
@@ -629,8 +630,8 @@ class BudgetApp:
         reports_menubutton["menu"] = reports_menu
         reports_menubutton.pack(side="left", padx=(0, 8))
         export_menu.add_separator()
-        export_menu.add_command(label="Exportar recursos a Excel…", command=lambda: self.export_resource_report("Recursos"))
-        export_menu.add_command(label="Exportar descompuestos a Excel…", command=lambda: self.export_resource_report("Descompuestos"))
+        export_menu.add_command(label="Exportar recursos a ODS…", command=lambda: self.export_resource_report("Recursos"))
+        export_menu.add_command(label="Exportar descompuestos a ODS…", command=lambda: self.export_resource_report("Descompuestos"))
 
         tools_menubutton = ttk.Menubutton(toolbar, text="Herramientas", style="Toolbar.TMenubutton")
         tools_menu = tk.Menu(tools_menubutton, tearoff=False)
@@ -2279,12 +2280,30 @@ class BudgetApp:
             ttk.Label(reports_tab, text=label).grid(row=row, column=0, sticky="w", pady=5, padx=(0, 12))
             variables[key] = tk.StringVar(value=str(values[key]))
             ttk.Entry(reports_tab, textvariable=variables[key], width=55).grid(row=row, column=1, sticky="ew")
+        format_row = len(fields)
+        ttk.Label(reports_tab, text="Formato de informes").grid(
+            row=format_row, column=0, sticky="w", pady=5, padx=(0, 12)
+        )
+        variables["output_format"] = tk.StringVar(value=values["output_format"].upper())
+        ttk.Combobox(
+            reports_tab, textvariable=variables["output_format"], values=("PDF", "ODT"),
+            state="readonly", width=12,
+        ).grid(row=format_row, column=1, sticky="w")
+        template_row = format_row + 1
+        variables["use_certification_template"] = tk.BooleanVar(
+            value=values["use_certification_template"]
+        )
+        ttk.Checkbutton(
+            reports_tab,
+            text="Usar plantilla personal en certificaciones (encabezado y pie)",
+            variable=variables["use_certification_template"],
+        ).grid(row=template_row, column=0, columnspan=2, sticky="w", pady=5)
         ttk.Label(
             reports_tab, text="GG y BI se aplican al PEM. En certificaciones, se deduce la baja\n"
             "antes del IVA. La baja no modifica el presupuesto de licitación.\n"
             "Guardar conserva estos datos para este proyecto y como valores\n"
             "iniciales de nuevos proyectos. Los proyectos guardados mantienen su configuración.",
-        ).grid(row=len(fields), column=0, columnspan=2, sticky="w", pady=12)
+        ).grid(row=template_row + 1, column=0, columnspan=2, sticky="w", pady=12)
 
         language_tab.columnconfigure(1, weight=1)
         ttk.Label(language_tab, text="Idioma").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=8)
@@ -2302,7 +2321,9 @@ class BudgetApp:
 
         def save_reports():
             """Guarda los valores del formulario y cierra el diálogo si son válidos."""
-            if self._save_report_settings({key: variable.get() for key, variable in variables.items()}):
+            data = {key: variable.get() for key, variable in variables.items()}
+            data["output_format"] = str(data["output_format"]).lower()
+            if self._save_report_settings(data):
                 window.destroy()
 
         def save_language():
@@ -2317,7 +2338,7 @@ class BudgetApp:
         ttk.Button(
             reports_tab, text="Guardar informes", style="Accent.TButton",
             command=save_reports,
-        ).grid(row=len(fields) + 1, column=0, columnspan=2, sticky="e", pady=(8, 0))
+        ).grid(row=template_row + 2, column=0, columnspan=2, sticky="e", pady=(8, 0))
         ttk.Button(
             language_tab, text="Guardar idioma", style="Accent.TButton",
             command=save_language,
@@ -2326,22 +2347,30 @@ class BudgetApp:
         window.grab_set()
 
     def generate_report(self, report: str) -> None:
-        """Genera y guarda un informe PDF del tipo indicado y trata de abrirlo."""
+        """Genera y guarda el informe en el formato configurado y trata de abrirlo."""
         if not self.budget_items:
             messagebox.showinfo("Presupuesto vacío", "No hay partidas para generar el informe.")
             return
+        is_odt = self.report_settings.output_format == "odt"
+        extension = ".odt" if is_odt else ".pdf"
+        filetype = ("Documento ODT", "*.odt") if is_odt else ("Documento PDF", "*.pdf")
         file_path = filedialog.asksaveasfilename(
-            title=f"Generar {report}", initialfile=f"{report}.pdf",
-            defaultextension=".pdf", filetypes=[("Documento PDF", "*.pdf")],
+            title=f"Generar {report}", initialfile=f"{report}{extension}",
+            defaultextension=extension, filetypes=[filetype],
         )
         if not file_path:
             return
         target = Path(file_path)
+        if target.suffix.lower() != extension:
+            target = target.with_suffix(extension)
         temporary_path: Path | None = None
         try:
-            with tempfile.NamedTemporaryFile(suffix=".pdf", dir=target.parent, delete=False) as handle:
+            with tempfile.NamedTemporaryFile(suffix=extension, dir=target.parent, delete=False) as handle:
                 temporary_path = Path(handle.name)
-            write_pdf(self, report, temporary_path)
+            if is_odt:
+                write_report_odt(self, report, temporary_path)
+            else:
+                write_pdf(self, report, temporary_path)
             temporary_path.replace(target)
         except ImportError as exc:
             messagebox.showerror("Dependencia de informes", f"Instala las dependencias con:\npython -m pip install -r requirements.txt\n\n{exc}")
@@ -2763,43 +2792,59 @@ class BudgetApp:
                 "usa Ctrl+P en el navegador.",
             )
 
-    def export_budget_excel(self):
-        """Exporta partidas, capítulos, mediciones e importes a un libro Excel."""
+    def export_budget_ods(self):
+        """Exporta partidas, capítulos, mediciones e importes a un libro ODS."""
         if not self.budget_items:
             messagebox.showinfo("Presupuesto vacío", "No hay partidas que exportar.")
             return
         file_path = filedialog.asksaveasfilename(
-            defaultextension=".xlsx", filetypes=[("Excel", "*.xlsx")], title="Exportar presupuesto"
+            defaultextension=".ods", filetypes=[("Hoja de cálculo ODS", "*.ods")],
+            title="Exportar presupuesto",
         )
         if not file_path:
             return
+        target = Path(file_path)
+        if target.suffix.lower() != ".ods":
+            target = target.with_suffix(".ods")
         try:
-            from openpyxl import Workbook
-        except ImportError:
-            messagebox.showerror("Falta openpyxl", "Instala openpyxl para exportar a Excel.")
-            return
+            from ods_export import write_ods
 
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Presupuesto"
-        ws.append(["Capítulo", "Código", "Ud", "Descripción", "Medición", "Precio", "Importe"])
-        for item in self.budget_items:
-            ws.append([
-                format_chapter_code(item.chapter), item.code, item.unit,
-                item.text or item.summary, item.measurement, item.unit_price, item.import_total,
+            budget_rows = [
+                ["Capítulo", "Código", "Ud", "Descripción", "Medición", "Precio", "Importe"],
+                *[
+                    [
+                        format_chapter_code(item.chapter), item.code, item.unit,
+                        item.text or item.summary, item.measurement, item.unit_price, item.import_total,
+                    ]
+                    for item in self.budget_items
+                ],
+                ["", "", "", "TOTAL", "", "",
+                 sum(item.import_total for item in self.budget_items)],
+            ]
+            measurement_rows = [
+                ["Código", "Descripción", "Uds", "Longitud", "Anchura", "Altura", "K", "Parcial"],
+                *[
+                    [
+                        item.code, line.comment, line.units, line.length, line.width,
+                        line.height, line.k, line.partial,
+                    ]
+                    for item in self.budget_items
+                    for line in item.measurement_lines
+                ],
+            ]
+            write_ods(target, [
+                {"name": "Presupuesto", "rows": budget_rows, "widths": (12, 14, 6, 70, 12, 12, 14)},
+                {"name": "Mediciones", "rows": measurement_rows, "widths": (14, 50, 12, 12, 12, 12, 10, 14)},
             ])
-        ws.append([])
-        ws.append(["", "", "", "TOTAL", "", "", sum(i.import_total for i in self.budget_items)])
-        for column, width in zip("ABCDEFG", (12, 14, 6, 70, 12, 12, 14)):
-            ws.column_dimensions[column].width = width
-
-        ws2 = wb.create_sheet("Mediciones")
-        ws2.append(["Código", "Descripción", "Uds", "Longitud", "Anchura", "Altura", "K", "Parcial"])
-        for item in self.budget_items:
-            for line in item.measurement_lines:
-                ws2.append([item.code, line.comment, line.units, line.length, line.width, line.height, line.k, line.partial])
-        wb.save(file_path)
-        self._set_status(f"Presupuesto exportado a {file_path}")
+        except ImportError as exc:
+            messagebox.showerror(
+                "Falta odfpy", f"Instala las dependencias con:\npython -m pip install -r requirements.txt\n\n{exc}",
+            )
+            return
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("No se pudo exportar el presupuesto", str(exc))
+            return
+        self._set_status(f"Presupuesto exportado a {target}")
 
     def _report_components(self, item: ProjectItem) -> list[tuple[Concept, float, float]]:
         """Usa los mismos precios editados que el detalle de descomposición."""
@@ -2817,25 +2862,19 @@ class BudgetApp:
         return rows
 
     def export_resource_report(self, report: str) -> None:
-        """Exporta una hoja; Recursos acumula medición de partida por rendimiento."""
+        """Exporta recursos o descompuestos a una hoja de cálculo ODS."""
         if not self.budget_items:
             messagebox.showinfo("Presupuesto vacío", "No hay partidas que exportar.")
             return
         file_path = filedialog.asksaveasfilename(
-            defaultextension=".xlsx", filetypes=[("Excel", "*.xlsx")], title=f"Exportar {report}"
+            defaultextension=".ods", filetypes=[("Hoja de cálculo ODS", "*.ods")],
+            title=f"Exportar {report}",
         )
         if not file_path:
             return
-        try:
-            from openpyxl import Workbook
-            from openpyxl.styles import Alignment, Font, PatternFill
-            from openpyxl.utils import get_column_letter
-        except ImportError:
-            messagebox.showerror("Falta openpyxl", "Instala openpyxl para exportar a Excel.")
-            return
-        wb = Workbook()
-        ws = wb.active
-        ws.title = report
+        target = Path(file_path)
+        if target.suffix.lower() != ".ods":
+            target = target.with_suffix(".ods")
         resources = report == "Recursos"
         headers = (
             ["Código", "Tipo", "Ud", "Resumen", "Precio (€)", "Fuente", "Medición"] if resources else
@@ -2843,7 +2882,12 @@ class BudgetApp:
              "Precio (€)", "Importe (€)", "Fuente"]
         )
         widths = (14, 7, 6, 60, 12, 12, 16) if resources else (14, 14, 7, 6, 55, 18, 12, 14, 12)
-        ws.append(headers)
+        rows = [headers]
+        number_formats = {}
+        if resources:
+            number_formats.update({4: 2, 6: 4})
+        else:
+            number_formats.update({5: 4, 6: 2, 7: 2})
         resource_measurements: dict[tuple, Decimal] = {}
         try:
             for item in self.budget_items:
@@ -2860,31 +2904,29 @@ class BudgetApp:
                             resource_measurements.get(resource, Decimal(0)) + measurement
                         )
                     else:
-                        ws.append((
+                        rows.append((
                             item.code, *resource[:4], quantity, price, quantity * price, item.source
                         ))
             for resource, measurement in resource_measurements.items():
-                ws.append((*resource, float(measurement)))
-            for cell in ws[1]:
-                cell.font = Font(bold=True, color="FFFFFF")
-                cell.fill = PatternFill("solid", fgColor="1F4E78")
-            for column, width in enumerate(widths, start=1):
-                ws.column_dimensions[get_column_letter(column)].width = width
-            for cells in ws.iter_rows(min_row=2):
-                cells[3 if resources else 4].alignment = Alignment(wrap_text=True)
-                for index in ((4,) if resources else (6, 7)):
-                    cells[index].number_format = '#,##0.00'
-                if resources:
-                    cells[6].number_format = '#,##0.0000'
-                else:
-                    cells[5].number_format = '0.0000'
-            ws.freeze_panes = "A2"
-            ws.auto_filter.ref = ws.dimensions
-            wb.save(file_path)
+                rows.append((*resource, float(measurement)))
+            from ods_export import write_ods
+
+            write_ods(target, [{
+                "name": report,
+                "rows": rows,
+                "widths": widths,
+                "header": True,
+                "number_formats": number_formats,
+            }])
         except (OSError, ValueError) as exc:
             messagebox.showerror("No se pudo exportar el informe", str(exc))
             return
-        self._set_status(f"{report} exportado a {file_path}")
+        except ImportError as exc:
+            messagebox.showerror(
+                "Falta odfpy", f"Instala las dependencias con:\npython -m pip install -r requirements.txt\n\n{exc}",
+            )
+            return
+        self._set_status(f"{report} exportado a {target}")
 
     def _price_report_html(self, number: int) -> str:
         """Genera el HTML del cuadro de precios simple o descompuesto indicado."""

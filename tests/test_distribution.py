@@ -204,7 +204,7 @@ class DistributionTests(unittest.TestCase):
         self.assertTrue((ROOT / "iconos" / "Arranque.jpg").is_file())
         self.assertTrue((ROOT / "iconos" / "report_header_logo.png").is_file())
         requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8").lower()
-        for name in ("openpyxl", "reportlab", "pillow", "matplotlib"):
+        for name in ("odfpy", "openpyxl", "reportlab", "pillow", "matplotlib"):
             with self.subTest(package=name):
                 self.assertIn(name, requirements)
         self.assertIn("-r requirements.txt", (ROOT / "requirements-test.txt").read_text(encoding="utf-8"))

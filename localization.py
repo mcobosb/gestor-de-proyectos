@@ -27,11 +27,11 @@ _TEXT = {
     "Imprimir y exportar": ("Print and export", "Imprimer et exporter"),
     "Vista previa del presupuesto…": ("Budget preview…", "Aperçu du budget…"),
     "Imprimir presupuesto": ("Print budget", "Imprimer le budget"),
-    "Exportar presupuesto a Excel…": ("Export budget to Excel…", "Exporter le budget vers Excel…"),
+    "Exportar presupuesto a ODS…": ("Export budget to ODS…", "Exporter le budget au format ODS…"),
     "Exportar mediciones a CSV…": ("Export measurements to CSV…", "Exporter les métrés en CSV…"),
     "Informes": ("Reports", "Rapports"),
-    "Exportar recursos a Excel…": ("Export resources to Excel…", "Exporter les ressources vers Excel…"),
-    "Exportar descompuestos a Excel…": ("Export breakdowns to Excel…", "Exporter les décompositions vers Excel…"),
+    "Exportar recursos a ODS…": ("Export resources to ODS…", "Exporter les ressources au format ODS…"),
+    "Exportar descompuestos a ODS…": ("Export breakdowns to ODS…", "Exporter les décompositions au format ODS…"),
     "Herramientas": ("Tools", "Outils"),
     "Planificación": ("Planning", "Planification"),
     "Certificaciones": ("Certifications", "Situations de travaux"),
@@ -123,6 +123,11 @@ _TEXT = {
     "Beneficio industrial (%)": ("Industrial profit (%)", "Bénéfice industriel (%)"),
     "IVA (%)": ("VAT (%)", "TVA (%)"),
     "Baja de adjudicación (%)": ("Tender discount (%)", "Rabais d'adjudication (%)"),
+    "Usar plantilla personal en certificaciones (encabezado y pie)": (
+        "Use personal certification template (header and footer)",
+        "Utiliser le modèle personnel des situations (en-tête et pied de page)",
+    ),
+    "Formato de informes": ("Report format", "Format des rapports"),
     "GG y BI se aplican al PEM. En certificaciones, se deduce la baja\nantes del IVA. La baja no modifica el presupuesto de licitación.\n"
     "Guardar conserva estos datos para este proyecto y como valores\n"
     "iniciales de nuevos proyectos. Los proyectos guardados mantienen su configuración.": (
