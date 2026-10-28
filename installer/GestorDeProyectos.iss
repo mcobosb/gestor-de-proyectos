@@ -11,23 +11,23 @@ AppPublisher={#AppPublisher}
 DefaultDirName={localappdata}\Programs\Gestor de Proyectos
 DefaultGroupName={#AppName}
 UninstallDisplayIcon={app}\{#AppExecutable}
-LicenseFile=LICENSE
-OutputDir=dist
+LicenseFile=..\LICENSE
+OutputDir=..\dist
 OutputBaseFilename=GestorDeProyectos-Setup-{#AppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
-ArchitecturesAllowed=x64
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesAllowed=x64os
+ArchitecturesInstallIn64BitMode=x64os
 
 [Tasks]
 Name: "desktopicon"; Description: "Crear un acceso directo en el escritorio"; GroupDescription: "Accesos directos:"; Flags: unchecked
 
 [Files]
-Source: "build\nuitka\GestorDeProyectos.dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
-Source: "docs\MANUAL_USUARIO.md"; DestDir: "{app}\docs"; Flags: ignoreversion
+Source: "..\build\nuitka\bc3_gui.dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\docs\MANUAL_USUARIO.md"; DestDir: "{app}\docs"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExecutable}"; WorkingDir: "{app}"

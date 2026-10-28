@@ -120,16 +120,20 @@ Se puede consultar la documentación integrada con `help()` o `python -m pydoc`.
 ## Crear el instalador de Windows
 
 La distribución se compila en Windows con Python de 64 bits, Nuitka, MinGW64
-(descargado por Nuitka durante la primera compilación) e Inno Setup 6. Instala
-Inno Setup 6 y añade `ISCC.exe` al `PATH` o déjalo en su ruta predeterminada.
+(descargado por Nuitka durante la primera compilación) e Inno Setup 7 o 6.
+Instala Inno Setup y añade `ISCC.exe` al `PATH` o déjalo en su ruta
+predeterminada. El script detecta automáticamente las instalaciones habituales
+de Inno Setup 7 y 6.
 Después, desde PowerShell en la carpeta del proyecto:
 
 ```powershell
-python -m pip install -r requirements.txt -r requirements-build.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-build.txt
 .\build_installer.ps1
 ```
 
 El instalador generado aparece en `dist\GestorDeProyectos-Setup-1.0.0.exe`.
+El script usa automáticamente `.\.venv\Scripts\python.exe` si existe; en caso
+contrario, utiliza el comando `python` disponible en el sistema.
 La distribución incluye la licencia y el manual, pero no los presupuestos ni
 los archivos fuente. El ejecutable compilado no equivale a cifrado y no ofrece
 protección absoluta frente a ingeniería inversa. La licencia MIT permite
