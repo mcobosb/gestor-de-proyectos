@@ -15,6 +15,7 @@ from math import isfinite
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
+from app_paths import application_directory, user_data_directory
 from ui_theme import COLORS, apply_theme
 from budget_reports import REPORT_NAMES, ReportSettings, write_pdf
 
@@ -526,7 +527,7 @@ class BudgetApp:
     def __init__(self, root: tk.Tk):
         """Inicia la interfaz sin proyecto ni bases, conservando preferencias y recientes."""
         self.root = root
-        self.root.title(APPLICATION_NAME)
+        self.root.title("Aplicación")
         self.root.geometry("1400x820")
         self.root.minsize(1100, 650)
         self.root.state("zoomed")
@@ -561,9 +562,10 @@ class BudgetApp:
         self._adjusting_sash = False
         self._bcca_visible = True
         self._collapse_chapters_on_refresh = False
-        self.recent_projects_path = Path(__file__).resolve().with_name("proyectos_recientes.json")
+        data_directory = user_data_directory(__file__)
+        self.recent_projects_path = data_directory / "proyectos_recientes.json"
         self.recent_projects = self._read_recent_projects()
-        self.report_settings_path = Path(__file__).resolve().with_name("configuracion_informes.json")
+        self.report_settings_path = data_directory / "configuracion_informes.json"
         self.default_report_settings = self._read_report_settings()
         self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
 
@@ -654,7 +656,7 @@ class BudgetApp:
         from PIL import Image, ImageTk
 
         try:
-            with Image.open(Path(__file__).resolve().parent / "iconos" / "logo.ico") as icon:
+            with Image.open(application_directory(__file__) / "iconos" / "logo.ico") as icon:
                 resized_icon = icon.convert("RGBA").resize((24, 24), Image.Resampling.LANCZOS)
                 white_icon = Image.new("RGBA", resized_icon.size, "white")
                 white_icon.putalpha(resized_icon.getchannel("A"))
@@ -2981,14 +2983,47 @@ th {{ background: #1f4e78; color: white; }}
         )
 
     def _set_status(self, text: str):
-        """Actualiza el título de la ventana con el nombre de la aplicación."""
-        self.root.title(APPLICATION_NAME)
+        """Mantiene el título del marco de la ventana al actualizar el estado."""
+        self.root.title("Aplicación")
+
+
+def show_startup_screen(root: tk.Tk) -> None:
+    """Muestra la imagen de arranque centrada durante dos segundos."""
+    from PIL import Image, ImageTk
+
+    image_path = application_directory(__file__) / "iconos" / "Arranque.jpg"
+    try:
+        with Image.open(image_path) as source:
+            resized = source.resize((612, 245), Image.Resampling.LANCZOS)
+            image = ImageTk.PhotoImage(resized, master=root)
+    except OSError as exc:
+        messagebox.showwarning(
+            "Imagen de arranque",
+            f"No se pudo cargar la imagen de arranque:\n{exc}",
+            parent=root,
+        )
+        return
+
+    splash = tk.Toplevel(root)
+    splash.withdraw()
+    splash.overrideredirect(True)
+    tk.Label(splash, image=image, borderwidth=0, highlightthickness=0).pack()
+    x = max(0, (splash.winfo_screenwidth() - image.width()) // 2)
+    y = max(0, (splash.winfo_screenheight() - image.height()) // 2)
+    splash.geometry(f"{image.width()}x{image.height()}+{x}+{y}")
+    splash.deiconify()
+    splash.wait_visibility()
+    splash.after(2000, splash.destroy)
+    root.wait_window(splash)
 
 
 def main():
-    """Crea la ventana principal y ejecuta el bucle de eventos de Tkinter."""
+    """Muestra el arranque y después inicia la ventana principal de Tkinter."""
     root = tk.Tk()
+    root.withdraw()
+    show_startup_screen(root)
     app = BudgetApp(root)
+    root.deiconify()
     root.mainloop()
 
 

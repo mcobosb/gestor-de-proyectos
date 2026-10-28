@@ -125,6 +125,9 @@ class ReportLayoutTests(unittest.TestCase):
                         self.app.report_settings, name, target, "2026-10-01", 1, "Oct 26",
                     )
                 reader = PdfReader(target)
+                self.assertEqual(reader.metadata.author, "Autoria singular")
+                report_text = "\n".join(page.extract_text() for page in reader.pages)
+                self.assertIn("Autoria singular", report_text)
                 for page in reader.pages:
                     self.assertEqual(len(page.images), 1)
                     self.assertEqual(page.images[0].image.size, (1434, 552))
@@ -135,6 +138,29 @@ class ReportLayoutTests(unittest.TestCase):
                     self.assertIn("CUADRO DE PRECIOS 1", reader.pages[0].extract_text())
                     self.assertIn("CUADRO DE PRECIOS 2", reader.pages[1].extract_text())
                     self.assertNotIn("CUADRO DE PRECIOS 1", reader.pages[1].extract_text())
+
+    def test_work_item_units_are_printed_in_price_budget_and_certification_details(self):
+        """Verify work-item units remain visible in item-level report templates."""
+        from pypdf import PdfReader
+
+        reports = (
+            (REPORT_NAMES[0], False),
+            ("Descompuestos", False),
+            ("Presupuesto mediciones", False),
+            (CERTIFICATION_REPORT_NAMES[1], True),
+        )
+        for index, (name, certification) in enumerate(reports):
+            with self.subTest(name=name):
+                target = self.folder / f"unit-{index}.pdf"
+                if certification:
+                    write_certification_pdf(
+                        self.app.budget_items, self.app._chapter_title, self.app._project_title(),
+                        self.app.report_settings, name, target, "2026-10-01", 1, "Oct 26",
+                    )
+                else:
+                    write_pdf(self.app, name, target)
+                report_text = "\n".join(page.extract_text() for page in PdfReader(target).pages)
+                self.assertRegex(report_text, r"P1\s+m\s+Resumen singular")
 
     def test_descriptions_are_indented_and_item_summaries_are_bold(self):
         """Verify descriptions are indented and item summaries are bold."""

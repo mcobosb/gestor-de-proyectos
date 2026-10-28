@@ -11,8 +11,9 @@ import re
 from html import escape
 from pathlib import Path
 
+from app_paths import application_directory
 
-LOGO_PATH = Path(__file__).resolve().parent / "iconos" / "report_header_logo.png"
+LOGO_PATH = application_directory(__file__) / "iconos" / "report_header_logo.png"
 LEFT_MARGIN = 68.0
 RIGHT_MARGIN = 17.0
 PAGE_WIDTH = 595.2755905511812

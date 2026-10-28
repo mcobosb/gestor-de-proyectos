@@ -38,7 +38,7 @@ from budget_reports import (
 )
 
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 BCCA_PATH, BUDGET_PATH = find_bc3_files(BASE_DIR)
 
 
@@ -470,6 +470,13 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         visible = [pixel for pixel in actual.get_flattened_data() if pixel[3] > 0]
         self.assertTrue(visible)
         self.assertTrue(all(pixel[:3] == (255, 255, 255) for pixel in visible))
+
+    def test_window_title_stays_application_after_status_updates(self):
+        """Keep the window-frame title distinct from the toolbar application name."""
+        self.assertEqual(self.root.title(), "Aplicación")
+        self.app._set_status("Proyecto guardado.")
+        self.assertEqual(self.root.title(), "Aplicación")
+        self.assertEqual(self.app.application_label.cget("text"), "Gestor de Proyectos (v1.0.0)")
 
     def test_information_menu_opens_mit_license_and_responsibility_notice(self):
         """Verify information menu opens mit license and responsibility notice."""

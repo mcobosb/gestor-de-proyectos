@@ -6,7 +6,14 @@ certificaciones mensuales.
 
 ## Instalación y arranque
 
-Requisitos: Windows, Python 3.11 o posterior con Tkinter y una sesión gráfica.
+En Windows se puede crear e instalar una versión compilada con Nuitka. Una vez
+generado, el instalador `GestorDeProyectos-Setup-1.0.0.exe` no requiere Python.
+Incluye los componentes necesarios, pero no los archivos fuente `.py`. La
+compilación Nuitka dificulta recuperar el código, aunque no puede impedir
+completamente la ingeniería inversa.
+
+Para ejecutar desde el código fuente se necesita Windows, Python 3.11 o
+posterior con Tkinter y una sesión gráfica.
 No se necesita Excel para exportar hojas de cálculo ni para generar el Gantt
 desde la aplicación.
 
@@ -18,8 +25,13 @@ python -m venv .venv
 .\.venv\Scripts\python.exe bc3_gui.py
 ```
 
-La carpeta debe permitir escritura, porque la aplicación guarda preferencias
-locales junto al código. No es necesario activar el entorno virtual.
+En modo desarrollo, la carpeta debe permitir escritura porque las preferencias
+se guardan junto al código. La versión instalada guarda preferencias e historial
+en `%APPDATA%\Gestor de Proyectos`. No es necesario activar el entorno virtual.
+
+Al iniciar se muestra la imagen `iconos/Arranque.jpg`, centrada y sin marco,
+durante dos segundos. Después se cierra y se abre la ventana principal.
+La imagen también se incluye en la versión instalada.
 
 ## Uso rápido
 
@@ -95,6 +107,24 @@ mediciones, planificación y configuración no requieren esos datos privados.
 Todas las funciones y métodos incluyen docstrings. La suite comprueba su
 presencia y verifica que las dependencias y recursos internos siguen accesibles.
 Se puede consultar la documentación integrada con `help()` o `python -m pydoc`.
+
+## Crear el instalador de Windows
+
+La distribución se compila en Windows con Python de 64 bits, Nuitka, MinGW64
+(descargado por Nuitka durante la primera compilación) e Inno Setup 6. Instala
+Inno Setup 6 y añade `ISCC.exe` al `PATH` o déjalo en su ruta predeterminada.
+Después, desde PowerShell en la carpeta del proyecto:
+
+```powershell
+python -m pip install -r requirements.txt -r requirements-build.txt
+.\build_installer.ps1
+```
+
+El instalador generado aparece en `dist\GestorDeProyectos-Setup-1.0.0.exe`.
+La distribución incluye la licencia y el manual, pero no los presupuestos ni
+los archivos fuente. El ejecutable compilado no equivale a cifrado y no ofrece
+protección absoluta frente a ingeniería inversa. La licencia MIT permite
+distribuir binarios siempre que se conserve el aviso y el texto de licencia.
 
 Los scripts auxiliares también admiten uso independiente:
 
