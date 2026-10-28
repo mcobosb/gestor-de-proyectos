@@ -432,6 +432,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         ):
             self.app = BudgetApp(self.root)
         self.app.recent_projects_path = self.directory / "proyectos_recientes.json"
+        self.app.recent_reference_bases_path = self.directory / "bases_referencia_recientes.json"
         self.app.report_settings_path = self.directory / "configuracion_informes.json"
 
     def set_report_items(self):
@@ -714,10 +715,25 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         expected = [self.directory / f"proyecto{number}.json" for number in (3, 5, 4, 2, 1)]
         self.assertEqual(self.app.recent_projects, expected)
         self.assertEqual(self.app._read_recent_projects(), expected)
-        self.assertEqual(self.app.file_menu.type(6), "separator")
-        self.assertEqual(self.app.file_menu.entrycget(7, "label"), "Nuevo proyecto")
+        self.assertEqual(self.app.file_menu.entrycget(6, "label"), "Bases de referencia recientes")
+        self.assertEqual(self.app.file_menu.type(8), "separator")
+        self.assertEqual(self.app.file_menu.entrycget(9, "label"), "Nuevo proyecto")
         with patch.object(self.app, "_load_project_file") as load:
             self.app.file_menu.invoke(1)
+            load.assert_called_once_with(latest)
+
+    def test_recent_reference_bases_keep_three_unique_paths_and_open_from_menu(self):
+        """Verify BCCA history is limited to three paths and can be reopened."""
+        self.assertEqual(self.app.file_menu.entrycget(2, "label"), "Bases de referencia recientes")
+        for number in range(4):
+            self.app._remember_recent_reference_base(self.directory / f"base{number}.bc3")
+        latest = self.directory / "base2.bc3"
+        self.app._remember_recent_reference_base(latest)
+        expected = [self.directory / f"base{number}.bc3" for number in (2, 3, 1)]
+        self.assertEqual(self.app.recent_reference_bases, expected)
+        self.assertEqual(self.app._read_recent_reference_bases(), expected)
+        with patch.object(self.app, "_load_bcca_file") as load:
+            self.app.file_menu.invoke(3)
             load.assert_called_once_with(latest)
 
     def test_icon_buttons_have_hover_help_without_replacing_commands(self):

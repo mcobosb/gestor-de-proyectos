@@ -49,9 +49,13 @@ El panel del proyecto contiene capítulos y partidas. El panel de referencia
 permite consultar bases de precios.
 
 1. Añade una base desde **Archivo → Añadir base de referencia BCCA…**.
+   Las tres últimas bases usadas se conservan en **Archivo → Bases de
+   referencia recientes** para poder abrirlas de nuevo.
 2. Localiza una partida en la referencia y añádela al presupuesto con la flecha
    hacia la izquierda o arrastrándola al proyecto.
-3. Usa **+** para añadir capítulos y **×** para eliminar la selección.
+3. Usa **+** para elegir entre añadir un capítulo o una partida manual. La
+   partida se añade al capítulo seleccionado; si no hay selección, se utiliza
+   el último capítulo. Usa **×** para eliminar la selección.
 4. Las flechas **↑** y **↓** cambian el orden.
 5. Selecciona una partida para consultar sus mediciones, descripción y recursos.
 6. Usa **↻** para editar los datos de la partida seleccionada.

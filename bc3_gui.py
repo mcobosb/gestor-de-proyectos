@@ -570,6 +570,8 @@ class BudgetApp:
         data_directory = user_data_directory(__file__)
         self.recent_projects_path = data_directory / "proyectos_recientes.json"
         self.recent_projects = self._read_recent_projects()
+        self.recent_reference_bases_path = data_directory / "bases_referencia_recientes.json"
+        self.recent_reference_bases = self._read_recent_reference_bases()
         self.preferences_path = data_directory / "preferencias.json"
         self.language = self._read_language_preference()
         set_language(self.language)
@@ -684,9 +686,13 @@ class BudgetApp:
 
         actions = ttk.Frame(self.root, padding=(10, 8))
         actions.grid(row=1, column=0, sticky="ew")
-        ttk.Button(actions, text="+", width=3, command=self.add_chapter, style="Accent.TButton").pack(
-            side="left", padx=(0, 4)
+        self.add_button = ttk.Button(
+            actions, text="+", width=3, command=self.show_add_menu, style="Accent.TButton"
         )
+        self.add_menu = tk.Menu(self.add_button, tearoff=False)
+        self.add_menu.add_command(label="Añadir capítulo", command=self.add_chapter)
+        self.add_menu.add_command(label="Añadir partida", command=self.add_manual_item)
+        self.add_button.pack(side="left", padx=(0, 4))
         ttk.Button(
             actions,
             text="×",
@@ -712,7 +718,7 @@ class BudgetApp:
         ).pack(side="left", padx=(0, 8))
         ttk.Button(actions, text="↻", width=3, command=self.update_selected_budget_item).pack(side="left")
         for button, help_text in zip(actions.winfo_children(), (
-            "Añadir un capítulo al presupuesto.",
+            "Añadir un capítulo o una partida al presupuesto.",
             "Eliminar la partida o el capítulo seleccionado.",
             "Añadir al presupuesto la partida seleccionada en la base de referencia.",
             "Subir la partida o el capítulo seleccionado.",
@@ -779,7 +785,6 @@ class BudgetApp:
         self.budget_tree.bind("<Double-1>", self.toggle_budget_node)
         self.budget_tree.bind("<ButtonRelease-1>", self.edit_budget_type)
         self.budget_tree.bind("<Configure>", lambda _event: self._close_type_editor())
-        ToolTip(self.budget_tree, "Pulsa en la columna Tipo para cambiar la naturaleza de una partida o recurso.")
 
         details = ttk.Notebook(self.budget_splitter, height=190)
         self.budget_splitter.add(details, weight=1)
@@ -1158,6 +1163,7 @@ class BudgetApp:
                 break
         else:
             self.reference_bases.append(dataset)
+        self._remember_recent_reference_base(path)
         self._refresh_reference_views()
         self._set_status(f"BCCA cargado: {path.name}")
 
@@ -1305,7 +1311,98 @@ class BudgetApp:
         chapter_iid = self.chapter_iid_by_code[code]
         self.budget_tree.selection_set(chapter_iid)
         self.budget_tree.see(chapter_iid)
+        self._mark_dirty()
         self._set_status(f"Añadido el capítulo {format_chapter_code(code)}.")
+
+    def show_add_menu(self) -> None:
+        """Muestra las opciones de alta junto al botón Añadir."""
+        self.add_menu.tk_popup(
+            self.add_button.winfo_rootx(),
+            self.add_button.winfo_rooty() + self.add_button.winfo_height(),
+        )
+
+    def add_manual_item(self) -> None:
+        """Solicita los datos de una partida y la añade al capítulo seleccionado."""
+        chapter = self.selected_chapter
+        if chapter is None and self.selected_budget_index is not None:
+            chapter = self.budget_items[self.selected_budget_index].chapter
+        if chapter is None and self.chapter_order:
+            chapter = self.chapter_order[-1]
+        if chapter is None:
+            messagebox.showwarning(
+                "Sin capítulo",
+                "Crea o selecciona un capítulo antes de añadir una partida.",
+                parent=self.root,
+            )
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Añadir partida")
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
+        form = ttk.Frame(dialog, padding=12)
+        form.pack(fill="both", expand=True)
+        values = {
+            "chapter_var": tk.StringVar(value=chapter),
+            "code_var": tk.StringVar(),
+            "unit_var": tk.StringVar(value="ud"),
+            "summary_var": tk.StringVar(),
+            "measurement_var": tk.StringVar(value="1"),
+            "price_var": tk.StringVar(value="0"),
+            "rend_var": tk.StringVar(value="0"),
+        }
+        for row, (label, key) in enumerate(ITEM_FIELDS):
+            ttk.Label(form, text=label).grid(row=row, column=0, sticky="w", padx=(0, 8), pady=3)
+            ttk.Entry(form, textvariable=values[key], width=50).grid(
+                row=row, column=1, sticky="ew", pady=3
+            )
+
+        def accept(_event=None):
+            """Valida la partida e inserta el nuevo elemento en el presupuesto."""
+            code = values["code_var"].get().strip()
+            if not code:
+                messagebox.showerror("Código requerido", "Indica un código para la partida.", parent=dialog)
+                return
+            raw_numbers = (
+                values["measurement_var"].get(),
+                values["price_var"].get(),
+                values["rend_var"].get(),
+            )
+            measurement, price, rendimiento = (
+                parse_float(value, float("nan")) for value in raw_numbers
+            )
+            if not all(isfinite(value) for value in (measurement, price, rendimiento)):
+                messagebox.showerror(
+                    "Dato inválido",
+                    "Comprueba que medición, precio y rendimiento son números válidos.",
+                    parent=dialog,
+                )
+                return
+            target_chapter = values["chapter_var"].get().strip()
+            if not target_chapter:
+                messagebox.showerror("Capítulo requerido", "Indica el capítulo de la partida.", parent=dialog)
+                return
+            item = ProjectItem(
+                code=code,
+                chapter=target_chapter,
+                unit=values["unit_var"].get().strip(),
+                summary=values["summary_var"].get().strip(),
+                measurement=measurement,
+                unit_price=price,
+                rendimiento=rendimiento,
+            )
+            dialog.destroy()
+            self._insert_item(item, self._end_of_chapter(target_chapter), target_chapter)
+            self._mark_dirty()
+
+        buttons = ttk.Frame(form)
+        buttons.grid(row=len(ITEM_FIELDS), column=0, columnspan=2, sticky="e", pady=(10, 0))
+        ttk.Button(buttons, text="Cancelar", command=dialog.destroy).pack(side="left", padx=(0, 6))
+        ttk.Button(buttons, text="Añadir", command=accept).pack(side="left")
+        dialog.bind("<Return>", accept)
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        localize_widget_tree(dialog)
+        dialog.grab_set()
 
     def delete_selected_budget_entry(self) -> None:
         """Elimina, previa confirmación, el capítulo o la partida seleccionados."""
@@ -2389,24 +2486,38 @@ class BudgetApp:
 
     def _read_recent_projects(self) -> list[Path]:
         """Lee hasta cinco rutas absolutas, de más reciente a más antigua."""
+        return self._read_recent_paths(
+            self.recent_projects_path, "Proyectos recientes", "proyectos", 5
+        )
+
+    def _read_recent_reference_bases(self) -> list[Path]:
+        """Lee hasta tres rutas absolutas de bases de referencia recientes."""
+        return self._read_recent_paths(
+            self.recent_reference_bases_path, "Bases recientes", "bases de referencia", 3
+        )
+
+    def _read_recent_paths(
+        self, history_path: Path, dialog_title: str, item_name: str, maximum: int
+    ) -> list[Path]:
+        """Lee un historial de rutas absolutas y descarta entradas duplicadas."""
         try:
-            data = json.loads(self.recent_projects_path.read_text(encoding="utf-8"))
+            data = json.loads(history_path.read_text(encoding="utf-8"))
             if not isinstance(data, list) or not all(
                 isinstance(value, str) and value.strip() and Path(value).is_absolute()
                 for value in data
             ):
-                raise ValueError("Se esperaba una lista de rutas absolutas de proyectos.")
-            return list(dict.fromkeys(Path(value) for value in data))[:5]
+                raise ValueError(f"Se esperaba una lista de rutas absolutas de {item_name}.")
+            return list(dict.fromkeys(Path(value) for value in data))[:maximum]
         except FileNotFoundError:
             return []
         except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
             messagebox.showwarning(
-                "Proyectos recientes", f"No se pudo leer el historial de proyectos:\n{exc}"
+                dialog_title, f"No se pudo leer el historial de {item_name}:\n{exc}"
             )
             return []
 
     def _refresh_recent_projects_menu(self) -> None:
-        """Reconstruye las entradas del menú con las rutas de proyectos recientes."""
+        """Reconstruye las secciones de proyectos y bases recientes del menú Archivo."""
         self.file_menu.insert_command(0, label="Recientes", state="disabled")
         if not self.recent_projects:
             self.file_menu.insert_command(1, label="(No hay proyectos recientes)", state="disabled")
@@ -2415,7 +2526,23 @@ class BudgetApp:
                 index, label=f"{index}. {path}",
                 command=lambda project_path=path: self.open_recent_project(project_path),
             )
-        self._recent_menu_entries = 1 + max(1, len(self.recent_projects))
+        reference_start = 1 + max(1, len(self.recent_projects))
+        self.file_menu.insert_command(
+            reference_start, label="Bases de referencia recientes", state="disabled"
+        )
+        if not self.recent_reference_bases:
+            self.file_menu.insert_command(
+                reference_start + 1,
+                label="(No hay bases de referencia recientes)",
+                state="disabled",
+            )
+        for index, path in enumerate(self.recent_reference_bases, start=1):
+            self.file_menu.insert_command(
+                reference_start + index,
+                label=f"{index}. {path}",
+                command=lambda reference_path=path: self._load_bcca_file(reference_path),
+            )
+        self._recent_menu_entries = reference_start + 1 + max(1, len(self.recent_reference_bases))
 
     def _remember_recent_project(self, path: Path) -> None:
         """Guarda una ruta como proyecto reciente y actualiza el menú correspondiente."""
@@ -2431,6 +2558,28 @@ class BudgetApp:
         except OSError as exc:
             messagebox.showwarning(
                 "Proyectos recientes", f"No se pudo guardar el historial de proyectos:\n{exc}"
+            )
+        self.file_menu.delete(0, self._recent_menu_entries - 1)
+        self._refresh_recent_projects_menu()
+
+    def _remember_recent_reference_base(self, path: Path) -> None:
+        """Guarda una base de referencia reciente y actualiza la sección del menú."""
+        path = path.resolve()
+        self.recent_reference_bases = [path] + [
+            previous for previous in self.recent_reference_bases if previous != path
+        ][:2]
+        try:
+            self.recent_reference_bases_path.write_text(
+                json.dumps(
+                    [str(value) for value in self.recent_reference_bases],
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            messagebox.showwarning(
+                "Bases recientes", f"No se pudo guardar el historial de bases de referencia:\n{exc}"
             )
         self.file_menu.delete(0, self._recent_menu_entries - 1)
         self._refresh_recent_projects_menu()

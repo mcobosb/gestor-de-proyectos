@@ -211,6 +211,8 @@ class DistributionTests(unittest.TestCase):
         build_requirements = (ROOT / "requirements-build.txt").read_text(encoding="utf-8").lower()
         self.assertIn("nuitka", build_requirements)
         self.assertTrue((ROOT / "build_installer.ps1").is_file())
+        build_script = (ROOT / "build_installer.ps1").read_text(encoding="utf-8").lower()
+        self.assertIn("--include-module=matplotlib.backends.backend_pdf", build_script)
         self.assertTrue((ROOT / "installer" / "GestorDeProyectos.iss").is_file())
 
 
