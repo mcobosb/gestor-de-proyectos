@@ -1393,6 +1393,12 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         browser.assert_called_once_with(files[0].as_uri())
         self.assertIn("Cuadro de precios Nº2", files[0].read_text(encoding="utf-8"))
 
+    def test_donation_action_opens_buy_me_a_coffee_page(self):
+        """Verify the donation action opens the configured support page."""
+        with patch("bc3_gui.webbrowser.open", return_value=True) as browser:
+            self.app.open_donation_page()
+        browser.assert_called_once_with("https://buymeacoffee.com/mcobosb")
+
     def test_ods_write_failure_is_reported(self):
         """Verify ODS write failure is reported."""
         self.set_report_items()

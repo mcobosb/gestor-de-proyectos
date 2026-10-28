@@ -222,6 +222,10 @@ certificado y justificación.
 En **Información → Licencia y responsabilidad…** puedes consultar el aviso MIT
 y la limitación de responsabilidad.
 
+Si deseas apoyar el mantenimiento del programa, usa **Información → Apoyar el
+proyecto (Buy Me a Coffee)**. El repositorio de GitHub también muestra el
+botón Sponsor con el mismo enlace.
+
 Verifica profesionalmente todos los resultados antes de emplearlos en un
 expediente o una decisión económica. Guarda copias de seguridad y protege los
 datos de los proyectos; no los subas al repositorio de código.

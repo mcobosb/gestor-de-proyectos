@@ -26,6 +26,7 @@ from odt_reports import write_report_odt
 
 
 APPLICATION_NAME = "Gestor de Proyectos (v1.0.0)"
+BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/mcobosb"
 
 CONCEPT_TYPES = {
     "chapter": "▣ Capítulo",
@@ -660,6 +661,9 @@ class BudgetApp:
         info_menu.add_separator()
         info_menu.add_command(
             label="Licencia y responsabilidad…", command=self.show_license_info
+        )
+        info_menu.add_command(
+            label="Apoyar el proyecto (Buy Me a Coffee)", command=self.open_donation_page
         )
         info_menubutton["menu"] = info_menu
         info_menubutton.pack(side="left", padx=(0, 8))
@@ -3238,6 +3242,25 @@ th {{ background: #1f4e78; color: white; }}
             "planificación económica y certificaciones.",
             parent=self.root,
         )
+
+    def open_donation_page(self) -> None:
+        """Abre la página de apoyo del proyecto en el navegador predeterminado."""
+        try:
+            if not webbrowser.open(BUY_ME_A_COFFEE_URL):
+                messagebox.showerror(
+                    "Apoyar el proyecto",
+                    f"No se pudo abrir el navegador. Visita:\n{BUY_ME_A_COFFEE_URL}",
+                    parent=self.root,
+                )
+                return
+        except (OSError, ValueError) as exc:
+            messagebox.showerror(
+                "Apoyar el proyecto",
+                f"No se pudo abrir el navegador:\n{exc}\n\nVisita:\n{BUY_ME_A_COFFEE_URL}",
+                parent=self.root,
+            )
+            return
+        self._set_status("Página de apoyo abierta en el navegador.")
 
     def show_license_info(self) -> None:
         """Presenta el resumen de la licencia MIT y el aviso de responsabilidad técnica."""
