@@ -16,8 +16,7 @@ from zipfile import BadZipFile, ZipFile
 
 from app_paths import application_directory
 
-LOGO_PATH = application_directory(__file__) / "iconos" / "report_header_logo.png"
-CERTIFICATION_TEMPLATE_PATH = application_directory(__file__) / "plantillas" / "plantilla.odt"
+DEFAULT_TEMPLATE_PATH = application_directory(__file__) / "plantillas" / "plantilla.odt"
 LEFT_MARGIN = 68.0
 RIGHT_MARGIN = 17.0
 PAGE_WIDTH = 595.2755905511812
@@ -35,8 +34,8 @@ def _template_length_to_points(value: str) -> float:
     ]
 
 
-def _read_certification_template():
-    """Carga la imagen de cabecera y el texto del pie de la plantilla ODT."""
+def _read_report_template(template_path: str = ""):
+    """Carga la imagen de cabecera y el texto del pie de la plantilla ODT indicada."""
     namespaces = {
         "style": "urn:oasis:names:tc:opendocument:xmlns:style:1.0",
         "draw": "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0",
@@ -44,8 +43,11 @@ def _read_certification_template():
         "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
         "xlink": "http://www.w3.org/1999/xlink",
     }
+    path = Path(template_path).expanduser() if template_path.strip() else DEFAULT_TEMPLATE_PATH
+    if path.suffix.lower() != ".odt":
+        raise ValueError(f"La plantilla de informes debe ser un archivo ODT: {path}.")
     try:
-        with ZipFile(CERTIFICATION_TEMPLATE_PATH) as archive:
+        with ZipFile(path) as archive:
             styles = ElementTree.fromstring(archive.read("styles.xml"))
             master_page = styles.find(".//style:master-page", namespaces)
             if master_page is None:
@@ -74,13 +76,13 @@ def _read_certification_template():
                 raise ValueError("La plantilla ODT no contiene texto en el pie de página.")
     except (OSError, KeyError, BadZipFile, ElementTree.ParseError) as exc:
         raise ValueError(
-            f"No se pudo leer la plantilla de certificación {CERTIFICATION_TEMPLATE_PATH}: {exc}"
+            f"No se pudo leer la plantilla de informes {path}: {exc}"
         ) from exc
     return image_data, image_path, image_width, image_height, footer_text
 
 
 class ReportLayout:
-    def __init__(self, *, certification: bool = False, use_personal_template: bool = True):
+    def __init__(self, *, certification: bool = False, template_path: str = ""):
         """Carga el logo y configura fuentes, sangrías y estilos del modelo elegido."""
         from reportlab.lib.enums import TA_CENTER, TA_RIGHT
         from reportlab.lib.styles import ParagraphStyle
@@ -132,20 +134,11 @@ class ReportLayout:
             "report-project", parent=self.bold, fontSize=8, leading=9,
         )
         self.certification = certification
-        self.use_personal_template = certification and use_personal_template
-        self.template_footer = ""
-        if self.use_personal_template:
-            (
-                image_data, self.template_image_path, self.logo_width, self.logo_height,
-                self.template_footer,
-            ) = _read_certification_template()
-            self.logo = ImageReader(BytesIO(image_data))
-        elif certification:
-            self.logo = None
-            self.logo_width = self.logo_height = 0
-        else:
-            # La lectura al iniciar permite informar de un logo ausente o corrupto.
-            self.logo = ImageReader(str(LOGO_PATH))
+        (
+            image_data, self.template_image_path, self.logo_width, self.logo_height,
+            self.template_footer,
+        ) = _read_report_template(template_path)
+        self.logo = ImageReader(BytesIO(image_data))
 
     def text(self, value, style=None):
         """Escapa texto para un párrafo PDF y conserva sus saltos de línea."""
@@ -259,14 +252,14 @@ class ReportLayout:
         from reportlab.lib.pagesizes import A4
 
         heading = self.text(title, self.title_style)
-        _, height = heading.wrap(CONTENT_WIDTH if self.certification else CONTENT_WIDTH - 170, 1000)
+        _, height = heading.wrap(CONTENT_WIDTH, 1000)
         project = self.text(project_title, self.project_style)
         _, project_height = project.wrap(CONTENT_WIDTH, 1000)
-        project_y = A4[1] - (124 if self.certification else 60) - height - project_height - 2
+        project_y = A4[1] - 124 - height - project_height - 2
         columns_height = 0
         if column_headers:
             _, columns_height = self.table(column_headers, [], ratios).wrap(CONTENT_WIDTH, 1000)
-        return max(98 if not self.certification else 166, A4[1] - project_y + columns_height + 4)
+        return max(166, A4[1] - project_y + project_height * 7 + columns_height + 4)
 
     def header(self, canvas, document, title, project_title, *, footer="", column_headers=(), ratios=()):
         """Dibuja el logo institucional, títulos, columnas y pie numerado de una página."""
@@ -274,24 +267,18 @@ class ReportLayout:
 
         canvas.saveState()
         top = A4[1]
-        if self.certification:
-            logo_width = self.logo_width
-            logo_y = top - 50 - self.logo_height
-            heading_y = top - 124
-        else:
-            logo_width = 160
-            logo_y = top - 83
-            heading_y = top - 60
+        logo_width = self.logo_width
+        logo_y = top - 50 - self.logo_height
+        heading_y = top - 124
         if self.logo is not None:
             canvas.drawImage(
                 self.logo, LEFT_MARGIN, logo_y, width=logo_width,
-                height=self.logo_height if self.certification else logo_width * 552 / 1434,
+                height=self.logo_height,
                 preserveAspectRatio=True, mask="auto",
             )
         heading = self.text(title, self.title_style)
-        heading_width = CONTENT_WIDTH if self.certification else CONTENT_WIDTH - 170
-        _, height = heading.wrap(heading_width, 100)
-        heading.drawOn(canvas, LEFT_MARGIN if self.certification else LEFT_MARGIN + 170, heading_y - height)
+        _, height = heading.wrap(CONTENT_WIDTH, 100)
+        heading.drawOn(canvas, LEFT_MARGIN, heading_y - height)
         project = self.text(project_title, self.project_style)
         _, project_height = project.wrap(CONTENT_WIDTH, 100)
         project_y = heading_y - height - project_height - 2
@@ -303,14 +290,7 @@ class ReportLayout:
         else:
             canvas.setLineWidth(0.5)
             canvas.line(LEFT_MARGIN, project_y - 4, PAGE_WIDTH - RIGHT_MARGIN, project_y - 4)
-        if self.use_personal_template:
-            canvas.setFont(self.regular_font, 6)
-            canvas.drawCentredString(PAGE_WIDTH / 2, 16, self.template_footer)
-            canvas.drawRightString(PAGE_WIDTH - RIGHT_MARGIN, 16, str(document.page))
-        elif not self.certification:
-            canvas.setLineWidth(0.5)
-            canvas.line(LEFT_MARGIN, 26, PAGE_WIDTH - RIGHT_MARGIN, 26)
-            canvas.setFont(self.regular_font, 7)
-            canvas.drawString(LEFT_MARGIN, 16, footer)
-            canvas.drawRightString(PAGE_WIDTH - RIGHT_MARGIN, 16, str(document.page))
+        canvas.setFont(self.regular_font, 6)
+        canvas.drawCentredString(PAGE_WIDTH / 2, 16, self.template_footer)
+        canvas.drawRightString(PAGE_WIDTH - RIGHT_MARGIN, 16, str(document.page))
         canvas.restoreState()

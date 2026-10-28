@@ -123,18 +123,29 @@ _TEXT = {
     "Beneficio industrial (%)": ("Industrial profit (%)", "Bénéfice industriel (%)"),
     "IVA (%)": ("VAT (%)", "TVA (%)"),
     "Baja de adjudicación (%)": ("Tender discount (%)", "Rabais d'adjudication (%)"),
-    "Usar plantilla personal en certificaciones (encabezado y pie)": (
-        "Use personal certification template (header and footer)",
-        "Utiliser le modèle personnel des situations (en-tête et pied de page)",
+    "Plantilla de cabecera y pie (ODT)": (
+        "Header and footer template (ODT)",
+        "Modèle d'en-tête et de pied de page (ODT)",
+    ),
+    "Examinar…": ("Browse…", "Parcourir…"),
+    "Selecciona la plantilla de informes": (
+        "Select the report template",
+        "Sélectionner le modèle des rapports",
     ),
     "Formato de informes": ("Report format", "Format des rapports"),
+    "La plantilla aporta la cabecera y el pie de todos los informes de\n"
+    "presupuesto y certificaciones. Déjala vacía para usar la incluida.\n"
     "GG y BI se aplican al PEM. En certificaciones, se deduce la baja\nantes del IVA. La baja no modifica el presupuesto de licitación.\n"
     "Guardar conserva estos datos para este proyecto y como valores\n"
     "iniciales de nuevos proyectos. Los proyectos guardados mantienen su configuración.": (
+        "The template provides the header and footer for all budget and certification\n"
+        "reports. Leave it empty to use the included template.\n"
         "Overheads and industrial profit apply to the construction budget. For certifications, "
         "the discount is deducted before VAT. The discount does not change the tender budget.\n"
         "Saving keeps these values for this project and as defaults for new projects. "
         "Saved projects retain their settings.",
+        "Le modèle fournit l'en-tête et le pied de page de tous les rapports de budget et de\n"
+        "situation. Laissez le champ vide pour utiliser le modèle inclus.\n"
         "Les frais généraux et le bénéfice industriel s'appliquent au montant des travaux. "
         "Pour les situations, le rabais est déduit avant la TVA. Le rabais ne modifie pas le budget d'appel d'offres.\n"
         "L'enregistrement conserve ces valeurs pour ce projet et comme valeurs par défaut des nouveaux projets. "

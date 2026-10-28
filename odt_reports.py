@@ -256,29 +256,15 @@ class _OdtReport:
 
 def _new_report(title: str, project_title: str, settings: ReportSettings, *, certification=False):
     """Crea un documento y prepara la identidad visual correspondiente al informe."""
-    if certification:
-        if settings.use_certification_template:
-            from report_layout import _read_certification_template
+    from report_layout import _read_report_template
 
-            image_data, image_path, width, height, footer = _read_certification_template()
-            return _OdtReport(
-                title, project_title, settings.author, image_data=image_data,
-                image_path=f"Pictures/certification-template{Path(image_path).suffix.lower()}",
-                image_type="image/jpeg" if Path(image_path).suffix.lower() in {".jpg", ".jpeg"}
-                else "image/png",
-                image_width=width, image_height=height, footer=footer,
-            )
-        return _OdtReport(title, project_title, settings.author)
-
-    from report_layout import LOGO_PATH
-
-    image = LOGO_PATH.read_bytes()
-    width = 160.0
-    height = width * 552 / 1434
+    image, image_path, width, height, footer = _read_report_template(settings.template_path)
     return _OdtReport(
         title, project_title, settings.author, image_data=image,
-        image_path="Pictures/report-header-logo.png", image_type="image/png",
-        image_width=width, image_height=height, footer=f"{date.today():%d/%m/%Y}",
+        image_path=f"Pictures/report-template{Path(image_path).suffix.lower()}",
+        image_type="image/jpeg" if Path(image_path).suffix.lower() in {".jpg", ".jpeg"}
+        else "image/png",
+        image_width=width, image_height=height, footer=footer,
     )
 
 

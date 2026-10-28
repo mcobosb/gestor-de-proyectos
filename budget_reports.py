@@ -42,7 +42,7 @@ class ReportSettings:
     signature: str = "(Fecha y firma electrónicas)"
     contractor: str = ""
     contractor_representative: str = ""
-    use_certification_template: bool = True
+    template_path: str = ""
     output_format: str = "pdf"
     general_expenses: float = 13.0
     industrial_profit: float = 6.0
@@ -69,14 +69,17 @@ class ReportSettings:
                 if not isfinite(number) or not 0 <= number <= 100:
                     raise ValueError(f"El porcentaje {key} debe estar entre 0 y 100.")
                 values[key] = number
-            elif key == "use_certification_template":
-                if not isinstance(value, bool):
-                    raise ValueError("El campo use_certification_template debe ser booleano.")
-                values[key] = value
             elif key == "output_format":
                 if not isinstance(value, str) or value.lower() not in {"pdf", "odt"}:
                     raise ValueError("El formato de informes debe ser PDF u ODT.")
                 values[key] = value.lower()
+            elif key == "template_path":
+                if not isinstance(value, str):
+                    raise ValueError("La ruta de la plantilla debe ser texto.")
+                raw_path = value.strip()
+                if raw_path and not Path(raw_path).expanduser().is_absolute():
+                    raise ValueError("La ruta de la plantilla debe ser absoluta.")
+                values[key] = str(Path(raw_path).expanduser()) if raw_path else ""
             else:
                 if not isinstance(value, str):
                     raise ValueError(f"El campo {key} debe ser texto.")
@@ -232,7 +235,7 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
         raise ValueError(f"Tipo de informe desconocido: {report}")
     settings = app.report_settings
     title = app._project_title()
-    layout = ReportLayout()
+    layout = ReportLayout(template_path=settings.template_path)
     text = layout.text
     table = layout.table
     story = []
@@ -517,9 +520,7 @@ def write_certification_pdf(
 
     report_heading = "CERTIFICACIÓN Y MEDICIONES" if detail else "RESUMEN DE CERTIFICACIÓN"
     heading = f"{report_heading} · Certificación {certification_number} · {month_label}"
-    layout = ReportLayout(
-        certification=True, use_personal_template=settings.use_certification_template,
-    )
+    layout = ReportLayout(certification=True, template_path=settings.template_path)
     text = layout.text
     table = layout.table
     story = []

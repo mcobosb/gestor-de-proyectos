@@ -94,9 +94,11 @@ Abre **Archivo → Configuración…** y completa:
 - Gastos generales, beneficio industrial e IVA.
 - Baja de adjudicación para certificaciones.
 - Formato de salida de los informes: PDF (predeterminado) u ODT editable.
-- Si se usa la plantilla personal ODT en la cabecera y el pie de los informes
-  de certificación. Al desactivarla, esos elementos quedan en blanco; las
-  partidas y los datos del informe se siguen generando.
+- La ruta de una plantilla ODT que aporta la cabecera y el pie de todos los
+  informes de presupuesto y certificaciones. Pulsa **Examinar…** para elegir
+  el archivo. Si se deja vacía, se emplea la plantilla incluida con la
+  aplicación. Esta plantilla no afecta a exportaciones Excel, CSV ni al
+  diagrama de Gantt.
 
 Los porcentajes deben estar entre 0 y 100. **Guardar** conserva los valores como
 configuración inicial para nuevos proyectos y dentro del proyecto actual.

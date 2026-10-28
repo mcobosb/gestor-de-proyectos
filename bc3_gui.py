@@ -2391,16 +2391,31 @@ class BudgetApp:
             state="readonly", width=12,
         ).grid(row=format_row, column=1, sticky="w")
         template_row = format_row + 1
-        variables["use_certification_template"] = tk.BooleanVar(
-            value=values["use_certification_template"]
+        ttk.Label(reports_tab, text="Plantilla de cabecera y pie (ODT)").grid(
+            row=template_row, column=0, sticky="w", pady=5, padx=(0, 12)
         )
-        ttk.Checkbutton(
-            reports_tab,
-            text="Usar plantilla personal en certificaciones (encabezado y pie)",
-            variable=variables["use_certification_template"],
-        ).grid(row=template_row, column=0, columnspan=2, sticky="w", pady=5)
+        variables["template_path"] = tk.StringVar(value=values["template_path"])
+        ttk.Entry(reports_tab, textvariable=variables["template_path"], width=55).grid(
+            row=template_row, column=1, sticky="ew"
+        )
+
+        def select_report_template() -> None:
+            """Permite seleccionar la plantilla ODT de cabecera y pie de los informes."""
+            path = filedialog.askopenfilename(
+                parent=window,
+                title="Selecciona la plantilla de informes",
+                filetypes=[("Plantilla ODT", "*.odt")],
+            )
+            if path:
+                variables["template_path"].set(path)
+
+        ttk.Button(reports_tab, text="Examinar…", command=select_report_template).grid(
+            row=template_row, column=2, sticky="w", padx=(8, 0)
+        )
         ttk.Label(
-            reports_tab, text="GG y BI se aplican al PEM. En certificaciones, se deduce la baja\n"
+            reports_tab, text="La plantilla aporta la cabecera y el pie de todos los informes de\n"
+            "presupuesto y certificaciones. Déjala vacía para usar la incluida.\n"
+            "GG y BI se aplican al PEM. En certificaciones, se deduce la baja\n"
             "antes del IVA. La baja no modifica el presupuesto de licitación.\n"
             "Guardar conserva estos datos para este proyecto y como valores\n"
             "iniciales de nuevos proyectos. Los proyectos guardados mantienen su configuración.",

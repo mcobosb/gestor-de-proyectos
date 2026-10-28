@@ -846,17 +846,13 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         format_selector.set("ODT")
         next(
             child for child in reports_tab.winfo_children()
-            if isinstance(child, ttk.Checkbutton)
-        ).invoke()
-        next(
-            child for child in reports_tab.winfo_children()
             if isinstance(child, ttk.Button) and child.cget("text") == "Guardar informes"
         ).invoke()
         self.assertFalse(window.winfo_exists())
         saved = self.app._read_report_settings()
         self.assertEqual(saved.author, "Autor desde ventana")
         self.assertEqual(saved.output_format, "odt")
-        self.assertFalse(saved.use_certification_template)
+        self.assertEqual(saved.template_path, "")
 
     def test_language_preference_is_saved_and_applied_immediately(self):
         """Save the application language globally and update the visible interface."""

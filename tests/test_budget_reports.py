@@ -72,15 +72,16 @@ class ReportCalculationsTests(unittest.TestCase):
         """Verify invalid configuration is rejected."""
         for data in (
             None, [], {"author": 123}, {"vat": True}, {"vat": "NaN"}, {"vat": -1},
-            {"use_certification_template": "true"},
+            {"template_path": 123}, {"template_path": "plantilla.odt"},
             {"output_format": "docx"},
         ):
             with self.subTest(data=data), self.assertRaises(ValueError):
                 ReportSettings.from_dict(data)
-        settings = ReportSettings.from_dict({"use_certification_template": False})
-        self.assertFalse(settings.use_certification_template)
-        self.assertIs(
-            ReportSettings.from_dict(settings.to_dict()).use_certification_template, False
+        path = str(Path.cwd() / "plantilla.odt")
+        settings = ReportSettings.from_dict({"template_path": path})
+        self.assertEqual(settings.template_path, path)
+        self.assertEqual(
+            ReportSettings.from_dict(settings.to_dict()).template_path, path
         )
         self.assertEqual(
             ReportSettings.from_dict({"output_format": "ODT"}).output_format, "odt"
@@ -128,6 +129,9 @@ class ReportLayoutTests(unittest.TestCase):
     def test_all_models_repeat_the_original_logo_and_use_real_bold_fonts(self):
         """Verify all models repeat the original logo and use real bold fonts."""
         from pypdf import PdfReader
+        from report_layout import _read_report_template
+
+        footer = _read_report_template()[-1]
 
         for index, name in enumerate((*REPORT_NAMES, *CERTIFICATION_REPORT_NAMES)):
             with self.subTest(name=name):
@@ -143,36 +147,17 @@ class ReportLayoutTests(unittest.TestCase):
                 self.assertEqual(reader.metadata.author, "Autoria singular")
                 report_text = "\n".join(page.extract_text() for page in reader.pages)
                 self.assertIn("Autoria singular", report_text)
+                self.assertIn(footer, report_text)
                 for page in reader.pages:
                     self.assertEqual(len(page.images), 1)
-                    expected_size = (1513, 570) if name in CERTIFICATION_REPORT_NAMES else (1434, 552)
-                    self.assertEqual(page.images[0].image.size, expected_size)
+                    self.assertEqual(page.images[0].image.size, (1513, 570))
                     fonts = [font.get_object().get("/BaseFont", "") for font in page["/Resources"]["/Font"].values()]
                     self.assertTrue(any("Bold" in name for name in fonts))
                     self.assertTrue(any("Arial" in name or "Helvetica" in name for name in fonts))
-                if name in CERTIFICATION_REPORT_NAMES:
-                    self.assertIn("Plaza Nueva", report_text)
                 if name == REPORT_NAMES[0]:
                     self.assertIn("CUADRO DE PRECIOS 1", reader.pages[0].extract_text())
                     self.assertIn("CUADRO DE PRECIOS 2", reader.pages[1].extract_text())
                     self.assertNotIn("CUADRO DE PRECIOS 1", reader.pages[1].extract_text())
-
-    def test_certification_reports_can_omit_personal_header_and_footer(self):
-        """Verify disabling the personal template leaves certification data intact."""
-        from pypdf import PdfReader
-
-        target = self.folder / "certification-without-template.pdf"
-        settings = ReportSettings(author="Autoria singular", use_certification_template=False)
-        write_certification_pdf(
-            self.app.budget_items, self.app._chapter_title, self.app._project_title(),
-            settings, CERTIFICATION_REPORT_NAMES[1], target, "2026-10-01", 1, "Oct 26",
-        )
-        page = PdfReader(target).pages[0]
-        self.assertEqual(len(page.images), 0)
-        report_text = page.extract_text()
-        self.assertIn("Proyecto singular", report_text)
-        self.assertIn("Resumen singular", report_text)
-        self.assertNotIn("Plaza Nueva", report_text)
 
     def test_all_budget_reports_export_as_editable_odt_documents(self):
         """Verify every budget report is written as a readable ODT document."""
@@ -198,9 +183,12 @@ class ReportLayoutTests(unittest.TestCase):
                     self.assertIn(expected_titles[name], report_text)
                     self.assertIsNone(archive.testzip())
 
-    def test_certification_reports_export_odt_with_or_without_the_personal_template(self):
-        """Verify certification ODTs retain report data and honor template settings."""
+    def test_certification_reports_export_odt_with_the_shared_template(self):
+        """Verify certification ODTs retain report data and use the shared template."""
         from odt_reports import _ODF_MIMETYPE
+        from report_layout import _read_report_template
+
+        footer = _read_report_template()[-1]
 
         for index, name in enumerate(CERTIFICATION_REPORT_NAMES):
             with self.subTest(name=name):
@@ -218,22 +206,9 @@ class ReportLayoutTests(unittest.TestCase):
                         else "Capitulo singular",
                         report_text,
                     )
-                    self.assertIn("Pictures/certification-template.jpg", archive.namelist())
+                    self.assertIn("Pictures/report-template.jpg", archive.namelist())
                     styles = ElementTree.fromstring(archive.read("styles.xml"))
-                    self.assertIn("Plaza Nueva", " ".join(styles.itertext()))
-
-        target = self.folder / "certification-unbranded.odt"
-        settings = ReportSettings(use_certification_template=False)
-        write_certification_odt(
-            self.app.budget_items, self.app._chapter_title, self.app._project_title(),
-            settings, CERTIFICATION_REPORT_NAMES[1], target, "2026-10-01", 1, "Oct 26",
-        )
-        with ZipFile(target) as archive:
-            content = ElementTree.fromstring(archive.read("content.xml"))
-            self.assertIn("Resumen singular", " ".join(content.itertext()))
-            self.assertFalse(any(name.startswith("Pictures/") for name in archive.namelist()))
-            styles = ElementTree.fromstring(archive.read("styles.xml"))
-            self.assertNotIn("Plaza Nueva", " ".join(styles.itertext()))
+                    self.assertIn(footer, " ".join(styles.itertext()))
 
     def test_work_item_units_are_printed_in_price_budget_and_certification_details(self):
         """Verify work-item units remain visible in item-level report templates."""
@@ -317,10 +292,10 @@ class ReportLayoutTests(unittest.TestCase):
         self.assertGreater(len(title_lines), 1)
         self.assertGreater(min(span[2] for span in title_lines), chapter[2] + 8)
 
-    def test_missing_header_logo_raises_instead_of_generating_an_unbranded_pdf(self):
-        """Verify missing header logo raises instead of generating an unbranded pdf."""
-        target = self.folder / "missing-logo.pdf"
-        with patch("report_layout.LOGO_PATH", self.folder / "absent.png"), self.assertRaises(OSError):
+    def test_missing_report_template_raises_instead_of_generating_an_unbranded_pdf(self):
+        """Verify a missing report template does not generate an unbranded PDF."""
+        target = self.folder / "missing-template.pdf"
+        with patch("report_layout.DEFAULT_TEMPLATE_PATH", self.folder / "absent.odt"), self.assertRaises(ValueError):
             write_pdf(self.app, "Presupuesto resumen", target)
         self.assertFalse(target.exists())
 
