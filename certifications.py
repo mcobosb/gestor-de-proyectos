@@ -17,9 +17,10 @@ import webbrowser
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import ttk
 
 from bc3_gui import APPLICATION_NAME, ToolTip, fmt_eur, format_chapter_code, parse_float
+from localization import filedialog, localize_widget_tree, messagebox, translate
 from planning import PlanParams, apply_saved_plan_state, build_activities, schedule
 from budget_reports import CERTIFICATION_REPORT_NAMES, ReportSettings, write_certification_pdf
 
@@ -234,6 +235,7 @@ class CertificationWindow(tk.Toplevel):
         self._load_saved_plan()
         self._build_ui()
         self._refresh_tree()
+        localize_widget_tree(self)
 
     def _load_saved_plan(self) -> None:
         """Sustituye las previsiones calculadas por importes mensuales guardados por partida."""
@@ -545,7 +547,7 @@ class CertificationWindow(tk.Toplevel):
         finally:
             if temporary_path is not None and temporary_path.exists():
                 temporary_path.unlink()
-        self.selection_label.config(text=f"Informe guardado: {target}")
+        self.selection_label.config(text=translate(f"Informe guardado: {target}"))
         try:
             os.startfile(str(target))  # type: ignore[attr-defined]
         except OSError as exc:

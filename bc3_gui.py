@@ -13,9 +13,13 @@ from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from math import isfinite
 from pathlib import Path
-from tkinter import filedialog, messagebox, simpledialog, ttk
+from tkinter import ttk
 
 from app_paths import application_directory, user_data_directory
+from localization import (
+    LANGUAGES, filedialog, localize_widget_tree, messagebox, set_language,
+    simpledialog, translate,
+)
 from ui_theme import COLORS, apply_theme
 from budget_reports import REPORT_NAMES, ReportSettings, write_pdf
 
@@ -565,6 +569,9 @@ class BudgetApp:
         data_directory = user_data_directory(__file__)
         self.recent_projects_path = data_directory / "proyectos_recientes.json"
         self.recent_projects = self._read_recent_projects()
+        self.preferences_path = data_directory / "preferencias.json"
+        self.language = self._read_language_preference()
+        set_language(self.language)
         self.report_settings_path = data_directory / "configuracion_informes.json"
         self.default_report_settings = self._read_report_settings()
         self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
@@ -889,6 +896,7 @@ class BudgetApp:
         bcca_details.rowconfigure(0, weight=1)
         self.bcca_detail_text = tk.Text(bcca_details, wrap="word", height=8, state="disabled")
         self.bcca_detail_text.grid(row=0, column=0, sticky="nsew")
+        localize_widget_tree(self.root)
 
     def _clear_tree(self, tree: ttk.Treeview):
         """Elimina todos los elementos de un árbol de Tkinter."""
@@ -1181,6 +1189,7 @@ class BudgetApp:
         buttons.pack(fill="x")
         ttk.Button(buttons, text="Quitar", command=accept).pack(side="right")
         ttk.Button(buttons, text="Cancelar", command=dialog.destroy).pack(side="right", padx=(0, 6))
+        localize_widget_tree(dialog)
         dialog.grab_set()
 
     def _reference_base_for(self, item: ProjectItem) -> Bc3Dataset | None:
@@ -1621,6 +1630,7 @@ class BudgetApp:
         ttk.Button(buttons, text="Guardar", command=accept).pack(side="left")
         dialog.bind("<Return>", accept)
         dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        localize_widget_tree(dialog)
         dialog.grab_set()
 
     def _apply_budget_fields(self) -> bool:
@@ -2160,6 +2170,59 @@ class BudgetApp:
         """Marca el proyecto como modificado desde su último guardado."""
         self.is_dirty = True
 
+    def _read_language_preference(self) -> str:
+        """Lee el idioma global guardado y avisa si el archivo no es válido."""
+        try:
+            data = json.loads(self.preferences_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return "es"
+        except (OSError, json.JSONDecodeError) as exc:
+            messagebox.showwarning(
+                "Preferencias de idioma",
+                f"No se pudieron leer las preferencias; se usará español:\n{exc}",
+                parent=self.root,
+            )
+            return "es"
+        language = data.get("language") if isinstance(data, dict) else None
+        if not isinstance(language, str) or language not in LANGUAGES:
+            messagebox.showwarning(
+                "Preferencias de idioma",
+                "El idioma guardado no es válido; se usará español.",
+                parent=self.root,
+            )
+            return "es"
+        return language
+
+    def _save_language_preference(self, language: str) -> bool:
+        """Guarda el idioma global de forma atómica y aplica el cambio al instante."""
+        if language not in LANGUAGES:
+            raise ValueError(f"Idioma no admitido: {language}")
+        temporary_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=self.preferences_path.parent,
+                suffix=".tmp", delete=False,
+            ) as handle:
+                temporary_path = Path(handle.name)
+                json.dump({"language": language}, handle, ensure_ascii=False, indent=2)
+                handle.write("\n")
+            temporary_path.replace(self.preferences_path)
+        except OSError as exc:
+            messagebox.showerror(
+                translate("No se pudo guardar el idioma"),
+                f"{translate('No se pudo guardar el idioma')}:\n{exc}",
+                parent=self.root,
+            )
+            return False
+        finally:
+            if temporary_path is not None and temporary_path.exists():
+                temporary_path.unlink()
+        self.language = language
+        set_language(language)
+        localize_widget_tree(self.root)
+        self._set_status(translate("Idioma cambiado"))
+        return True
+
     def _read_report_settings(self) -> ReportSettings:
         """Lee la configuración de informes y usa valores predeterminados ante errores."""
         try:
@@ -2189,13 +2252,17 @@ class BudgetApp:
         return True
 
     def open_report_settings(self) -> None:
-        """Abre el formulario para editar datos de autoría y porcentajes de informes."""
+        """Abre las pestañas de configuración de informes e idioma."""
         window = tk.Toplevel(self.root)
         window.title("Configuración de informes")
         window.transient(self.root)
-        window.resizable(False, False)
-        frame = ttk.Frame(window, padding=18)
-        frame.pack(fill="both", expand=True)
+        window.resizable(True, False)
+        notebook = ttk.Notebook(window, padding=12)
+        notebook.pack(fill="both", expand=True)
+        reports_tab = ttk.Frame(notebook, padding=8)
+        language_tab = ttk.Frame(notebook, padding=8)
+        notebook.add(reports_tab, text="Informes")
+        notebook.add(language_tab, text="Idioma")
         fields = (
             ("Autoría / nombre", "author"), ("Cargo / titulación", "role"),
             ("Entidad / servicio", "organization"), ("Localidad", "location"),
@@ -2209,25 +2276,53 @@ class BudgetApp:
         variables = {}
         values = self.report_settings.to_dict()
         for row, (label, key) in enumerate(fields):
-            ttk.Label(frame, text=label).grid(row=row, column=0, sticky="w", pady=5, padx=(0, 12))
+            ttk.Label(reports_tab, text=label).grid(row=row, column=0, sticky="w", pady=5, padx=(0, 12))
             variables[key] = tk.StringVar(value=str(values[key]))
-            ttk.Entry(frame, textvariable=variables[key], width=55).grid(row=row, column=1, sticky="ew")
+            ttk.Entry(reports_tab, textvariable=variables[key], width=55).grid(row=row, column=1, sticky="ew")
         ttk.Label(
-            frame, text="GG y BI se aplican al PEM. En certificaciones, se deduce la baja\n"
+            reports_tab, text="GG y BI se aplican al PEM. En certificaciones, se deduce la baja\n"
             "antes del IVA. La baja no modifica el presupuesto de licitación.\n"
             "Guardar conserva estos datos para este proyecto y como valores\n"
             "iniciales de nuevos proyectos. Los proyectos guardados mantienen su configuración.",
         ).grid(row=len(fields), column=0, columnspan=2, sticky="w", pady=12)
 
-        def save():
+        language_tab.columnconfigure(1, weight=1)
+        ttk.Label(language_tab, text="Idioma").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=8)
+        language_var = tk.StringVar(value=LANGUAGES[self.language])
+        language_selector = ttk.Combobox(
+            language_tab, textvariable=language_var, values=tuple(LANGUAGES.values()),
+            state="readonly", width=24,
+        )
+        language_selector.grid(row=0, column=1, sticky="w", pady=8)
+        ttk.Label(
+            language_tab,
+            text="El idioma se guarda como preferencia de la aplicación y se aplica inmediatamente.",
+            wraplength=420,
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 12))
+
+        def save_reports():
             """Guarda los valores del formulario y cierra el diálogo si son válidos."""
             if self._save_report_settings({key: variable.get() for key, variable in variables.items()}):
                 window.destroy()
 
-        buttons = ttk.Frame(frame)
-        buttons.grid(row=len(fields) + 1, column=0, columnspan=2, sticky="e")
-        ttk.Button(buttons, text="Cancelar", command=window.destroy).pack(side="left", padx=6)
-        ttk.Button(buttons, text="Guardar", style="Accent.TButton", command=save).pack(side="left")
+        def save_language():
+            """Guarda la preferencia global y conserva abierto el diálogo."""
+            selected = language_var.get()
+            language = next(
+                code for code, label in LANGUAGES.items() if label == selected
+            )
+            if self._save_language_preference(language):
+                language_var.set(LANGUAGES[language])
+
+        ttk.Button(
+            reports_tab, text="Guardar informes", style="Accent.TButton",
+            command=save_reports,
+        ).grid(row=len(fields) + 1, column=0, columnspan=2, sticky="e", pady=(8, 0))
+        ttk.Button(
+            language_tab, text="Guardar idioma", style="Accent.TButton",
+            command=save_language,
+        ).grid(row=2, column=1, sticky="e", pady=(8, 0))
+        localize_widget_tree(window)
         window.grab_set()
 
     def generate_report(self, report: str) -> None:
@@ -2984,7 +3079,7 @@ th {{ background: #1f4e78; color: white; }}
 
     def _set_status(self, text: str):
         """Mantiene el título del marco de la ventana al actualizar el estado."""
-        self.root.title("Aplicación")
+        self.root.title(translate("Aplicación"))
 
 
 def show_startup_screen(root: tk.Tk) -> None:

@@ -401,6 +401,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.addCleanup(self.root.destroy)
         with (
             patch.object(BudgetApp, "_read_recent_projects", return_value=[]),
+            patch("bc3_gui.user_data_directory", return_value=self.directory),
             patch.object(self.root, "state"),
         ):
             self.app = BudgetApp(self.root)
@@ -771,14 +772,78 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
                      if menu.type(i) == "command" and menu.entrycget(i, "label") == "Configuración…")
         menu.invoke(index)
         window = next(child for child in self.root.winfo_children() if isinstance(child, tk.Toplevel))
-        frame = window.winfo_children()[0]
-        entries = [child for child in frame.winfo_children() if isinstance(child, ttk.Entry)]
+        notebook = next(child for child in window.winfo_children() if isinstance(child, ttk.Notebook))
+        reports_tab = window.nametowidget(notebook.tabs()[0])
+        entries = [child for child in reports_tab.winfo_children() if isinstance(child, ttk.Entry)]
         entries[0].delete(0, "end")
         entries[0].insert(0, "Autor desde ventana")
-        buttons = next(child for child in frame.winfo_children() if isinstance(child, ttk.Frame))
-        next(child for child in buttons.winfo_children() if child.cget("text") == "Guardar").invoke()
+        next(
+            child for child in reports_tab.winfo_children()
+            if isinstance(child, ttk.Button) and child.cget("text") == "Guardar informes"
+        ).invoke()
         self.assertFalse(window.winfo_exists())
         self.assertEqual(self.app._read_report_settings().author, "Autor desde ventana")
+
+    def test_language_preference_is_saved_and_applied_immediately(self):
+        """Save the application language globally and update the visible interface."""
+        self.assertTrue(self.app._save_language_preference("en"))
+        self.assertEqual(json.loads(self.app.preferences_path.read_text(encoding="utf-8")), {
+            "language": "en",
+        })
+        toolbar = self.root.grid_slaves(row=0, column=0)[0]
+        file_button = next(
+            child for child in toolbar.winfo_children()
+            if isinstance(child, ttk.Menubutton) and child.cget("text") == "File"
+        )
+        self.assertEqual(file_button.cget("text"), "File")
+        self.assertTrue(self.app._save_language_preference("es"))
+
+    def test_language_can_be_selected_in_settings_dialog(self):
+        """Allow choosing and saving a language from the settings language tab."""
+        self.app.open_report_settings()
+        window = next(
+            child for child in self.root.winfo_children()
+            if isinstance(child, tk.Toplevel)
+        )
+        notebook = next(
+            child for child in window.winfo_children()
+            if isinstance(child, ttk.Notebook)
+        )
+        language_tab = window.nametowidget(notebook.tabs()[1])
+        selector = next(
+            child for child in language_tab.winfo_children()
+            if isinstance(child, ttk.Combobox)
+        )
+        selector.set("Français")
+        next(
+            child for child in language_tab.winfo_children()
+            if isinstance(child, ttk.Button) and child.cget("text") == "Guardar idioma"
+        ).invoke()
+        self.assertEqual(self.app.language, "fr")
+        self.assertEqual(
+            json.loads(self.app.preferences_path.read_text(encoding="utf-8"))["language"],
+            "fr",
+        )
+        self.assertTrue(self.app._save_language_preference("es"))
+
+    def test_language_preference_is_restored_on_next_application_start(self):
+        """Load the selected global language when a new application instance starts."""
+        self.app.preferences_path.write_text('{"language": "fr"}', encoding="utf-8")
+        root = tk.Tk()
+        root.withdraw()
+        self.addCleanup(root.destroy)
+        with (
+            patch.object(BudgetApp, "_read_recent_projects", return_value=[]),
+            patch("bc3_gui.user_data_directory", return_value=self.directory),
+            patch.object(root, "state"),
+        ):
+            reopened = BudgetApp(root)
+        self.assertEqual(reopened.language, "fr")
+        toolbar = root.grid_slaves(row=0, column=0)[0]
+        self.assertTrue(any(
+            isinstance(child, ttk.Menubutton) and child.cget("text") == "Fichier"
+            for child in toolbar.winfo_children()
+        ))
 
     def test_pdf_generation_is_atomic_and_uses_saved_settings(self):
         """Verify pdf generation is atomic and uses saved settings."""

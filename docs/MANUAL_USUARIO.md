@@ -21,6 +21,10 @@ python -m venv .venv
 En las siguientes ocasiones basta con ejecutar el último comando. Mantén juntos
 los módulos Python y la carpeta `iconos`.
 
+El idioma se puede cambiar desde **Archivo → Configuración… → Idioma**.
+Están disponibles español, inglés y francés. La preferencia se guarda en el
+archivo global `preferencias.json` y se aplica sin reiniciar la aplicación.
+
 ## 2. Crear o abrir un proyecto
 
 La aplicación arranca siempre sin proyecto ni bases cargadas, aunque conserve

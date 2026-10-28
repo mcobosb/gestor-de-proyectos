@@ -13,9 +13,10 @@ import webbrowser
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import ttk
 
 from bc3_gui import APPLICATION_NAME, ToolTip, fmt_eur, fmt_number, format_chapter_code
+from localization import filedialog, localize_widget_tree, messagebox, translate
 from ui_theme import COLORS
 
 try:
@@ -286,6 +287,7 @@ class PlanningWindow(tk.Toplevel):
         self._build_ui()
         self._refresh_holidays()
         self._recalculate()
+        localize_widget_tree(self)
         self._ready = True
         self.protocol("WM_DELETE_WINDOW", self._close)
 
@@ -706,6 +708,7 @@ class PlanningWindow(tk.Toplevel):
         ttk.Button(actions, text="Abrir PDF", command=lambda: self._open_file(pdf)).pack(side="left", padx=(6, 0))
         ttk.Button(actions, text="Guardar como…", command=lambda: self._save_copy(png, pdf)).pack(side="left", padx=(6, 0))
         ttk.Button(actions, text="Cerrar", command=window.destroy).pack(side="right")
+        localize_widget_tree(window)
 
     @staticmethod
     def _open_file(path: Path) -> None:
@@ -730,4 +733,4 @@ class PlanningWindow(tk.Toplevel):
 
     def _set_status(self, text: str) -> None:
         """Muestra un mensaje en la barra de estado de planificación."""
-        self.status.config(text=text)
+        self.status.config(text=translate(text))
