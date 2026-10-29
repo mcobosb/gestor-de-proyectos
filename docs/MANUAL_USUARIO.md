@@ -1,6 +1,6 @@
 # Manual de usuario
 
-## Gestor de Proyectos (v1.0.0)
+## Gestor de Proyectos (v1.2.0)
 
 Herramienta para preparar presupuestos, mediciones, planificación de obra y
 certificaciones. Los ejemplos de rutas de este manual son ficticios.
@@ -157,7 +157,178 @@ no el modelo PDF maquetado.
 Los informes no inventan precios ausentes. Si falta un recurso, carga su base de
 referencia o completa los precios necesarios antes de volver a generarlo.
 
-## 8. Planificar la obra
+## 8. Estimar residuos de construcción y demolición (RCDs)
+
+Abre **Herramientas → RCDs**, primera entrada del menú. El modelo procede de las
+hojas **Resumen**, **Lista MAM** y **Presupuesto** del ODS aportado, pero no
+necesita ese archivo para funcionar. Es una estimación revisable, no una
+certificación de cantidades reales ni de cumplimiento normativo.
+
+### Paso 1. Datos de cálculo
+
+Completa los campos pendientes (o indica cero si no proceden) y revisa los
+valores recuperados, cuya procedencia se muestra junto a cada campo:
+
+- **Superficie afectada**: manual; no se suman superficies de partidas que
+  podrían solaparse.
+- **Volumen de excavación**: se propone la suma de las mediciones de partidas
+  de excavación o desmonte en m³, excluyendo transporte, carga y relleno.
+  No se deduce volumen a partir de superficie, toneladas u otras unidades.
+- **Presupuesto sin gestión de residuos**: suma del PEM, excluyendo partidas
+  o capítulos identificados como gestión de residuos por su descripción.
+  Comprueba que no se hayan omitido ni incluido conceptos indebidamente.
+- **Movimiento de tierras / trabajos previos**: estimación por las descripciones
+  y capítulos; se conserva como dato de referencia, no se usa para la antigua
+  fórmula B1 del ODS.
+- Coeficiente volumen/superficie (inicial 0,15 m³/m²), densidad global,
+  porcentajes de peso y densidades por grupo, precios de gestión y costes
+  complementarios: todos revisables.
+
+Los valores particulares de la obra del ODS (superficie, excavación e importes)
+no se aplican automáticamente a nuevos proyectos. Los datos deben ser finitos
+y no negativos; densidades y presupuesto deben ser mayores que cero. Los
+porcentajes individuales admiten de 0 a 100. El porcentaje de tierras no se usa:
+ese grupo parte directamente del volumen de excavación.
+
+Pulsa **Aceptar y revisar residuos** para pasar al segundo paso en la misma
+ventana. **Datos de cálculo** permite volver al formulario. Los cambios de ese
+formulario solo se aplican cuando se aceptan.
+
+### Copiar las demoliciones al transporte a vertedero
+
+En el primer paso, pulsa **Llevar mediciones de demolición a transporte a
+vertedero**. Se abre una tabla de revisión con cada línea de medición, su
+partida de origen, cantidad, material/LER y factor de conversión:
+
+- Se proponen partidas de demolición, retirada, levantamiento y desmontaje
+  por su descripción o capítulo. Desmarca las que no procedan.
+- Las partidas originales no se mueven ni se borran. Se copia el parcial de
+  cada línea, conservando código, descripción y comentario de origen. Se
+  omiten las líneas de subtotal; una partida sin desglose aporta su medición.
+- En **m³**, el factor es 1. Para **m²**, introduce el espesor en metros; para
+  **m**, la sección en m²; para **ud**, el volumen por unidad; para **t**, los
+  m³ por tonelada. No se suponen espesores, densidades de conversión ni
+  esponjamiento. No se permite copiar una línea incluida sin material y factor.
+- Confirma el material y su código LER. Las coincidencias ambiguas se dejan
+  pendientes. Los descuentos se conservan, pero el volumen neto por residuo
+  no puede ser negativo.
+- Elige la partida de transporte. Si hay varias, debes seleccionar una; el
+  destino debe estar medido en m³. También puedes crear una partida nueva.
+- Se mantienen las líneas manuales y los precios, rendimientos y descompuestos
+  existentes. Al repetir, se sustituyen las líneas identificadas con
+  `[RCD demolición]`, sin duplicarlas. Si cambias de destino, las líneas
+  generadas se retiran del transporte anterior.
+
+La partida automática tiene código único, unidad m³ y **precio inicial cero**.
+Su descripción y un aviso recuerdan que debes **revisar costes, rendimiento,
+descomposición, distancia, esponjamiento y condiciones de transporte y vertido**.
+El cero no es un precio válido de presupuesto.
+
+Al copiar se activan los **volúmenes revisados por material**, en sustitución
+del reparto por superficie y porcentajes del ODS. La superficie, el coeficiente
+de generación y la densidad global dejan de intervenir; las densidades de grupo
+siguen sirviendo para calcular el peso. Se conserva el volumen de excavación,
+salvo que se hayan revisado también mediciones del grupo tierras, que lo
+sustituyen. Los campos del modelo que ya no intervienen pueden quedar vacíos.
+Revisa el presupuesto sin gestión de residuos después de modificar el
+transporte: no se sobrescribe un presupuesto introducido manualmente.
+
+Las mediciones copiadas, sus conversiones y materiales se guardan con el
+proyecto y aparecen en los informes PDF/ODT. Las marcas X del segundo paso
+permiten excluir residuos del cálculo, pero no borran las líneas del transporte.
+Si cambian las demoliciones, repite la copia para actualizar sus cantidades.
+Cancelar la tabla de revisión no modifica el presupuesto.
+
+### Paso 2. Revisar residuos y guardar
+
+La tabla muestra las 57 filas del modelo con **X**, grupo, código LER, descripción
+y la partida que motivó la detección:
+
+- Se reconocen códigos LER explícitos o materiales mencionados en partidas de
+  demolición, retirada, excavación, fresado, etc. Los suministros, por sí solos,
+  no se consideran residuos.
+- Una coincidencia de texto es orientativa y no una clasificación acreditada.
+  Los residuos no reconocidos aparecen sin X.
+- Pulsa la primera columna, **X** o **Espacio** sobre la fila seleccionada para
+  incluir o excluir manualmente. Las evidencias se mantienen aunque cambies
+  la marca y las selecciones manuales no se vuelven a detectar al reabrir.
+- Revisa los peligrosos y los códigos LER antes de emitir el informe. El ODS
+  repite ciertos códigos y sitúa aislamientos no peligrosos en el grupo
+  «potencialmente peligrosos y otros»; se conservan sus filas diferenciadas,
+  sin presentar esa agrupación como una clasificación legal actualizada.
+- La vista inferior recalcula el presupuesto al cambiar las marcas.
+
+El **disquete** o **Ctrl+S** guarda los datos, coeficientes, precios, selecciones
+y evidencias dentro del JSON del proyecto. El disquete negro indica cambios
+pendientes. Cerrar conserva las ediciones aceptadas en memoria; guarda el
+proyecto para persistirlas.
+
+### Incorporar la gestión de residuos al presupuesto
+
+Al pulsar el **disquete** o **Ctrl+S dentro de RCDs**, se crea un capítulo nuevo
+**Gestión de residuos** en el presupuesto y se guarda junto al proyecto:
+
+- **Nivel I**: tierras y pétreos de excavación.
+- **Nivel II**: naturaleza pétrea, no pétrea y potencialmente peligrosos/otros.
+- **Otros costes**: complementos B1 y B2 y gestión B3.
+
+Las cuatro tipologías se incorporan como partidas en **m³**, con su volumen y
+precio de gestión. Los complementos se incorporan como **1 ud**, con su importe
+calculado como precio. Se mantienen las siete filas, incluso las de importe
+cero, sin añadir otra partida de total que duplicaría el coste.
+
+Los importes de estas partidas se redondean individualmente a céntimos: sin
+costes indirectos, el total del capítulo coincide con el informe RCDs. Si hay
+**costes indirectos** configurados, se aplican además, con el mismo criterio
+que en las demás partidas. El informe RCDs conserva los costes directos.
+Las demás partidas mantienen su comportamiento de cálculo anterior.
+
+Al volver a guardar se actualizan las mediciones y precios de las partidas
+generadas, sin crear otro capítulo ni duplicarlas. También se conserva su
+planificación y certificaciones. Una vez incorporado el capítulo, el guardado
+normal del proyecto actualiza sus partidas con el último estado RCDs aceptado.
+Las partidas manuales y el transporte existente no se sustituyen ni se borran:
+revisa que no estén presupuestando ya los mismos costes de gestión.
+
+Los códigos de capítulo y partidas se eligen sin sobrescribir códigos existentes.
+Para cambiar mediciones o precios generados, edita los datos en RCDs: el próximo
+guardado reemplaza las ediciones directas de esos campos. Si cancelas el
+guardado o falla la escritura, el capítulo queda en memoria como cambio pendiente;
+todavía debes guardar el proyecto para conservarlo en disco.
+
+### Informe y cálculo revisado
+
+**Generar informe RCDs** utiliza **PDF u ODT** y la **plantilla de cabecera y pie**
+elegidos en **Archivo → Configuración**. Incluye la tabla económica de la hoja
+Presupuesto (tipología, volumen, precio de gestión, importe y porcentaje del
+presupuesto), datos de cálculo y residuos seleccionados con su procedencia.
+
+- **A1**: volumen de tierras seleccionado × precio de gestión Nivel I.
+- **A2**: costes de los grupos pétreo, no pétreo y peligrosos/otros.
+  Cuando se han copiado demoliciones, se usan sus volúmenes revisados por
+  material y por residuo marcado. En caso contrario se aplica el modelo:
+  Peso estimado = superficie × coeficiente volumen/superficie × densidad
+  global × porcentaje de peso del grupo. Volumen = peso / densidad del grupo.
+  Un grupo participa si tiene al menos un residuo marcado: marcar varias filas
+  del mismo grupo no multiplica su volumen ni reparte toneladas por código LER.
+- **B1**: complemento Nivel I manual en euros; no se utiliza la fórmula
+  incoherente del ODS basada en el umbral 86.000 €.
+- **B2**: complemento necesario para alcanzar el mínimo configurado de Nivel II
+  (inicial 0,4 % del presupuesto). Si A2 ya lo cubre, es cero.
+- **B3**: porcentaje del presupuesto para costes de gestión, alquileres, etc.
+- **Total**: suma de A1, A2, B1, B2 y B3. No incluye fianza ni IVA.
+
+Se conservan los porcentajes de grupo del modelo, sin renormalizarlos cuando
+se desmarcan residuos; no son porcentajes medidos de la obra. El texto del ODS
+mencionaba 0,2 % para Nivel II, mientras su fórmula usaba 0,4 %; aquí el mínimo
+es explícito y configurable, no una afirmación de exigencia normativa.
+
+Volúmenes y precios se redondean a dos decimales antes de calcular los costes;
+B2 se calcula sobre importes redondeados y el total suma las filas visibles.
+Con los datos de ejemplo esto da 13.044,62 €, un céntimo menos que el ODS
+original por su distinto redondeo de B2.
+
+## 9. Planificar la obra
 
 Abre **Herramientas → Planificación**.
 
@@ -178,7 +349,7 @@ En **Secuencia y plan de trabajo**:
 Revisa que la secuencia sea coherente y no tenga dependencias circulares.
 El botón del disquete guarda la planificación mediante el proyecto.
 
-## 9. Registrar certificaciones
+## 10. Registrar certificaciones
 
 Abre **Herramientas → Certificaciones**. La tabla muestra hasta 24 meses del
 plan económico, con columnas de previsión y certificación.
@@ -215,7 +386,7 @@ cero impide calcular esa cantidad.
 **Informe de desviaciones** abre una vista HTML adicional para comparar previsión,
 certificado y justificación.
 
-## 10. Controlar la facturación
+## 11. Controlar la facturación
 
 Abre **Herramientas → Facturación**, elige la **Carpeta de facturas PDF** y pulsa
 **Continuar**. La carpeta se conserva dentro del proyecto; también puedes
@@ -288,7 +459,7 @@ posteriores del presupuesto no sustituyen los costes personalizados.
 Los importes deben usar un criterio homogéneo (por ejemplo, todos sin IVA);
 no se deducen ni se añaden impuestos automáticamente.
 
-## 11. Resolver problemas frecuentes
+## 12. Resolver problemas frecuentes
 
 | Problema | Comprobación |
 |---|---|
@@ -303,7 +474,7 @@ no se deducen ni se añaden impuestos automáticamente.
 | No se interpreta una factura | Revisa las cabeceras y los avisos; si es escaneada, realiza OCR externo o introduce sus datos manualmente |
 | Un importe de factura no se asigna | Usa Revisar líneas o reparte el importe en las celdas; los códigos ambiguos nunca se reparten automáticamente |
 
-## 12. Licencia y precauciones
+## 13. Licencia y precauciones
 
 En **Información → Licencia y responsabilidad…** puedes consultar el aviso MIT
 y la limitación de responsabilidad.

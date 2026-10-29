@@ -14,6 +14,8 @@ from zipfile import ZipFile
 import planning
 
 from bc3_gui import (
+    APPLICATION_NAME,
+    APPLICATION_VERSION,
     Bc3Dataset,
     BudgetApp,
     Concept,
@@ -501,7 +503,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
     def test_application_name_has_small_icon_and_explicit_bold_font(self):
         """Verify application name has small icon and explicit bold font."""
         label = self.app.application_label
-        self.assertEqual(label.cget("text"), "Gestor de Proyectos (v1.0.0)")
+        self.assertEqual(label.cget("text"), APPLICATION_NAME)
         self.assertEqual(str(label.cget("compound")), "left")
         self.assertTrue(label.cget("image"))
         self.assertEqual(self.app._toolbar_icon.width(), 24)
@@ -524,7 +526,13 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.assertEqual(self.root.title(), "Aplicación")
         self.app._set_status("Proyecto guardado.")
         self.assertEqual(self.root.title(), "Aplicación")
-        self.assertEqual(self.app.application_label.cget("text"), "Gestor de Proyectos (v1.0.0)")
+        self.assertEqual(self.app.application_label.cget("text"), APPLICATION_NAME)
+
+    def test_application_information_shows_release_version(self):
+        """Display release metadata without changing the unversioned toolbar name."""
+        with patch("bc3_gui.messagebox.showinfo") as info:
+            self.app.show_application_info()
+        self.assertIn(f"v{APPLICATION_VERSION}", info.call_args.args[1])
 
     def test_information_menu_opens_mit_license_and_responsibility_notice(self):
         """Verify information menu opens mit license and responsibility notice."""
@@ -532,7 +540,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         button = next(child for child in toolbar.winfo_children()
                       if isinstance(child, ttk.Menubutton) and child.cget("text") == "Información")
         menu = self.root.nametowidget(button.cget("menu"))
-        self.assertEqual(menu.entrycget(0, "label"), "Gestor de Proyectos (v1.0.0)")
+        self.assertEqual(menu.entrycget(0, "label"), APPLICATION_NAME)
         index = next(i for i in range(menu.index("end") + 1)
                      if menu.type(i) == "command" and
                      menu.entrycget(i, "label") == "Licencia y responsabilidad…")

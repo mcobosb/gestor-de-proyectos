@@ -26,6 +26,7 @@ from odt_reports import write_report_odt
 
 
 APPLICATION_NAME = "Gestor de Proyectos"
+APPLICATION_VERSION = "1.2.0"
 BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/mcobosb"
 
 CONCEPT_TYPES = {
@@ -300,6 +301,7 @@ class ProjectItem:
     component_types: dict[str, str] = field(default_factory=dict)
     direct_unit_price: float | None = None
     indirect_costs: float = 0.0
+    round_import_total: bool = False
 
     def set_indirect_costs(self, percentage: float, direct_price: float | None = None) -> None:
         """Aplica el recargo sin perder el precio directo ni acumular porcentajes."""
@@ -333,6 +335,9 @@ class ProjectItem:
     @property
     def import_total(self) -> float:
         """Devuelve el importe de la partida como medición por precio unitario."""
+        if self.round_import_total:
+            amount = Decimal(str(self.measurement)) * Decimal(str(self.unit_price))
+            return float(amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
         return self.measurement * self.unit_price
 
     def recalculate_measurement(self) -> float:
@@ -582,6 +587,8 @@ class BudgetApp:
         self.planning_state: dict = {}
         self.invoicing_state: dict = {}
         self._invoicing_window: tk.Toplevel | None = None
+        self.rcd_state: dict = {}
+        self._rcd_window: tk.Toplevel | None = None
         self.project_title: str | None = None
         self.project_path: Path | None = None
         self.source_budget_path: Path | None = None
@@ -671,6 +678,7 @@ class BudgetApp:
 
         tools_menubutton = ttk.Menubutton(toolbar, text="Herramientas", style="Toolbar.TMenubutton")
         tools_menu = tk.Menu(tools_menubutton, tearoff=False)
+        tools_menu.add_command(label="RCDs", command=self.open_rcds)
         tools_menu.add_command(label="Planificación", command=self.open_planning)
         tools_menu.add_command(label="Certificaciones", command=self.open_certifications)
         tools_menu.add_command(label="Facturación", command=self.open_invoicing)
@@ -1257,6 +1265,7 @@ class BudgetApp:
                     self._set_status(f"Presupuesto y estado de proyecto cargados: {path.name}")
                 return
             self._dismiss_invoicing()
+            self._dismiss_rcds()
             self.budget_dataset = ds
             self.source_budget_path = path
             self.budget_items = ds.to_project_items()
@@ -1266,6 +1275,7 @@ class BudgetApp:
             self.chapter_titles.clear()
             self.planning_state = {}
             self.invoicing_state = {}
+            self.rcd_state = {}
             self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
             for item in self.budget_items:
                 item.set_indirect_costs(self.report_settings.indirect_costs)
@@ -1291,6 +1301,7 @@ class BudgetApp:
         if project_title is None:
             return
         self._dismiss_invoicing()
+        self._dismiss_rcds()
         self.budget_dataset = None
         self.budget_items = []
         self.selected_budget_index = None
@@ -1299,6 +1310,7 @@ class BudgetApp:
         self.chapter_titles.clear()
         self.planning_state = {}
         self.invoicing_state = {}
+        self.rcd_state = {}
         self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
         self.project_title = project_title.strip() or "Nuevo proyecto"
         self.project_path = None
@@ -2708,11 +2720,15 @@ class BudgetApp:
     def _write_project_file(self, path: Path) -> bool:
         """Serializa el estado actual del proyecto y registra su ruta como reciente."""
         try:
+            from rcd import RCD_BUDGET_SOURCE, RcdState, synchronize_budget
+
+            if self.rcd_state and any(item.source.startswith(RCD_BUDGET_SOURCE) for item in self.budget_items):
+                synchronize_budget(self, RcdState.from_dict(self.rcd_state))
             path.write_text(
                 json.dumps(self._project_payload(), ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
             messagebox.showerror("No se pudo guardar el proyecto", f"No se pudo escribir el archivo:\n{exc}")
             return False
         self.project_path = path
@@ -2739,6 +2755,9 @@ class BudgetApp:
     @staticmethod
     def _item_from_project_data(data: dict) -> ProjectItem:
         """Reconstruye una partida y sus mediciones desde los datos de un proyecto."""
+        round_import_total = data.get("round_import_total", False)
+        if not isinstance(round_import_total, bool):
+            raise ValueError("El redondeo del importe de la partida debe ser booleano.")
         measurement_lines = [
             MeasurementLine(
                 comment=str(line.get("comment", "")),
@@ -2757,6 +2776,7 @@ class BudgetApp:
             summary=str(data.get("summary", "")),
             measurement=float(data.get("measurement", 0.0)),
             unit_price=float(data.get("unit_price", 0.0)),
+            round_import_total=round_import_total,
             direct_unit_price=(
                 float(data["direct_unit_price"]) if data.get("direct_unit_price") is not None else None
             ),
@@ -2809,6 +2829,7 @@ class BudgetApp:
             },
             "planning": self.planning_state,
             "invoicing": self.invoicing_state,
+            "rcds": self.rcd_state,
             "report_settings": self.report_settings.to_dict(),
             "items": [
                 {
@@ -2818,6 +2839,7 @@ class BudgetApp:
                     "summary": item.summary,
                     "measurement": item.measurement,
                     "unit_price": item.unit_price,
+                    "round_import_total": item.round_import_total,
                     "direct_unit_price": item.direct_unit_price,
                     "rendimiento": item.rendimiento,
                     "source": item.source,
@@ -2867,6 +2889,12 @@ class BudgetApp:
             from invoicing import InvoiceState
 
             invoicing_state = InvoiceState.from_dict(payload.get("invoicing", {})).to_dict()
+            from rcd import RcdState
+
+            raw_rcds = payload.get("rcds", {})
+            rcd_state = RcdState.from_dict(raw_rcds).to_dict() if raw_rcds else {}
+            if not isinstance(raw_rcds, dict):
+                raise ValueError("Los datos RCDs deben ser un objeto JSON.")
             if source_budget_path is not None:
                 declared_source = payload.get("source_budget_bc3")
                 if declared_source is not None and Path(declared_source).name != source_budget_path.name:
@@ -2914,7 +2942,9 @@ class BudgetApp:
             return False
 
         self._dismiss_invoicing()
+        self._dismiss_rcds()
         self.invoicing_state = invoicing_state
+        self.rcd_state = rcd_state
         self.budget_dataset = budget_dataset
         self.report_settings = report_settings
         self.project_path = project_path
@@ -3344,6 +3374,24 @@ th {{ background: #1f4e78; color: white; }}
             on_dirty_change=lambda dirty: self._mark_dirty() if dirty else None,
         )
 
+    def _dismiss_rcds(self) -> None:
+        """Cierra la herramienta RCDs antes de sustituir el proyecto activo."""
+        if self._rcd_window is not None and self._rcd_window.winfo_exists():
+            self._rcd_window.destroy()
+        self._rcd_window = None
+
+    def open_rcds(self) -> None:
+        """Abre la estimación de residuos y sus datos guardados en el proyecto."""
+        if not self.budget_items:
+            messagebox.showinfo("RCDs", "Carga o crea un presupuesto antes de estimar residuos.")
+            return
+        if self._rcd_window is not None and self._rcd_window.winfo_exists():
+            self._rcd_window.lift()
+            return
+        from rcd import RcdWindow
+
+        self._rcd_window = RcdWindow(self.root, self)
+
     def _dismiss_invoicing(self) -> None:
         """Cierra la ventana y su lectura pendiente antes de cambiar de proyecto."""
         window = self._invoicing_window
@@ -3374,7 +3422,7 @@ th {{ background: #1f4e78; color: white; }}
         """Muestra la información institucional y las funciones principales del programa."""
         messagebox.showinfo(
             "Información de la aplicación",
-            f"{APPLICATION_NAME}\n"
+            f"{APPLICATION_NAME} — v{APPLICATION_VERSION}\n"
             "Presupuestos, planificación y certificaciones de obra\n\n"
             "Autor\n"
             "Manuel Cobos Budia\n"

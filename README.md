@@ -4,6 +4,21 @@ Aplicación de escritorio para Windows que permite trabajar con presupuestos
 FIEBDC-3 (BC3), editar mediciones y descomposiciones, planificar obras y gestionar
 certificaciones mensuales.
 
+## Versión 1.2.0 — Gestión de RCDs
+
+- **Herramientas → RCDs**, como primera opción: datos de cálculo editables y
+  revisión de residuos detectados en las partidas.
+- Marcas X manuales y evidencias de detección, guardadas con el proyecto.
+- Al guardar RCDs, capítulo Gestión de residuos incorporado al presupuesto
+  con niveles, tipologías, mediciones, precios e importes, sin duplicados.
+- Presupuesto de gestión tabulado en PDF u ODT, con el formato y la plantilla
+  configurados. Modelo revisado a partir de las tres hojas del ODS aportado;
+  coeficientes, precios, mínimos y complemento Nivel I editables.
+
+La estimación debe revisarse por el técnico responsable; no acredita cumplimiento
+normativo ni sustituye la identificación de residuos peligrosos. El ODS de trabajo
+no es necesario para ejecutar la herramienta y no se incluye en el instalador.
+
 ## 🚀 Release v1.1.0 — ¡Primeros pasos!
 
 ¡Hola a todos! 👋
@@ -43,7 +58,7 @@ Esperamos que os sea muy útil. ¡Esto es solo el comienzo!
 ## Instalación y arranque
 
 En Windows se puede crear e instalar una versión compilada con Nuitka. Una vez
-generado, el instalador `GestorDeProyectos-Setup-1.1.0.exe` no requiere Python.
+generado, el instalador `GestorDeProyectos-Setup-1.2.0.exe` no requiere Python.
 Incluye los componentes necesarios, pero no los archivos fuente `.py`. La
 compilación Nuitka dificulta recuperar el código, aunque no puede impedir
 completamente la ingeniería inversa.
@@ -75,8 +90,9 @@ La imagen también se incluye en la versión instalada.
 2. Añade una base BCCA si necesitas incorporar partidas de referencia.
 3. Selecciona una partida y pulsa una celda de **Mediciones** para editarla.
 4. Completa **Archivo → Configuración** con la autoría y porcentajes.
-5. Guarda el proyecto en JSON y genera los documentos desde **Informes**.
-6. Utiliza **Herramientas → Planificación**, **Certificaciones** y **Facturación** para el seguimiento.
+5. Completa **Herramientas → RCDs** y guarda para incorporar la gestión de residuos al presupuesto.
+6. Guarda el proyecto en JSON y genera los documentos desde **Informes**.
+7. Continúa con **Herramientas → Planificación**, **Certificaciones** y **Facturación** para el seguimiento.
 
 Consulta el [manual de usuario](docs/MANUAL_USUARIO.md) para el procedimiento completo.
 
@@ -103,6 +119,7 @@ no abre una ventana, revisa la instalación de Python antes de iniciar la app.
 | Archivo o carpeta | Función |
 |---|---|
 | [bc3_gui.py](bc3_gui.py) | Entrada de la aplicación, presupuesto y mediciones |
+| [rcd.py](rcd.py) | Estimación, revisión y presupuesto de gestión de RCDs |
 | [planning.py](planning.py) | Planificación y secuencia de actividades |
 | [certifications.py](certifications.py) | Previsiones y certificaciones mensuales |
 | [invoicing.py](invoicing.py) | Facturas PDF y matriz editable de costes por recurso |
@@ -169,7 +186,7 @@ Después, desde PowerShell en la carpeta del proyecto:
 .\build_installer.ps1
 ```
 
-El instalador generado aparece en `dist\GestorDeProyectos-Setup-1.0.0.exe`.
+El instalador generado aparece en `dist\GestorDeProyectos-Setup-1.2.0.exe`.
 El script usa automáticamente `.\.venv\Scripts\python.exe` si existe; en caso
 contrario, utiliza el comando `python` disponible en el sistema.
 La distribución incluye la licencia y el manual, pero no los presupuestos ni
