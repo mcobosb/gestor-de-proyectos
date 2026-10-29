@@ -372,8 +372,8 @@ def transfer_demolition(app: BudgetApp, state: RcdState,
                         if re.search(r"residu|vertedero", normalize(app._chapter_title(chapter)))),
                        app.budget_items[-1].chapter)
         target = ProjectItem(code, chapter, "m³",
-                             "Transporte de residuos de demolición a vertedero (REVISAR costes y rendimiento)",
-                             measurement=0, text=TRANSPORT_REVIEW)
+                             "TRANSPORTE DE RESIDUOS DE DEMOLICIÓN A VERTEDERO (REVISAR COSTES Y RENDIMIENTO)",
+                             measurement=0, text=TRANSPORT_REVIEW.upper())
         target.set_indirect_costs(app.report_settings.indirect_costs)
     manual = [deepcopy(line) for line in target.measurement_lines
               if not line.comment.startswith(TRANSPORT_PREFIX)]
@@ -611,12 +611,12 @@ def synchronize_budget(app: BudgetApp, state: RcdState) -> None:
         item.chapter = chapter
         item.unit = "m³" if line.volume is not None else "ud"
         item.round_import_total = True
-        item.summary = f"{level} — {line.label}"
+        item.summary = f"{level} — {line.label}".upper()
         item.text = (
             "Gestión de residuos generada desde RCDs. Medición y precio directo se actualizan "
             "al guardar RCDs. No incluye fianza ni IVA. Los costes indirectos de configuración "
             "se aplican como en las demás partidas. El transporte existente se conserva por separado."
-        )
+        ).upper()
         item.measurement_lines = [MeasurementLine(
             comment=f"Gestión de residuos RCDs: {line.label}",
             units=float(line.volume) if line.volume is not None else 1.0,

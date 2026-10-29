@@ -7,13 +7,35 @@ from xml.etree import ElementTree
 from zipfile import ZIP_STORED, ZipFile
 
 from budget_reports import (
-    CERTIFICATION_REPORT_NAMES, REPORT_NAMES, ReportSettings, amount_in_words,
-    budget_totals, certification_totals, write_certification_pdf, write_pdf,
+    CERTIFICATION_REPORT_NAMES, DEVIATION_REPORT_NAME, REPORT_NAMES, ReportSettings,
+    amount_in_words, budget_totals, certification_deviation_rows,
+    certification_totals, write_certification_pdf, write_pdf,
 )
 from odt_reports import write_certification_odt, write_report_odt
 
 
 class ReportCalculationsTests(unittest.TestCase):
+    def test_deviations_use_original_plan_and_include_uncertified_items(self):
+        """Preserve original monthly forecasts and reconcile rounded row totals."""
+        from bc3_gui import ProjectItem
+
+        items = [
+            ProjectItem(code="P1", chapter="01#", unit="ud", summary="Partida uno",
+                        certifications={"2026-10-01": 120.005},
+                        certification_plans={"2026-10-01": 100}),
+            ProjectItem(code="P2", chapter="01#", unit="ud", summary="Pendiente"),
+        ]
+        rows, total = certification_deviation_rows(items, [120.005, 50], "2026-10-01")
+        self.assertEqual(rows[0][3:6], [Decimal("100.00"), Decimal("120.01"), Decimal("20.01")])
+        self.assertEqual(rows[1][3:6], [Decimal("50.00"), Decimal("0.00"), Decimal("-50.00")])
+        self.assertEqual(total[3:6], [Decimal("150.00"), Decimal("120.01"), Decimal("-29.99")])
+        for plans in (None, [], [float("nan"), 50], [float("inf"), 50]):
+            with self.subTest(plans=plans):
+                if plans and len(plans) == 2:
+                    items[0].certification_plans.clear()
+                with self.assertRaises(ValueError):
+                    certification_deviation_rows(items, plans, "2026-10-01")
+
     def test_summary_reproduces_the_template_calculation(self):
         """Verify summary reproduces the template calculation."""
         result = budget_totals(138765.72, ReportSettings())
@@ -437,6 +459,109 @@ class ReportLayoutTests(unittest.TestCase):
             ))
         for boundary in boundaries[1:]:
             self.assertAlmostEqual(boundary, boundaries[0], places=3)
+
+    def test_certification_headers_totals_and_signatures_in_pdf_and_rendered_odt(self):
+        """Check unbroken headings, amount alignment and paired electronic signatures."""
+        import os
+        import shutil
+        import subprocess
+        from pypdf import PdfReader
+        from report_layout import COLUMN_REFERENCE_WIDTH, CONTENT_WIDTH, LEFT_MARGIN, ReportLayout
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+
+        settings = self.app.report_settings
+        settings.contractor = "Constructora singular"
+        settings.contractor_representative = "Responsable singular"
+        settings.role = "Ingeniero municipal"
+        for index, name in enumerate(CERTIFICATION_REPORT_NAMES):
+            args = (self.app.budget_items, self.app._chapter_title, self.app.project_title,
+                    settings, name)
+            for extension, writer in (("pdf", write_certification_pdf),
+                                      ("odt", write_certification_odt)):
+                writer(*args, self.folder / f"cert-check-{index}.{extension}",
+                       "2026-10-01", 1, "Oct 26")
+        soffice = shutil.which("soffice") or str(
+            Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
+            / "LibreOffice" / "program" / "soffice.exe"
+        )
+        variants = [("PDF", self.folder)]
+        if Path(soffice).is_file():
+            converted = self.folder / "rendered"
+            converted.mkdir()
+            subprocess.run(
+                [soffice, f"-env:UserInstallation={(self.folder / 'cert-lo-profile').as_uri()}",
+                 "--headless", "--convert-to", "pdf", "--outdir", str(converted),
+                 *[str(self.folder / f"cert-check-{index}.odt") for index in range(2)]],
+                check=True, capture_output=True, timeout=90,
+            )
+            variants.append(("ODT", converted))
+        layout = ReportLayout(certification=True)
+        for variant, folder in variants:
+            for index in range(2):
+                with self.subTest(format=variant, detail=index):
+                    reader = PdfReader(folder / f"cert-check-{index}.pdf")
+                    spans = [span for page in reader.pages for span in self.spans(page)]
+                    texts = [span[0] for span in spans]
+                    expected = ("LONGITUD", "ANCHURA") if index else ("CERTIFICADO",)
+                    for word in expected:
+                        self.assertTrue(any(word in text.split() for text in texts), word)
+                    company = next(span for span in spans if span[0] == settings.contractor)
+                    person = next(span for span in spans if span[0] == settings.contractor_representative)
+                    administration = next(span for span in spans if span[0] == settings.author)
+                    self.assertLess(company[1], LEFT_MARGIN + CONTENT_WIDTH / 2)
+                    self.assertGreater(administration[1], LEFT_MARGIN + CONTENT_WIDTH / 2)
+                    self.assertGreater(person[2], company[2])
+                    signature = [span for span in spans if span[0] == settings.signature]
+                    self.assertEqual(len(signature), 2)
+                    self.assertTrue(any(span[1] < LEFT_MARGIN + CONTENT_WIDTH / 2 and
+                                        span[2] < company[2] for span in signature))
+                    if not index:
+                        boundaries = []
+                        for text, x, _, font, size in spans:
+                            if text in {"100,00", "13,00", "6,00", "19,00", "119,00", "0,00",
+                                        "24,99", "143,99"} and (
+                                x < LEFT_MARGIN + CONTENT_WIDTH * 435 / COLUMN_REFERENCE_WIDTH
+                            ):
+                                font_name = layout.bold_font if "Bold" in font else layout.regular_font
+                                boundaries.append(x + stringWidth(text, font_name, size))
+                        self.assertEqual(len(boundaries), 10)
+                        for boundary in boundaries:
+                            self.assertAlmostEqual(boundary, boundaries[0], delta=0.3)
+
+    def test_deviation_reports_share_template_and_paginate_with_all_rows(self):
+        """Export the monthly comparison, pending items, totals and justifications."""
+        from dataclasses import replace
+        from odt_reports import _tag
+        from pypdf import PdfReader
+
+        original = self.app.budget_items[0]
+        items = [replace(
+            original, code=f"DEV{index:03}", summary=f"Partida desviada {index:03}",
+            certifications={"2026-10-01": 120} if index % 2 == 0 else {},
+            certification_plans={"2026-10-01": 100},
+            certification_justifications={"2026-10-01": f"Motivo <especial> & revision {index:03}"},
+        ) for index in range(60)]
+        for extension, writer in (("pdf", write_certification_pdf), ("odt", write_certification_odt)):
+            target = self.folder / f"deviations.{extension}"
+            writer(items, self.app._chapter_title, self.app.project_title,
+                   self.app.report_settings, DEVIATION_REPORT_NAME, target,
+                   "2026-10-01", 1, "Oct 26", planned_amounts=[120] * len(items))
+            if extension == "pdf":
+                reader = PdfReader(target)
+                self.assertGreater(len(reader.pages), 1)
+                text = "\n".join(page.extract_text() for page in reader.pages)
+                for page in reader.pages:
+                    self.assertIn("INFORME DE DESVIACIONES", page.extract_text())
+                    self.assertEqual(len(page.images), 1)
+            else:
+                with ZipFile(target) as archive:
+                    self.assert_odt_styles(archive)
+                    content = ElementTree.fromstring(archive.read("content.xml"))
+                    self.assertIsNotNone(content.find(f".//{_tag('table:table-header-rows')}"))
+                    text = " ".join(content.itertext())
+            for expected in ("DEV000", "DEV059", "6.000,00", "3.600,00", "-2.400,00",
+                             "Motivo <especial> & revision 059"):
+                self.assertIn(expected, text)
 
     def test_material_group_subtotals_use_chapter_background_in_pdf_and_odt(self):
         """Verify group subtotal rows are colored without coloring normal material rows."""

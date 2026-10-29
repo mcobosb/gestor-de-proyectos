@@ -8,11 +8,13 @@ from xml.etree import ElementTree as ET
 from zipfile import ZIP_STORED, ZIP_DEFLATED, ZipFile
 
 from budget_reports import (
-    CERTIFICATION_REPORT_NAMES, REPORT_NAMES, ReportSettings, _collect_report_resources,
-    amount_in_words, budget_totals, certification_totals, money,
+    CERTIFICATION_REPORT_NAMES, DEVIATION_REPORT_NAME, REPORT_NAMES, ReportSettings,
+    _collect_report_resources, amount_in_words, budget_totals,
+    certification_deviation_rows, certification_totals, money,
 )
 from report_layout import (
-    CERTIFICATION_COLUMN_RATIOS, COLUMN_REFERENCE_WIDTH, CONTENT_WIDTH, LEFT_MARGIN,
+    CERTIFICATION_COLUMN_RATIOS, CERTIFICATION_SUMMARY_RATIOS, COLUMN_REFERENCE_WIDTH,
+    CONTENT_WIDTH, DEVIATION_COLUMN_RATIOS, DEVIATION_HEADERS, LEFT_MARGIN,
     MEASUREMENT_COLUMN_RATIOS, PAGE_MARGIN, RIGHT_MARGIN, ReportLayout,
     budget_report_columns, report_project_label,
 )
@@ -876,13 +878,18 @@ def write_report_odt(app, report: str, target: Path) -> None:
 def write_certification_odt(
     items, chapter_title, project_title: str, settings: ReportSettings,
     report: str, target: Path, month_key: str, certification_number: int, month_label: str,
+    *, planned_amounts: list[float] | None = None,
 ) -> None:
     """Genera en ODT editable el resumen o el detalle de una certificación."""
     from bc3_gui import currency_label, fmt_number, format_chapter_code
 
-    if report not in CERTIFICATION_REPORT_NAMES:
+    if report not in (*CERTIFICATION_REPORT_NAMES, DEVIATION_REPORT_NAME):
         raise ValueError(f"Tipo de informe desconocido: {report}")
     detail = report == CERTIFICATION_REPORT_NAMES[1]
+    deviation = report == DEVIATION_REPORT_NAME
+    deviation_rows, deviation_total = (
+        certification_deviation_rows(items, planned_amounts, month_key) if deviation else ([], [])
+    )
     certified = []
     for item in items:
         value = item.certifications.get(month_key, 0.0)
@@ -898,10 +905,12 @@ def write_certification_odt(
                     "el precio unitario debe ser finito y distinto de cero."
                 )
             certified.append((item, amount))
-    if not certified:
+    if not certified and not deviation:
         raise ValueError("No hay partidas con importe certificado en el mes seleccionado.")
 
-    heading = "CERTIFICACIÓN Y MEDICIONES" if detail else "RESUMEN DE CERTIFICACIÓN"
+    heading = "INFORME DE DESVIACIONES" if deviation else (
+        "CERTIFICACIÓN Y MEDICIONES" if detail else "RESUMEN DE CERTIFICACIÓN"
+    )
     title = f"{heading} · Certificación {certification_number} · {month_label}"
     document = _new_report(
         title, project_title,
@@ -930,13 +939,29 @@ def write_certification_odt(
 
     def total(label, value, major=True):
         """Añade una línea de total de la certificación."""
+        indent = COLUMN_REFERENCE_WIDTH * (0.25 if major else 0.35)
         document.table(
-            [], [["", label, money_text(value)]],
-            ratios=[0.36 if major else 0.48, 0.48 if major else 0.36, 0.16],
+            [], [["", label, money_text(value)]] if detail else [["", label, money_text(value), ""]],
+            ratios=[0.36 if major else 0.48, 0.48 if major else 0.36, 0.16] if detail else [
+                indent, sum(CERTIFICATION_SUMMARY_RATIOS[:2]) - indent,
+                *CERTIFICATION_SUMMARY_RATIOS[2:],
+            ],
             bold_rows=(0,) if major else (), right_columns=(2,),
         )
 
-    if detail:
+    if deviation:
+        document.table(
+            DEVIATION_HEADERS,
+            [[money_text(value) if isinstance(value, Decimal) else value for value in row]
+             for row in [*deviation_rows, deviation_total]],
+            ratios=DEVIATION_COLUMN_RATIOS, right_columns=(3, 4, 5),
+            bold_rows=(len(deviation_rows),),
+        )
+        document.paragraph(
+            "Desviación = certificado - plan original del mes. "
+            "Se incluyen las partidas pendientes de certificar.", style="ReportNote",
+        )
+    elif detail:
         for chapter_index, code in enumerate(codes):
             document.chapter(
                 format_chapter_code(code), chapter_title(code), new_page=chapter_index > 0,
@@ -986,7 +1011,7 @@ def write_certification_odt(
             ])
         document.table(
             ["CAPÍTULO", "RESUMEN", "IMPORTE", "% CERTIFICADO"], rows,
-            ratios=[65, 288, 75, CONTENT_WIDTH - 428],
+            ratios=CERTIFICATION_SUMMARY_RATIOS,
         )
         document.paragraph(
             "% certificado respecto al presupuesto de cada capítulo.",
@@ -1020,7 +1045,7 @@ def write_certification_odt(
 
     signatures = [
         "\n".join(filter(None, (
-            settings.contractor, settings.contractor_representative, settings.signature,
+            settings.contractor_representative, settings.contractor, settings.signature,
         ))),
         "\n".join(filter(None, (
             settings.role, settings.author, settings.organization, settings.location,

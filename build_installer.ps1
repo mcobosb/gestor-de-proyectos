@@ -62,8 +62,8 @@ $distributionDirectory = Join-Path $nuitkaOutput "bc3_gui.dist"
     --windows-icon-from-ico=iconos\logo.ico `
     --company-name="Manuel Cobos Budia" `
     --product-name="Gestor de Proyectos" `
-    --file-version=1.2.0 `
-    --product-version=1.2.0 `
+    --file-version=1.3.0 `
+    --product-version=1.3.0 `
     --file-description="Gestión de presupuestos, planificación y certificaciones" `
     --output-dir=$nuitkaOutput `
     --output-filename=GestorDeProyectos.exe `
@@ -88,4 +88,4 @@ if ($LASTEXITCODE -ne 0) {
     throw "La creación del instalador con Inno Setup ha fallado."
 }
 
-Write-Host "Instalador creado en dist\GestorDeProyectos-Setup-1.2.0.exe"
+Write-Host "Instalador creado en dist\GestorDeProyectos-Setup-1.3.0.exe"

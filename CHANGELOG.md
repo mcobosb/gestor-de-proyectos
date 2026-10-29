@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.3.0
+
+### Añadido
+- Informe de mediciones, estilos editables ODT y cabecera de plantilla repetida.
+- Buscador del proyecto, filtros de maquinaria, mano de obra y materiales,
+  expansión de capítulos y partidas y duplicación con aviso de revisión.
+- Incorporación de capítulos completos desde las bases de referencia.
+- Divisa del proyecto configurable e informe de desviaciones en PDF u ODT.
+
+### Cambiado
+- Márgenes, alineaciones, cabeceras, firmas y separación de tablas revisados
+  en los informes PDF y ODT.
+- Cálculo de componentes porcentuales, redondeos e indirectos compartido entre
+  el presupuesto y sus informes, con indirectos explícitos en el cuadro de precios 2.
+- Información de la aplicación sin datos personales y con acceso al repositorio.
+- Resumen y descripción de nuevas partidas, copias, RCDs y transporte en mayúsculas,
+  sin alterar las bases originales ni los textos al abrir proyectos existentes.
+- Aplicación, compilación e instalador actualizados a 1.3.0.
+
 ## 1.2.0
 
 ### Añadido

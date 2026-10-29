@@ -25,7 +25,10 @@ PAGE_WIDTH = 595.2755905511812
 CONTENT_WIDTH = PAGE_WIDTH - LEFT_MARGIN - RIGHT_MARGIN
 # Las proporciones del modelo original se escalan al ancho disponible.
 COLUMN_REFERENCE_WIDTH = PAGE_WIDTH - 85
-CERTIFICATION_COLUMN_RATIOS = (57, 179, 20, 38, 38, 38, 57, 42, COLUMN_REFERENCE_WIDTH - 469)
+CERTIFICATION_COLUMN_RATIOS = (50, 90, 22, 45, 44, 35, 60, 48, 59)
+CERTIFICATION_SUMMARY_RATIOS = (65, 295, 75, COLUMN_REFERENCE_WIDTH - 435)
+DEVIATION_COLUMN_RATIOS = (35, 40, 100, 60, 60, 60, 98)
+DEVIATION_HEADERS = ("CAPÍTULO", "CÓDIGO", "RESUMEN", "PLAN", "CERTIFICADO", "DESVIACIÓN", "JUSTIFICACIÓN")
 MEASUREMENT_COLUMN_RATIOS = (4, 1, 1, 1, 1, 0.8, 1.2, 0.5)
 
 
@@ -273,6 +276,7 @@ class ReportLayout:
             "CANTIDAD", "PRECIO", "PRECIO/UD.", "SUBTOTAL", "IMPORTE", "%",
             "% CERTIFICADO", "UDS", "LONGITUD", "ANCHURA", "ALTURA", "K", "PARCIAL",
             "MEDICIÓN TOTAL",
+            "PLAN", "CERTIFICADO", "DESVIACIÓN",
         }
         numeric = {i for i, h in enumerate(headers) if h in numeric_headers}
         data = [[self.text(h, self.bold_right if i in numeric else self.bold)

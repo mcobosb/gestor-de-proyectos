@@ -201,6 +201,10 @@ _TEXT = {
     "Texto de firma / fecha": ("Signature / date text", "Texte de signature / date"),
     "Empresa contratista": ("Contractor", "Entreprise titulaire"),
     "Representante de la empresa": ("Company representative", "Représentant de l'entreprise"),
+    "Empresa constructora": ("Construction company", "Entreprise de construction"),
+    "Responsable de la empresa constructora": (
+        "Construction company representative", "Responsable de l'entreprise de construction",
+    ),
     "Gastos generales (%)": ("Overheads (%)", "Frais généraux (%)"),
     "Beneficio industrial (%)": ("Industrial profit (%)", "Bénéfice industriel (%)"),
     "IVA (%)": ("VAT (%)", "TVA (%)"),

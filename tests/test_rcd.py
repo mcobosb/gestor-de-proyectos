@@ -168,9 +168,10 @@ class RcdCalculationTests(unittest.TestCase):
     def test_catalogue_and_version_are_packaged_without_private_workbook(self):
         self.assertEqual(len(WASTES), 57)
         self.assertEqual(len({entry[0] for entry in WASTES}), 57)
-        self.assertEqual(APPLICATION_VERSION, "1.2.0")
-        self.assertIn('--file-version=1.2.0', (ROOT / "build_installer.ps1").read_text(encoding="utf-8"))
-        self.assertIn('#define AppVersion "1.2.0"',
+        self.assertEqual(APPLICATION_VERSION, "1.3.0")
+        self.assertIn('--file-version=1.3.0', (ROOT / "build_installer.ps1").read_text(encoding="utf-8"))
+        self.assertIn('--product-version=1.3.0', (ROOT / "build_installer.ps1").read_text(encoding="utf-8"))
+        self.assertIn('#define AppVersion "1.3.0"',
                       (ROOT / "installer" / "GestorDeProyectos.iss").read_text(encoding="utf-8"))
 
     def test_demolition_measured_volumes_replace_model_and_follow_waste_marks(self):
@@ -453,8 +454,10 @@ class RcdWindowTests(unittest.TestCase):
         self.assertEqual([(item.measurement, item.unit_price) for item in generated[:4]],
                          [(1853.84, 5.9), (121.14, 8.61), (29.91, 21.13), (0, 22.25)])
         self.assertEqual([item.unit for item in generated], ["m³"] * 4 + ["ud"] * 3)
-        self.assertIn("Nivel I", generated[0].summary)
-        self.assertTrue(all("Nivel II" in item.summary for item in generated[1:4]))
+        self.assertIn("NIVEL I", generated[0].summary)
+        self.assertTrue(all("NIVEL II" in item.summary for item in generated[1:4]))
+        self.assertTrue(all(item.summary == item.summary.upper() and
+                            item.text == item.text.upper() for item in generated))
         self.assertEqual([item.unit_price for item in generated[4:]], [0, 10.55, 421.39])
         self.assertEqual(round(sum(item.import_total for item in generated), 2), 13044.62)
         self.assertEqual(round(sum(item.import_total for item in self.app.budget_items) - previous_total, 2),
@@ -624,7 +627,8 @@ class RcdWindowTests(unittest.TestCase):
         target = next(item for item in self.app.budget_items if item.code == "RCD-TRANS")
         self.assertEqual((target.unit, target.measurement, target.unit_price, target.rendimiento),
                          ("m³", 10, 0, 0))
-        self.assertEqual(target.text, TRANSPORT_REVIEW)
+        self.assertEqual(target.text, TRANSPORT_REVIEW.upper())
+        self.assertEqual(target.summary, target.summary.upper())
         self.assertIn("DEM", target.measurement_lines[0].comment)
         self.assertIn("Hormigón", target.measurement_lines[0].comment)
         self.assertEqual(self.app.budget_items[1].measurement, 50)

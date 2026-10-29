@@ -1078,7 +1078,8 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.assertEqual(duplicate.code, "P1*")
         self.assertEqual(duplicate.chapter, source.chapter)
         self.assertEqual(duplicate.unit, source.unit)
-        self.assertEqual(duplicate.summary, source.summary)
+        self.assertEqual(duplicate.summary, source.summary.upper())
+        self.assertEqual(duplicate.text, source.text.upper())
         self.assertEqual(duplicate.measurement, source.measurement)
         self.assertEqual(duplicate.unit_price, source.unit_price)
         self.assertEqual(duplicate.decomposition, source.decomposition)
@@ -1174,6 +1175,8 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
             "author": "Autor de prueba", "role": "Ingeniería", "location": "Lucena",
             "general_expenses": "13,5", "industrial_profit": "6", "vat": "21",
             "currency": "USD",
+            "contractor": "Constructora de prueba",
+            "contractor_representative": "Responsable de prueba",
         }))
         self.assertEqual(self.app._read_report_settings().author, "Autor de prueba")
         self.assertEqual(self.app.report_settings.general_expenses, 13.5)
@@ -1183,6 +1186,8 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.assertEqual(self.app.report_settings.author, "Autor de prueba")
         self.assertEqual(self.app.report_settings.currency, "USD")
         previous = self.app.report_settings_path.read_bytes()
+        self.assertEqual(self.app.report_settings.contractor, "Constructora de prueba")
+        self.assertEqual(self.app.report_settings.contractor_representative, "Responsable de prueba")
         for value in ("nan", "inf", "-1", "101", "abc", ""):
             with self.subTest(value=value), patch("bc3_gui.messagebox.showerror") as error:
                 self.assertFalse(self.app._save_report_settings({"vat": value}))
@@ -1286,6 +1291,46 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         assert item is not None
         self.app._insert_item(item)
         self.assertEqual(item.unit_price, 10.3)
+
+    def test_new_and_copied_item_text_is_uppercase_without_changing_source_or_saved_projects(self):
+        """Normalize new project text while preserving source data, units and persisted text."""
+        base_path = self.directory / "mixed-case.bc3"
+        base_path.write_text(
+            "~C|01#||Capítulo original|10||0|\n"
+            "~C|pMin|m²|Partida de hormigón|10||0|\n"
+            "~T|pMin|Descripción con ñ y tildes: ejecución.|\n"
+            "~D|01#|pMin\\1\\1\\|\n", encoding="cp1252",
+        )
+        base = Bc3Dataset(base_path)
+        original = (base.concepts["pMin"].summary, base.concepts["pMin"].text)
+        for item in (base.to_project_items()[0], self.app._build_item_from_bcca("pMin", base)):
+            self.assertIsNotNone(item)
+            self.assertEqual(item.summary, original[0].upper())
+            self.assertEqual(item.text, original[1].upper())
+            self.assertEqual((item.code, item.unit), ("pMin", "m²"))
+        self.assertEqual((base.concepts["pMin"].summary, base.concepts["pMin"].text), original)
+        self.app.reference_bases.append(base)
+        self.app._insert_bcca_chapter("01#", base)
+        self.assertEqual(self.app.budget_items[0].summary, original[0].upper())
+        self.assertEqual(self.app.budget_items[0].text, original[1].upper())
+        manual = ProjectItem("nuevo", "01#", "m²", "Resumen manual", text="Texto manual con ñ")
+        self.app._insert_item(manual)
+        self.assertEqual((manual.summary, manual.text), ("RESUMEN MANUAL", "TEXTO MANUAL CON Ñ"))
+        manual.summary, manual.text = "Edición posterior", "Descripción conservada"
+        self.app.selected_budget_index = self.app.budget_items.index(manual)
+        with patch("bc3_gui.messagebox.showwarning"):
+            self.app.duplicate_selected_budget_item()
+        duplicate = self.app.budget_items[self.app.selected_budget_index]
+        self.assertEqual((duplicate.summary, duplicate.text),
+                         ("EDICIÓN POSTERIOR", "DESCRIPCIÓN CONSERVADA"))
+        self.assertEqual((manual.summary, manual.text),
+                         ("Edición posterior", "Descripción conservada"))
+        target = self.directory / "mixed-case.json"
+        self.assertTrue(self.app._write_project_file(target))
+        self.assertTrue(self.app._load_project_file(target))
+        restored = next(item for item in self.app.budget_items if item.code == "nuevo")
+        self.assertEqual((restored.summary, restored.text),
+                         ("Edición posterior", "Descripción conservada"))
 
     def test_adding_reference_chapter_imports_all_direct_and_nested_items(self):
         """Import a selected reference chapter and all its nested work items."""
@@ -1676,6 +1721,74 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
             )
             content = ElementTree.fromstring(archive.read("content.xml"))
             self.assertIn("Partida", " ".join(content.itertext()))
+
+    def test_deviation_button_exports_configured_format_and_original_monthly_plan(self):
+        """Export the selected month's deviations through the normal report workflow."""
+        from pypdf import PdfReader
+
+        window = self.certification_window()
+        toolbar = window.grid_slaves(row=0, column=0)[0]
+        button = next(child for child in toolbar.winfo_children()
+                      if child.cget("text") == "Informe de desviaciones")
+        window.selected_certification_month = 0
+        month = window.months[0]
+        item = self.app.budget_items[0]
+        item.certifications[month.key] = 120
+        item.certification_plans[month.key] = 100
+        item.certification_justifications[month.key] = "Motivo singular"
+        window.plan[0][0] = 120
+        window.plan[1][0] = 50
+        window.plan[2][0] = 0
+        for extension in ("pdf", "odt"):
+            self.app.report_settings.output_format = extension
+            target = self.directory / f"deviations.{extension}"
+            with (
+                patch("certifications.filedialog.asksaveasfilename", return_value=str(target)) as dialog,
+                patch("certifications.os.startfile") as open_report,
+            ):
+                button.invoke()
+            self.assertEqual(dialog.call_args.kwargs["defaultextension"], "." + extension)
+            open_report.assert_called_once_with(str(target))
+            if extension == "pdf":
+                text = "\n".join(page.extract_text() for page in PdfReader(target).pages)
+            else:
+                with ZipFile(target) as archive:
+                    text = " ".join(ElementTree.fromstring(archive.read("content.xml")).itertext())
+            for expected in ("Motivo singular", "Partida dos", "150,00", "120,00", "-30,00"):
+                self.assertIn(expected, text)
+
+    def test_deviation_export_handles_pending_month_cancel_and_invalid_plan(self):
+        """Allow uncertified months, respect cancellation and preserve existing files on error."""
+        window = self.certification_window()
+        with (
+            patch("certifications.messagebox.showwarning") as warning,
+            patch("certifications.filedialog.asksaveasfilename", return_value="") as dialog,
+        ):
+            window.generate_certification_report()
+            warning.assert_called_once()
+            dialog.assert_not_called()
+            window.selected_certification_month = 0
+            window.generate_certification_report()
+            dialog.assert_called_once()
+        target = self.directory / "pending.pdf"
+        with (
+            patch("certifications.filedialog.asksaveasfilename", return_value=str(target)),
+            patch("certifications.os.startfile"),
+        ):
+            window.generate_certification_report()
+        self.assertTrue(target.is_file())
+        original = target.read_bytes()
+        window.plan[0][0] = float("nan")
+        with (
+            patch("certifications.filedialog.asksaveasfilename", return_value=str(target)),
+            patch("certifications.messagebox.showerror") as error,
+            patch("certifications.os.startfile") as open_report,
+        ):
+            window.generate_certification_report()
+        error.assert_called_once()
+        open_report.assert_not_called()
+        self.assertEqual(target.read_bytes(), original)
+        self.assertEqual(list(self.directory.glob("tmp*.pdf")), [])
 
     def test_certification_pdf_selection_empty_cancel_and_errors(self):
         """Verify certification pdf selection empty cancel and errors."""

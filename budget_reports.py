@@ -31,6 +31,7 @@ REPORT_NAMES = (
     "Presupuesto resumen",
 )
 CERTIFICATION_REPORT_NAMES = ("Resumen certificaciones", "Certificaciones con mediciones")
+DEVIATION_REPORT_NAME = "Informe de desviaciones"
 PERCENTAGE_FIELDS = {"general_expenses", "industrial_profit", "vat", "tender_discount", "indirect_costs"}
 CURRENCY_CODES = {"EUR", "USD", "GBP", "CHF", "CAD", "AUD", "OTHER"}
 
@@ -544,9 +545,34 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
         raise ValueError(f"No se pudo paginar el informe: {exc}") from exc
 
 
+def certification_deviation_rows(items, planned_amounts, month_key: str):
+    """Calcula las desviaciones del mes con la previsión original y redondeo monetario."""
+    from bc3_gui import format_chapter_code
+
+    if planned_amounts is None or len(planned_amounts) != len(items):
+        raise ValueError("Las previsiones deben corresponder a todas las partidas del proyecto.")
+    rows = []
+    for item, planned in zip(items, planned_amounts):
+        planned = item.certification_plans.get(month_key, planned)
+        certified = item.certifications.get(month_key, 0.0)
+        if not isfinite(planned) or not isfinite(certified):
+            raise ValueError(f"Importe de previsión o certificación no válido en {item.code}.")
+        planned, certified = money(planned), money(certified)
+        rows.append([
+            format_chapter_code(item.chapter), item.code, item.summary,
+            planned, certified, certified - planned,
+            item.certification_justifications.get(month_key, ""),
+        ])
+    if not rows:
+        raise ValueError("No hay partidas para el informe de desviaciones.")
+    totals = [sum((row[column] for row in rows), Decimal(0)) for column in (3, 4, 5)]
+    return rows, ["", "", "TOTAL", *totals, ""]
+
+
 def write_certification_pdf(
     items, chapter_title, project_title: str, settings: ReportSettings,
     report: str, target: Path, month_key: str, certification_number: int, month_label: str,
+    *, planned_amounts: list[float] | None = None,
 ) -> None:
     """Certifica importes del mes; no atribuye las mediciones del presupuesto al mes."""
     from reportlab.lib.pagesizes import A4
@@ -557,13 +583,18 @@ def write_certification_pdf(
     from reportlab.platypus.doctemplate import LayoutError
     from bc3_gui import fmt_number, format_chapter_code
     from report_layout import (
-        CERTIFICATION_COLUMN_RATIOS, CONTENT_WIDTH, LEFT_MARGIN, RIGHT_MARGIN, ReportLayout,
-        report_project_label,
+        CERTIFICATION_COLUMN_RATIOS, CERTIFICATION_SUMMARY_RATIOS, COLUMN_REFERENCE_WIDTH,
+        CONTENT_WIDTH, DEVIATION_COLUMN_RATIOS, DEVIATION_HEADERS,
+        LEFT_MARGIN, RIGHT_MARGIN, ReportLayout, report_project_label,
     )
 
-    if report not in CERTIFICATION_REPORT_NAMES:
+    if report not in (*CERTIFICATION_REPORT_NAMES, DEVIATION_REPORT_NAME):
         raise ValueError(f"Tipo de informe desconocido: {report}")
     detail = report == CERTIFICATION_REPORT_NAMES[1]
+    deviation = report == DEVIATION_REPORT_NAME
+    deviation_rows, deviation_total = (
+        certification_deviation_rows(items, planned_amounts, month_key) if deviation else ([], [])
+    )
     certified = []
     for item in items:
         value = item.certifications.get(month_key, 0.0)
@@ -577,10 +608,12 @@ def write_certification_pdf(
                     "el precio unitario debe ser finito y distinto de cero."
                 )
             certified.append((item, amount))
-    if not certified:
+    if not certified and not deviation:
         raise ValueError("No hay partidas con importe certificado en el mes seleccionado.")
 
-    report_heading = "CERTIFICACIÓN Y MEDICIONES" if detail else "RESUMEN DE CERTIFICACIÓN"
+    report_heading = "INFORME DE DESVIACIONES" if deviation else (
+        "CERTIFICACIÓN Y MEDICIONES" if detail else "RESUMEN DE CERTIFICACIÓN"
+    )
     heading = f"{report_heading} · Certificación {certification_number} · {month_label}"
     layout = ReportLayout(certification=True, template_path=settings.template_path)
     from bc3_gui import currency_label
@@ -594,7 +627,16 @@ def write_certification_pdf(
 
     def total(label, value, major=True):
         """Añade una línea económica tabulada al detalle o resumen de certificación."""
-        story.append(layout.total(label, value, major=major))
+        if detail:
+            story.append(layout.total(label, value, major=major))
+        else:
+            indent = COLUMN_REFERENCE_WIDTH * (0.25 if major else 0.35)
+            story.append(table(
+                [], [["", label, value, ""]],
+                [indent, sum(CERTIFICATION_SUMMARY_RATIOS[:2]) - indent,
+                 *CERTIFICATION_SUMMARY_RATIOS[2:]],
+                bold_rows=(0,) if major else (), rule=major, leaders=(1,),
+            ))
 
     codes = list(dict.fromkeys(item.chapter for item, _ in certified))
     chapter_amounts = {
@@ -602,7 +644,16 @@ def write_certification_pdf(
         for code in codes
     }
     pem = sum(chapter_amounts.values(), Decimal(0))
-    if detail:
+    if deviation:
+        story.append(table(
+            DEVIATION_HEADERS, [*deviation_rows, deviation_total],
+            DEVIATION_COLUMN_RATIOS, bold_rows=(len(deviation_rows),),
+        ))
+        story.append(text(
+            "Desviación = certificado - plan original del mes. "
+            "Se incluyen las partidas pendientes de certificar."
+        ))
+    elif detail:
         for chapter_index, code in enumerate(codes):
             if chapter_index:
                 story.append(PageBreak())
@@ -641,7 +692,7 @@ def write_certification_pdf(
             percentage = fmt_number(float(chapter_amounts[code] * 100 / budget)) if budget else "No aplicable"
             rows.append([format_chapter_code(code), chapter_title(code), chapter_amounts[code], percentage])
         story.append(table(["CAPÍTULO", "RESUMEN", "IMPORTE", "% CERTIFICADO"],
-                           rows, [65, 288, 75, CONTENT_WIDTH - 428], leaders=(1,)))
+                           rows, CERTIFICATION_SUMMARY_RATIOS, leaders=(1,)))
         story.append(text("% certificado respecto al presupuesto de cada capítulo."))
         totals = certification_totals(float(pem), settings)
         total("EJECUCIÓN MATERIAL", totals["pem"])
@@ -660,7 +711,7 @@ def write_certification_pdf(
                           ), layout.words_style))
 
     signatures = [[
-        text("\n".join(filter(None, (settings.contractor, settings.contractor_representative, settings.signature))),
+        text("\n".join(filter(None, (settings.contractor_representative, settings.contractor, settings.signature))),
              layout.center),
         text("\n".join(filter(None, (settings.role, settings.author, settings.organization,
                                     settings.location, settings.signature))), layout.center),

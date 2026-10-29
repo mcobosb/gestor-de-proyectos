@@ -27,7 +27,7 @@ from odt_reports import write_report_odt
 
 
 APPLICATION_NAME = "Gestor de Proyectos"
-APPLICATION_VERSION = "1.2.0"
+APPLICATION_VERSION = "1.3.0"
 REPOSITORY_URL = "https://github.com/mcobosb/gestor-de-proyectos"
 BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/mcobosb"
 
@@ -568,12 +568,12 @@ class Bc3Dataset:
                         code=code,
                         chapter=chapter,
                         unit=child.unit,
-                        summary=child.summary,
+                        summary=child.summary.upper(),
                         measurement=measured.total if measured else decomposition_quantity,
                         unit_price=child.price,
                         rendimiento=self.calculate_rendimiento(code),
                         source="BC3",
-                        text=child.text,
+                        text=child.text.upper(),
                         measurement_detail=measured.detail if measured else "",
                         measurement_lines=parse_measurement_lines(measured.detail if measured else ""),
                         decomposition=list(child.children),
@@ -1676,13 +1676,13 @@ class BudgetApp:
             code=code,
             chapter=base.find_parent_chapter(code),
             unit=concept.unit,
-            summary=concept.summary,
+            summary=concept.summary.upper(),
             measurement=1.0,
             unit_price=concept.price,
             rendimiento=base.calculate_rendimiento(code),
             source="BCCA",
             reference_base=base.path.stem,
-            text=concept.text,
+            text=concept.text.upper(),
             decomposition=list(concept.children),
             measurement_lines=[MeasurementLine(comment="Medición inicial", units=1.0)],
         )
@@ -1748,6 +1748,8 @@ class BudgetApp:
 
     def _insert_item(self, item: ProjectItem, position: int | None = None, chapter: str | None = None) -> None:
         """Inserta una partida en el capítulo y posición indicados y actualiza la vista."""
+        item.summary = item.summary.upper()
+        item.text = item.text.upper()
         if chapter:
             item.chapter = chapter
         self._ensure_chapter(item.chapter)
@@ -2889,8 +2891,8 @@ class BudgetApp:
             ("Autoría / nombre", "author"), ("Cargo / titulación", "role"),
             ("Entidad / servicio", "organization"), ("Localidad", "location"),
             ("Texto de firma / fecha", "signature"),
-            ("Empresa contratista", "contractor"),
-            ("Representante de la empresa", "contractor_representative"),
+            ("Empresa constructora", "contractor"),
+            ("Responsable de la empresa constructora", "contractor_representative"),
             ("Costes Indirectos (%)", "indirect_costs"),
             ("Gastos generales (%)", "general_expenses"),
             ("Beneficio industrial (%)", "industrial_profit"), ("IVA (%)", "vat"),

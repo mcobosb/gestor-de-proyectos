@@ -1,6 +1,6 @@
 # Manual de usuario
 
-## Gestor de Proyectos (v1.2.0)
+## Gestor de Proyectos (v1.3.0)
 
 Herramienta para preparar presupuestos, mediciones, planificación de obra y
 certificaciones. Los ejemplos de rutas de este manual son ficticios.
@@ -47,6 +47,12 @@ datos, utiliza **Nuevo proyecto** o **Importar presupuesto BC3**.
 
 El panel del proyecto contiene capítulos y partidas. El panel de referencia
 permite consultar bases de precios.
+
+Al crear, duplicar o incorporar partidas desde una base de referencia o un
+presupuesto BC3, el resumen y la descripción se convierten a mayúsculas.
+También se aplica a las partidas generadas de RCDs y transporte. Se conservan
+los códigos, unidades y datos originales de las bases; abrir un proyecto JSON
+existente no cambia sus textos.
 
 1. Añade una base desde **Archivo → Añadir base de referencia BCCA…**.
    Las tres últimas bases usadas se conservan en **Archivo → Bases de
@@ -107,7 +113,10 @@ Abre **Archivo → Configuración…** y completa:
 
 - Autoría, cargo o titulación, entidad o servicio.
 - Localidad y texto de firma o fecha.
-- Empresa contratista y representante.
+- Empresa constructora y responsable de la empresa constructora. En ambos
+  informes de certificación aparecen el responsable, la empresa y el texto de
+  firma o fecha (por defecto, «Fecha y firma electrónicas»), a la izquierda de
+  la firma de la administración.
 - Costes Indirectos (%): recargo sobre el precio directo de todas las partidas.
 - Gastos generales, beneficio industrial e IVA.
 - Baja de adjudicación para certificaciones.
@@ -454,8 +463,13 @@ presupuesto como si se hubieran ejecutado ese mes. Muestra la cantidad derivada
 con seis decimales; el importe mensual guardado prevalece. Un precio unitario
 cero impide calcular esa cantidad.
 
-**Informe de desviaciones** abre una vista HTML adicional para comparar previsión,
-certificado y justificación.
+**Informe de desviaciones** permite guardar el informe en PDF u ODT, según
+**Archivo → Configuración…**, con la misma cabecera, pie y estilos del resto.
+Incluye todas las partidas del mes seleccionado, también las pendientes de
+certificar: capítulo, código, resumen, previsión original, certificado,
+desviación (certificado menos previsión) y justificación, con sus totales.
+Para partidas ya certificadas usa la previsión original guardada antes del
+ajuste del plan, como los indicadores de desviación de la tabla.
 
 ## 11. Controlar la facturación
 

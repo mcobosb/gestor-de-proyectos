@@ -4,7 +4,15 @@ Aplicación de escritorio para Windows que permite trabajar con presupuestos
 FIEBDC-3 (BC3), editar mediciones y descomposiciones, planificar obras y gestionar
 certificaciones mensuales.
 
-## Versión 1.2.0 — Gestión de RCDs
+## Versión 1.3.0 — Informes y edición del presupuesto
+
+- Informes PDF y ODT editables con estilos, cabeceras y firmas configurables.
+- Informe de mediciones y exportación del informe de desviaciones en PDF u ODT.
+- Buscador del proyecto, filtros de recursos y expansión de capítulos y partidas.
+- Resumen y descripción en mayúsculas al crear, duplicar o incorporar partidas;
+  las bases originales y los proyectos existentes no se modifican al abrirlos.
+
+### Gestión de RCDs
 
 - **Herramientas → RCDs**, como primera opción: datos de cálculo editables y
   revisión de residuos detectados en las partidas.
@@ -58,7 +66,7 @@ Esperamos que os sea muy útil. ¡Esto es solo el comienzo!
 ## Instalación y arranque
 
 En Windows se puede crear e instalar una versión compilada con Nuitka. Una vez
-generado, el instalador `GestorDeProyectos-Setup-1.2.0.exe` no requiere Python.
+generado, el instalador `GestorDeProyectos-Setup-1.3.0.exe` no requiere Python.
 Incluye los componentes necesarios, pero no los archivos fuente `.py`. La
 compilación Nuitka dificulta recuperar el código, aunque no puede impedir
 completamente la ingeniería inversa.
@@ -186,7 +194,7 @@ Después, desde PowerShell en la carpeta del proyecto:
 .\build_installer.ps1
 ```
 
-El instalador generado aparece en `dist\GestorDeProyectos-Setup-1.2.0.exe`.
+El instalador generado aparece en `dist\GestorDeProyectos-Setup-1.3.0.exe`.
 El script usa automáticamente `.\.venv\Scripts\python.exe` si existe; en caso
 contrario, utiliza el comando `python` disponible en el sistema.
 La distribución incluye la licencia y el manual, pero no los presupuestos ni

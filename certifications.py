@@ -1,9 +1,10 @@
 """Plan económico mensual y certificaciones editables por partida.
 
-Informes ofrece los modelos PDF «Resumen certificaciones» y «Certificaciones
+Informes ofrece los modelos PDF/ODT «Resumen certificaciones» y «Certificaciones
 con mediciones» para el mes seleccionado. Las cantidades se deducen del importe
 mensual y el precio unitario; no se reutilizan las líneas del presupuesto.
 Los porcentajes, la baja y las firmas proceden de Archivo > Configuración.
+El informe de desviaciones usa la misma plantilla y el formato configurado.
 """
 from __future__ import annotations
 
@@ -13,7 +14,6 @@ import math
 import os
 import tempfile
 import tkinter as tk
-import webbrowser
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -24,7 +24,9 @@ from bc3_gui import (
 )
 from localization import filedialog, localize_widget_tree, messagebox, translate
 from planning import PlanParams, apply_saved_plan_state, build_activities, schedule
-from budget_reports import CERTIFICATION_REPORT_NAMES, ReportSettings, write_certification_pdf
+from budget_reports import (
+    CERTIFICATION_REPORT_NAMES, DEVIATION_REPORT_NAME, ReportSettings, write_certification_pdf,
+)
 from odt_reports import write_certification_odt
 
 
@@ -520,7 +522,9 @@ class CertificationWindow(tk.Toplevel):
                 parent=self,
             )
             return
-        if not any(abs(item.certifications.get(month.key, 0.0)) >= 0.005 for item in self.items):
+        if report != DEVIATION_REPORT_NAME and not any(
+            abs(item.certifications.get(month.key, 0.0)) >= 0.005 for item in self.items
+        ):
             messagebox.showinfo(
                 "Informe de certificación",
                 f"No hay partidas con importe certificado en Certificación {index + 1}.",
@@ -544,16 +548,13 @@ class CertificationWindow(tk.Toplevel):
         try:
             with tempfile.NamedTemporaryFile(suffix=extension, dir=target.parent, delete=False) as handle:
                 temporary_path = Path(handle.name)
-            if is_odt:
-                write_certification_odt(
-                    self.items, self.chapter_title, self.project_title, settings,
-                    report, temporary_path, month.key, index + 1, month.label,
-                )
-            else:
-                write_certification_pdf(
-                    self.items, self.chapter_title, self.project_title, settings,
-                    report, temporary_path, month.key, index + 1, month.label,
-                )
+            writer = write_certification_odt if is_odt else write_certification_pdf
+            writer(
+                self.items, self.chapter_title, self.project_title, settings,
+                report, temporary_path, month.key, index + 1, month.label,
+                planned_amounts=[row[index] for row in self.plan]
+                if report == DEVIATION_REPORT_NAME else None,
+            )
             temporary_path.replace(target)
         except ImportError as exc:
             messagebox.showerror(
@@ -573,47 +574,13 @@ class CertificationWindow(tk.Toplevel):
             os.startfile(str(target))  # type: ignore[attr-defined]
         except OSError as exc:
             messagebox.showwarning(
-                "Informe guardado", f"El PDF se ha guardado en:\n{target}\n\nNo se pudo abrir:\n{exc}",
+                "Informe guardado", f"El informe se ha guardado en:\n{target}\n\nNo se pudo abrir:\n{exc}",
                 parent=self,
             )
 
     def generate_certification_report(self) -> None:
-        """Genera la vista HTML de importes certificados, previsiones y desviaciones del mes."""
-        if self.selected_certification_month is None:
-            messagebox.showwarning(
-                "Informe de certificación",
-                "Selecciona primero la cabecera de una columna «Certificación».",
-                parent=self,
-            )
-            return
-        month_index = self.selected_certification_month
-        month = self.months[month_index]
-        certified_items = [
-            item for item in self.items
-            if not math.isclose(item.certifications.get(month.key, 0.0), 0.0, abs_tol=0.005)
-        ]
-        if not certified_items:
-            messagebox.showinfo(
-                "Informe de certificación",
-                f"No hay partidas con importe certificado en Certificación {month_index + 1}.",
-                parent=self,
-            )
-            return
-        report_path = Path(tempfile.gettempdir()) / (
-            f"certificacion_{month_index + 1}_{month.key}.html"
-        )
-        report_path.write_text(
-            certification_report_html(
-                self.items, self.activities, self.plan, month, month_index + 1, self.project_title,
-                currency=self._report_settings().currency,
-                custom_currency=self._report_settings().custom_currency,
-            ),
-            encoding="utf-8",
-        )
-        webbrowser.open(report_path.as_uri())
-        self.selection_label.config(
-            text=f"Informe de Certificación {month_index + 1} abierto en el navegador."
-        )
+        """Exporta las desviaciones del mes con la plantilla y el formato configurados."""
+        self.generate_template_report(DEVIATION_REPORT_NAME)
 
     def edit_certification(self, event):
         """Identifica una celda de certificación y abre su editor de importe."""
