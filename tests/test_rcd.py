@@ -220,6 +220,33 @@ class RcdReportTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.folder = Path(self.temporary.name)
 
+    def test_reports_separate_tables_and_signature_vertically(self):
+        """Verify both renderers reserve space between tables and before signatures."""
+        from unittest.mock import patch
+        from reportlab.platypus import KeepTogether, Spacer
+
+        settings = ReportSettings(author="Autor RCD", output_format="odt")
+        target = self.folder / "spaced.odt"
+        write_report(example_state(), "Proyecto RCD", settings, target)
+        with ZipFile(target) as archive:
+            root = ElementTree.fromstring(archive.read("content.xml"))
+        ns = {
+            "office": "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
+            "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
+        }
+        body = root.find("office:body/office:text", ns)
+        styles = [element.get(f"{{{ns['text']}}}style-name") for element in body]
+        self.assertGreaterEqual(styles.count("Space12.0000"), 7)
+        signature = styles.index("Signature")
+        self.assertEqual(styles[signature - 1], "Space24.0000")
+        settings.output_format = "pdf"
+        with patch("reportlab.platypus.SimpleDocTemplate.build") as build:
+            write_report(example_state(), "Proyecto RCD", settings, self.folder / "spaced.pdf")
+        story = build.call_args.args[0]
+        self.assertGreaterEqual(sum(isinstance(item, Spacer) and item.height == 12 for item in story), 7)
+        self.assertIsInstance(story[-1], KeepTogether)
+        self.assertEqual(story[-1]._content[0].height, 24)
+
     def test_pdf_and_odt_contain_budget_rows_and_configured_template(self):
         template = self.folder / "custom.odt"
         with ZipFile(DEFAULT_TEMPLATE_PATH) as source, ZipFile(template, "w") as target:

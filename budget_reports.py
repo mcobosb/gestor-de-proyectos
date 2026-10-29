@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 
 REPORT_NAMES = (
+    "Mediciones",
     "Cuadro de precios 1 y 2 por capitulos",
     "Descompuestos",
     "Materiales",
@@ -203,7 +204,7 @@ def amount_in_words(
 
 def _collect_report_resources(app):
     """Acumula auxiliares y materiales usados con sus cantidades y precios actuales."""
-    from bc3_gui import Concept
+    from bc3_gui import Concept, ProjectItem
 
     auxiliaries: dict[tuple, tuple] = {}
     materials: dict[tuple, list] = {}
@@ -214,12 +215,11 @@ def _collect_report_resources(app):
             raise ValueError(f"Descomposición circular: {' → '.join((*stack, concept.code))}")
         if concept.children:
             dataset = app._component_dataset(item)
-            children = []
-            for code, factor in concept.children:
-                child = dataset.concepts.get(code) if dataset else None
-                if child is None:
-                    raise ValueError(f"No se dispone del recurso {code} del auxiliar {concept.code}.")
-                children.append((child, factor, child.price))
+            auxiliary = ProjectItem(
+                concept.code, item.chapter, concept.unit, concept.summary,
+                unit_price=price, decomposition=list(concept.children),
+            )
+            children = auxiliary.cost_components(dataset)
             key = (concept.code, price, tuple((c.code, q, p) for c, q, p in children))
             auxiliaries[key] = (concept, price, children)
             for child, factor, child_price in children:
@@ -259,12 +259,20 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
     )
     from reportlab.platypus.doctemplate import LayoutError
     from bc3_gui import fmt_number, format_chapter_code
-    from report_layout import CONTENT_WIDTH, LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
+    from report_layout import (
+        COLUMN_REFERENCE_WIDTH, CONTENT_WIDTH, LEFT_MARGIN, RIGHT_MARGIN, ReportLayout,
+        MEASUREMENT_COLUMN_RATIOS, budget_report_columns, report_project_label,
+    )
 
     if report not in REPORT_NAMES:
         raise ValueError(f"Tipo de informe desconocido: {report}")
     settings = app.report_settings
     title = app._project_title()
+    from bc3_gui import currency_label
+
+    project_label = report_project_label(
+        title, "" if report == "Mediciones" else currency_label(settings.currency, settings.custom_currency),
+    )
     layout = ReportLayout(template_path=settings.template_path)
     text = layout.text
     table = layout.table
@@ -275,28 +283,13 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
         "Precios Auxiliares": "CUADRO DE PRECIOS AUXILIARES",
         "Presupuesto mediciones": "PRESUPUESTO",
         "Presupuesto resumen": "RESUMEN DE PRESUPUESTO",
+        "Mediciones": "MEDICIONES",
     }.get(report, "CUADRO DE PRECIOS 1")
     page_headings = {}
     current_heading = header_title
-    component_headers = ["CÓDIGO", "UD", "RESUMEN", "CANTIDAD", "PRECIO", "SUBTOTAL", "IMPORTE"]
-    component_widths = [50, 20, CONTENT_WIDTH - 65 - 210, 45, 50, 50, 60]
-    auxiliary_headers = ["CÓDIGO", "UD", "CANTIDAD", "RESUMEN", "PRECIO", "SUBTOTAL", "IMPORTE"]
-    auxiliary_widths = [50, 20, 40, CONTENT_WIDTH - 65 - 210, 50, 50, 65]
-
-    def header_columns():
-        """Selecciona las cabeceras y los anchos tabulados del modelo de informe."""
-        if report == REPORT_NAMES[0]:
-            return ["CÓDIGO", "UD", "RESUMEN", "PRECIO"], [50, 15, CONTENT_WIDTH - 115, 50]
-        if report == "Descompuestos":
-            return component_headers, component_widths
-        if report == "Precios Auxiliares":
-            return auxiliary_headers, auxiliary_widths
-        if report == "Presupuesto mediciones":
-            return (["CÓDIGO", "UD", "RESUMEN", "CANTIDAD", "PRECIO", "IMPORTE"],
-                    [50, 15, CONTENT_WIDTH - 215, 50, 50, 50])
-        return (), ()
-
-    column_headers, column_ratios = header_columns()
+    _, component_widths = budget_report_columns("Descompuestos")
+    _, auxiliary_widths = budget_report_columns("Precios Auxiliares")
+    column_headers, column_ratios = budget_report_columns(report)
 
     class SectionMarker(Flowable):
         def __init__(self, value):
@@ -313,11 +306,24 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
 
     def total(label, value, major=True):
         """Añade una línea tabulada de importe con el énfasis del total correspondiente."""
-        story.append(layout.total(label, money(value), major=major))
+        if report == "Presupuesto resumen":
+            indent = COLUMN_REFERENCE_WIDTH * (0.36 if major else 0.48)
+            block = table(
+                [], [["", label, money(value), ""]],
+                [indent, 393 - indent, 75, COLUMN_REFERENCE_WIDTH - 468],
+                bold_rows=(0,) if major else (), leaders=(1,),
+            )
+            if major:
+                from reportlab.lib import colors
+
+                block.setStyle([("LINEABOVE", (2, 0), (2, 0), 0.5, colors.black)])
+            story.append(block)
+        else:
+            story.append(layout.total(label, money(value), major=major))
 
     def chapter(code):
         """Inserta la banda de capítulo con su código normalizado y su título."""
-        story.append(Spacer(1, 4 * mm))
+        story.append(Spacer(1, 2 * mm))
         story.append(layout.chapter(format_chapter_code(code), app._chapter_title(code)))
 
     def item_heading(item, value=None):
@@ -358,7 +364,7 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
             percent = amount * 100 / pem if pem else Decimal(0)
             rows.append([format_chapter_code(code), app._chapter_title(code), amount, money(percent)])
         story.append(table(["CAPÍTULO", "RESUMEN", "IMPORTE", "%"], rows,
-                           [65, 328, 75, CONTENT_WIDTH - 468], leaders=(1,)))
+                           [65, 328, 75, COLUMN_REFERENCE_WIDTH - 468], leaders=(1,)))
         totals = budget_totals(float(pem), settings)
         total("PRESUPUESTO DE EJECUCIÓN MATERIAL", totals["pem"])
         total(f"{fmt_number(settings.general_expenses)} % Gastos generales", totals["general_expenses"], False)
@@ -393,7 +399,8 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
         if rows:
             subtotal_rows = [i for i, row in enumerate(rows) if str(row[3]).startswith("Grupo ")]
             story.append(table(["CÓDIGO", "CANTIDAD", "UD.", "RESUMEN", "PRECIO/UD.", "IMPORTE"],
-                               rows, [50, 45, 18, 290, 50, 57], bold_rows=subtotal_rows))
+                               rows, [50, 45, 18, 290, 50, 57], bold_rows=subtotal_rows,
+                               highlighted_rows=subtotal_rows))
         else:
             story.append(text("No hay materiales en las descomposiciones del proyecto."))
         total("TOTAL", grand_total)
@@ -420,13 +427,14 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
         if not auxiliaries:
             story.append(text("No hay precios auxiliares en las descomposiciones del proyecto."))
     else:
-        sections = (1, 2) if report == REPORT_NAMES[0] else (0,)
+        sections = (1, 2) if report == "Cuadro de precios 1 y 2 por capitulos" else (0,)
         for section_index, section in enumerate(sections):
             if section_index:
                 story.append(PageBreak())
             section_title = (
                 f"CUADRO DE PRECIOS {section}" if section else
                 "PRESUPUESTO" if report == "Presupuesto mediciones" else
+                "MEDICIONES" if report == "Mediciones" else
                 "CUADRO DE PRECIOS DESCOMPUESTOS"
             )
             story.append(SectionMarker(section_title))
@@ -447,6 +455,8 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
                             kind = app._budget_concept_type(item, concept.code)
                             label = {"1": "Mano de obra", "2": "Maquinaria", "3": "Materiales"}.get(
                                 kind, "Resto de obra y costes complementarios")
+                            if concept.code == "%CI" and item.indirect_costs:
+                                label = f"Costes indirectos ({fmt_number(item.indirect_costs)} %)"
                             grouped[label] = grouped.get(label, Decimal(0)) + money(quantity * price)
                         if grouped:
                             story.append(table(["RESUMEN", "IMPORTE"], list(grouped.items()), [8, 2]))
@@ -473,15 +483,27 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
                             rows = [[line.comment, *[
                                 "" if v is None else fmt_number(v, 3)
                                 for v in (line.units, line.length, line.width, line.height)
-                            ], fmt_number(line.k, 3), money(line.partial)]
+                            ], fmt_number(line.k, 3),
+                                fmt_number(line.partial, 3) if report == "Mediciones" else money(line.partial)]
                                 for line in item.measurement_lines]
                             story.append(table(
-                                ["COMENTARIO", "UDS", "LONGITUD", "ANCHURA", "ALTURA", "K", "PARCIAL"],
-                                rows, [4, 1, 1, 1, 1, 0.8, 1.2]))
-                        story.append(table(
-                            ["CANTIDAD", "PRECIO", "IMPORTE"],
-                            [[money(item.measurement), money(item.unit_price), money(item.import_total)]],
-                            [CONTENT_WIDTH - 100, 50, 50]))
+                                ["COMENTARIO", "UDS", "LONGITUD", "ANCHURA", "ALTURA", "K", "PARCIAL"]
+                                + ([""] if report == "Mediciones" else []),
+                                [row + [""] for row in rows] if report == "Mediciones" else rows,
+                                MEASUREMENT_COLUMN_RATIOS if report == "Mediciones" else
+                                [4, 1, 1, 1, 1, 0.8, 1.2]))
+                        if report == "Mediciones":
+                            story.append(table(
+                                [],
+                                [["MEDICIÓN TOTAL", "", "", "", "", "",
+                                  text(fmt_number(item.measurement, 3), layout.bold_right), item.unit]],
+                                MEASUREMENT_COLUMN_RATIOS, bold_rows=(0,),
+                            ))
+                        else:
+                            story.append(table(
+                                ["CANTIDAD", "PRECIO", "IMPORTE"],
+                                [[money(item.measurement), money(item.unit_price), money(item.import_total)]],
+                                [CONTENT_WIDTH - 100, 50, 50]))
                     story.append(Spacer(1, 3 * mm))
                 if report == "Presupuesto mediciones":
                     total(f"TOTAL {format_chapter_code(code)}",
@@ -500,10 +522,8 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
 
     def page_header(canvas, document):
         """Dibuja el logo, título de sección, cabeceras tabuladas y pie de página."""
-        from bc3_gui import currency_label
-
         layout.header(canvas, document, page_headings.get(document.page, current_heading),
-                      f"{title} · Importes {currency_label(settings.currency, settings.custom_currency)}",
+                      project_label,
                       footer=f"{date.today():%d/%m/%Y}",
                       column_headers=column_headers, ratios=column_ratios)
 
@@ -514,8 +534,8 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
 
     document = ReportDocument(
         str(target), pagesize=A4, rightMargin=RIGHT_MARGIN - 6, leftMargin=LEFT_MARGIN - 6,
-        topMargin=layout.top_margin(header_title, title, column_headers, column_ratios),
-        bottomMargin=38, title=f"{report} - {title}",
+        topMargin=layout.top_margin(header_title, project_label, column_headers, column_ratios),
+        bottomMargin=layout.bottom_margin(), title=f"{report} - {title}",
         author=settings.author,
     )
     try:
@@ -536,7 +556,10 @@ def write_certification_pdf(
     )
     from reportlab.platypus.doctemplate import LayoutError
     from bc3_gui import fmt_number, format_chapter_code
-    from report_layout import CONTENT_WIDTH, LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
+    from report_layout import (
+        CERTIFICATION_COLUMN_RATIOS, CONTENT_WIDTH, LEFT_MARGIN, RIGHT_MARGIN, ReportLayout,
+        report_project_label,
+    )
 
     if report not in CERTIFICATION_REPORT_NAMES:
         raise ValueError(f"Tipo de informe desconocido: {report}")
@@ -560,6 +583,11 @@ def write_certification_pdf(
     report_heading = "CERTIFICACIÓN Y MEDICIONES" if detail else "RESUMEN DE CERTIFICACIÓN"
     heading = f"{report_heading} · Certificación {certification_number} · {month_label}"
     layout = ReportLayout(certification=True, template_path=settings.template_path)
+    from bc3_gui import currency_label
+
+    project_label = report_project_label(
+        project_title, currency_label(settings.currency, settings.custom_currency),
+    )
     text = layout.text
     table = layout.table
     story = []
@@ -592,7 +620,7 @@ def write_certification_pdf(
                 story.append(table(
                     [],
                     [["", "", "", "", "", "", fmt_number(float(quantity), 6), money(item.unit_price), amount]],
-                    [57, 179, 20, 38, 38, 38, 57, 42, CONTENT_WIDTH - 469],
+                    CERTIFICATION_COLUMN_RATIOS,
                 ))
                 justification = item.certification_justifications.get(month_key, "")
                 if justification:
@@ -641,24 +669,22 @@ def write_certification_pdf(
 
     def page_header(canvas, document):
         """Dibuja la cabecera institucional y la identificación del mes certificado."""
-        from bc3_gui import currency_label
-
         layout.header(
             canvas, document, heading,
-            f"{project_title} · Importes {currency_label(settings.currency, settings.custom_currency)}",
+            project_label,
             footer=f"Certificación {certification_number} · {month_label}",
             column_headers=["CÓDIGO", "RESUMEN", "UDS", "LONGITUD", "ANCHURA", "ALTURA",
                             "CANTIDAD", "PRECIO", "IMPORTE"] if detail else (),
-            ratios=[57, 179, 20, 38, 38, 38, 57, 42, CONTENT_WIDTH - 469],
+            ratios=CERTIFICATION_COLUMN_RATIOS,
         )
 
     column_headers = (["CÓDIGO", "RESUMEN", "UDS", "LONGITUD", "ANCHURA", "ALTURA",
                        "CANTIDAD", "PRECIO", "IMPORTE"] if detail else ())
-    column_ratios = [57, 179, 20, 38, 38, 38, 57, 42, CONTENT_WIDTH - 469]
+    column_ratios = CERTIFICATION_COLUMN_RATIOS
     document = SimpleDocTemplate(
         str(target), pagesize=A4, leftMargin=LEFT_MARGIN - 6, rightMargin=RIGHT_MARGIN - 6,
-        topMargin=layout.top_margin(heading, project_title, column_headers, column_ratios),
-        bottomMargin=38,
+        topMargin=layout.top_margin(heading, project_label, column_headers, column_ratios),
+        bottomMargin=layout.bottom_margin(),
         title=f"{report} - Certificación {certification_number} - {project_title}", author=settings.author,
     )
     try:

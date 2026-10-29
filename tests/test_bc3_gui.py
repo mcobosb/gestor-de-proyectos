@@ -82,6 +82,83 @@ class ParseFloatTests(unittest.TestCase):
 
 
 class IndirectCostsTests(unittest.TestCase):
+    @unittest.skipUnless((BASE_DIR / "Conectividad_PPO1v2.bc3").exists(), "Requiere el BC3 local.")
+    def test_supplied_bc3_balances_all_items_with_and_without_configured_indirect_costs(self):
+        """Verify all imported unit prices equal rounded components without modifying the source."""
+        from decimal import Decimal, ROUND_HALF_UP
+
+        dataset = Bc3Dataset(BASE_DIR / "Conectividad_PPO1v2.bc3")
+        for item in dataset.to_project_items():
+            original = item.unit_price
+            for percentage in (0, 3, 7.5, 0):
+                item.set_indirect_costs(percentage)
+                rows = item.cost_components(dataset) + item.indirect_components()
+                total = sum((
+                    (Decimal(str(quantity)) * Decimal(str(price))).quantize(
+                        Decimal(".01"), rounding=ROUND_HALF_UP,
+                    ) for _, quantity, price in rows
+                ), Decimal(0))
+                self.assertEqual(total, Decimal(str(item.unit_price)), (item.code, percentage))
+            self.assertEqual(item.unit_price, original)
+
+    def test_bc3_percentages_use_rounded_accumulated_cost_and_keep_budget_price(self):
+        """Verify successive imported percentages and configured overhead reconcile exactly."""
+        from decimal import Decimal, ROUND_HALF_UP
+
+        dataset = Bc3Dataset.__new__(Bc3Dataset)
+        dataset.concepts = {
+            "R": Concept("R", "ud", "Recurso", 26.80, "3"),
+            "%A": Concept("%A", "u", "Medios auxiliares", 2, "0"),
+            "%I": Concept("%I", "u", "Indirectos importados", 3, "0"),
+        }
+        item = ProjectItem(
+            "P", "01#", "ud", "Partida", unit_price=28.16,
+            decomposition=[("R", 1), ("%A", 0.02), ("%I", 0.03)],
+        )
+        for percentage, expected in ((0, "28.16"), (3, "29.00"), (3, "29.00"), (7.5, "30.27"), (0, "28.16")):
+            item.set_indirect_costs(percentage)
+            rows = item.cost_components(dataset) + item.indirect_components()
+            amounts = [
+                (Decimal(str(quantity)) * Decimal(str(price))).quantize(
+                    Decimal(".01"), rounding=ROUND_HALF_UP,
+                ) for _, quantity, price in rows
+            ]
+            self.assertEqual(amounts[:3], [Decimal("26.80"), Decimal(".54"), Decimal(".82")])
+            self.assertEqual(sum(amounts), Decimal(expected))
+            self.assertEqual(Decimal(str(item.unit_price)), Decimal(expected))
+        self.assertEqual(dataset.concepts["%A"].price, 2)
+
+    def test_rounding_adjustment_is_explicit_but_does_not_hide_real_price_changes(self):
+        """Reconcile cents without altering a stored unit price or masking larger differences."""
+        dataset = Bc3Dataset.__new__(Bc3Dataset)
+        dataset.concepts = {"R": Concept("R", price=24.91)}
+        item = ProjectItem("P", "01#", "ud", "Partida", unit_price=24.93, decomposition=[("R", 1)])
+        rows = item.cost_components(dataset)
+        self.assertEqual(len(rows), 1)
+        dataset.concepts["R"].price = 24.92
+        rows = item.cost_components(dataset)
+        self.assertEqual(rows[-1][0].summary, "Ajuste de redondeo")
+        self.assertEqual(rows[-1][2], .01)
+        self.assertEqual(item.unit_price, 24.93)
+        self.assertEqual(len(item.cost_components(dataset, reconcile=False)), 1)
+        dataset.concepts["R"].price = 20
+        self.assertEqual(len(item.cost_components(dataset)), 1)
+
+    def test_percentage_only_safety_study_preserves_lump_sum_and_configured_overhead(self):
+        """Treat a percentage-only placeholder as an undecomposed fixed-price item."""
+        dataset = Bc3Dataset.__new__(Bc3Dataset)
+        dataset.concepts = {"%A": Concept("%A", price=2), "%I": Concept("%I", price=3)}
+        item = ProjectItem(
+            "19SWW001", "01#", "ud", "Seguridad y salud", unit_price=1064.56,
+            decomposition=[("%A", .02), ("%I", .03)],
+        )
+        item.set_indirect_costs(3)
+        rows = item.cost_components(dataset) + item.indirect_components()
+        self.assertEqual(rows[0][0].summary, "Precio sin descomposición")
+        self.assertEqual(rows[0][2], 1064.56)
+        self.assertEqual(item.unit_price, 1096.5)
+        self.assertEqual(len(rows), 2)
+
     def test_percentage_changes_do_not_compound_and_zero_restores_direct_price(self):
         item = ProjectItem("P", "01#", "ud", "Partida", unit_price=100, measurement=2)
         for percentage, expected in ((3, 103), (3, 103), (7.5, 107.5), (0, 100)):
@@ -944,6 +1021,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         toolbar = self.root.grid_slaves(row=0, column=0)[0]
         button = next(child for child in toolbar.winfo_children() if child.cget("text") == "Informes")
         menu = self.root.nametowidget(button.cget("menu"))
+        self.assertEqual(menu.entrycget(0, "label"), "Mediciones")
         self.assertEqual(
             [menu.entrycget(index, "label") for index in range(menu.index("end") + 1)],
             list(REPORT_NAMES),
@@ -1314,7 +1392,8 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
                 "application/vnd.oasis.opendocument.text",
             )
             content = ElementTree.fromstring(archive.read("content.xml"))
-            report_text = " ".join(content.itertext())
+            styles = ElementTree.fromstring(archive.read("styles.xml"))
+            report_text = " ".join((*content.itertext(), *styles.itertext()))
             self.assertIn("RESUMEN DE PRESUPUESTO", report_text)
             self.assertIn("4.648,00", report_text)
 
@@ -1324,6 +1403,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         from odt_reports import write_report_odt
 
         expectations = {
+            "Mediciones": ("Partida <uno>", "MEDICIÓN TOTAL"),
             "Cuadro de precios 1 y 2 por capitulos": ("Partida <uno>", "TREINTA Y DOS"),
             "Descompuestos": ("Operario", "14,00"),
             "Materiales": ("Material", "303,00"),
@@ -1362,7 +1442,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
                 self.assertIn("Proyecto de prueba", report)
                 self.assertIn("Autora de prueba", report)
                 self.assertAlmostEqual(float(reader.pages[0].mediabox.width), 595.28, delta=0.1)
-                if name == REPORT_NAMES[0]:
+                if name == "Cuadro de precios 1 y 2 por capitulos":
                     self.assertIn("CUADRO DE PRECIOS 1", report)
                     self.assertIn("CUADRO DE PRECIOS 2", report)
                 elif name == "Descompuestos":

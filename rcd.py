@@ -657,57 +657,80 @@ def write_report(state: RcdState, title: str, settings, target: Path) -> None:
 
         document = _new_report(heading, title, settings)
         document.paragraph(NOTE)
+        document.space(12)
         if state.demolition:
             document.paragraph(MEASURED_NOTE)
             document.heading("Mediciones de demolición copiadas al transporte")
-            document.table(demolition_headers, demolition_rows)
+            document.table(demolition_headers, demolition_rows, ratios=[3, 1, 1, 1.5, 1])
+            document.space(12)
         for label, rows in sections:
             document.heading(label)
-            document.table(HEADERS, rows, bold_rows=(0,) if label.startswith("TOTAL") else ())
+            document.table(
+                HEADERS, rows, bold_rows=(0,) if label.startswith("TOTAL") else (),
+                ratios=[40, 15, 17, 14, 14],
+            )
+            document.space(12)
         document.heading("Datos de cálculo y revisión")
-        document.table(["Dato", "Valor"], inputs)
-        document.table(["Grupo", "X", "Peso (t)", "Densidad (t/m³)", "Volumen (m³)"], details)
+        document.table(["Dato", "Valor"], inputs, ratios=[4, 1])
+        document.space(12)
+        document.table(
+            ["Grupo", "X", "Peso (t)", "Densidad (t/m³)", "Volumen (m³)"], details,
+            ratios=[4, 0.5, 1, 1, 1],
+        )
+        document.space(12)
         document.heading("Residuos seleccionados (revisión manual)")
-        document.table(["LER (modelo ODS)", "Residuo", "Procedencia"], waste_rows)
+        document.table(
+            ["LER (modelo ODS)", "Residuo", "Procedencia"], waste_rows,
+            ratios=[1.2, 2.5, 4],
+        )
         document.paragraph("Los códigos repetidos y la clasificación del grupo otros proceden del modelo.")
+        document.space(24)
         for value in (settings.location, settings.role, settings.author, settings.organization, settings.signature):
             if value:
-                document.paragraph(value)
+                document.paragraph(value, style="Signature")
         document.write(target)
         return
     from reportlab.lib.pagesizes import A4
-    from reportlab.platypus import SimpleDocTemplate, Spacer
-    from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
+    from reportlab.platypus import KeepTogether, SimpleDocTemplate, Spacer
+    from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout, report_project_label
 
     layout = ReportLayout(template_path=settings.template_path)
-    story = [layout.text(NOTE), Spacer(1, 8)]
+    project_label = report_project_label(title)
+    story = [layout.text(NOTE), Spacer(1, 12)]
     if state.demolition:
         story.extend([layout.text(MEASURED_NOTE),
                       layout.text("Mediciones de demolición copiadas al transporte", layout.bold),
-                      layout.table(demolition_headers, demolition_rows, [3, 1, 1, 1.5, 1])])
+                      layout.table(demolition_headers, demolition_rows, [3, 1, 1, 1.5, 1]),
+                      Spacer(1, 12)])
     for label, rows in sections:
         story.extend([layout.text(label, layout.bold), layout.table(
             HEADERS, rows, [40, 15, 17, 14, 14],
             bold_rows=(0,) if label.startswith("TOTAL") else (),
-        ), Spacer(1, 8)])
+        ), Spacer(1, 12)])
     story.extend([layout.text("Datos de cálculo y revisión", layout.bold),
                   layout.table(["Dato", "Valor"], inputs, [4, 1]),
+                  Spacer(1, 12),
                   layout.table(["Grupo", "X", "Peso (t)", "Densidad (t/m³)", "Volumen (m³)"],
                                details, [4, 0.5, 1, 1, 1]),
+                  Spacer(1, 12),
                   layout.text("Residuos seleccionados (revisión manual)", layout.bold)])
     if waste_rows:
         story.append(layout.table(["LER (modelo ODS)", "Residuo", "Procedencia"], waste_rows, [1.2, 2.5, 4]))
-    for value in (settings.location, settings.role, settings.author, settings.organization, settings.signature):
-        if value:
-            story.append(layout.text(value, layout.center))
+    signatures = [
+        layout.text(value, layout.center)
+        for value in (settings.location, settings.role, settings.author, settings.organization, settings.signature)
+        if value
+    ]
+    if signatures:
+        story.append(KeepTogether([Spacer(1, 24), *signatures]))
 
     def header(canvas, document):
         """Dibuja cabecera y pie con el mismo diseño que los demás informes."""
-        layout.header(canvas, document, heading, title)
+        layout.header(canvas, document, heading, project_label)
 
-    document = SimpleDocTemplate(str(target), pagesize=A4, leftMargin=LEFT_MARGIN,
-                                 rightMargin=RIGHT_MARGIN, bottomMargin=38,
-                                 topMargin=layout.top_margin(heading, title),
+    document = SimpleDocTemplate(str(target), pagesize=A4, leftMargin=LEFT_MARGIN - 6,
+                                 rightMargin=RIGHT_MARGIN - 6, bottomMargin=layout.bottom_margin(),
+                                 topMargin=layout.top_margin(heading, project_label),
                                  title=f"{heading} - {title}", author=settings.author)
     document.build(story, onFirstPage=header, onLaterPages=header)
 

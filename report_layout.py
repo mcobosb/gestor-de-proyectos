@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import re
+from datetime import date
 from io import BytesIO
 from html import escape
 from pathlib import Path
@@ -17,10 +18,45 @@ from zipfile import BadZipFile, ZipFile
 from app_paths import application_directory
 
 DEFAULT_TEMPLATE_PATH = application_directory(__file__) / "plantillas" / "plantilla.odt"
-LEFT_MARGIN = 68.0
-RIGHT_MARGIN = 17.0
+PAGE_MARGIN = 25 * 72 / 25.4
+LEFT_MARGIN = PAGE_MARGIN
+RIGHT_MARGIN = PAGE_MARGIN
 PAGE_WIDTH = 595.2755905511812
 CONTENT_WIDTH = PAGE_WIDTH - LEFT_MARGIN - RIGHT_MARGIN
+# Las proporciones del modelo original se escalan al ancho disponible.
+COLUMN_REFERENCE_WIDTH = PAGE_WIDTH - 85
+CERTIFICATION_COLUMN_RATIOS = (57, 179, 20, 38, 38, 38, 57, 42, COLUMN_REFERENCE_WIDTH - 469)
+MEASUREMENT_COLUMN_RATIOS = (4, 1, 1, 1, 1, 0.8, 1.2, 0.5)
+
+
+def report_project_label(title: str, currency: str = "") -> str:
+    """Identifica el proyecto con la fecha de emisión y la divisa cuando corresponde."""
+    label = f"{title} · {date.today():%d/%m/%Y}"
+    return f"{label} · Importes {currency}" if currency else label
+
+
+def budget_report_columns(report: str):
+    """Comparte las cabeceras y proporciones de columna de los modelos PDF y ODT."""
+    return {
+        "Mediciones": (
+            ["CÓDIGO", "UD", "RESUMEN"], [50, 15, CONTENT_WIDTH - 65],
+        ),
+        "Cuadro de precios 1 y 2 por capitulos": (
+            ["CÓDIGO", "UD", "RESUMEN", "PRECIO"], [50, 15, CONTENT_WIDTH - 115, 50],
+        ),
+        "Descompuestos": (
+            ["CÓDIGO", "UD", "RESUMEN", "CANTIDAD", "PRECIO", "SUBTOTAL", "IMPORTE"],
+            [50, 20, CONTENT_WIDTH - 275, 45, 50, 50, 60],
+        ),
+        "Precios Auxiliares": (
+            ["CÓDIGO", "UD", "CANTIDAD", "RESUMEN", "PRECIO", "SUBTOTAL", "IMPORTE"],
+            [50, 20, 40, CONTENT_WIDTH - 275, 50, 50, 65],
+        ),
+        "Presupuesto mediciones": (
+            ["CÓDIGO", "UD", "RESUMEN", "CANTIDAD", "PRECIO", "IMPORTE"],
+            [50, 15, CONTENT_WIDTH - 215, 50, 50, 50],
+        ),
+    }.get(report, ((), ()))
 
 
 def _template_length_to_points(value: str) -> float:
@@ -67,6 +103,8 @@ def _read_report_template(template_path: str = ""):
             image_height = _template_length_to_points(
                 frame.get(f"{{{namespaces['svg']}}}height", "")
             )
+            if image_width <= 0 or image_height <= 0:
+                raise ValueError("La imagen de cabecera debe tener dimensiones positivas.")
             footer = master_page.find("style:footer", namespaces)
             footer_text = " ".join(
                 " ".join("".join(paragraph.itertext()).split())
@@ -79,6 +117,55 @@ def _read_report_template(template_path: str = ""):
             f"No se pudo leer la plantilla de informes {path}: {exc}"
         ) from exc
     return image_data, image_path, image_width, image_height, footer_text
+
+
+def _read_report_template_borders(template_path: str = "") -> dict[str, dict[str, str]]:
+    """Lee los bordes horizontales de cabecera y pie, incluidos estilos heredados."""
+    namespaces = {
+        "style": "urn:oasis:names:tc:opendocument:xmlns:style:1.0",
+        "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
+        "fo": "urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0",
+    }
+    path = Path(template_path).expanduser() if template_path.strip() else DEFAULT_TEMPLATE_PATH
+    try:
+        with ZipFile(path) as archive:
+            root = ElementTree.fromstring(archive.read("styles.xml"))
+        styles = {
+            element.get(f"{{{namespaces['style']}}}name"): element
+            for element in root.findall(".//style:style", namespaces)
+            if element.get(f"{{{namespaces['style']}}}family") == "paragraph"
+        }
+        master = root.find(".//style:master-page", namespaces)
+        if master is None:
+            raise ValueError("La plantilla ODT no contiene una página maestra.")
+        borders: dict[str, dict[str, str]] = {"header": {}, "footer": {}}
+        for section in borders:
+            for paragraph in master.findall(f"style:{section}//text:p", namespaces):
+                name = paragraph.get(f"{{{namespaces['text']}}}style-name")
+                chain = []
+                visited = set()
+                while name in styles and name not in visited:
+                    visited.add(name)
+                    style = styles[name]
+                    chain.append(style)
+                    name = style.get(f"{{{namespaces['style']}}}parent-style-name")
+                properties = {}
+                for style in reversed(chain):
+                    element = style.find("style:paragraph-properties", namespaces)
+                    if element is not None:
+                        for edge in ("top", "bottom"):
+                            value = element.get(
+                                f"{{{namespaces['fo']}}}border-{edge}",
+                                element.get(f"{{{namespaces['fo']}}}border"),
+                            )
+                            if value is not None:
+                                properties[edge] = value
+                for edge, value in properties.items():
+                    if value not in {"none", "hidden"}:
+                        borders[section][edge] = value
+        return borders
+    except (OSError, KeyError, BadZipFile, ElementTree.ParseError) as exc:
+        raise ValueError(f"No se pudieron leer las líneas de la plantilla {path}: {exc}") from exc
 
 
 class ReportLayout:
@@ -138,6 +225,7 @@ class ReportLayout:
             image_data, self.template_image_path, self.logo_width, self.logo_height,
             self.template_footer,
         ) = _read_report_template(template_path)
+        self.template_borders = _read_report_template_borders(template_path)
         self.logo = ImageReader(BytesIO(image_data))
 
     def text(self, value, style=None):
@@ -171,7 +259,10 @@ class ReportLayout:
 
         return LeaderParagraph(escape(str(value)), style or self.normal)
 
-    def table(self, headers, rows, ratios, *, bold_rows=(), background=None, rule=False, leaders=()):
+    def table(
+        self, headers, rows, ratios, *, bold_rows=(), background=None, rule=False,
+        leaders=(), highlighted_rows=(),
+    ):
         """Compone columnas fijas con alineación numérica, negritas y reglas opcionales."""
         from decimal import Decimal
         from reportlab.lib import colors
@@ -181,6 +272,7 @@ class ReportLayout:
         numeric_headers = {
             "CANTIDAD", "PRECIO", "PRECIO/UD.", "SUBTOTAL", "IMPORTE", "%",
             "% CERTIFICADO", "UDS", "LONGITUD", "ANCHURA", "ALTURA", "K", "PARCIAL",
+            "MEDICIÓN TOTAL",
         }
         numeric = {i for i, h in enumerate(headers) if h in numeric_headers}
         data = [[self.text(h, self.bold_right if i in numeric else self.bold)
@@ -221,6 +313,9 @@ class ReportLayout:
             ])
         if background is not None:
             style.append(("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(background)))
+        for index in highlighted_rows:
+            row = index + bool(headers)
+            style.append(("BACKGROUND", (0, row), (-1, row), colors.HexColor("#C7D0DF")))
         if rule:
             style.append(("LINEABOVE", (-1, 0), (-1, 0), 0.5, colors.black))
         block.setStyle(TableStyle(style))
@@ -255,11 +350,21 @@ class ReportLayout:
         _, height = heading.wrap(CONTENT_WIDTH, 1000)
         project = self.text(project_title, self.project_style)
         _, project_height = project.wrap(CONTENT_WIDTH, 1000)
-        project_y = A4[1] - 124 - height - project_height - 2
+        project_y = A4[1] - PAGE_MARGIN - self.header_logo_height - height - project_height - 2
         columns_height = 0
         if column_headers:
             _, columns_height = self.table(column_headers, [], ratios).wrap(CONTENT_WIDTH, 1000)
-        return max(166, A4[1] - project_y + project_height * 7 + columns_height + 4)
+        return A4[1] - project_y + columns_height + 12
+
+    @property
+    def header_logo_height(self) -> float:
+        """Reserva la altura del logo de la plantilla y una separación antes del título."""
+        return self.logo_height + 8
+
+    def bottom_margin(self) -> float:
+        """Reserva el pie dentro del margen exterior de 2,5 cm y separa el cuerpo."""
+        _, height = self.text(self.template_footer, self.normal).wrap(CONTENT_WIDTH - 20, 1000)
+        return PAGE_MARGIN + max(22, height + 12)
 
     def header(self, canvas, document, title, project_title, *, footer="", column_headers=(), ratios=()):
         """Dibuja el logo institucional, títulos, columnas y pie numerado de una página."""
@@ -268,13 +373,13 @@ class ReportLayout:
         canvas.saveState()
         top = A4[1]
         logo_width = self.logo_width
-        logo_y = top - 50 - self.logo_height
-        heading_y = top - 124
+        logo_y = top - PAGE_MARGIN - self.logo_height
+        heading_y = top - PAGE_MARGIN - self.header_logo_height
         if self.logo is not None:
             canvas.drawImage(
                 self.logo, LEFT_MARGIN, logo_y, width=logo_width,
                 height=self.logo_height,
-                preserveAspectRatio=True, mask="auto",
+                preserveAspectRatio=False, mask="auto",
             )
         heading = self.text(title, self.title_style)
         _, height = heading.wrap(CONTENT_WIDTH, 100)
@@ -290,7 +395,42 @@ class ReportLayout:
         else:
             canvas.setLineWidth(0.5)
             canvas.line(LEFT_MARGIN, project_y - 4, PAGE_WIDTH - RIGHT_MARGIN, project_y - 4)
+        from reportlab.lib.styles import ParagraphStyle
+
+        footer_style = ParagraphStyle(
+            "report-footer", parent=self.normal, fontSize=6, leading=7, alignment=1,
+        )
+        footer_block = self.text(self.template_footer, footer_style)
+        _, footer_height = footer_block.wrap(CONTENT_WIDTH - 20, 1000)
+        footer_block.drawOn(canvas, LEFT_MARGIN, PAGE_MARGIN)
         canvas.setFont(self.regular_font, 6)
-        canvas.drawCentredString(PAGE_WIDTH / 2, 16, self.template_footer)
-        canvas.drawRightString(PAGE_WIDTH - RIGHT_MARGIN, 16, str(document.page))
+        canvas.drawRightString(PAGE_WIDTH - RIGHT_MARGIN, PAGE_MARGIN + 1, str(document.page))
+        for section, borders in self.template_borders.items():
+            for edge, border in borders.items():
+                parts = border.split()
+                if len(parts) != 3:
+                    raise ValueError(f"Borde no válido en la plantilla ODT: {border!r}.")
+                width, pattern, color = parts
+                from reportlab.lib.colors import HexColor
+
+                canvas.setStrokeColor(HexColor(color))
+                line_width = _template_length_to_points(width)
+                canvas.setLineWidth(line_width)
+                if pattern == "dashed":
+                    canvas.setDash(3 * line_width, 2 * line_width)
+                elif pattern == "dotted":
+                    canvas.setDash(line_width, 2 * line_width)
+                elif pattern in {"solid", "double"}:
+                    canvas.setDash()
+                else:
+                    raise ValueError(f"Tipo de borde ODT no compatible: {pattern!r}.")
+                y = (top - PAGE_MARGIN if edge == "top" else logo_y - 4) if section == "header" else (
+                    PAGE_MARGIN + footer_height + 4 if edge == "top" else PAGE_MARGIN
+                )
+                if pattern == "double":
+                    canvas.setLineWidth(line_width / 3)
+                    for offset in (-line_width / 3, line_width / 3):
+                        canvas.line(LEFT_MARGIN, y + offset, PAGE_WIDTH - RIGHT_MARGIN, y + offset)
+                else:
+                    canvas.line(LEFT_MARGIN, y, PAGE_WIDTH - RIGHT_MARGIN, y)
         canvas.restoreState()

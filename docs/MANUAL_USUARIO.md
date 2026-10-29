@@ -111,15 +111,54 @@ Abre **Archivo → Configuración…** y completa:
   aplicación. Esta plantilla no afecta a exportaciones Excel, CSV ni al
   diagrama de Gantt.
 
+Las líneas horizontales definidas como bordes de párrafo en la cabecera o el
+pie de la plantilla también se incluyen en los informes PDF y ODT, conservando
+su grosor, color y trazo (continuo, discontinuo, punteado o doble).
+
+Los informes PDF y ODT se generan en A4 con márgenes exteriores de **2,5 cm
+en los cuatro lados**. La cabecera y el pie quedan dentro de esos límites;
+el cuerpo reserva espacio adicional para no invadirlos. Las columnas se
+ajustan al ancho disponible.
+
+El ODT utiliza las fuentes, tamaños, interlineados, sangrías y alineaciones
+del PDF como valores iniciales de sus estilos editables. También reproduce
+las bandas de capítulo, las columnas, las cabeceras repetidas y los saltos
+de capítulo y cuadro de precios. La paginación puede variar al editar texto,
+cambiar estilos o abrir el documento con otras fuentes o procesadores.
+
+El logo se repite en la cabecera de todas las páginas, incluidas las páginas
+de continuación, con el ancho y alto definidos en la plantilla. La altura de
+la cabecera se adapta al logo. Junto al nombre del proyecto se muestra
+` · dd/mm/aaaa` con la fecha de generación del informe.
+
+En **Mediciones**, la medición total queda alineada bajo la columna
+**Parcial**, con la unidad inmediatamente a su derecha.
+
+En el listado de elementales (**Materiales**), los grupos reúnen códigos
+con los mismos tres primeros caracteres. Sus subtotales se destacan en
+negrita y con el mismo fondo azul grisáceo que los capítulos, en PDF y ODT.
+
+Los recursos porcentuales del BC3 se calculan sobre el coste acumulado de los
+componentes anteriores, redondeando cada coste a céntimos con redondeo
+comercial. Los ajustes pequeños de precisión se muestran como **Ajuste de
+redondeo**, conservando el precio unitario importado; las discrepancias mayores
+siguen siendo visibles. Los porcentajes sin ningún recurso base se consideran
+un desglose pendiente: se conserva el precio de la partida sin inventar costes.
+El porcentaje de costes indirectos de Configuración es adicional al precio
+importado y se aplica una sola vez; cambiarlo no acumula recargos anteriores.
+En el cuadro de precios 2 aparece en una línea independiente **Costes
+indirectos (porcentaje %)** con su importe, sin agruparse con el resto de costes.
+
 Los informes ODT asignan estilos de párrafo por función: `ReportTitle`,
 `ProjectTitle`, `ReportBody`, `Heading1`–`Heading3`, `ChapterTitle`,
 `PriceSectionTitle`, `AuxiliaryTitle`, `TableHeader`, `TableText`, `TableTotal`,
 `TableItemTitle`, `ItemDescription`, `AmountInWords`, `ReportNote`,
-`Justification`, `Signature` y `FooterText`.
+`Justification`, `Signature`, `SignatureNote` y `FooterText`.
 En LibreOffice Writer, abre **Estilos** (F11), modifica el estilo que quieras y
-se actualizarán todos los textos del documento que lo utilicen. Los estilos de
-celda `HeaderCell`, `BodyCell` y `TotalCell` controlan por separado el fondo y
-los bordes de las tablas.
+se actualizarán todos los textos del documento que lo utilicen. Las variantes
+terminadas en `Right` heredan el estilo correspondiente y alinean los números
+a la derecha. Los fondos y bordes se modifican por separado en las propiedades
+de las tablas y sus celdas.
 
 Los porcentajes deben estar entre 0 y 100. **Guardar** conserva los valores como
 configuración inicial para nuevos proyectos y dentro del proyecto actual.
@@ -158,6 +197,7 @@ En el menú **Informes** de la ventana principal están:
 
 | Opción | Contenido |
 |---|---|
+| Mediciones | Capítulos, código, unidad, resumen, descripción, desglose de mediciones y medición total, sin precios ni importes |
 | Cuadro de precios 1 y 2 por capitulos | Precio unitario y cuadro agrupado de costes por capítulo |
 | Descompuestos | Recursos y rendimientos de cada partida |
 | Materiales | Materiales utilizados, cantidades acumuladas e importes |

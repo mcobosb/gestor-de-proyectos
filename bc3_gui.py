@@ -9,7 +9,7 @@ import re
 import tempfile
 import tkinter as tk
 import webbrowser
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from math import isfinite
@@ -375,6 +375,46 @@ class ProjectItem:
     def component_price(self, code: str, default: float) -> float:
         """Obtiene el precio editado de un componente o el precio de referencia dado."""
         return self.component_prices.get(code, default)
+
+    def cost_components(
+        self, dataset: Bc3Dataset | None, *, reconcile: bool = True, strict: bool = True,
+    ) -> list[tuple[Concept, float, float]]:
+        """Calcula porcentajes BC3 sobre el acumulado y concilia solo redondeos pequeños."""
+        if self.decomposition and all("%" in code for code, _ in self.decomposition):
+            direct = self.unit_price if self.direct_unit_price is None else self.direct_unit_price
+            return [(Concept("DIRECTO", self.unit, "Precio sin descomposición"), 1.0, direct)]
+        rows = []
+        accumulated = Decimal(0)
+        for code, quantity in self.decomposition:
+            concept = dataset.concepts.get(code) if dataset else None
+            if concept is None and code not in self.component_prices and strict:
+                raise ValueError(
+                    f"No se dispone del precio del recurso {code} de la partida {self.code}. "
+                    "Carga su base de referencia antes de generar el informe."
+                )
+            concept = concept or Concept(code=code, summary=code)
+            if "%" in code:
+                price = float(accumulated)
+                concept = replace(concept, ctype="%", unit="%")
+            else:
+                price = self.component_price(code, concept.price)
+            amount = (Decimal(str(quantity)) * Decimal(str(price))).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP,
+            )
+            accumulated += amount
+            rows.append((concept, quantity, price))
+        if reconcile and rows:
+            direct = self.unit_price if self.direct_unit_price is None else self.direct_unit_price
+            difference = Decimal(str(direct)).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP,
+            ) - accumulated
+            tolerance = Decimal("0.005") * len(rows) + Decimal("0.01")
+            if difference and abs(difference) <= tolerance:
+                rows.append((
+                    Concept("REDONDEO", summary="Ajuste de redondeo", ctype="%"),
+                    1.0, float(difference),
+                ))
+        return rows
 
 
 class Bc3Dataset:
@@ -2163,8 +2203,10 @@ class BudgetApp:
             )
 
             dataset = self._component_dataset(item)
-            for resource_index, (resource_code, quantity) in enumerate(item.decomposition):
-                resource = dataset.concepts.get(resource_code, Concept(resource_code)) if dataset else Concept(resource_code)
+            for resource_index, (resource, quantity, price) in enumerate(
+                item.cost_components(dataset, strict=False)
+            ):
+                resource_code = resource.code
                 self.budget_tree.insert(
                     item_iid,
                     "end",
@@ -2174,7 +2216,7 @@ class BudgetApp:
                         CONCEPT_TYPES[self._budget_concept_type(item, resource_code)],
                         resource.summary or resource_code,
                         f"{fmt_number(quantity, 4)} {resource.unit}".strip(),
-                        self._format_currency(quantity * resource.price),
+                        self._format_currency(round_half_up(Decimal(str(quantity)) * Decimal(str(price)))),
                     ),
                     tags=("resource",),
                 )
@@ -2186,7 +2228,7 @@ class BudgetApp:
                         CONCEPT_TYPES["%" if resource.ctype == "%" else "0"],
                         resource.summary,
                         f"{fmt_number(quantity, 4)} {resource.unit}".strip(),
-                        self._format_currency(quantity * price),
+                        self._format_currency(round_half_up(Decimal(str(quantity)) * Decimal(str(price)))),
                     ),
                     tags=("resource",),
                 )
@@ -2332,23 +2374,26 @@ class BudgetApp:
             for index, line in enumerate(item.measurement_lines):
                 self.measurement_tree.insert("", "end", iid=str(index), values=self._measurement_values(line))
             dataset = self._component_dataset(item)
-            for index, (code, quantity) in enumerate(item.decomposition):
-                component = dataset.concepts.get(code, Concept(code)) if dataset else Concept(code)
-                price = item.component_price(code, component.price)
+            for index, (component, quantity, price) in enumerate(
+                item.cost_components(dataset, strict=False)
+            ):
+                code = component.code
+                editable = index < len(item.decomposition) and item.decomposition[index][0] == code
                 self.component_tree.insert(
-                    "", "end", iid=str(index), values=(
+                    "", "end", iid=str(index) if editable else f"indirect:calculated:{index}", values=(
                         code,
                         component.summary or code,
                         fmt_number(quantity, 4),
                         fmt_number(price),
-                        self._format_currency(quantity * price),
+                        self._format_currency(round_half_up(Decimal(str(quantity)) * Decimal(str(price)))),
                     )
                 )
             for index, (component, quantity, price) in enumerate(item.indirect_components()):
                 self.component_tree.insert(
                     "", "end", iid=f"indirect:{index}", values=(
                         component.code, component.summary, fmt_number(quantity, 4),
-                        fmt_number(price, 4), self._format_currency(quantity * price),
+                        fmt_number(price, 4),
+                        self._format_currency(round_half_up(Decimal(str(quantity)) * Decimal(str(price)))),
                     ),
                 )
             self._update_measurement_total(item)
@@ -2371,12 +2416,12 @@ class BudgetApp:
             dataset is None and any(code not in item.component_prices for code, _ in item.decomposition)
         ):
             return
-        direct_price = sum(
-            quantity * item.component_price(
-                code, dataset.concepts.get(code, Concept(code)).price if dataset else 0.0
+        direct_price = float(sum((
+            (Decimal(str(quantity)) * Decimal(str(price))).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP,
             )
-            for code, quantity in item.decomposition
-        )
+            for _, quantity, price in item.cost_components(dataset, reconcile=False)
+        ), Decimal(0)))
         item.set_indirect_costs(self.report_settings.indirect_costs, direct_price)
 
     def edit_component_cell(self, event):
@@ -2426,6 +2471,13 @@ class BudgetApp:
         if component_index >= len(item.decomposition):
             return
         code, _quantity = item.decomposition[component_index]
+        if "%" in code and column == "#4":
+            messagebox.showwarning(
+                "Precio calculado",
+                "La base de un porcentaje se calcula desde los componentes anteriores. "
+                "Edita su coeficiente en Cantidad.",
+            )
+            return
         if column == "#3":
             item.decomposition[component_index] = (code, number)
         else:
@@ -2485,13 +2537,30 @@ class BudgetApp:
         iid = f"item:{index}"
         if self.budget_tree.exists(iid):
             self.budget_tree.item(iid, text=item.code, values=self._item_row_values(item))
+        components = item.cost_components(self._component_dataset(item), strict=False)
+        if self.budget_tree.exists(iid):
+            for row in self.budget_tree.get_children(iid):
+                if row.startswith(f"resource:{index}:") and int(row.rsplit(":", 1)[1]) >= len(components):
+                    self.budget_tree.delete(row)
+        for component_index, (component, quantity, price) in enumerate(components):
+            row = f"resource:{index}:{component_index}"
+            values = (
+                CONCEPT_TYPES[self._budget_concept_type(item, component.code)],
+                component.summary or component.code,
+                f"{fmt_number(quantity, 4)} {component.unit}".strip(),
+                self._format_currency(round_half_up(Decimal(str(quantity)) * Decimal(str(price)))),
+            )
+            if self.budget_tree.exists(row):
+                self.budget_tree.item(row, text=component.code, values=values)
+            elif self.budget_tree.exists(iid):
+                self.budget_tree.insert(iid, "end", iid=row, text=component.code, values=values, tags=("resource",))
         for component_index, (component, quantity, price) in enumerate(item.indirect_components()):
             row = f"indirect:{index}:{component_index}"
             if self.budget_tree.exists(row):
                 self.budget_tree.item(row, values=(
                     CONCEPT_TYPES["%" if component.ctype == "%" else "0"],
                     component.summary, f"{fmt_number(quantity, 4)} {component.unit}".strip(),
-                    self._format_currency(quantity * price),
+                    self._format_currency(round_half_up(Decimal(str(quantity)) * Decimal(str(price)))),
                 ))
 
         chapter_iid = self.chapter_iid_by_code.get(item.chapter)
@@ -3449,16 +3518,7 @@ class BudgetApp:
     def _report_components(self, item: ProjectItem) -> list[tuple[Concept, float, float]]:
         """Usa los mismos precios editados que el detalle de descomposición."""
         dataset = self._component_dataset(item)
-        rows: list[tuple[Concept, float, float]] = []
-        for code, quantity in item.decomposition:
-            concept = dataset.concepts.get(code) if dataset else None
-            if concept is None and code not in item.component_prices:
-                raise ValueError(
-                    f"No se dispone del precio del recurso {code} de la partida {item.code}. "
-                    "Carga su base de referencia antes de generar el informe."
-                )
-            concept = concept or Concept(code=code, summary=code)
-            rows.append((concept, quantity, item.component_price(code, concept.price)))
+        rows = item.cost_components(dataset)
         return rows + item.indirect_components()
 
     def export_resource_report(self, report: str) -> None:
@@ -3505,7 +3565,8 @@ class BudgetApp:
                         )
                     else:
                         rows.append((
-                            item.code, *resource[:4], quantity, price, quantity * price, item.source
+                            item.code, *resource[:4], quantity, price,
+                            round_half_up(Decimal(str(quantity)) * Decimal(str(price))), item.source
                         ))
             for resource, measurement in resource_measurements.items():
                 rows.append((*resource, float(measurement)))
@@ -3549,12 +3610,17 @@ class BudgetApp:
                         f'<tr><td>{esc(concept.code)}</td><td>{esc(concept.unit)}</td>'
                         f'<td>{esc(concept.summary)}</td><td class="num">{fmt_number(quantity, 4)}</td>'
                         f'<td class="num">{html.escape(self._format_currency(price))}</td>'
-                        f'<td class="num">{html.escape(self._format_currency(quantity * price))}</td></tr>'
+                        f'<td class="num">{html.escape(self._format_currency(round_half_up(Decimal(str(quantity)) * Decimal(str(price)))))}</td></tr>'
                     )
                 if not components:
                     rows.append('<tr><td colspan="6">Sin descomposición.</td></tr>')
                 else:
-                    component_total = sum(quantity * price for _, quantity, price in components)
+                    component_total = sum(
+                        (Decimal(str(quantity)) * Decimal(str(price))).quantize(
+                            Decimal("0.01"), rounding=ROUND_HALF_UP,
+                        )
+                        for _, quantity, price in components
+                    )
                     rows.append(
                         '<tr><td colspan="5">Total descompuesto</td>'
                         f'<td class="num">{html.escape(self._format_currency(component_total))}</td></tr>'
@@ -3562,7 +3628,7 @@ class BudgetApp:
                     if round_half_up(component_total) != round_half_up(item.unit_price):
                         rows.append(
                             '<tr><td colspan="5">Diferencia respecto al precio unitario</td>'
-                            f'<td class="num">{html.escape(self._format_currency(item.unit_price - component_total))}</td></tr>'
+                            f'<td class="num">{html.escape(self._format_currency(Decimal(str(item.unit_price)) - component_total))}</td></tr>'
                         )
         title = f"Cuadro de precios Nº{number}"
         headers = (
