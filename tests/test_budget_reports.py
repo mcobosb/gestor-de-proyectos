@@ -114,6 +114,41 @@ class ReportLayoutTests(unittest.TestCase):
         self.app.project_title = "Proyecto singular"
         self.app.report_settings = ReportSettings(author="Autoria singular")
 
+    def assert_odt_styles(self, archive, expected_used_styles=()):
+        """Verify ODT paragraphs and cells reference declared reusable styles."""
+        namespaces = {
+            "style": "urn:oasis:names:tc:opendocument:xmlns:style:1.0",
+            "table": "urn:oasis:names:tc:opendocument:xmlns:table:1.0",
+            "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
+        }
+        content = ElementTree.fromstring(archive.read("content.xml"))
+        styles = ElementTree.fromstring(archive.read("styles.xml"))
+        declarations = {
+            (element.get(f"{{{namespaces['style']}}}family"),
+             element.get(f"{{{namespaces['style']}}}name"))
+            for element in styles.iter(f"{{{namespaces['style']}}}style")
+        }
+        used_paragraph_styles = set()
+        for element in content.iter():
+            if element.tag in {
+                f"{{{namespaces['text']}}}p",
+                f"{{{namespaces['text']}}}h",
+            }:
+                name = element.get(f"{{{namespaces['text']}}}style-name")
+                self.assertTrue(name, f"Unstyled text element: {element.tag}")
+                self.assertIn(("paragraph", name), declarations)
+                used_paragraph_styles.add(name)
+            elif element.tag == f"{{{namespaces['table']}}}table-cell":
+                name = element.get(f"{{{namespaces['table']}}}style-name")
+                self.assertTrue(name, "Unstyled table cell")
+                self.assertIn(("table-cell", name), declarations)
+        for element in styles.iter(f"{{{namespaces['text']}}}p"):
+            name = element.get(f"{{{namespaces['text']}}}style-name")
+            self.assertTrue(name, "Unstyled header or footer text")
+            self.assertIn(("paragraph", name), declarations)
+        for name in expected_used_styles:
+            self.assertIn(name, used_paragraph_styles)
+
     @staticmethod
     def spans(page):
         """Extract PDF text spans with their transformed coordinates and fonts."""
@@ -186,6 +221,12 @@ class ReportLayoutTests(unittest.TestCase):
                     }
                     self.assertIn("Proyecto singular", report_text)
                     self.assertIn(expected_titles[name], report_text)
+                    self.assert_odt_styles(
+                        archive,
+                        {"ReportTitle", "ProjectTitle"} |
+                        ({"ChapterTitle", "TableItemTitle", "ItemDescription", "AmountInWords"}
+                         if name == REPORT_NAMES[0] else set()),
+                    )
                     self.assertIsNone(archive.testzip())
 
     def test_certification_reports_export_odt_with_the_shared_template(self):
@@ -214,6 +255,12 @@ class ReportLayoutTests(unittest.TestCase):
                     self.assertIn("Pictures/report-template.jpg", archive.namelist())
                     styles = ElementTree.fromstring(archive.read("styles.xml"))
                     self.assertIn(footer, " ".join(styles.itertext()))
+                    self.assert_odt_styles(
+                        archive,
+                        {"ReportTitle", "ProjectTitle"} |
+                        ({"ChapterTitle", "TableItemTitle", "ItemDescription"}
+                         if name == CERTIFICATION_REPORT_NAMES[1] else set()),
+                    )
 
     def test_work_item_units_are_printed_in_price_budget_and_certification_details(self):
         """Verify work-item units remain visible in item-level report templates."""

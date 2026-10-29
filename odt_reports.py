@@ -58,19 +58,19 @@ class _OdtReport:
         })
         body = ET.SubElement(self.content_root, _tag("office:body"))
         self.body = ET.SubElement(body, _tag("office:text"))
-        self.heading(title, level=1)
-        self.paragraph(project_title, style="Project")
+        self.heading(title, level=1, style="ReportTitle")
+        self.paragraph(project_title, style="ProjectTitle")
 
-    def heading(self, text: str, level: int = 2) -> None:
-        """Añade un encabezado con nivel jerárquico al documento."""
+    def heading(self, text: str, level: int = 2, style: str | None = None) -> None:
+        """Añade un encabezado con nivel jerárquico y estilo semántico."""
         element = ET.SubElement(self.body, _tag("text:h"), {
-            _tag("text:style-name"): f"Heading{min(level, 3)}",
+            _tag("text:style-name"): style or f"Heading{min(level, 3)}",
             _tag("text:outline-level"): str(level),
         })
         element.text = str(text)
 
-    def paragraph(self, text: str, style: str = "Normal") -> None:
-        """Añade un párrafo y conserva los saltos de línea como saltos ODF."""
+    def paragraph(self, text: str, style: str = "ReportBody") -> None:
+        """Añade un párrafo con estilo reutilizable y conserva sus saltos de línea."""
         paragraph = ET.SubElement(self.body, _tag("text:p"), {
             _tag("text:style-name"): style,
         })
@@ -81,8 +81,11 @@ class _OdtReport:
             if line:
                 ET.SubElement(paragraph, _tag("text:span")).text = line
 
-    def table(self, headers, rows, *, bold_rows=()) -> None:
-        """Añade una tabla ODF con cabecera opcional y filas destacadas."""
+    def table(
+        self, headers, rows, *, bold_rows=(), bold_text_style: str = "TableTotal",
+        body_text_style: str = "TableText",
+    ) -> None:
+        """Añade una tabla ODF con estilos semánticos para cabecera, texto y énfasis."""
         column_count = max(
             [len(headers), *(len(row) for row in rows)], default=0,
         )
@@ -106,7 +109,11 @@ class _OdtReport:
                     _tag("office:value-type"): "string",
                 })
                 paragraph = ET.SubElement(cell, _tag("text:p"), {
-                    _tag("text:style-name"): "TableHeader" if header else "Normal",
+                    _tag("text:style-name"): (
+                        "TableHeader" if header else
+                        bold_text_style if bold else
+                        body_text_style
+                    ),
                 })
                 paragraph.text = "" if value is None else str(value)
 
@@ -143,6 +150,22 @@ class _OdtReport:
         self._paragraph_style(styles, "Normal")
         self._paragraph_style(styles, "Project", size="10pt", bold=True, after="0.08in")
         self._paragraph_style(styles, "Title", size="16pt", bold=True, after="0.12in")
+        self._paragraph_style(styles, "ReportBody")
+        self._paragraph_style(styles, "ReportTitle", size="16pt", bold=True, after="0.12in")
+        self._paragraph_style(styles, "ProjectTitle", size="10pt", bold=True, after="0.08in")
+        self._paragraph_style(styles, "ChapterTitle", size="12pt", bold=True, before="0.12in")
+        self._paragraph_style(styles, "PriceSectionTitle", size="12pt", bold=True, before="0.12in")
+        self._paragraph_style(styles, "AuxiliaryTitle", size="12pt", bold=True, before="0.12in")
+        self._paragraph_style(styles, "ItemDescription", after="0.04in")
+        self._paragraph_style(styles, "AmountInWords", after="0.08in")
+        self._paragraph_style(styles, "ReportNote", after="0.06in")
+        self._paragraph_style(styles, "Signature", size="9pt", after="0.04in")
+        self._paragraph_style(styles, "FooterText", size="8pt")
+        self._paragraph_style(styles, "TableText")
+        self._paragraph_style(styles, "TableTotal")
+        self._paragraph_style(styles, "TableItemTitle")
+        self._paragraph_style(styles, "Justification", size="9pt", after="0.04in")
+        self._paragraph_style(styles, "ReportHeader")
         for level, size in ((1, "16pt"), (2, "12pt"), (3, "10pt")):
             self._paragraph_style(styles, f"Heading{level}", size=size, bold=True, before="0.12in")
         self._paragraph_style(styles, "TableHeader", size="8pt", bold=True)
@@ -178,7 +201,9 @@ class _OdtReport:
         })
         if self.image_data is not None:
             header = ET.SubElement(master_page, _tag("style:header"))
-            paragraph = ET.SubElement(header, _tag("text:p"))
+            paragraph = ET.SubElement(header, _tag("text:p"), {
+                _tag("text:style-name"): "ReportHeader",
+            })
             frame = ET.SubElement(paragraph, _tag("draw:frame"), {
                 _tag("draw:name"): "ReportHeader",
                 _tag("text:anchor-type"): "as-char",
@@ -193,7 +218,9 @@ class _OdtReport:
             })
         if self.footer:
             footer = ET.SubElement(master_page, _tag("style:footer"))
-            paragraph = ET.SubElement(footer, _tag("text:p"))
+            paragraph = ET.SubElement(footer, _tag("text:p"), {
+                _tag("text:style-name"): "FooterText",
+            })
             paragraph.text = self.footer
         return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
@@ -301,6 +328,7 @@ def write_report_odt(app, report: str, target: Path) -> None:
         """Añade el título del capítulo y su nombre visible."""
         document.heading(
             f"{format_chapter_code(code)} — {app._chapter_title(code)}", level=2,
+            style="ChapterTitle",
         )
 
     def total(label, value):
@@ -332,7 +360,8 @@ def write_report_odt(app, report: str, target: Path) -> None:
             "Asciende el presupuesto a la expresada cantidad de " +
             amount_in_words(
                 totals["total"], settings.currency, settings.custom_currency
-            )
+            ),
+            style="AmountInWords",
         )
     elif report in {"Materiales", "Precios Auxiliares"}:
         auxiliaries, materials = _collect_report_resources(app)
@@ -361,15 +390,24 @@ def write_report_odt(app, report: str, target: Path) -> None:
                     ["CÓDIGO", "CANTIDAD", "UD.", "RESUMEN", "PRECIO/UD.", "IMPORTE"], rows,
                 )
             else:
-                document.paragraph("No hay materiales en las descomposiciones del proyecto.")
+                document.paragraph(
+                    "No hay materiales en las descomposiciones del proyecto.",
+                    style="ReportNote",
+                )
             total("TOTAL", grand_total)
         else:
             if not auxiliaries:
-                document.paragraph("No hay precios auxiliares en las descomposiciones del proyecto.")
+                document.paragraph(
+                    "No hay precios auxiliares en las descomposiciones del proyecto.",
+                    style="ReportNote",
+                )
             for concept, price, children in auxiliaries.values():
-                document.heading(f"{concept.code} · {concept.unit} · {concept.summary}", level=2)
+                document.heading(
+                    f"{concept.code} · {concept.unit} · {concept.summary}", level=2,
+                    style="AuxiliaryTitle",
+                )
                 if concept.text:
-                    document.paragraph(concept.text)
+                    document.paragraph(concept.text, style="ItemDescription")
                 rows = [[
                     child.code, child.unit, fmt_number(quantity, 3), child.summary,
                     money_text(child_price), money_text(money(quantity * child_price)),
@@ -387,13 +425,15 @@ def write_report_odt(app, report: str, target: Path) -> None:
                 document.paragraph(
                     "Asciende el precio unitario del concepto auxiliar a " + amount_in_words(
                         price, settings.currency, settings.custom_currency
-                    )
+                    ),
+                    style="AmountInWords",
                 )
     else:
         for section in ((1, 2) if report == REPORT_NAMES[0] else (0,)):
             if section:
                 document.heading(
                     f"CUADRO DE PRECIOS {section}", level=2,
+                    style="PriceSectionTitle",
                 )
             for code, items in groups:
                 chapter(code)
@@ -405,13 +445,16 @@ def write_report_odt(app, report: str, target: Path) -> None:
                     item_text = [item.code, item.unit, item.summary]
                     if shown_amount is not None:
                         item_text.append(money_text(shown_amount))
-                    document.table([], [item_text], bold_rows=(0,))
+                    document.table(
+                        [], [item_text], bold_rows=(0,),
+                        bold_text_style="TableItemTitle",
+                    )
                     if item.text:
-                        document.paragraph(item.text)
+                        document.paragraph(item.text, style="ItemDescription")
                     if section == 1:
                         document.paragraph(amount_in_words(
                             item.unit_price, settings.currency, settings.custom_currency
-                        ))
+                        ), style="AmountInWords")
                     elif section == 2:
                         grouped = {}
                         for concept, quantity, price in app._report_components(item):
@@ -429,7 +472,7 @@ def write_report_odt(app, report: str, target: Path) -> None:
                             if difference:
                                 total("Diferencia respecto al precio unitario", difference)
                         else:
-                            document.paragraph("Sin descomposición.")
+                            document.paragraph("Sin descomposición.", style="ReportNote")
                         total("TOTAL PARTIDA", item.unit_price)
                     elif report == "Descompuestos":
                         components = app._report_components(item)
@@ -449,7 +492,7 @@ def write_report_odt(app, report: str, target: Path) -> None:
                             if difference:
                                 total("Diferencia respecto al precio unitario", difference)
                         else:
-                            document.paragraph("Sin descomposición.")
+                            document.paragraph("Sin descomposición.", style="ReportNote")
                         total("TOTAL PARTIDA", item.unit_price)
                     elif report == "Presupuesto mediciones":
                         if item.measurement_lines:
@@ -486,7 +529,7 @@ def write_report_odt(app, report: str, target: Path) -> None:
         ) if value
     ]
     if signature:
-        document.paragraph("\n".join(signature))
+        document.paragraph("\n".join(signature), style="Signature")
     document.write(target)
 
 
@@ -542,13 +585,17 @@ def write_certification_odt(
         for code in codes:
             document.heading(
                 f"{format_chapter_code(code)} — {chapter_title(code)}", level=2,
+                style="ChapterTitle",
             )
             for item, amount in certified:
                 if item.chapter != code:
                     continue
-                document.table([], [[item.code, item.unit, item.summary]], bold_rows=(0,))
+                document.table(
+                    [], [[item.code, item.unit, item.summary]], bold_rows=(0,),
+                    bold_text_style="TableItemTitle",
+                )
                 if item.text:
-                    document.paragraph(item.text)
+                    document.paragraph(item.text, style="ItemDescription")
                 quantity = float(item.certifications[month_key]) / item.unit_price
                 document.table(
                     ["CANTIDAD", "PRECIO", "IMPORTE"],
@@ -556,13 +603,16 @@ def write_certification_odt(
                 )
                 justification = item.certification_justifications.get(month_key, "")
                 if justification:
-                    document.paragraph(f"Justificación: {justification}")
+                    document.paragraph(
+                        f"Justificación: {justification}", style="Justification",
+                    )
             total(f"TOTAL {format_chapter_code(code)}", chapter_amounts[code])
         total("TOTAL EJECUCIÓN MATERIAL CERTIFICADA", pem)
         document.paragraph(
             "Cantidad certificada = importe certificado del mes / precio unitario. "
             "No se incluyen líneas de medición del presupuesto ni dimensiones no certificadas. "
-            "La cantidad se muestra con seis decimales; el importe mensual guardado prevalece."
+            "La cantidad se muestra con seis decimales; el importe mensual guardado prevalece.",
+            style="ReportNote",
         )
     else:
         rows = []
@@ -576,7 +626,10 @@ def write_certification_odt(
                 percentage,
             ])
         document.table(["CAPÍTULO", "RESUMEN", "IMPORTE", "% CERTIFICADO"], rows)
-        document.paragraph("% certificado respecto al presupuesto de cada capítulo.")
+        document.paragraph(
+            "% certificado respecto al presupuesto de cada capítulo.",
+            style="ReportNote",
+        )
         totals = certification_totals(float(pem), settings)
         for label, amount in (
             ("EJECUCIÓN MATERIAL", totals["pem"]),
@@ -594,7 +647,8 @@ def write_certification_odt(
             "Asciende la presente certificación a la expresada cantidad de " +
             amount_in_words(
                 totals["total"], settings.currency, settings.custom_currency
-            )
+            ),
+            style="AmountInWords",
         )
 
     signatures = [
@@ -606,5 +660,8 @@ def write_certification_odt(
             settings.signature,
         ))),
     ]
-    document.table(["CONTRATISTA", "DIRECCIÓN FACULTATIVA"], [signatures])
+    document.table(
+        ["CONTRATISTA", "DIRECCIÓN FACULTATIVA"], [signatures],
+        body_text_style="Signature",
+    )
     document.write(target)

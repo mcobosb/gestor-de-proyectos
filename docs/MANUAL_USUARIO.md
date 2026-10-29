@@ -111,6 +111,16 @@ Abre **Archivo → Configuración…** y completa:
   aplicación. Esta plantilla no afecta a exportaciones Excel, CSV ni al
   diagrama de Gantt.
 
+Los informes ODT asignan estilos de párrafo por función: `ReportTitle`,
+`ProjectTitle`, `ReportBody`, `Heading1`–`Heading3`, `ChapterTitle`,
+`PriceSectionTitle`, `AuxiliaryTitle`, `TableHeader`, `TableText`, `TableTotal`,
+`TableItemTitle`, `ItemDescription`, `AmountInWords`, `ReportNote`,
+`Justification`, `Signature` y `FooterText`.
+En LibreOffice Writer, abre **Estilos** (F11), modifica el estilo que quieras y
+se actualizarán todos los textos del documento que lo utilicen. Los estilos de
+celda `HeaderCell`, `BodyCell` y `TotalCell` controlan por separado el fondo y
+los bordes de las tablas.
+
 Los porcentajes deben estar entre 0 y 100. **Guardar** conserva los valores como
 configuración inicial para nuevos proyectos y dentro del proyecto actual.
 Los proyectos ya guardados mantienen su configuración propia.
