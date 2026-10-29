@@ -1,4 +1,4 @@
-# Gestor de Proyectos (v1.0.0)
+# Gestor de Proyectos
 
 Aplicación de escritorio para Windows que permite trabajar con presupuestos
 FIEBDC-3 (BC3), editar mediciones y descomposiciones, planificar obras y gestionar
@@ -43,7 +43,7 @@ Esperamos que os sea muy útil. ¡Esto es solo el comienzo!
 ## Instalación y arranque
 
 En Windows se puede crear e instalar una versión compilada con Nuitka. Una vez
-generado, el instalador `GestorDeProyectos-Setup-1.0.0.exe` no requiere Python.
+generado, el instalador `GestorDeProyectos-Setup-1.1.0.exe` no requiere Python.
 Incluye los componentes necesarios, pero no los archivos fuente `.py`. La
 compilación Nuitka dificulta recuperar el código, aunque no puede impedir
 completamente la ingeniería inversa.
