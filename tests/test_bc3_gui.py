@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 import tempfile
 import tkinter as tk
-from tkinter import font as tkfont
 from tkinter import ttk
 import unittest
 from unittest.mock import patch
@@ -667,39 +666,60 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
             style.lookup("Reference.Section.TLabel", "background"), COLORS["teal"]
         )
 
-    def test_application_name_has_small_icon_and_explicit_bold_font(self):
-        """Verify application name has small icon and explicit bold font."""
-        label = self.app.application_label
-        self.assertEqual(label.cget("text"), APPLICATION_NAME)
-        self.assertEqual(str(label.cget("compound")), "left")
-        self.assertTrue(label.cget("image"))
-        self.assertEqual(self.app._toolbar_icon.width(), 24)
-        self.assertEqual(self.app._toolbar_icon.height(), 24)
-        self.assertEqual(tkfont.Font(root=self.root, font=label.cget("font")).actual("weight"), "bold")
-        from PIL import Image, ImageTk
-
-        actual = ImageTk.getimage(self.app._toolbar_icon).convert("RGBA")
-        with Image.open(BASE_DIR / "iconos" / "logo.ico") as source:
-            expected_alpha = source.convert("RGBA").resize(
-                (24, 24), Image.Resampling.LANCZOS
-            ).getchannel("A")
-        self.assertEqual(actual.getchannel("A").tobytes(), expected_alpha.tobytes())
-        visible = [pixel for pixel in actual.get_flattened_data() if pixel[3] > 0]
-        self.assertTrue(visible)
-        self.assertTrue(all(pixel[:3] == (255, 255, 255) for pixel in visible))
+    def test_toolbar_has_no_redundant_application_branding(self):
+        """Keep only menu buttons in the blue toolbar."""
+        toolbar = self.root.grid_slaves(row=0, column=0)[0]
+        self.assertTrue(toolbar.winfo_children())
+        self.assertTrue(all(isinstance(child, ttk.Menubutton)
+                            for child in toolbar.winfo_children()))
 
     def test_window_title_stays_application_after_status_updates(self):
-        """Keep the window-frame title distinct from the toolbar application name."""
+        """Preserve the window-frame title after status updates."""
         self.assertEqual(self.root.title(), "Aplicación")
         self.app._set_status("Proyecto guardado.")
         self.assertEqual(self.root.title(), "Aplicación")
-        self.assertEqual(self.app.application_label.cget("text"), APPLICATION_NAME)
 
     def test_application_information_shows_release_version(self):
-        """Display release metadata without changing the unversioned toolbar name."""
+        """Display release metadata and the repository without personal details."""
         with patch("bc3_gui.messagebox.showinfo") as info:
             self.app.show_application_info()
         self.assertIn(f"v{APPLICATION_VERSION}", info.call_args.args[1])
+        self.assertIn("https://github.com/mcobosb/gestor-de-proyectos", info.call_args.args[1])
+        for removed in ("Manuel", "Ingeniero", "Servicio de Infraestructuras", "Ayuntamiento"):
+            self.assertNotIn(removed, info.call_args.args[1])
+
+    def test_information_menu_replaces_personal_details_with_repository(self):
+        """Open the project repository directly from the information menu."""
+        toolbar = self.root.grid_slaves(row=0, column=0)[0]
+        button = next(child for child in toolbar.winfo_children()
+                      if child.cget("text") == "Información")
+        menu = self.root.nametowidget(button.cget("menu"))
+        labels = [menu.entrycget(i, "label") for i in range(menu.index("end") + 1)
+                  if menu.type(i) == "command"]
+        for removed in ("Manuel", "Ingeniero", "Servicio de Infraestructuras", "Ayuntamiento"):
+            self.assertFalse(any(removed in label for label in labels))
+        index = next(i for i in range(menu.index("end") + 1)
+                     if menu.type(i) == "command" and
+                     menu.entrycget(i, "label") == "Repositorio en GitHub")
+        with patch("bc3_gui.webbrowser.open", return_value=True) as browser:
+            menu.invoke(index)
+        browser.assert_called_once_with("https://github.com/mcobosb/gestor-de-proyectos")
+
+    def test_repository_browser_failures_are_reported(self):
+        """Report a refused or failed browser launch without claiming success."""
+        for result in (False, OSError("browser unavailable"), ValueError("invalid browser")):
+            with (
+                self.subTest(result=result),
+                patch("bc3_gui.webbrowser.open", return_value=result,
+                      side_effect=result if isinstance(result, Exception) else None),
+                patch("bc3_gui.messagebox.showerror") as error,
+                patch.object(self.app, "_set_status") as status,
+            ):
+                self.app.open_repository_page()
+            error.assert_called_once()
+            self.assertIn("https://github.com/mcobosb/gestor-de-proyectos",
+                          error.call_args.args[1])
+            status.assert_not_called()
 
     def test_information_menu_opens_mit_license_and_responsibility_notice(self):
         """Verify information menu opens mit license and responsibility notice."""

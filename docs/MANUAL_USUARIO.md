@@ -536,6 +536,9 @@ no se deducen ni se añaden impuestos automáticamente.
 
 ## 13. Licencia y precauciones
 
+En **Información → Repositorio en GitHub** puedes abrir el repositorio del
+proyecto en el navegador. El menú no muestra datos personales de autoría.
+
 En **Información → Licencia y responsabilidad…** puedes consultar el aviso MIT
 y la limitación de responsabilidad.
 

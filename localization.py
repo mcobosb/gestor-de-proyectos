@@ -16,6 +16,10 @@ LANGUAGES = {
 }
 
 _TEXT = {
+    "Repositorio en GitHub": ("GitHub repository", "Dépôt GitHub"),
+    "Repositorio abierto en el navegador.": (
+        "Repository opened in the browser.", "Dépôt ouvert dans le navigateur.",
+    ),
     "Archivo": ("File", "Fichier"),
     "Nuevo proyecto": ("New project", "Nouveau projet"),
     "Importar presupuesto BC3…": ("Import BC3 budget…", "Importer un budget BC3…"),

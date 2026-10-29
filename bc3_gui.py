@@ -28,6 +28,7 @@ from odt_reports import write_report_odt
 
 APPLICATION_NAME = "Gestor de Proyectos"
 APPLICATION_VERSION = "1.2.0"
+REPOSITORY_URL = "https://github.com/mcobosb/gestor-de-proyectos"
 BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/mcobosb"
 
 CONCEPT_TYPES = {
@@ -753,13 +754,9 @@ class BudgetApp:
         info_menu = tk.Menu(info_menubutton, tearoff=False)
         info_menu.add_command(label=APPLICATION_NAME, state="disabled")
         info_menu.add_separator()
-        info_menu.add_command(label="Manuel Cobos Budia", state="disabled")
         info_menu.add_command(
-            label="Ingeniero de Caminos, Canales y Puertos Municipal",
-            state="disabled",
+            label="Repositorio en GitHub", command=self.open_repository_page
         )
-        info_menu.add_command(label="Servicio de Infraestructuras y Obras", state="disabled")
-        info_menu.add_command(label="Excelentísimo Ayuntamiento de Lucena", state="disabled")
         info_menu.add_separator()
         info_menu.add_command(
             label="Presupuestos BC3, mediciones, planificación y certificaciones",
@@ -774,25 +771,6 @@ class BudgetApp:
         )
         info_menubutton["menu"] = info_menu
         info_menubutton.pack(side="left", padx=(0, 8))
-        from PIL import Image, ImageTk
-
-        try:
-            with Image.open(application_directory(__file__) / "iconos" / "logo.ico") as icon:
-                resized_icon = icon.convert("RGBA").resize((24, 24), Image.Resampling.LANCZOS)
-                white_icon = Image.new("RGBA", resized_icon.size, "white")
-                white_icon.putalpha(resized_icon.getchannel("A"))
-                self._toolbar_icon = ImageTk.PhotoImage(
-                    white_icon, master=self.root
-                )
-        except (OSError, tk.TclError) as exc:
-            messagebox.showwarning("Icono de la aplicación", f"No se pudo cargar el icono:\n{exc}")
-            self._toolbar_icon = None
-        self.application_label = ttk.Label(
-            toolbar, text=APPLICATION_NAME, image=self._toolbar_icon or "",
-            compound="left", padding=(4, 0), style="Toolbar.TLabel",
-            font=("Segoe UI", 10, "bold"),
-        )
-        self.application_label.pack(side="right")
         self.bcca_visibility_text = tk.StringVar(value="▶")
 
         actions = ttk.Frame(self.root, padding=(10, 8))
@@ -3786,20 +3764,35 @@ th {{ background: #1f4e78; color: white; }}
         )
 
     def show_application_info(self):
-        """Muestra la información institucional y las funciones principales del programa."""
+        """Muestra la versión, el repositorio y las funciones principales del programa."""
         messagebox.showinfo(
             "Información de la aplicación",
             f"{APPLICATION_NAME} — v{APPLICATION_VERSION}\n"
             "Presupuestos, planificación y certificaciones de obra\n\n"
-            "Autor\n"
-            "Manuel Cobos Budia\n"
-            "Ingeniero de Caminos, Canales y Puertos Municipal\n"
-            "Servicio de Infraestructuras y Obras\n"
-            "Excelentísimo Ayuntamiento de Lucena\n\n"
+            f"Repositorio: {REPOSITORY_URL}\n\n"
             "Gestión de presupuestos BC3, bases BCCA, mediciones, "
             "planificación económica y certificaciones.",
             parent=self.root,
         )
+
+    def open_repository_page(self) -> None:
+        """Abre el repositorio del proyecto en el navegador predeterminado."""
+        try:
+            if not webbrowser.open(REPOSITORY_URL):
+                messagebox.showerror(
+                    "Repositorio en GitHub",
+                    f"No se pudo abrir el navegador. Visita:\n{REPOSITORY_URL}",
+                    parent=self.root,
+                )
+                return
+        except (OSError, ValueError) as exc:
+            messagebox.showerror(
+                "Repositorio en GitHub",
+                f"No se pudo abrir el navegador:\n{exc}\n\nVisita:\n{REPOSITORY_URL}",
+                parent=self.root,
+            )
+            return
+        self._set_status("Repositorio abierto en el navegador.")
 
     def open_donation_page(self) -> None:
         """Abre la página de apoyo del proyecto en el navegador predeterminado."""
