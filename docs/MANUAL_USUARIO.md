@@ -52,7 +52,8 @@ permite consultar bases de precios.
    Las tres últimas bases usadas se conservan en **Archivo → Bases de
    referencia recientes** para poder abrirlas de nuevo.
 2. Localiza una partida en la referencia y añádela al presupuesto con la flecha
-   hacia la izquierda o arrastrándola al proyecto.
+   hacia la izquierda o arrastrándola al proyecto. Si seleccionas un capítulo,
+   la flecha o el arrastre incorporan el capítulo con todas sus partidas.
 3. Usa **+** para elegir entre añadir un capítulo o una partida manual. La
    partida se añade al capítulo seleccionado; si no hay selección, se utiliza
    el último capítulo. Usa **×** para eliminar la selección.
@@ -60,6 +61,10 @@ permite consultar bases de precios.
 5. Selecciona una partida para consultar sus mediciones, descripción y recursos.
 6. Selecciona un capítulo y usa **✎** para cambiar su nombre; selecciona una
    partida y usa el mismo botón para editar sus datos.
+7. Usa **⧉** para duplicar la partida seleccionada. La copia conserva sus datos
+   técnicos, aparece justo debajo con un código terminado en `*` y se resalta en
+   amarillo: debes modificarla y revisarla manualmente; elimina `*` cuando
+   hayas terminado. La planificación y las certificaciones no se copian.
 
 La columna **Tipo** permite modificar la naturaleza de partidas y recursos.
 Revisa los tipos porque intervienen en los listados de materiales y precios.
@@ -95,6 +100,10 @@ Abre **Archivo → Configuración…** y completa:
 - Costes Indirectos (%): recargo sobre el precio directo de todas las partidas.
 - Gastos generales, beneficio industrial e IVA.
 - Baja de adjudicación para certificaciones.
+- Divisa del proyecto: EUR, USD, GBP, CHF, CAD, AUD o una personalizada.
+  Esta opción cambia el símbolo o código mostrado, pero no convierte importes;
+  comprueba que los precios de entrada y de las bases de referencia usan la
+  misma divisa.
 - Formato de salida de los informes: PDF (predeterminado) u ODT editable.
 - La ruta de una plantilla ODT que aporta la cabecera y el pie de todos los
   informes de presupuesto y certificaciones. Pulsa **Examinar…** para elegir

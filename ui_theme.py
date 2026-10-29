@@ -20,6 +20,8 @@ COLORS = {
     "teal_hover": "#066657",
     "teal_soft": "#E0F2EC",
     "teal_text": "#155E50",
+    "warning_soft": "#FFF4CC",
+    "warning_text": "#7A4E00",
     "danger": "#A32F3D",
     "danger_soft": "#FBEAEC",
 }

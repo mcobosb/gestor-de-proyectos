@@ -24,6 +24,7 @@ from bc3_gui import (
     ToolTip,
     find_bc3_files,
     format_chapter_code,
+    format_currency,
     format_measurement_lines,
     parse_float,
     parse_measurement_lines,
@@ -38,7 +39,8 @@ from certifications import (
 )
 from ui_theme import COLORS
 from budget_reports import (
-    CERTIFICATION_REPORT_NAMES, REPORT_NAMES, ReportSettings, write_certification_pdf, write_pdf,
+    CERTIFICATION_REPORT_NAMES, REPORT_NAMES, ReportSettings, amount_in_words,
+    write_certification_pdf, write_pdf,
 )
 
 
@@ -97,6 +99,20 @@ class IndirectCostsTests(unittest.TestCase):
         self.assertEqual(item.unit_price, 2.015)
         item.set_indirect_costs(0)
         self.assertEqual(item.unit_price, 1.005)
+
+    def test_project_currency_formats_known_and_custom_units_without_conversion(self):
+        self.assertEqual(format_currency(1234.5), "1.234,50 €")
+        self.assertEqual(format_currency(1234.5, "USD"), "$1.234,50")
+        self.assertEqual(format_currency(1234.5, "GBP"), "£1.234,50")
+        self.assertEqual(format_currency(1234.5, "CHF"), "1.234,50 CHF")
+        self.assertEqual(format_currency(1234.5, "OTHER", "MXN"), "1.234,50 MXN")
+        self.assertIn("DÓLARES CON CINCUENTA CENTAVOS", amount_in_words(10.5, "USD"))
+        self.assertEqual(
+            ReportSettings.from_dict({"currency": "OTHER", "custom_currency": "COP"}).currency,
+            "OTHER",
+        )
+        with self.assertRaisesRegex(ValueError, "personalizada"):
+            ReportSettings.from_dict({"currency": "OTHER"})
 
 
 @unittest.skipUnless(BUDGET_PATH, "Requiere el presupuesto BC3 local, no distribuido.")
@@ -793,12 +809,64 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         """Verify icon buttons have hover help without replacing commands."""
         actions = self.root.grid_slaves(row=1, column=0)[0]
         buttons = actions.winfo_children()
-        self.assertEqual(len(buttons), 7)
+        self.assertEqual(len(buttons), 8)
         for button in buttons:
             self.assertTrue(button.bind("<Enter>"))
             self.assertTrue(button.bind("<Leave>"))
             self.assertTrue(button.bind("<ButtonPress>"))
             self.assertTrue(button.cget("command"))
+        self.assertEqual(buttons[-1].cget("text"), "⧉")
+
+    def test_duplicate_selected_item_is_independent_and_marked_for_manual_review(self):
+        """Duplicate a work item, avoid copied tracking data, and flag manual review."""
+        self.set_report_items()
+        self.app.chapter_order = ["CAP.01#"]
+        source = self.app.budget_items[0]
+        source.measurement_lines = [MeasurementLine(comment="Tramo", units=2, length=5)]
+        source.recalculate_measurement()
+        source.planned_amounts = {"2030-01": 100}
+        source.certifications = {"2030-01": 50}
+        source.certification_plans = {"2030-01": 75}
+        source.certification_justifications = {"2030-01": "Justificación"}
+        self.app.refresh_budget_tree()
+        self.app.budget_tree.selection_set("item:0")
+        self.app.on_budget_select(None)
+        self.app.is_dirty = False
+
+        with patch("bc3_gui.messagebox.showwarning") as warning:
+            self.app.duplicate_selected_budget_item()
+
+        duplicate = self.app.budget_items[1]
+        self.assertEqual(duplicate.code, "P1*")
+        self.assertEqual(duplicate.chapter, source.chapter)
+        self.assertEqual(duplicate.unit, source.unit)
+        self.assertEqual(duplicate.summary, source.summary)
+        self.assertEqual(duplicate.measurement, source.measurement)
+        self.assertEqual(duplicate.unit_price, source.unit_price)
+        self.assertEqual(duplicate.decomposition, source.decomposition)
+        self.assertIsNot(duplicate.decomposition, source.decomposition)
+        self.assertEqual(duplicate.component_prices, source.component_prices)
+        self.assertIsNot(duplicate.component_prices, source.component_prices)
+        self.assertEqual(duplicate.measurement_lines, source.measurement_lines)
+        self.assertIsNot(duplicate.measurement_lines, source.measurement_lines)
+        self.assertEqual(duplicate.planned_amounts, {})
+        self.assertEqual(duplicate.certifications, {})
+        self.assertEqual(duplicate.certification_plans, {})
+        self.assertEqual(duplicate.certification_justifications, {})
+        self.assertEqual(self.app.budget_tree.item("item:1", "tags"), ("duplicate_review",))
+        self.assertEqual(
+            str(self.app.budget_tree.tag_configure("duplicate_review", "background")),
+            COLORS["warning_soft"],
+        )
+        self.assertIn("revísala manualmente", warning.call_args.args[1])
+        self.assertEqual(warning.call_args.kwargs["parent"], self.root)
+        self.assertTrue(self.app.is_dirty)
+        self.assertEqual(self.app.selected_budget_index, 1)
+        self.assertEqual(self.app._project_payload()["items"][1]["code"], "P1*")
+
+        with patch("bc3_gui.messagebox.showwarning"):
+            self.app.duplicate_selected_budget_item()
+        self.assertEqual(self.app.budget_items[2].code, "P1**")
 
     def test_tooltip_shows_without_focus_and_hides_on_leave_click_and_destroy(self):
         """Verify tooltip shows without focus and hides on leave click and destroy."""
@@ -866,12 +934,15 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.assertTrue(self.app._save_report_settings({
             "author": "Autor de prueba", "role": "Ingeniería", "location": "Lucena",
             "general_expenses": "13,5", "industrial_profit": "6", "vat": "21",
+            "currency": "USD",
         }))
         self.assertEqual(self.app._read_report_settings().author, "Autor de prueba")
         self.assertEqual(self.app.report_settings.general_expenses, 13.5)
+        self.assertEqual(self.app.report_settings.currency, "USD")
         self.app.report_settings = ReportSettings(author="Otro")
         self.assertTrue(self.app._load_project_file(project))
         self.assertEqual(self.app.report_settings.author, "Autor de prueba")
+        self.assertEqual(self.app.report_settings.currency, "USD")
         previous = self.app.report_settings_path.read_bytes()
         for value in ("nan", "inf", "-1", "101", "abc", ""):
             with self.subTest(value=value), patch("bc3_gui.messagebox.showerror") as error:
@@ -879,6 +950,29 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
                 error.assert_called_once()
                 self.assertEqual(self.app.report_settings_path.read_bytes(), previous)
                 self.assertEqual(self.app.report_settings.author, "Autor de prueba")
+
+    def test_project_currency_formats_budget_and_custom_symbols_without_changing_values(self):
+        """Format budget amounts in the configured currency without converting prices."""
+        self.set_report_items()
+        item = self.app.budget_items[0]
+        original_price = item.unit_price
+        self.assertTrue(self.app._save_report_settings({"currency": "USD"}))
+        self.assertEqual(item.unit_price, original_price)
+        self.assertEqual(
+            self.app.budget_tree.item("item:0", "values")[-1],
+            "$3.200,00",
+        )
+        self.assertIn("$32,00", self.app._budget_html())
+
+        self.assertTrue(self.app._save_report_settings({
+            "currency": "OTHER",
+            "custom_currency": "COP",
+        }))
+        self.assertEqual(
+            self.app.budget_tree.item("item:0", "values")[-1],
+            "3.200,00 COP",
+        )
+        self.assertIn("COP", self.app._budget_html())
 
     def test_indirect_costs_update_all_items_and_persist_without_compounding(self):
         self.set_report_items()
@@ -954,6 +1048,52 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.app._insert_item(item)
         self.assertEqual(item.unit_price, 10.3)
 
+    def test_adding_reference_chapter_imports_all_direct_and_nested_items(self):
+        """Import a selected reference chapter and all its nested work items."""
+        base_path = self.directory / "reference.bc3"
+        base_path.write_text(
+            "~C|01#||Capítulo principal|30||0|\n"
+            "~C|02#||Subcapítulo|20||0|\n"
+            "~C|P1|m|Partida uno|10||0|\n"
+            "~C|P2|ud|Partida dos|20||0|\n"
+            "~D|01#|02#\\1\\1\\P1\\1\\1\\|\n"
+            "~D|02#|P2\\1\\1\\|\n",
+            encoding="cp1252",
+        )
+        base = Bc3Dataset(base_path)
+        self.app.reference_bases = [base]
+        self.app.selected_bcca_code = "01#"
+        self.app.selected_bcca_base = base
+
+        self.app.add_selected_bcca_to_budget()
+
+        self.assertEqual(self.app.chapter_order, ["01#"])
+        self.assertEqual(self.app.chapter_titles, {"01#": "Capítulo principal"})
+        self.assertEqual([item.code for item in self.app.budget_items], ["P2", "P1"])
+        self.assertEqual({item.chapter for item in self.app.budget_items}, {"01#"})
+        self.assertEqual([item.unit_price for item in self.app.budget_items], [20, 10])
+        self.assertEqual(self.app.selected_budget_index, 0)
+        self.assertEqual(self.app.budget_tree.selection(), ("item:0",))
+
+        self.app.budget_items.clear()
+        self.app.chapter_order.clear()
+        self.app.refresh_budget_tree()
+        self.app.budget_tree.selection_remove(self.app.budget_tree.selection())
+        self.app._drag_code = "01#"
+        self.app._drag_base = base
+        self.app._dragging = True
+        event = tk.Event()
+        event.x_root = 20
+        event.y_root = 20
+        with (
+            patch.object(self.app.budget_tree, "winfo_rootx", return_value=0),
+            patch.object(self.app.budget_tree, "winfo_rooty", return_value=0),
+            patch.object(self.app.budget_tree, "winfo_width", return_value=100),
+            patch.object(self.app.budget_tree, "winfo_height", return_value=100),
+        ):
+            self.app.drop_on_budget(event)
+        self.assertEqual([item.code for item in self.app.budget_items], ["P2", "P1"])
+
     def test_indirect_costs_appear_in_html_pdf_odt_and_ods(self):
         from odt_reports import write_report_odt
         from pypdf import PdfReader
@@ -1001,6 +1141,12 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
             if isinstance(child, ttk.Combobox)
         )
         format_selector.set("ODT")
+        currency_selector = next(
+            child for child in reports_tab.winfo_children()
+            if isinstance(child, ttk.Combobox) and "USD ($)" in child.cget("values")
+        )
+        currency_selector.set("USD ($)")
+        currency_selector.event_generate("<<ComboboxSelected>>")
         next(
             child for child in reports_tab.winfo_children()
             if isinstance(child, ttk.Button) and child.cget("text") == "Guardar informes"
@@ -1011,6 +1157,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.assertEqual(saved.output_format, "odt")
         self.assertEqual(saved.template_path, "")
         self.assertEqual(saved.indirect_costs, 3.5)
+        self.assertEqual(saved.currency, "USD")
 
     def test_language_preference_is_saved_and_applied_immediately(self):
         """Save the application language globally and update the visible interface."""

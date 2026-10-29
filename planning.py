@@ -264,6 +264,7 @@ class PlanningWindow(tk.Toplevel):
         on_state_change=None,
         on_save=None,
         on_dirty_change=None,
+        currency_formatter=None,
     ):
         """Crea la ventana, restaura la planificación guardada y calcula las fechas."""
         super().__init__(master)
@@ -278,6 +279,7 @@ class PlanningWindow(tk.Toplevel):
         self._on_state_change = on_state_change
         self._on_save = on_save
         self._on_dirty_change = on_dirty_change
+        self._currency_formatter = currency_formatter or fmt_eur
         self._is_dirty = False
         self._ready = False
         self._editor: ttk.Entry | ttk.Combobox | None = None
@@ -563,7 +565,7 @@ class PlanningWindow(tk.Toplevel):
         fin = f"  ·  Fin previsto: {end:%d/%m/%Y}" if end else ""
         self.plan_summary.config(
             text=f"Actividades: {len(self.activities)}  ·  Plazo: {plazo} días laborables"
-                 f"{fin}  ·  PEM: {fmt_eur(pem)}"
+                 f"{fin}  ·  PEM: {self._currency_formatter(pem)}"
         )
 
     def edit_cell(self, event=None):
@@ -671,6 +673,7 @@ class PlanningWindow(tk.Toplevel):
             png, pdf = figura_gantt.draw(
                 acts, names, start_works, end_works, plazo, pem,
                 self.params.holiday_dates, self.project_title, self.params.plan, out_base,
+                currency_formatter=self._currency_formatter,
             )
         except Exception as exc:  # pragma: no cover - depende de matplotlib
             messagebox.showerror("Plan de trabajo", f"No se pudo dibujar el plan:\n{exc}", parent=self)

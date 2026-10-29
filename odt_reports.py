@@ -270,7 +270,7 @@ def _new_report(title: str, project_title: str, settings: ReportSettings, *, cer
 
 def write_report_odt(app, report: str, target: Path) -> None:
     """Genera en ODT editable cualquiera de los informes de presupuesto."""
-    from bc3_gui import fmt_eur, fmt_number, format_chapter_code
+    from bc3_gui import fmt_number, format_chapter_code
 
     if report not in REPORT_NAMES:
         raise ValueError(f"Tipo de informe desconocido: {report}")
@@ -293,6 +293,10 @@ def write_report_odt(app, report: str, target: Path) -> None:
     groups = [(code, items) for code, items in groups if items]
     pem = sum((money(item.import_total) for item in app.budget_items), money(0))
 
+    def money_text(value) -> str:
+        """Formatea importes del presupuesto con la divisa del proyecto."""
+        return app._format_currency(float(value))
+
     def chapter(code):
         """Añade el título del capítulo y su nombre visible."""
         document.heading(
@@ -300,8 +304,8 @@ def write_report_odt(app, report: str, target: Path) -> None:
         )
 
     def total(label, value):
-        """Añade una línea de total con su importe en euros."""
-        document.table([], [[label, fmt_eur(value)]], bold_rows=(0,))
+        """Añade una línea de total con la divisa del proyecto."""
+        document.table([], [[label, money_text(value)]], bold_rows=(0,))
 
     if report == "Presupuesto resumen":
         rows = []
@@ -309,7 +313,7 @@ def write_report_odt(app, report: str, target: Path) -> None:
             amount = sum((money(item.import_total) for item in items), money(0))
             percent = amount * 100 / pem if pem else money(0)
             rows.append([
-                format_chapter_code(code), app._chapter_title(code), fmt_eur(amount),
+                format_chapter_code(code), app._chapter_title(code), money_text(amount),
                 fmt_number(float(percent)),
             ])
         document.table(["CAPÍTULO", "RESUMEN", "IMPORTE", "%"], rows)
@@ -326,7 +330,9 @@ def write_report_odt(app, report: str, target: Path) -> None:
             total(label, amount)
         document.paragraph(
             "Asciende el presupuesto a la expresada cantidad de " +
-            amount_in_words(totals["total"])
+            amount_in_words(
+                totals["total"], settings.currency, settings.custom_currency
+            )
         )
     elif report in {"Materiales", "Precios Auxiliares"}:
         auxiliaries, materials = _collect_report_resources(app)
@@ -338,18 +344,18 @@ def write_report_odt(app, report: str, target: Path) -> None:
             for _, (concept, quantity, price) in sorted(materials.items()):
                 prefix = concept.code[:3]
                 if group is not None and prefix != group:
-                    rows.append(["", "", "", f"Grupo {group}", "", fmt_eur(subtotal)])
+                    rows.append(["", "", "", f"Grupo {group}", "", money_text(subtotal)])
                     subtotal = money(0)
                 amount = money(quantity * Decimal(str(price)))
                 rows.append([
                     concept.code, fmt_number(float(quantity), 3), concept.unit,
-                    concept.summary, fmt_eur(price), fmt_eur(amount),
+                    concept.summary, money_text(price), money_text(amount),
                 ])
                 subtotal += amount
                 grand_total += amount
                 group = prefix
             if group is not None:
-                rows.append(["", "", "", f"Grupo {group}", "", fmt_eur(subtotal)])
+                rows.append(["", "", "", f"Grupo {group}", "", money_text(subtotal)])
             if rows:
                 document.table(
                     ["CÓDIGO", "CANTIDAD", "UD.", "RESUMEN", "PRECIO/UD.", "IMPORTE"], rows,
@@ -366,7 +372,7 @@ def write_report_odt(app, report: str, target: Path) -> None:
                     document.paragraph(concept.text)
                 rows = [[
                     child.code, child.unit, fmt_number(quantity, 3), child.summary,
-                    fmt_eur(child_price), fmt_eur(money(quantity * child_price)),
+                    money_text(child_price), money_text(money(quantity * child_price)),
                 ] for child, quantity, child_price in children]
                 document.table(
                     ["CÓDIGO", "UD", "CANTIDAD", "RESUMEN", "PRECIO", "SUBTOTAL"], rows,
@@ -379,7 +385,9 @@ def write_report_odt(app, report: str, target: Path) -> None:
                 if difference:
                     total("Diferencia respecto a los componentes", difference)
                 document.paragraph(
-                    "Asciende el precio unitario del concepto auxiliar a " + amount_in_words(price)
+                    "Asciende el precio unitario del concepto auxiliar a " + amount_in_words(
+                        price, settings.currency, settings.custom_currency
+                    )
                 )
     else:
         for section in ((1, 2) if report == REPORT_NAMES[0] else (0,)):
@@ -396,12 +404,14 @@ def write_report_odt(app, report: str, target: Path) -> None:
                     )
                     item_text = [item.code, item.unit, item.summary]
                     if shown_amount is not None:
-                        item_text.append(fmt_eur(shown_amount))
+                        item_text.append(money_text(shown_amount))
                     document.table([], [item_text], bold_rows=(0,))
                     if item.text:
                         document.paragraph(item.text)
                     if section == 1:
-                        document.paragraph(amount_in_words(item.unit_price))
+                        document.paragraph(amount_in_words(
+                            item.unit_price, settings.currency, settings.custom_currency
+                        ))
                     elif section == 2:
                         grouped = {}
                         for concept, quantity, price in app._report_components(item):
@@ -413,7 +423,7 @@ def write_report_odt(app, report: str, target: Path) -> None:
                         if grouped:
                             document.table(
                                 ["RESUMEN", "IMPORTE"],
-                                [[label, fmt_eur(amount)] for label, amount in grouped.items()],
+                                [[label, money_text(amount)] for label, amount in grouped.items()],
                             )
                             difference = money(item.unit_price) - sum(grouped.values(), money(0))
                             if difference:
@@ -428,8 +438,8 @@ def write_report_odt(app, report: str, target: Path) -> None:
                                 ["CÓDIGO", "UD", "RESUMEN", "CANTIDAD", "PRECIO", "SUBTOTAL"],
                                 [[
                                     concept.code, concept.unit, concept.summary,
-                                    fmt_number(quantity, 3), fmt_eur(price),
-                                    fmt_eur(money(quantity * price)),
+                                    fmt_number(quantity, 3), money_text(price),
+                                    money_text(money(quantity * price)),
                                 ] for concept, quantity, price in components],
                             )
                             difference = money(item.unit_price) - sum(
@@ -453,13 +463,13 @@ def write_report_odt(app, report: str, target: Path) -> None:
                                             line.units, line.length, line.width, line.height
                                         )
                                     ],
-                                    fmt_number(line.k, 3), fmt_eur(line.partial),
+                                    fmt_number(line.k, 3), money_text(line.partial),
                                 ] for line in item.measurement_lines],
                             )
                         document.table(
                             ["CANTIDAD", "PRECIO", "IMPORTE"],
-                            [[fmt_number(item.measurement), fmt_eur(item.unit_price),
-                              fmt_eur(item.import_total)]],
+                            [[fmt_number(item.measurement), money_text(item.unit_price),
+                              money_text(item.import_total)]],
                         )
                 if report == "Presupuesto mediciones":
                     total(
@@ -485,7 +495,7 @@ def write_certification_odt(
     report: str, target: Path, month_key: str, certification_number: int, month_label: str,
 ) -> None:
     """Genera en ODT editable el resumen o el detalle de una certificación."""
-    from bc3_gui import fmt_eur, fmt_number, format_chapter_code
+    from bc3_gui import format_currency, fmt_number, format_chapter_code
 
     if report not in CERTIFICATION_REPORT_NAMES:
         raise ValueError(f"Tipo de informe desconocido: {report}")
@@ -511,6 +521,12 @@ def write_certification_odt(
     heading = "CERTIFICACIÓN Y MEDICIONES" if detail else "RESUMEN DE CERTIFICACIÓN"
     title = f"{heading} · Certificación {certification_number} · {month_label}"
     document = _new_report(title, project_title, settings, certification=True)
+
+    def money_text(value) -> str:
+        """Formatea importes certificados con la divisa de su configuración."""
+        return format_currency(
+            float(value), settings.currency, settings.custom_currency
+        )
     codes = list(dict.fromkeys(item.chapter for item, _ in certified))
     chapter_amounts = {
         code: sum((amount for item, amount in certified if item.chapter == code), money(0))
@@ -520,7 +536,7 @@ def write_certification_odt(
 
     def total(label, value):
         """Añade una línea de total de la certificación."""
-        document.table([], [[label, fmt_eur(value)]], bold_rows=(0,))
+        document.table([], [[label, money_text(value)]], bold_rows=(0,))
 
     if detail:
         for code in codes:
@@ -536,7 +552,7 @@ def write_certification_odt(
                 quantity = float(item.certifications[month_key]) / item.unit_price
                 document.table(
                     ["CANTIDAD", "PRECIO", "IMPORTE"],
-                    [[fmt_number(quantity, 6), fmt_eur(item.unit_price), fmt_eur(amount)]],
+                    [[fmt_number(quantity, 6), money_text(item.unit_price), money_text(amount)]],
                 )
                 justification = item.certification_justifications.get(month_key, "")
                 if justification:
@@ -556,7 +572,7 @@ def write_certification_odt(
             )
             percentage = fmt_number(float(chapter_amounts[code] * 100 / budget)) if budget else "No aplicable"
             rows.append([
-                format_chapter_code(code), chapter_title(code), fmt_eur(chapter_amounts[code]),
+                format_chapter_code(code), chapter_title(code), money_text(chapter_amounts[code]),
                 percentage,
             ])
         document.table(["CAPÍTULO", "RESUMEN", "IMPORTE", "% CERTIFICADO"], rows)
@@ -576,7 +592,9 @@ def write_certification_odt(
             total(label, amount)
         document.paragraph(
             "Asciende la presente certificación a la expresada cantidad de " +
-            amount_in_words(totals["total"])
+            amount_in_words(
+                totals["total"], settings.currency, settings.custom_currency
+            )
         )
 
     signatures = [

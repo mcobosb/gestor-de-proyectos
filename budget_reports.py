@@ -31,6 +31,7 @@ REPORT_NAMES = (
 )
 CERTIFICATION_REPORT_NAMES = ("Resumen certificaciones", "Certificaciones con mediciones")
 PERCENTAGE_FIELDS = {"general_expenses", "industrial_profit", "vat", "tender_discount", "indirect_costs"}
+CURRENCY_CODES = {"EUR", "USD", "GBP", "CHF", "CAD", "AUD", "OTHER"}
 
 
 @dataclass
@@ -44,6 +45,8 @@ class ReportSettings:
     contractor_representative: str = ""
     template_path: str = ""
     output_format: str = "pdf"
+    currency: str = "EUR"
+    custom_currency: str = ""
     general_expenses: float = 13.0
     industrial_profit: float = 6.0
     vat: float = 21.0
@@ -74,6 +77,17 @@ class ReportSettings:
                 if not isinstance(value, str) or value.lower() not in {"pdf", "odt"}:
                     raise ValueError("El formato de informes debe ser PDF u ODT.")
                 values[key] = value.lower()
+            elif key == "currency":
+                if not isinstance(value, str) or value.upper() not in CURRENCY_CODES:
+                    raise ValueError("La divisa seleccionada no es válida.")
+                values[key] = value.upper()
+            elif key == "custom_currency":
+                if not isinstance(value, str):
+                    raise ValueError("La divisa personalizada debe ser texto.")
+                custom_currency = value.strip()
+                if len(custom_currency) > 12 or any(ord(char) < 32 for char in custom_currency):
+                    raise ValueError("La divisa personalizada debe tener como máximo 12 caracteres.")
+                values[key] = custom_currency
             elif key == "template_path":
                 if not isinstance(value, str):
                     raise ValueError("La ruta de la plantilla debe ser texto.")
@@ -85,6 +99,8 @@ class ReportSettings:
                 if not isinstance(value, str):
                     raise ValueError(f"El campo {key} debe ser texto.")
                 values[key] = value.strip()
+        if values["currency"] == "OTHER" and not values["custom_currency"]:
+            raise ValueError("Indica el símbolo o código de la divisa personalizada.")
         return cls(**values)
 
     def to_dict(self) -> dict:
@@ -117,8 +133,10 @@ def certification_totals(pem: float, settings: ReportSettings) -> dict[str, Deci
     return {**totals, "discount": discount, "net": net, "vat": vat, "total": net + vat}
 
 
-def amount_in_words(value: Decimal | float) -> str:
-    """Expresa un importe redondeado en euros y céntimos con palabras en español."""
+def amount_in_words(
+    value: Decimal | float, currency: str = "EUR", custom_currency: str = ""
+) -> str:
+    """Expresa un importe redondeado en la divisa seleccionada y su unidad menor."""
     small = (
         "cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete",
         "ocho", "nueve", "diez", "once", "doce", "trece", "catorce", "quince",
@@ -162,13 +180,24 @@ def amount_in_words(value: Decimal | float) -> str:
     amount = money(value)
     negative = amount < 0
     cents = int(abs(amount) * 100)
-    euros, remainder = divmod(cents, 100)
-    text = apocopate(integer(euros))
-    text += (" de euros" if euros and euros % 10**6 == 0 else
-             " euro" if euros == 1 else " euros")
+    units, remainder = divmod(cents, 100)
+    unit_names = {
+        "EUR": ("euro", "euros", "céntimo", "céntimos"),
+        "USD": ("dólar", "dólares", "centavo", "centavos"),
+        "GBP": ("libra", "libras", "penique", "peniques"),
+        "CHF": ("franco", "francos", "céntimo", "céntimos"),
+        "CAD": ("dólar canadiense", "dólares canadienses", "centavo", "centavos"),
+        "AUD": ("dólar australiano", "dólares australianos", "centavo", "centavos"),
+    }
+    singular, plural, minor_singular, minor_plural = unit_names.get(
+        currency, (custom_currency or currency, custom_currency or currency, "centavo", "centavos")
+    )
+    text = apocopate(integer(units))
+    text += (f" de {plural}" if units and units % 10**6 == 0 else
+             f" {singular}" if units == 1 else f" {plural}")
     if remainder:
         text += " con " + apocopate(integer(remainder))
-        text += " céntimo" if remainder == 1 else " céntimos"
+        text += f" {minor_singular}" if remainder == 1 else f" {minor_plural}"
     return (("menos " if negative else "") + text).upper()
 
 
@@ -340,7 +369,9 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
         total("PRESUPUESTO BASE DE LICITACIÓN", totals["total"])
         story.append(Spacer(1, 5 * mm))
         story.append(text("Asciende el presupuesto a la expresada cantidad de " +
-                          amount_in_words(totals["total"]), layout.words_style))
+                          amount_in_words(
+                              totals["total"], settings.currency, settings.custom_currency
+                          ), layout.words_style))
     elif report == "Materiales":
         rows = []
         group = None
@@ -382,7 +413,9 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
             if difference:
                 total("Diferencia respecto a los componentes", difference)
             story.append(text("Asciende el precio unitario del concepto auxiliar a " +
-                              amount_in_words(price), layout.words_style))
+                              amount_in_words(
+                                  price, settings.currency, settings.custom_currency
+                              ), layout.words_style))
             story.append(Spacer(1, 4 * mm))
         if not auxiliaries:
             story.append(text("No hay precios auxiliares en las descomposiciones del proyecto."))
@@ -405,7 +438,9 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
                     item_heading(item, item.unit_price if section == 1 else
                                  item.import_total if report == "Presupuesto mediciones" else None)
                     if section == 1:
-                        story.append(text(amount_in_words(item.unit_price), layout.words_style))
+                        story.append(text(amount_in_words(
+                            item.unit_price, settings.currency, settings.custom_currency
+                        ), layout.words_style))
                     elif section == 2:
                         grouped = {}
                         for concept, quantity, price in components(item):
@@ -465,8 +500,11 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
 
     def page_header(canvas, document):
         """Dibuja el logo, título de sección, cabeceras tabuladas y pie de página."""
+        from bc3_gui import currency_label
+
         layout.header(canvas, document, page_headings.get(document.page, current_heading),
-                      title, footer=f"{date.today():%d/%m/%Y}",
+                      f"{title} · Importes {currency_label(settings.currency, settings.custom_currency)}",
+                      footer=f"{date.today():%d/%m/%Y}",
                       column_headers=column_headers, ratios=column_ratios)
 
     class ReportDocument(SimpleDocTemplate):
@@ -589,7 +627,9 @@ def write_certification_pdf(
         total(f"LÍQUIDO CERTIFICACIÓN {certification_number}", totals["total"])
         story.append(Spacer(1, 4 * mm))
         story.append(text("Asciende la presente certificación a la expresada cantidad de " +
-                          amount_in_words(totals["total"]), layout.words_style))
+                          amount_in_words(
+                              totals["total"], settings.currency, settings.custom_currency
+                          ), layout.words_style))
 
     signatures = [[
         text("\n".join(filter(None, (settings.contractor, settings.contractor_representative, settings.signature))),
@@ -601,8 +641,11 @@ def write_certification_pdf(
 
     def page_header(canvas, document):
         """Dibuja la cabecera institucional y la identificación del mes certificado."""
+        from bc3_gui import currency_label
+
         layout.header(
-            canvas, document, heading, project_title,
+            canvas, document, heading,
+            f"{project_title} · Importes {currency_label(settings.currency, settings.custom_currency)}",
             footer=f"Certificación {certification_number} · {month_label}",
             column_headers=["CÓDIGO", "RESUMEN", "UDS", "LONGITUD", "ANCHURA", "ALTURA",
                             "CANTIDAD", "PRECIO", "IMPORTE"] if detail else (),

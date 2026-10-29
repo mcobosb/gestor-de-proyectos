@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from copy import deepcopy
 import html
 import json
 import os
@@ -37,6 +38,16 @@ CONCEPT_TYPES = {
     "2": "⚙ Maquinaria",
     "3": "▧ Material",
     "%": "% Porcentaje",
+}
+
+DUPLICATE_ITEM_MARKER = "*"
+CURRENCY_SYMBOLS = {
+    "EUR": "€",
+    "USD": "$",
+    "GBP": "£",
+    "CHF": "CHF",
+    "CAD": "CA$",
+    "AUD": "A$",
 }
 
 ITEM_FIELDS = (
@@ -110,6 +121,20 @@ def round_half_up(value: float, digits: int = 2) -> float:
 def fmt_eur(value: float) -> str:
     """Formatea una cantidad como euros con separadores numéricos españoles."""
     return f"{value:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def currency_label(currency: str = "EUR", custom_currency: str = "") -> str:
+    """Devuelve el símbolo o código de una divisa conocida o personalizada."""
+    return custom_currency if currency == "OTHER" else CURRENCY_SYMBOLS.get(currency, currency)
+
+
+def format_currency(value: float, currency: str = "EUR", custom_currency: str = "") -> str:
+    """Formatea un importe con la divisa del proyecto y separadores españoles."""
+    amount = f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    symbol = currency_label(currency, custom_currency)
+    if currency in {"USD", "GBP", "CAD", "AUD"}:
+        return f"{symbol}{amount}"
+    return f"{amount} {symbol}"
 
 
 def fmt_number(value: float, digits: int = 2) -> str:
@@ -763,14 +788,21 @@ class BudgetApp:
             actions, textvariable=self.bcca_visibility_text, command=self.toggle_bcca_panel
         ).pack(side="left", padx=(0, 8))
         ttk.Button(actions, text="✎", width=3, command=self.update_selected_budget_item).pack(side="left")
+        ttk.Button(
+            actions,
+            text="⧉",
+            width=3,
+            command=self.duplicate_selected_budget_item,
+        ).pack(side="left", padx=(4, 0))
         for button, help_text in zip(actions.winfo_children(), (
             "Añadir un capítulo o una partida al presupuesto.",
             "Eliminar la partida o el capítulo seleccionado.",
-            "Añadir al presupuesto la partida seleccionada en la base de referencia.",
+            "Añadir al presupuesto la partida o el capítulo completo seleccionado en la base de referencia.",
             "Subir la partida o el capítulo seleccionado.",
             "Bajar la partida o el capítulo seleccionado.",
             "Mostrar u ocultar el panel de la base de referencia.",
             "Editar el nombre del capítulo o los datos de la partida seleccionada.",
+            "Duplicar la partida seleccionada. La copia marcada con * debe modificarse manualmente.",
         )):
             ToolTip(button, help_text)
 
@@ -824,6 +856,12 @@ class BudgetApp:
         self.budget_tree.tag_configure("chapter", background=COLORS["navy"], foreground=COLORS["surface"], font=("Segoe UI", 9, "bold"))
         self.budget_tree.tag_configure("item_even", background=COLORS["surface"], foreground=COLORS["text"])
         self.budget_tree.tag_configure("item_odd", background=COLORS["blue_soft"], foreground=COLORS["text"])
+        self.budget_tree.tag_configure(
+            "duplicate_review",
+            background=COLORS["warning_soft"],
+            foreground=COLORS["warning_text"],
+            font=("Segoe UI", 9, "bold"),
+        )
         self.budget_tree.tag_configure("resource", background=COLORS["background"], foreground=COLORS["muted"])
 
         self.budget_tree.grid(row=0, column=0, sticky="nsew")
@@ -905,7 +943,9 @@ class BudgetApp:
         self.budget_fields = {key: tk.StringVar() for _label, key in ITEM_FIELDS}
 
         self.budget_summary = ttk.Label(
-            self.left_panel, text="Total del presupuesto: 0,00 €", style="Total.TLabel"
+            self.left_panel,
+            text=f"Total del presupuesto: {self._format_currency(0)}",
+            style="Total.TLabel",
         )
         self.budget_summary.grid(row=2, column=0, sticky="ew", pady=(8, 0))
 
@@ -1154,7 +1194,7 @@ class BudgetApp:
             f"Base: {base.path.stem}",
             f"C?digo: {concept.code}",
             f"Unidad: {concept.unit or '-'}",
-            f"Precio: {fmt_eur(concept.price)}",
+            f"Precio: {self._format_currency(concept.price)}",
             f"Rendimiento: {fmt_number(base.calculate_rendimiento(code), 4)} h",
             "",
             concept.text or concept.summary or "Sin texto descriptivo.",
@@ -1165,7 +1205,7 @@ class BudgetApp:
                 child = base.concepts.get(child_code, Concept(child_code))
                 lines.append(
                     f"  {child_code}: {child.summary or child_code} | "
-                    f"{fmt_number(quantity, 4)} {child.unit} ? {fmt_eur(child.price)}"
+                    f"{fmt_number(quantity, 4)} {child.unit} ? {self._format_currency(child.price)}"
                 )
         self.bcca_detail_text.config(state="normal")
         self.bcca_detail_text.delete("1.0", "end")
@@ -1509,6 +1549,54 @@ class BudgetApp:
         self._show_item_details(None)
         self._set_status(f"Eliminada la partida {item.code}.")
 
+    def _format_currency(self, value: float) -> str:
+        """Formatea un importe según la divisa guardada para el proyecto."""
+        return format_currency(
+            value,
+            self.report_settings.currency,
+            self.report_settings.custom_currency,
+        )
+
+    def _currency_label(self) -> str:
+        """Devuelve el símbolo o código de la divisa configurada."""
+        return currency_label(
+            self.report_settings.currency,
+            self.report_settings.custom_currency,
+        )
+
+    def duplicate_selected_budget_item(self) -> None:
+        """Duplica la partida seleccionada y la marca para su revisión manual."""
+        if self.selected_budget_index is None:
+            messagebox.showwarning(
+                "Sin selección",
+                "Selecciona una partida del presupuesto para duplicarla.",
+                parent=self.root,
+            )
+            return
+
+        source = self.budget_items[self.selected_budget_index]
+        duplicate = deepcopy(source)
+        existing_codes = {item.code for item in self.budget_items}
+        duplicate.code = f"{source.code}{DUPLICATE_ITEM_MARKER}"
+        while duplicate.code in existing_codes:
+            duplicate.code += DUPLICATE_ITEM_MARKER
+        duplicate.planned_amounts = {}
+        duplicate.certifications = {}
+        duplicate.certification_plans = {}
+        duplicate.certification_justifications = {}
+
+        code = duplicate.code
+        self._insert_item(duplicate, self.selected_budget_index + 1, source.chapter)
+        self._mark_dirty()
+        messagebox.showwarning(
+            "Revisar partida duplicada",
+            (
+                f"La copia se ha creado con el código {code}. Modifícala y "
+                f"revísala manualmente; elimina {DUPLICATE_ITEM_MARKER} cuando hayas terminado."
+            ),
+            parent=self.root,
+        )
+
     def load_budget_dialog(self):
         """Abre el selector de archivos para importar un presupuesto BC3."""
         path = filedialog.askopenfilename(title="Selecciona un presupuesto .bc3", filetypes=[("BC3", "*.bc3")])
@@ -1551,6 +1639,65 @@ class BudgetApp:
             measurement_lines=[MeasurementLine(comment="Medición inicial", units=1.0)],
         )
 
+    def _insert_bcca_chapter(self, code: str, base: Bc3Dataset) -> None:
+        """Incorpora un capítulo de referencia y todas sus partidas al presupuesto."""
+        concept = base.concepts.get(code)
+        if concept is None or not is_chapter_code(code):
+            messagebox.showwarning(
+                "Selección no válida",
+                "Selecciona un capítulo de la base de referencia.",
+                parent=self.root,
+            )
+            return
+
+        items: list[ProjectItem] = []
+        visited_chapters: set[str] = set()
+
+        def collect(chapter_code: str) -> None:
+            """Recorre subcapítulos y recopila las partidas presupuestables."""
+            if chapter_code in visited_chapters:
+                return
+            visited_chapters.add(chapter_code)
+            for child_code in base.get_children(chapter_code):
+                child = base.concepts.get(child_code)
+                if child is None:
+                    continue
+                if is_chapter_code(child_code):
+                    collect(child_code)
+                    continue
+                if child.ctype != "0":
+                    continue
+                item = self._build_item_from_bcca(child_code, base)
+                if item is None:
+                    continue
+                item.chapter = code
+                measured = base.measurements.get((norm_code(chapter_code), child_code))
+                if measured is not None:
+                    item.measurement = measured.total
+                    item.measurement_detail = measured.detail
+                    item.measurement_lines = parse_measurement_lines(measured.detail)
+                items.append(item)
+
+        collect(code)
+        self._ensure_chapter(code)
+        if concept.summary:
+            self.chapter_titles.setdefault(code, concept.summary)
+        position = self._end_of_chapter(code)
+        for item in items:
+            item.recalculate_measurement()
+            item.set_indirect_costs(self.report_settings.indirect_costs)
+        self.budget_items[position:position] = items
+        self.selected_chapter = None if items else code
+        self.selected_budget_index = position if items else None
+        self.refresh_budget_tree()
+        selected_iid = f"item:{position}" if items else self.chapter_iid_by_code[code]
+        self.budget_tree.selection_set(selected_iid)
+        self.budget_tree.see(selected_iid)
+        self._mark_dirty()
+        self._set_status(
+            f"Capítulo {format_chapter_code(code)} añadido con {len(items)} partidas."
+        )
+
     def _insert_item(self, item: ProjectItem, position: int | None = None, chapter: str | None = None) -> None:
         """Inserta una partida en el capítulo y posición indicados y actualiza la vista."""
         if chapter:
@@ -1570,9 +1717,16 @@ class BudgetApp:
         self._set_status(f"Partida añadida a {item.chapter}: {item.code} - {item.summary}")
 
     def add_selected_bcca_to_budget(self):
-        """Añade al presupuesto la partida seleccionada en la base de referencia."""
+        """Añade al presupuesto la partida o capítulo de referencia seleccionado."""
         if not self.selected_bcca_code or self.selected_bcca_base is None:
-            messagebox.showwarning("Sin selección", "Primero selecciona una partida del BCCA.")
+            messagebox.showwarning(
+                "Sin selección",
+                "Primero selecciona una partida o capítulo del BCCA.",
+                parent=self.root,
+            )
+            return
+        if is_chapter_code(self.selected_bcca_code):
+            self._insert_bcca_chapter(self.selected_bcca_code, self.selected_bcca_base)
             return
         item = self._build_item_from_bcca(self.selected_bcca_code, self.selected_bcca_base)
         if item is None:
@@ -1615,13 +1769,23 @@ class BudgetApp:
             self._set_status(f"Soltar en {chapter}")
 
     def drop_on_budget(self, event):
-        """Finaliza el arrastre e inserta la partida en el destino del presupuesto."""
+        """Finaliza el arrastre e inserta una partida o capítulo de referencia."""
         code, base, dragging = self._drag_code, self._drag_base, self._dragging
         self._drag_code, self._drag_base, self._dragging = None, None, False
         self.bcca_tree.config(cursor="")
         if not code or not dragging:
             return
         target = self._budget_drop_target(event)
+        if is_chapter_code(code):
+            x = event.x_root - self.budget_tree.winfo_rootx()
+            y = event.y_root - self.budget_tree.winfo_rooty()
+            inside_budget = (
+                0 <= x <= self.budget_tree.winfo_width()
+                and 0 <= y <= self.budget_tree.winfo_height()
+            )
+            if base is not None and (target is not None or (not self.budget_items and inside_budget)):
+                self._insert_bcca_chapter(code, base)
+            return
         if target is None:
             return
         chapter, position = target
@@ -1915,7 +2079,7 @@ class BudgetApp:
                 "end",
                 iid=chapter_iid,
                 text=format_chapter_code(chapter),
-                values=(CONCEPT_TYPES["chapter"], self._chapter_title(chapter), "", fmt_eur(chapter_totals.get(chapter, 0.0))),
+                values=(CONCEPT_TYPES["chapter"], self._chapter_title(chapter), "", self._format_currency(chapter_totals.get(chapter, 0.0))),
                 open=not self._collapse_chapters_on_refresh,
                 tags=("chapter",),
             )
@@ -1932,7 +2096,7 @@ class BudgetApp:
                     "end",
                     iid=chapter_iid,
                     text=format_chapter_code(item.chapter),
-                    values=(CONCEPT_TYPES["chapter"], self._chapter_title(item.chapter), "", fmt_eur(chapter_totals[item.chapter])),
+                    values=(CONCEPT_TYPES["chapter"], self._chapter_title(item.chapter), "", self._format_currency(chapter_totals[item.chapter])),
                     open=True,
                     tags=("chapter",),
                 )
@@ -1947,7 +2111,11 @@ class BudgetApp:
                 iid=item_iid,
                 text=item.code,
                 values=self._item_row_values(item),
-                tags=("item_even" if position % 2 == 0 else "item_odd",),
+                tags=(
+                    ("duplicate_review",)
+                    if item.code.endswith(DUPLICATE_ITEM_MARKER)
+                    else ("item_even" if position % 2 == 0 else "item_odd",)
+                ),
             )
 
             dataset = self._component_dataset(item)
@@ -1962,7 +2130,7 @@ class BudgetApp:
                         CONCEPT_TYPES[self._budget_concept_type(item, resource_code)],
                         resource.summary or resource_code,
                         f"{fmt_number(quantity, 4)} {resource.unit}".strip(),
-                        fmt_eur(quantity * resource.price),
+                        self._format_currency(quantity * resource.price),
                     ),
                     tags=("resource",),
                 )
@@ -1974,11 +2142,11 @@ class BudgetApp:
                         CONCEPT_TYPES["%" if resource.ctype == "%" else "0"],
                         resource.summary,
                         f"{fmt_number(quantity, 4)} {resource.unit}".strip(),
-                        fmt_eur(quantity * price),
+                        self._format_currency(quantity * price),
                     ),
                     tags=("resource",),
                 )
-        self.budget_summary.config(text=f"Total del presupuesto: {fmt_eur(total)}")
+        self.budget_summary.config(text=f"Total del presupuesto: {self._format_currency(total)}")
         self._collapse_chapters_on_refresh = False
 
     def _chapter_title(self, chapter: str) -> str:
@@ -1998,7 +2166,7 @@ class BudgetApp:
             CONCEPT_TYPES[self._budget_concept_type(item)],
             item.summary,
             f"{fmt_number(item.measurement)} {item.unit}".strip(),
-            fmt_eur(item.import_total),
+            self._format_currency(item.import_total),
         )
 
     def toggle_budget_node(self, event=None):
@@ -2129,14 +2297,14 @@ class BudgetApp:
                         component.summary or code,
                         fmt_number(quantity, 4),
                         fmt_number(price),
-                        fmt_eur(quantity * price),
+                        self._format_currency(quantity * price),
                     )
                 )
             for index, (component, quantity, price) in enumerate(item.indirect_components()):
                 self.component_tree.insert(
                     "", "end", iid=f"indirect:{index}", values=(
                         component.code, component.summary, fmt_number(quantity, 4),
-                        fmt_number(price, 4), fmt_eur(quantity * price),
+                        fmt_number(price, 4), self._format_currency(quantity * price),
                     ),
                 )
             self._update_measurement_total(item)
@@ -2279,7 +2447,7 @@ class BudgetApp:
                 self.budget_tree.item(row, values=(
                     CONCEPT_TYPES["%" if component.ctype == "%" else "0"],
                     component.summary, f"{fmt_number(quantity, 4)} {component.unit}".strip(),
-                    fmt_eur(quantity * price),
+                    self._format_currency(quantity * price),
                 ))
 
         chapter_iid = self.chapter_iid_by_code.get(item.chapter)
@@ -2290,11 +2458,11 @@ class BudgetApp:
             self.budget_tree.item(
                 chapter_iid,
                 text=format_chapter_code(item.chapter),
-                values=(CONCEPT_TYPES["chapter"], self._chapter_title(item.chapter), "", fmt_eur(chapter_total)),
+                values=(CONCEPT_TYPES["chapter"], self._chapter_title(item.chapter), "", self._format_currency(chapter_total)),
             )
 
         total = sum(entry.import_total for entry in self.budget_items)
-        self.budget_summary.config(text=f"Total del presupuesto: {fmt_eur(total)}")
+        self.budget_summary.config(text=f"Total del presupuesto: {self._format_currency(total)}")
 
     def add_measurement_line(self):
         """Añade una línea inicial de medición a la partida seleccionada."""
@@ -2531,7 +2699,54 @@ class BudgetApp:
             reports_tab, textvariable=variables["output_format"], values=("PDF", "ODT"),
             state="readonly", width=12,
         ).grid(row=format_row, column=1, sticky="w")
-        template_row = format_row + 1
+        currency_row = format_row + 1
+        ttk.Label(reports_tab, text="Divisa del proyecto").grid(
+            row=currency_row, column=0, sticky="w", pady=5, padx=(0, 12)
+        )
+        currency_options = {
+            "EUR (€)": "EUR",
+            "USD ($)": "USD",
+            "GBP (£)": "GBP",
+            "CHF": "CHF",
+            "CAD (CA$)": "CAD",
+            "AUD (A$)": "AUD",
+            "Otra (personalizada)": "OTHER",
+        }
+        variables["currency"] = tk.StringVar(value=values["currency"])
+        currency_selector = ttk.Combobox(
+            reports_tab,
+            values=tuple(currency_options),
+            state="readonly",
+            width=24,
+        )
+        currency_selector.set(next(
+            label for label, code in currency_options.items() if code == values["currency"]
+        ))
+        currency_selector.grid(row=currency_row, column=1, sticky="w")
+        currency_selector.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: set_custom_currency_state(),
+        )
+        custom_currency_row = currency_row + 1
+        ttk.Label(reports_tab, text="Símbolo o código personalizado").grid(
+            row=custom_currency_row, column=0, sticky="w", pady=5, padx=(0, 12)
+        )
+        variables["custom_currency"] = tk.StringVar(value=values["custom_currency"])
+        custom_currency_entry = ttk.Entry(
+            reports_tab, textvariable=variables["custom_currency"], width=20
+        )
+        custom_currency_entry.grid(row=custom_currency_row, column=1, sticky="w")
+
+        def set_custom_currency_state() -> None:
+            """Activa el campo de divisa personalizada solo cuando se ha seleccionado."""
+            currency = currency_options[currency_selector.get()]
+            variables["currency"].set(currency)
+            custom_currency_entry.state(
+                ("!disabled",) if currency == "OTHER" else ("disabled",)
+            )
+
+        set_custom_currency_state()
+        template_row = custom_currency_row + 1
         ttk.Label(reports_tab, text="Plantilla de cabecera y pie (ODT)").grid(
             row=template_row, column=0, sticky="w", pady=5, padx=(0, 12)
         )
@@ -2559,7 +2774,8 @@ class BudgetApp:
             "GG y BI se aplican al PEM. En certificaciones, se deduce la baja\n"
             "antes del IVA. La baja no modifica el presupuesto de licitación.\n"
             "Guardar conserva estos datos para este proyecto y como valores\n"
-            "iniciales de nuevos proyectos. Los proyectos guardados mantienen su configuración.",
+            "iniciales de nuevos proyectos. Los proyectos guardados mantienen su configuración.\n"
+            "La divisa solo cambia cómo se muestran los importes; no los convierte.",
         ).grid(row=template_row + 1, column=0, columnspan=2, sticky="w", pady=12)
 
         language_tab.columnconfigure(1, weight=1)
@@ -2580,6 +2796,7 @@ class BudgetApp:
             """Guarda los valores del formulario y cierra el diálogo si son válidos."""
             data = {key: variable.get() for key, variable in variables.items()}
             data["output_format"] = str(data["output_format"]).lower()
+            data["currency"] = currency_options[currency_selector.get()]
             if self._save_report_settings(data):
                 window.destroy()
 
@@ -3047,20 +3264,20 @@ class BudgetApp:
                 rows.append(
                     f'<tr class="cap"><td>{esc(format_chapter_code(item.chapter))}</td>'
                     f'<td colspan="4">{esc(self._chapter_title(item.chapter))}</td>'
-                    f'<td class="num">{fmt_eur(chapter_totals[item.chapter])}</td></tr>'
+                    f'<td class="num">{esc(self._format_currency(chapter_totals[item.chapter]))}</td></tr>'
                 )
             rows.append(
                 f"<tr><td>{esc(item.code)}</td><td>{esc(item.unit)}</td>"
                 f'<td class="txt">{esc(item.text or item.summary)}</td>'
                 f'<td class="num">{fmt_number(item.measurement)}</td>'
-                f'<td class="num">{fmt_eur(item.unit_price)}</td>'
-                f'<td class="num">{fmt_eur(item.import_total)}</td></tr>'
+                f'<td class="num">{esc(self._format_currency(item.unit_price))}</td>'
+                f'<td class="num">{esc(self._format_currency(item.import_total))}</td></tr>'
             )
 
         total = sum(item.import_total for item in self.budget_items)
         summary = "".join(
             f'<tr><td>{esc(format_chapter_code(code))} · {esc(self._chapter_title(code))}</td>'
-            f'<td class="num">{fmt_eur(amount)}</td></tr>'
+            f'<td class="num">{esc(self._format_currency(amount))}</td></tr>'
             for code, amount in chapter_totals.items()
         )
         return f"""<!DOCTYPE html>
@@ -3082,10 +3299,10 @@ class BudgetApp:
 <div class="sub">Presupuesto y mediciones · {date.today():%d/%m/%Y}</div>
 <table><thead><tr><th>Código</th><th>Ud</th><th>Descripción</th><th>Medición</th><th>Precio</th><th>Importe</th></tr></thead>
 <tbody>{''.join(rows)}</tbody>
-<tfoot><tr><td colspan="5">TOTAL EJECUCIÓN MATERIAL</td><td class="num">{fmt_eur(total)}</td></tr></tfoot></table>
+<tfoot><tr><td colspan="5">TOTAL EJECUCIÓN MATERIAL</td><td class="num">{esc(self._format_currency(total))}</td></tr></tfoot></table>
 <h1 style="margin-top:22px">Resumen por capítulos</h1>
 <table><tbody>{summary}</tbody>
-<tfoot><tr><td>TOTAL</td><td class="num">{fmt_eur(total)}</td></tr></tfoot></table>
+<tfoot><tr><td>TOTAL</td><td class="num">{esc(self._format_currency(total))}</td></tr></tfoot></table>
 </body></html>"""
 
     def _project_title(self) -> str:
@@ -3216,9 +3433,9 @@ class BudgetApp:
             target = target.with_suffix(".ods")
         resources = report == "Recursos"
         headers = (
-            ["Código", "Tipo", "Ud", "Resumen", "Precio (€)", "Fuente", "Medición"] if resources else
+            ["Código", "Tipo", "Ud", "Resumen", f"Precio ({self._currency_label()})", "Fuente", "Medición"] if resources else
             ["Partida", "Recurso", "Tipo", "Ud", "Resumen", "Rendimiento (ud/ud partida)",
-             "Precio (€)", "Importe (€)", "Fuente"]
+             f"Precio ({self._currency_label()})", f"Importe ({self._currency_label()})", "Fuente"]
         )
         widths = (14, 7, 6, 60, 12, 12, 16) if resources else (14, 14, 7, 6, 55, 18, 12, 14, 12)
         rows = [headers]
@@ -3279,7 +3496,7 @@ class BudgetApp:
             rows.append(
                 f'<tr class="partida"><td>{esc(item.code)}</td><td>{esc(item.unit)}</td>'
                 f'{description}'
-                f'<td class="num">{fmt_eur(item.unit_price)}</td></tr>'
+                f'<td class="num">{html.escape(self._format_currency(item.unit_price))}</td></tr>'
             )
             if number == 2:
                 components = self._report_components(item)
@@ -3287,8 +3504,8 @@ class BudgetApp:
                     rows.append(
                         f'<tr><td>{esc(concept.code)}</td><td>{esc(concept.unit)}</td>'
                         f'<td>{esc(concept.summary)}</td><td class="num">{fmt_number(quantity, 4)}</td>'
-                        f'<td class="num">{fmt_eur(price)}</td>'
-                        f'<td class="num">{fmt_eur(quantity * price)}</td></tr>'
+                        f'<td class="num">{html.escape(self._format_currency(price))}</td>'
+                        f'<td class="num">{html.escape(self._format_currency(quantity * price))}</td></tr>'
                     )
                 if not components:
                     rows.append('<tr><td colspan="6">Sin descomposición.</td></tr>')
@@ -3296,12 +3513,12 @@ class BudgetApp:
                     component_total = sum(quantity * price for _, quantity, price in components)
                     rows.append(
                         '<tr><td colspan="5">Total descompuesto</td>'
-                        f'<td class="num">{fmt_eur(component_total)}</td></tr>'
+                        f'<td class="num">{html.escape(self._format_currency(component_total))}</td></tr>'
                     )
                     if round_half_up(component_total) != round_half_up(item.unit_price):
                         rows.append(
                             '<tr><td colspan="5">Diferencia respecto al precio unitario</td>'
-                            f'<td class="num">{fmt_eur(item.unit_price - component_total)}</td></tr>'
+                            f'<td class="num">{html.escape(self._format_currency(item.unit_price - component_total))}</td></tr>'
                         )
         title = f"Cuadro de precios Nº{number}"
         headers = (
@@ -3387,6 +3604,7 @@ th {{ background: #1f4e78; color: white; }}
             on_state_change=self._store_planning_state,
             on_save=self.save_project,
             on_dirty_change=lambda dirty: self._mark_dirty() if dirty else None,
+            currency_formatter=self._format_currency,
         )
 
     def _store_planning_state(self, state: dict) -> None:

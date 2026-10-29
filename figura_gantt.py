@@ -199,8 +199,12 @@ def short(text: str, n: int) -> str:
     return text if len(text) <= n else text[: n - 1] + "…"
 
 
-def draw(acts, names, start_works, end_works, plazo, pem, holidays, title: str, plan: str, out_base: Path):
+def draw(
+    acts, names, start_works, end_works, plazo, pem, holidays, title: str,
+    plan: str, out_base: Path, currency_formatter=None,
+):
     """Dibuja el Gantt por capítulos o partidas y guarda las versiones PNG y PDF."""
+    currency_formatter = currency_formatter or fmt_eur
     plt.rcParams.update({"font.family": FONT, "font.size": 8.5})
 
     chapters: List[str] = list(dict.fromkeys(a.chapter for a in acts))
@@ -259,7 +263,7 @@ def draw(acts, names, start_works, end_works, plazo, pem, holidays, title: str, 
                                      closed=True, color=DARK, zorder=3))
             ax.add_patch(Rectangle((xs, i - h / 2 + 0.04), xe - xs, h - 0.08, color=c, zorder=3.1))
             amount = sum(a.amount for a in ch_acts)
-            txt = f"{fmt_date(s)} → {fmt_date(e - timedelta(days=1))}  ·  {fmt_eur(amount)}"
+            txt = f"{fmt_date(s)} → {fmt_date(e - timedelta(days=1))}  ·  {currency_formatter(amount)}"
             room_right = mdates.date2num(t1) - xe
             if room_right > span * 0.30:
                 ax.text(xe + span * 0.008, i, txt, va="center", ha="left", fontsize=7.5, color=DARK,
@@ -285,7 +289,10 @@ def draw(acts, names, start_works, end_works, plazo, pem, holidays, title: str, 
                              facecolor=c, edgecolor="white", lw=0.6, alpha=0.55 if a.continuous else 0.95,
                              hatch="////" if a.continuous else None, zorder=3)
         ax.add_patch(box)
-        label = f"{a.duration} días laborables · {fmt_eur(a.amount)}" if a.continuous else f"{a.duration} d"
+        label = (
+            f"{a.duration} días laborables · {currency_formatter(a.amount)}"
+            if a.continuous else f"{a.duration} d"
+        )
         width_days = xe - xs
         if width_days >= span * 0.035:
             ax.text((xs + xe) / 2, i, label, ha="center", va="center", fontsize=7,

@@ -19,7 +19,9 @@ from datetime import date
 from pathlib import Path
 from tkinter import ttk
 
-from bc3_gui import APPLICATION_NAME, ToolTip, fmt_eur, format_chapter_code, parse_float
+from bc3_gui import (
+    APPLICATION_NAME, ToolTip, format_currency, format_chapter_code, parse_float,
+)
 from localization import filedialog, localize_widget_tree, messagebox, translate
 from planning import PlanParams, apply_saved_plan_state, build_activities, schedule
 from budget_reports import CERTIFICATION_REPORT_NAMES, ReportSettings, write_certification_pdf
@@ -140,6 +142,7 @@ def reconcile_certification(plan: list[float], month_index: int, certified: floa
 def certification_report_html(
     items, activities, plan: list[list[float]], month: EconomicMonth,
     certification_number: int, project_title: str,
+    currency: str = "EUR", custom_currency: str = "",
 ) -> str:
     """Genera un informe imprimible con las partidas certificadas en un mes."""
     rows: list[str] = []
@@ -158,9 +161,9 @@ def certification_report_html(
             f"<td>{html.escape(format_chapter_code(item.chapter))}</td>"
             f"<td>{html.escape(item.code)}</td>"
             f"<td>{html.escape(activity.summary)}</td>"
-            f'<td class="num">{html.escape(fmt_eur(planned))}</td>'
-            f'<td class="num">{html.escape(fmt_eur(certified))}</td>'
-            f'<td class="num">{html.escape(fmt_eur(difference))}</td>'
+            f'<td class="num">{html.escape(format_currency(planned, currency, custom_currency))}</td>'
+            f'<td class="num">{html.escape(format_currency(certified, currency, custom_currency))}</td>'
+            f'<td class="num">{html.escape(format_currency(difference, currency, custom_currency))}</td>'
             f"<td>{html.escape(item.certification_justifications.get(month.key, ''))}</td>"
             "</tr>"
         )
@@ -183,9 +186,9 @@ tfoot td {{ background: #f2f5f9; font-weight: bold; }}
 <table><thead><tr><th>Capítulo</th><th>Código</th><th>Partida</th><th>Plan</th>
 <th>Certificado</th><th>Desviación</th><th>Justificación</th></tr></thead>
 <tbody>{''.join(rows)}</tbody>
-<tfoot><tr><td colspan="3">TOTAL</td><td class="num">{fmt_eur(total_plan)}</td>
-<td class="num">{fmt_eur(total_certified)}</td>
-<td class="num">{fmt_eur(total_certified - total_plan)}</td><td></td></tr></tfoot>
+<tfoot><tr><td colspan="3">TOTAL</td><td class="num">{html.escape(format_currency(total_plan, currency, custom_currency))}</td>
+<td class="num">{html.escape(format_currency(total_certified, currency, custom_currency))}</td>
+<td class="num">{html.escape(format_currency(total_certified - total_plan, currency, custom_currency))}</td><td></td></tr></tfoot>
 </table></body></html>"""
 
 
@@ -237,6 +240,11 @@ class CertificationWindow(tk.Toplevel):
         self._build_ui()
         self._refresh_tree()
         localize_widget_tree(self)
+
+    def _format_currency(self, value: float) -> str:
+        """Formatea importes usando la divisa actual del proyecto."""
+        settings = self._report_settings()
+        return format_currency(value, settings.currency, settings.custom_currency)
 
     def _load_saved_plan(self) -> None:
         """Sustituye las previsiones calculadas por importes mensuales guardados por partida."""
@@ -376,15 +384,15 @@ class CertificationWindow(tk.Toplevel):
                 format_chapter_code(item.chapter),
                 item.code,
                 item.summary,
-                fmt_eur(activity.amount),
+                self._format_currency(activity.amount),
             ]
             for month_index, month in enumerate(self.months):
                 planned = self.plan[row][month_index]
                 certified = item.certifications.get(month.key)
                 values.extend(
                     [
-                        fmt_eur(planned) if planned else "",
-                        fmt_eur(certified) if certified is not None else "",
+                        self._format_currency(planned) if planned else "",
+                        self._format_currency(certified) if certified is not None else "",
                     ]
                 )
             self.tree.insert("", "end", iid=str(row), values=values)
@@ -417,7 +425,7 @@ class CertificationWindow(tk.Toplevel):
                 sign = "+" if difference > 0.005 else ""
                 label = tk.Label(
                     self.tree,
-                    text=f"{sign}{fmt_eur(difference)}",
+                    text=f"{sign}{self._format_currency(difference)}",
                     foreground=color,
                     background="#FFFFFF",
                     font=("Segoe UI", 7),
@@ -596,7 +604,9 @@ class CertificationWindow(tk.Toplevel):
         )
         report_path.write_text(
             certification_report_html(
-                self.items, self.activities, self.plan, month, month_index + 1, self.project_title
+                self.items, self.activities, self.plan, month, month_index + 1, self.project_title,
+                currency=self._report_settings().currency,
+                custom_currency=self._report_settings().custom_currency,
             ),
             encoding="utf-8",
         )
@@ -667,7 +677,7 @@ class CertificationWindow(tk.Toplevel):
         if remainder:
             self.deviation_label.config(
                 text=(
-                    f"Certificación superior al saldo planificado en {fmt_eur(remainder)}. "
+                    f"Certificación superior al saldo planificado en {self._format_currency(remainder)}. "
                     "No hay previsión futura suficiente; justifica la desviación."
                 )
             )
@@ -709,12 +719,12 @@ class CertificationWindow(tk.Toplevel):
         difference = (certified if certified is not None else 0.0) - planned
         status = "Pendiente de certificar" if certified is None else (
             "Sin desviación" if math.isclose(difference, 0.0, abs_tol=0.005)
-            else f"Desviación: {fmt_eur(difference)}"
+            else f"Desviación: {self._format_currency(difference)}"
         )
         self.deviation_label.config(
             text=(
-                f"{item.code} · {month.label} · Plan: {fmt_eur(planned)} · "
-                f"Certificado: {fmt_eur(certified) if certified is not None else '-'} · {status}"
+                f"{item.code} · {month.label} · Plan: {self._format_currency(planned)} · "
+                f"Certificado: {self._format_currency(certified) if certified is not None else '-'} · {status}"
             )
         )
         self.justification.delete("1.0", "end")
