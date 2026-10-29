@@ -646,8 +646,13 @@ def write_report(state: RcdState, title: str, settings, target: Path) -> None:
                   for key, _, code, description, _ in WASTES if state.selected[key]]
     group_names = {key: label for key, label, *_ in GROUPS}
     demolition_rows = [
-        [row.source, f"{row.quantity:g} {row.unit}", f"{row.factor:g}", group_names[row.group],
-         fmt_number(float(row.volume))]
+        [
+            row.source,
+            f"{fmt_number(float(row.quantity), 3)} {row.unit}",
+            fmt_number(float(row.factor), 3),
+            group_names[row.group],
+            fmt_number(float(row.volume)),
+        ]
         for row in state.demolition if row.included
     ]
     demolition_headers = ["Procedencia", "Medición original", "Factor a m³", "Material", "Volumen (m³)"]

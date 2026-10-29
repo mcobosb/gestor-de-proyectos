@@ -314,7 +314,7 @@ class RcdReportTests(unittest.TestCase):
                 with ZipFile(target) as archive:
                     text = " ".join(ElementTree.fromstring(archive.read("content.xml")).itertext())
             text = " ".join(text.split())
-            for value in ("DEM: Pavimento zona norte", "50 m", "10,00", "0.2",
+            for value in ("DEM: Pavimento zona norte", "50,000 m", "10,00", "0,200",
                           "no de porcentajes del ODS"):
                 self.assertIn(value, text)
 

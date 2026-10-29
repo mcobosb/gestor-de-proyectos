@@ -124,7 +124,7 @@ def write_report(app: BudgetApp, target: Path) -> None:
     )
     budget_headers = ("CÓDIGO", "UD.", "RESUMEN", "CANTIDAD", "PRECIO", "IMPORTE")
     budget_ratios = (50, 20, CONTENT_WIDTH - 250, 50, 60, 70)
-    money = lambda value: f"{Decimal(str(value)).quantize(Decimal('0.01')):.2f}"
+    money = lambda value: fmt_number(float(Decimal(str(value)).quantize(Decimal("0.01"))))
     rows = [
         (item.code, item.unit, item.summary, fmt_number(item.measurement, 3),
          money(item.unit_price), money(item.import_total))

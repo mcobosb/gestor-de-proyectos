@@ -53,6 +53,8 @@ class SafetyHealthTests(unittest.TestCase):
             text = "\n".join(page.extract_text() or "" for page in PdfReader(target).pages)
             self.assertIn("PRESUPUESTO DE SEGURIDAD Y SALUD", text)
             self.assertNotIn("DESCOMPUESTOS", text)
+            self.assertIn("3,11", text)
+            self.assertNotIn("3.11", text)
 
 
 if __name__ == "__main__":
