@@ -23,6 +23,10 @@ if ($LASTEXITCODE -ne 0) {
 if ($LASTEXITCODE -ne 0) {
     throw "Falta Nuitka. Instala las dependencias con: python -m pip install -r requirements.txt -r requirements-build.txt"
 }
+& $python -c "import pdfminer, pdfplumber"
+if ($LASTEXITCODE -ne 0) {
+    throw "Faltan dependencias de ejecución. Instálalas con: python -m pip install -r requirements.txt"
+}
 
 $innoCompiler = Get-Command ISCC.exe -ErrorAction SilentlyContinue
 if ($innoCompiler) {
@@ -62,16 +66,18 @@ $distributionDirectory = Join-Path $nuitkaOutput "bc3_gui.dist"
     --windows-icon-from-ico=iconos\logo.ico `
     --company-name="Manuel Cobos Budia" `
     --product-name="Gestor de Proyectos" `
-    --file-version=1.3.0 `
-    --product-version=1.3.0 `
+    --file-version=1.4.0 `
+    --product-version=1.4.0 `
     --file-description="Gestión de presupuestos, planificación y certificaciones" `
     --output-dir=$nuitkaOutput `
     --output-filename=GestorDeProyectos.exe `
     --include-data-dir=iconos=iconos `
     --include-data-dir=plantillas=plantillas `
+    --include-data-dir=datos=datos `
     --include-package-data=matplotlib `
     --include-package-data=pdfminer `
     --include-module=matplotlib.backends.backend_pdf `
+    --noinclude-unittest-mode=nofollow `
     bc3_gui.py
 if ($LASTEXITCODE -ne 0) {
     throw "La compilación Nuitka ha fallado."
@@ -88,4 +94,4 @@ if ($LASTEXITCODE -ne 0) {
     throw "La creación del instalador con Inno Setup ha fallado."
 }
 
-Write-Host "Instalador creado en dist\GestorDeProyectos-Setup-1.3.0.exe"
+Write-Host "Instalador creado en dist\GestorDeProyectos-Setup-1.4.0.exe"

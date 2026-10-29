@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0
+
+### Añadido
+- Herramienta Seguridad y salud con propuesta revisable por riesgos de las UO
+  BCCA, matriz CSV incluida y capítulo generado en el presupuesto.
+- Porcentaje orientativo configurable e informe PDF del capítulo con
+  presupuesto y mediciones.
+
 ## 1.3.0
 
 ### Añadido

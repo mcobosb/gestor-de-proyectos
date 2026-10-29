@@ -27,7 +27,7 @@ from odt_reports import write_report_odt
 
 
 APPLICATION_NAME = "Gestor de Proyectos"
-APPLICATION_VERSION = "1.3.0"
+APPLICATION_VERSION = "1.4.0"
 REPOSITORY_URL = "https://github.com/mcobosb/gestor-de-proyectos"
 BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/mcobosb"
 
@@ -655,6 +655,7 @@ class BudgetApp:
         self._invoicing_window: tk.Toplevel | None = None
         self.rcd_state: dict = {}
         self._rcd_window: tk.Toplevel | None = None
+        self._safety_health_window: tk.Toplevel | None = None
         self.project_title: str | None = None
         self.project_path: Path | None = None
         self.source_budget_path: Path | None = None
@@ -748,6 +749,7 @@ class BudgetApp:
         tools_menubutton = ttk.Menubutton(toolbar, text="Herramientas", style="Toolbar.TMenubutton")
         tools_menu = tk.Menu(tools_menubutton, tearoff=False)
         tools_menu.add_command(label="RCDs", command=self.open_rcds)
+        tools_menu.add_command(label="Seguridad y salud", command=self.open_safety_health)
         tools_menu.add_command(label="Planificación", command=self.open_planning)
         tools_menu.add_command(label="Certificaciones", command=self.open_certifications)
         tools_menu.add_command(label="Facturación", command=self.open_invoicing)
@@ -1354,6 +1356,7 @@ class BudgetApp:
                 return
             self._dismiss_invoicing()
             self._dismiss_rcds()
+            self._dismiss_safety_health()
             self.budget_dataset = ds
             self.source_budget_path = path
             self.budget_items = ds.to_project_items()
@@ -1390,6 +1393,7 @@ class BudgetApp:
             return
         self._dismiss_invoicing()
         self._dismiss_rcds()
+        self._dismiss_safety_health()
         self.budget_dataset = None
         self.budget_items = []
         self.selected_budget_index = None
@@ -2897,6 +2901,7 @@ class BudgetApp:
             ("Gastos generales (%)", "general_expenses"),
             ("Beneficio industrial (%)", "industrial_profit"), ("IVA (%)", "vat"),
             ("Baja de adjudicación (%)", "tender_discount"),
+            ("Seguridad y salud orientativa (%)", "safety_health_percentage"),
         )
         variables = {}
         values = self.report_settings.to_dict()
@@ -3413,6 +3418,7 @@ class BudgetApp:
 
         self._dismiss_invoicing()
         self._dismiss_rcds()
+        self._dismiss_safety_health()
         self.invoicing_state = invoicing_state
         self.rcd_state = rcd_state
         self.budget_dataset = budget_dataset
@@ -3848,6 +3854,12 @@ th {{ background: #1f4e78; color: white; }}
             self._rcd_window.destroy()
         self._rcd_window = None
 
+    def _dismiss_safety_health(self) -> None:
+        """Cierra la ventana de Seguridad y Salud antes de cambiar de proyecto."""
+        if self._safety_health_window is not None and self._safety_health_window.winfo_exists():
+            self._safety_health_window.destroy()
+        self._safety_health_window = None
+
     def open_rcds(self) -> None:
         """Abre la estimación de residuos y sus datos guardados en el proyecto."""
         if not self.budget_items:
@@ -3859,6 +3871,21 @@ th {{ background: #1f4e78; color: white; }}
         from rcd import RcdWindow
 
         self._rcd_window = RcdWindow(self.root, self)
+
+    def open_safety_health(self) -> None:
+        """Propone y revisa las partidas de Seguridad y Salud del presupuesto activo."""
+        if not self.budget_items:
+            messagebox.showinfo(
+                "Seguridad y salud",
+                "Carga o crea un presupuesto antes de analizar Seguridad y Salud.",
+            )
+            return
+        if self._safety_health_window is not None and self._safety_health_window.winfo_exists():
+            self._safety_health_window.lift()
+            return
+        from safety_health import SafetyHealthWindow
+
+        self._safety_health_window = SafetyHealthWindow(self.root, self)
 
     def _dismiss_invoicing(self) -> None:
         """Cierra la ventana y su lectura pendiente antes de cambiar de proyecto."""

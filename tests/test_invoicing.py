@@ -72,8 +72,12 @@ class InvoiceModelTests(unittest.TestCase):
 
     def test_pdf_runtime_dependency_and_packaged_character_maps(self):
         root = Path(__file__).resolve().parent.parent
-        self.assertIn("pdfplumber>=0.11.10", (root / "requirements.txt").read_text(encoding="utf-8"))
-        self.assertIn("--include-package-data=pdfminer", (root / "build_installer.ps1").read_text(encoding="utf-8"))
+        requirements = (root / "requirements.txt").read_text(encoding="utf-8")
+        self.assertIn("pdfplumber>=0.11.10", requirements)
+        self.assertIn("pdfminer.six", requirements)
+        build_script = (root / "build_installer.ps1").read_text(encoding="utf-8")
+        self.assertIn("--include-package-data=pdfminer", build_script)
+        self.assertIn("--noinclude-unittest-mode=nofollow", build_script)
 
     def test_strict_amounts_and_totals(self):
         for value, expected in (

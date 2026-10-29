@@ -32,7 +32,10 @@ REPORT_NAMES = (
 )
 CERTIFICATION_REPORT_NAMES = ("Resumen certificaciones", "Certificaciones con mediciones")
 DEVIATION_REPORT_NAME = "Informe de desviaciones"
-PERCENTAGE_FIELDS = {"general_expenses", "industrial_profit", "vat", "tender_discount", "indirect_costs"}
+PERCENTAGE_FIELDS = {
+    "general_expenses", "industrial_profit", "vat", "tender_discount", "indirect_costs",
+    "safety_health_percentage",
+}
 CURRENCY_CODES = {"EUR", "USD", "GBP", "CHF", "CAD", "AUD", "OTHER"}
 
 
@@ -54,6 +57,7 @@ class ReportSettings:
     vat: float = 21.0
     tender_discount: float = 0.0
     indirect_costs: float = 0.0
+    safety_health_percentage: float = 2.0
 
     @classmethod
     def from_dict(cls, data: object) -> ReportSettings:
