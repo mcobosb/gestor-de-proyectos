@@ -58,7 +58,8 @@ permite consultar bases de precios.
    el último capítulo. Usa **×** para eliminar la selección.
 4. Las flechas **↑** y **↓** cambian el orden.
 5. Selecciona una partida para consultar sus mediciones, descripción y recursos.
-6. Usa **↻** para editar los datos de la partida seleccionada.
+6. Selecciona un capítulo y usa **✎** para cambiar su nombre; selecciona una
+   partida y usa el mismo botón para editar sus datos.
 
 La columna **Tipo** permite modificar la naturaleza de partidas y recursos.
 Revisa los tipos porque intervienen en los listados de materiales y precios.

@@ -762,7 +762,7 @@ class BudgetApp:
         ttk.Button(
             actions, textvariable=self.bcca_visibility_text, command=self.toggle_bcca_panel
         ).pack(side="left", padx=(0, 8))
-        ttk.Button(actions, text="↻", width=3, command=self.update_selected_budget_item).pack(side="left")
+        ttk.Button(actions, text="✎", width=3, command=self.update_selected_budget_item).pack(side="left")
         for button, help_text in zip(actions.winfo_children(), (
             "Añadir un capítulo o una partida al presupuesto.",
             "Eliminar la partida o el capítulo seleccionado.",
@@ -770,7 +770,7 @@ class BudgetApp:
             "Subir la partida o el capítulo seleccionado.",
             "Bajar la partida o el capítulo seleccionado.",
             "Mostrar u ocultar el panel de la base de referencia.",
-            "Editar los datos de la partida seleccionada.",
+            "Editar el nombre del capítulo o los datos de la partida seleccionada.",
         )):
             ToolTip(button, help_text)
 
@@ -1759,7 +1759,10 @@ class BudgetApp:
         self._set_status(f"Movida la partida {item.code}.")
 
     def update_selected_budget_item(self):
-        """Abre un formulario para editar los campos generales de la partida seleccionada."""
+        """Edita el nombre del capítulo o los campos de la partida seleccionada."""
+        if self.selected_chapter is not None:
+            self.rename_selected_chapter()
+            return
         if self.selected_budget_index is None:
             messagebox.showwarning("Sin selección", "Selecciona una partida del presupuesto para actualizarla.")
             return
@@ -1791,6 +1794,42 @@ class BudgetApp:
         dialog.bind("<Escape>", lambda _event: dialog.destroy())
         localize_widget_tree(dialog)
         dialog.grab_set()
+
+    def rename_selected_chapter(self) -> None:
+        """Solicita y guarda un nuevo nombre para el capítulo seleccionado."""
+        chapter = self.selected_chapter
+        if chapter is None:
+            messagebox.showwarning(
+                "Sin selección",
+                "Selecciona un capítulo del presupuesto para cambiar su nombre.",
+                parent=self.root,
+            )
+            return
+        title = simpledialog.askstring(
+            "Cambiar nombre del capítulo",
+            "Nombre del capítulo:",
+            initialvalue=self._chapter_title(chapter),
+            parent=self.root,
+        )
+        if title is None:
+            return
+        title = title.strip()
+        if not title:
+            messagebox.showwarning(
+                "Nombre requerido",
+                "Indica un nombre para el capítulo.",
+                parent=self.root,
+            )
+            return
+        self.chapter_titles[chapter] = title
+        self.refresh_budget_tree()
+        self.selected_budget_index = None
+        self.selected_chapter = chapter
+        chapter_iid = self.chapter_iid_by_code[chapter]
+        self.budget_tree.selection_set(chapter_iid)
+        self.budget_tree.see(chapter_iid)
+        self._mark_dirty()
+        self._set_status(f"Actualizado el nombre del capítulo {format_chapter_code(chapter)}.")
 
     def _apply_budget_fields(self) -> bool:
         """Valida y aplica los campos editables de la partida actualmente seleccionada."""
