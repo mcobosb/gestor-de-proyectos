@@ -495,8 +495,8 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
             ProjectItem(code="P3", chapter="CAP.01#", unit="ud", summary="Partida sin descomponer", unit_price=5),
         ]
 
-    def test_selected_chapter_can_be_renamed_and_saved_in_project_data(self):
-        """Verify chapter names can be edited without changing their codes."""
+    def test_selected_chapter_name_can_be_edited_and_saved_in_project_data(self):
+        """Verify chapter names remain editable while preserving their code."""
         self.set_report_items()
         self.app.chapter_order = ["CAP.01#"]
         self.app.refresh_budget_tree()
@@ -504,21 +504,70 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.app.budget_tree.selection_set(chapter_iid)
         self.app.on_budget_select(None)
 
-        with patch("bc3_gui.simpledialog.askstring", return_value="  Preparación del terreno  ") as ask:
+        with patch(
+            "bc3_gui.simpledialog.askstring",
+            side_effect=["CAP.01#", "  Preparación del terreno  "],
+        ) as ask:
             self.app.update_selected_budget_item()
 
-        ask.assert_called_once_with(
-            "Cambiar nombre del capítulo",
-            "Nombre del capítulo:",
-            initialvalue="CAP. 01",
-            parent=self.root,
-        )
+        self.assertEqual(ask.call_count, 2)
+        self.assertEqual(ask.call_args_list[0].args[:2], ("Editar capítulo", "Código del capítulo:"))
+        self.assertEqual(ask.call_args_list[0].kwargs["initialvalue"], "CAP.01#")
+        self.assertEqual(ask.call_args_list[1].args[:2], ("Editar capítulo", "Nombre del capítulo:"))
+        self.assertEqual(ask.call_args_list[1].kwargs["initialvalue"], "CAP. 01")
         self.assertEqual(self.app.chapter_titles, {"CAP.01#": "Preparación del terreno"})
         self.assertEqual(self.app.budget_tree.item(chapter_iid, "values")[1], "Preparación del terreno")
         self.assertEqual(self.app.selected_chapter, "CAP.01#")
         self.assertTrue(self.app.is_dirty)
         self.assertEqual(self.app._project_payload()["chapters"]["titles"], self.app.chapter_titles)
         self.assertEqual(self.app.budget_items[0].chapter, "CAP.01#")
+
+    def test_selected_chapter_code_updates_order_titles_items_and_selection(self):
+        """Verify editing a chapter code updates every project reference."""
+        self.set_report_items()
+        self.app.chapter_order = ["CAP.01#"]
+        self.app.chapter_titles = {}
+        self.app.refresh_budget_tree()
+        chapter_iid = self.app.chapter_iid_by_code["CAP.01#"]
+        self.app.budget_tree.selection_set(chapter_iid)
+        self.app.on_budget_select(None)
+
+        with patch(
+            "bc3_gui.simpledialog.askstring",
+            side_effect=["  02  ", "CAP. 02"],
+        ) as ask:
+            self.app.update_selected_budget_item()
+
+        self.assertEqual(ask.call_args_list[1].kwargs["initialvalue"], "CAP. 02")
+        self.assertEqual(self.app.chapter_order, ["02#"])
+        self.assertEqual(self.app.chapter_titles, {"02#": "CAP. 02"})
+        self.assertEqual([item.chapter for item in self.app.budget_items], ["02#"] * 3)
+        self.assertEqual(self.app.selected_chapter, "02#")
+        self.assertEqual(
+            self.app.budget_tree.item(self.app.chapter_iid_by_code["02#"], "text"),
+            "CAP. 02",
+        )
+        self.assertTrue(self.app.is_dirty)
+
+    def test_selected_chapter_cannot_be_renamed_to_an_existing_code(self):
+        """Verify an existing chapter code is rejected without modifying the project."""
+        self.set_report_items()
+        self.app.chapter_order = ["CAP.01#", "CAP.02#"]
+        self.app.refresh_budget_tree()
+        chapter_iid = self.app.chapter_iid_by_code["CAP.01#"]
+        self.app.budget_tree.selection_set(chapter_iid)
+        self.app.on_budget_select(None)
+
+        with (
+            patch("bc3_gui.simpledialog.askstring", return_value="CAP.02#"),
+            patch("bc3_gui.messagebox.showwarning") as warning,
+        ):
+            self.app.update_selected_budget_item()
+
+        warning.assert_called_once()
+        self.assertEqual(self.app.chapter_order, ["CAP.01#", "CAP.02#"])
+        self.assertEqual([item.chapter for item in self.app.budget_items], ["CAP.01#"] * 3)
+        self.assertFalse(self.app.is_dirty)
 
     def test_theme_colors_keep_selection_and_input_states_readable(self):
         """Verify theme colors keep selection and input states readable."""

@@ -801,7 +801,7 @@ class BudgetApp:
             "Subir la partida o el capítulo seleccionado.",
             "Bajar la partida o el capítulo seleccionado.",
             "Mostrar u ocultar el panel de la base de referencia.",
-            "Editar el nombre del capítulo o los datos de la partida seleccionada.",
+            "Editar el código y nombre del capítulo o los datos de la partida seleccionada.",
             "Duplicar la partida seleccionada. La copia marcada con * debe modificarse manualmente.",
         )):
             ToolTip(button, help_text)
@@ -1960,7 +1960,7 @@ class BudgetApp:
         dialog.grab_set()
 
     def rename_selected_chapter(self) -> None:
-        """Solicita y guarda un nuevo nombre para el capítulo seleccionado."""
+        """Solicita y guarda un nuevo código y nombre para el capítulo seleccionado."""
         chapter = self.selected_chapter
         if chapter is None:
             messagebox.showwarning(
@@ -1969,10 +1969,43 @@ class BudgetApp:
                 parent=self.root,
             )
             return
+        code = simpledialog.askstring(
+            "Editar capítulo",
+            "Código del capítulo:",
+            initialvalue=chapter,
+            parent=self.root,
+        )
+        if code is None:
+            return
+        code = code.strip()
+        if not code:
+            messagebox.showwarning(
+                "Código requerido",
+                "Indica un código para el capítulo.",
+                parent=self.root,
+            )
+            return
+        if not code.endswith("#"):
+            code += "#"
+        existing_chapters = (
+            set(self.chapter_order)
+            | set(self.chapter_titles)
+            | {item.chapter for item in self.budget_items}
+        )
+        if code != chapter and code in existing_chapters:
+            messagebox.showwarning(
+                "Capítulo existente",
+                f"El capítulo {format_chapter_code(code)} ya existe.",
+                parent=self.root,
+            )
+            return
+        initial_title = self._chapter_title(chapter)
+        if chapter not in self.chapter_titles and initial_title == format_chapter_code(chapter):
+            initial_title = format_chapter_code(code)
         title = simpledialog.askstring(
-            "Cambiar nombre del capítulo",
+            "Editar capítulo",
             "Nombre del capítulo:",
-            initialvalue=self._chapter_title(chapter),
+            initialvalue=initial_title,
             parent=self.root,
         )
         if title is None:
@@ -1985,15 +2018,26 @@ class BudgetApp:
                 parent=self.root,
             )
             return
-        self.chapter_titles[chapter] = title
+        if chapter in self.chapter_order:
+            position = self.chapter_order.index(chapter)
+            self.chapter_order[position] = code
+        else:
+            self.chapter_order.append(code)
+        self.chapter_titles.pop(chapter, None)
+        self.chapter_titles[code] = title
+        for item in self.budget_items:
+            if item.chapter == chapter:
+                item.chapter = code
         self.refresh_budget_tree()
         self.selected_budget_index = None
-        self.selected_chapter = chapter
-        chapter_iid = self.chapter_iid_by_code[chapter]
+        self.selected_chapter = code
+        chapter_iid = self.chapter_iid_by_code[code]
         self.budget_tree.selection_set(chapter_iid)
         self.budget_tree.see(chapter_iid)
         self._mark_dirty()
-        self._set_status(f"Actualizado el nombre del capítulo {format_chapter_code(chapter)}.")
+        self._set_status(
+            f"Actualizado el capítulo {format_chapter_code(code)}."
+        )
 
     def _apply_budget_fields(self) -> bool:
         """Valida y aplica los campos editables de la partida actualmente seleccionada."""
