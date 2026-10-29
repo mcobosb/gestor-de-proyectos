@@ -91,6 +91,7 @@ Abre **Archivo → Configuración…** y completa:
 - Autoría, cargo o titulación, entidad o servicio.
 - Localidad y texto de firma o fecha.
 - Empresa contratista y representante.
+- Costes Indirectos (%): recargo sobre el precio directo de todas las partidas.
 - Gastos generales, beneficio industrial e IVA.
 - Baja de adjudicación para certificaciones.
 - Formato de salida de los informes: PDF (predeterminado) u ODT editable.
@@ -103,6 +104,14 @@ Abre **Archivo → Configuración…** y completa:
 Los porcentajes deben estar entre 0 y 100. **Guardar** conserva los valores como
 configuración inicial para nuevos proyectos y dentro del proyecto actual.
 Los proyectos ya guardados mantienen su configuración propia.
+
+Si los costes indirectos son distintos de cero, cada partida muestra una línea
+«Costes Indirectos» en su detalle, descompuestos e informes, y su precio e importe
+incluyen el recargo. También se aplica a partidas nuevas y sin descomposición.
+Al cambiar el porcentaje se conserva el precio directo, sin acumular recargos;
+al volver a cero se elimina la línea y se recupera el precio sin recargo.
+Con el recargo activo, el formulario de edición solicita el **Precio directo**;
+los costes indirectos se calculan automáticamente y se modifican desde configuración.
 
 Los gastos generales y el beneficio industrial se calculan sobre el presupuesto
 de ejecución material (PEM). El IVA se aplica después de sumar ambos.

@@ -74,6 +74,9 @@ class ReportCalculationsTests(unittest.TestCase):
             None, [], {"author": 123}, {"vat": True}, {"vat": "NaN"}, {"vat": -1},
             {"template_path": 123}, {"template_path": "plantilla.odt"},
             {"output_format": "docx"},
+            {"indirect_costs": True}, {"indirect_costs": "nan"},
+            {"indirect_costs": "inf"}, {"indirect_costs": -1},
+            {"indirect_costs": 101}, {"indirect_costs": ""},
         ):
             with self.subTest(data=data), self.assertRaises(ValueError):
                 ReportSettings.from_dict(data)
@@ -86,6 +89,8 @@ class ReportCalculationsTests(unittest.TestCase):
         self.assertEqual(
             ReportSettings.from_dict({"output_format": "ODT"}).output_format, "odt"
         )
+        self.assertEqual(ReportSettings.from_dict({}).indirect_costs, 0)
+        self.assertEqual(ReportSettings.from_dict({"indirect_costs": "3,5"}).indirect_costs, 3.5)
 
 
 class ReportLayoutTests(unittest.TestCase):

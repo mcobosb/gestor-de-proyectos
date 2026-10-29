@@ -77,6 +77,26 @@ class ParseFloatTests(unittest.TestCase):
         self.assertEqual(parse_float("1,606.40"), 1606.4)
 
 
+class IndirectCostsTests(unittest.TestCase):
+    def test_percentage_changes_do_not_compound_and_zero_restores_direct_price(self):
+        item = ProjectItem("P", "01#", "ud", "Partida", unit_price=100, measurement=2)
+        for percentage, expected in ((3, 103), (3, 103), (7.5, 107.5), (0, 100)):
+            with self.subTest(percentage=percentage):
+                item.set_indirect_costs(percentage)
+                self.assertEqual(item.unit_price, expected)
+                self.assertEqual(item.import_total, expected * 2)
+                self.assertEqual(bool(item.indirect_components()), bool(percentage))
+        self.assertIsNone(item.direct_unit_price)
+        self.assertEqual(item.decomposition, [])
+
+    def test_rounding_uses_decimal_half_up_and_preserves_original_price(self):
+        item = ProjectItem("P", "01#", "ud", "Partida", unit_price=1.005)
+        item.set_indirect_costs(100)
+        self.assertEqual(item.unit_price, 2.015)
+        item.set_indirect_costs(0)
+        self.assertEqual(item.unit_price, 1.005)
+
+
 @unittest.skipUnless(BUDGET_PATH, "Requiere el presupuesto BC3 local, no distribuido.")
 class BudgetDatasetTests(unittest.TestCase):
     @classmethod
@@ -827,6 +847,103 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
                 self.assertEqual(self.app.report_settings_path.read_bytes(), previous)
                 self.assertEqual(self.app.report_settings.author, "Autor de prueba")
 
+    def test_indirect_costs_update_all_items_and_persist_without_compounding(self):
+        self.set_report_items()
+        original_prices = [item.unit_price for item in self.app.budget_items]
+        self.assertTrue(self.app._save_report_settings({"indirect_costs": "3,0"}))
+        self.assertEqual([item.unit_price for item in self.app.budget_items], [32.96, 23.69, 5.15])
+        for index, item in enumerate(self.app.budget_items):
+            self.assertEqual(item.direct_unit_price, original_prices[index])
+            rows = self.app._report_components(item)
+            self.assertEqual(rows[-1][0].summary, "Costes Indirectos")
+            self.assertEqual(rows[-1][1], 3)
+            self.assertEqual(
+                self.app.budget_tree.item(f"indirect:{index}:0", "values")[1],
+                "Coste directo" if not item.decomposition else "Costes Indirectos",
+            )
+        self.app._show_item_details(self.app.budget_items[1])
+        self.assertEqual(self.app.component_tree.item("indirect:0", "values")[1], "Costes Indirectos")
+        project = self.directory / "indirect.json"
+        self.assertTrue(self.app._write_project_file(project))
+        for _ in range(2):
+            self.assertTrue(self.app._load_project_file(project))
+            self.assertEqual([item.unit_price for item in self.app.budget_items], [32.96, 23.69, 5.15])
+        self.assertTrue(self.app._save_report_settings({"indirect_costs": 0}))
+        self.assertEqual([item.unit_price for item in self.app.budget_items], original_prices)
+        self.assertFalse(any(row.startswith("indirect:") for row in self.app.component_tree.get_children()))
+        self.assertTrue(self.app._load_project_file(project))
+        self.assertEqual(self.app.report_settings.indirect_costs, 0)
+        self.assertEqual([item.unit_price for item in self.app.budget_items], original_prices)
+
+    def test_indirect_costs_follow_new_items_resource_edits_and_direct_price_edits(self):
+        self.set_report_items()
+        self.assertTrue(self.app._save_report_settings({"indirect_costs": 3}))
+        item = ProjectItem("NEW", "CAP.01#", "ud", "Nueva", unit_price=100)
+        self.app._insert_item(item)
+        self.assertEqual(item.unit_price, 103)
+        self.app.on_budget_select(None)
+        self.assertEqual(self.app.budget_fields["price_var"].get(), "100.00")
+        self.app.budget_fields["price_var"].set("200")
+        self.assertTrue(self.app._apply_budget_fields())
+        self.assertEqual(item.unit_price, 206)
+        self.app.selected_budget_index = 0
+        first = self.app.budget_items[0]
+        self.app._commit_component_cell("0", "#3", "3")
+        self.assertEqual(first.direct_unit_price, 45)
+        self.assertEqual(first.unit_price, 46.35)
+        self.assertEqual(self.app.budget_tree.item("indirect:0:0", "values")[-1], "1,35 €")
+        self.app._commit_component_cell("indirect:0", "#3", "99")
+        self.assertEqual(first.unit_price, 46.35)
+
+    def test_indirect_costs_defaults_apply_to_bc3_and_reference_items(self):
+        self.assertTrue(self.app._save_report_settings({"indirect_costs": 3}))
+        source = self.directory / "budget.bc3"
+        source.write_text(
+            "~C|OBRA##||Obra|40||0|\n"
+            "~C|01#||Capitulo|40||0|\n"
+            "~C|P1|m|Partida|10||0|\n"
+            "~C|MO|h|Operario|5||1|\n"
+            "~D|OBRA##|01#\\1\\1\\|\n"
+            "~D|01#|P1\\1\\4\\|\n"
+            "~D|P1|MO\\1\\2\\|\n",
+            encoding="cp1252",
+        )
+        self.app._load_budget_file(source)
+        self.assertEqual(len(self.app.budget_items), 1)
+        self.assertEqual(self.app.budget_items[0].unit_price, 10.3)
+        self.app._load_budget_file(source)
+        self.assertEqual(self.app.budget_items[0].unit_price, 10.3)
+        base = self.app.budget_dataset
+        assert base is not None
+        self.app.reference_bases.append(base)
+        item = self.app._build_item_from_bcca("P1", base)
+        assert item is not None
+        self.app._insert_item(item)
+        self.assertEqual(item.unit_price, 10.3)
+
+    def test_indirect_costs_appear_in_html_pdf_odt_and_ods(self):
+        from odt_reports import write_report_odt
+        from pypdf import PdfReader
+
+        self.set_report_items()
+        self.assertTrue(self.app._save_report_settings({"indirect_costs": 3}))
+        self.assertIn("Costes Indirectos", self.app._price_report_html(2))
+        pdf = self.directory / "indirect.pdf"
+        write_pdf(self.app, "Descompuestos", pdf)
+        self.assertEqual("".join(page.extract_text() for page in PdfReader(pdf).pages).count("Costes Indirectos"), 3)
+        odt = self.directory / "indirect.odt"
+        write_report_odt(self.app, "Descompuestos", odt)
+        with ZipFile(odt) as archive:
+            content = ElementTree.fromstring(archive.read("content.xml"))
+        self.assertEqual("".join(content.itertext()).count("Costes Indirectos"), 3)
+        ods = self.directory / "indirect.ods"
+        with patch("bc3_gui.filedialog.asksaveasfilename", return_value=str(ods)):
+            self.app.export_resource_report("Descompuestos")
+        indirect_rows = [row for row in read_ods_rows(ods) if row[4] == "Costes Indirectos"]
+        self.assertEqual(len(indirect_rows), 3)
+        self.assertEqual([row[5] for row in indirect_rows], [3, 3, 3])
+        self.assertAlmostEqual(indirect_rows[0][7], 0.96)
+
     def test_settings_dialog_saves_fields_through_file_menu(self):
         """Verify settings dialog saves fields through file menu."""
         menu = self.app.file_menu
@@ -839,6 +956,13 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         entries = [child for child in reports_tab.winfo_children() if isinstance(child, ttk.Entry)]
         entries[0].delete(0, "end")
         entries[0].insert(0, "Autor desde ventana")
+        indirect_label = next(
+            child for child in reports_tab.winfo_children()
+            if isinstance(child, ttk.Label) and child.cget("text") == "Costes Indirectos (%)"
+        )
+        indirect_entry = reports_tab.grid_slaves(row=indirect_label.grid_info()["row"], column=1)[0]
+        indirect_entry.delete(0, "end")
+        indirect_entry.insert(0, "3,5")
         format_selector = next(
             child for child in reports_tab.winfo_children()
             if isinstance(child, ttk.Combobox)
@@ -853,6 +977,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.assertEqual(saved.author, "Autor desde ventana")
         self.assertEqual(saved.output_format, "odt")
         self.assertEqual(saved.template_path, "")
+        self.assertEqual(saved.indirect_costs, 3.5)
 
     def test_language_preference_is_saved_and_applied_immediately(self):
         """Save the application language globally and update the visible interface."""

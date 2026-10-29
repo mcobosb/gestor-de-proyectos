@@ -25,7 +25,7 @@ from budget_reports import REPORT_NAMES, ReportSettings, write_pdf
 from odt_reports import write_report_odt
 
 
-APPLICATION_NAME = "Gestor de Proyectos (v1.0.0)"
+APPLICATION_NAME = "Gestor de Proyectos"
 BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/mcobosb"
 
 CONCEPT_TYPES = {
@@ -298,6 +298,37 @@ class ProjectItem:
     certification_justifications: dict[str, str] = field(default_factory=dict)
     concept_type: str = ""
     component_types: dict[str, str] = field(default_factory=dict)
+    direct_unit_price: float | None = None
+    indirect_costs: float = 0.0
+
+    def set_indirect_costs(self, percentage: float, direct_price: float | None = None) -> None:
+        """Aplica el recargo sin perder el precio directo ni acumular porcentajes."""
+        if direct_price is None:
+            direct_price = self.unit_price if self.direct_unit_price is None else self.direct_unit_price
+        if not isfinite(direct_price) or not isfinite(percentage) or not 0 <= percentage <= 100:
+            raise ValueError("El precio directo y el porcentaje de costes indirectos deben ser válidos.")
+        self.indirect_costs = percentage
+        self.direct_unit_price = direct_price if percentage else None
+        if not percentage:
+            self.unit_price = direct_price
+            return
+        amount = Decimal(str(direct_price)) * Decimal(str(percentage)) / 100
+        self.unit_price = float(
+            Decimal(str(direct_price)) + amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        )
+
+    def indirect_components(self) -> list[tuple[Concept, float, float]]:
+        """Genera las líneas calculadas sin modificar los recursos originales."""
+        if not self.indirect_costs or self.direct_unit_price is None:
+            return []
+        rows = []
+        if not self.decomposition:
+            rows.append((Concept("DIRECTO", self.unit, "Coste directo"), 1.0, self.direct_unit_price))
+        rows.append((
+            Concept("%CI", "%", "Costes Indirectos", ctype="%"),
+            self.indirect_costs, self.direct_unit_price / 100,
+        ))
+        return rows
 
     @property
     def import_total(self) -> float:
@@ -1231,6 +1262,8 @@ class BudgetApp:
             self.chapter_titles.clear()
             self.planning_state = {}
             self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
+            for item in self.budget_items:
+                item.set_indirect_costs(self.report_settings.indirect_costs)
             self.project_title = path.stem
             self.project_path = project_path
             self.project_panel_title.set(f"Proyecto: {self._project_title()}")
@@ -1356,6 +1389,8 @@ class BudgetApp:
             "rend_var": tk.StringVar(value="0"),
         }
         for row, (label, key) in enumerate(ITEM_FIELDS):
+            if key == "price_var" and self.report_settings.indirect_costs:
+                label = "Precio directo"
             ttk.Label(form, text=label).grid(row=row, column=0, sticky="w", padx=(0, 8), pady=3)
             ttk.Entry(form, textvariable=values[key], width=50).grid(
                 row=row, column=1, sticky="ew", pady=3
@@ -1503,6 +1538,7 @@ class BudgetApp:
             item.chapter = chapter
         self._ensure_chapter(item.chapter)
         item.recalculate_measurement()
+        item.set_indirect_costs(self.report_settings.indirect_costs)
         index = len(self.budget_items) if position is None else max(0, min(position, len(self.budget_items)))
         self.budget_items.insert(index, item)
         self.refresh_budget_tree()
@@ -1716,6 +1752,8 @@ class BudgetApp:
         form = ttk.Frame(dialog, padding=12)
         form.pack(fill="both", expand=True)
         for row, (label, key) in enumerate(ITEM_FIELDS):
+            if key == "price_var" and self.report_settings.indirect_costs:
+                label = "Precio directo"
             ttk.Label(form, text=label).grid(row=row, column=0, sticky="w", padx=(0, 8), pady=3)
             ttk.Entry(form, textvariable=self.budget_fields[key], width=50).grid(
                 row=row, column=1, sticky="ew", pady=3
@@ -1746,7 +1784,7 @@ class BudgetApp:
             self.budget_fields["rend_var"].get(),
         )
         parsed_numbers = tuple(parse_float(value, float("nan")) for value in raw_numbers)
-        if any(number != number for number in parsed_numbers):
+        if not all(isfinite(number) for number in parsed_numbers):
             messagebox.showerror("Dato inválido", "Comprueba que medición, precio y rendimiento son números válidos.")
             return False
         item.chapter = self.budget_fields["chapter_var"].get().strip() or item.chapter
@@ -1754,7 +1792,8 @@ class BudgetApp:
         item.code = self.budget_fields["code_var"].get().strip() or item.code
         item.unit = self.budget_fields["unit_var"].get().strip() or item.unit
         item.summary = self.budget_fields["summary_var"].get().strip() or item.summary
-        item.measurement, item.unit_price, item.rendimiento = parsed_numbers
+        item.measurement, price, item.rendimiento = parsed_numbers
+        item.set_indirect_costs(self.report_settings.indirect_costs, price)
         if item.measurement_lines:
             item.recalculate_measurement()
             note = " (medición recalculada desde su desglose)"
@@ -1791,7 +1830,8 @@ class BudgetApp:
         self.budget_fields["unit_var"].set(item.unit)
         self.budget_fields["summary_var"].set(item.summary)
         self.budget_fields["measurement_var"].set(f"{item.measurement:.4f}")
-        self.budget_fields["price_var"].set(f"{item.unit_price:.2f}")
+        direct_price = item.unit_price if item.direct_unit_price is None else item.direct_unit_price
+        self.budget_fields["price_var"].set(f"{direct_price:.2f}")
         self.budget_fields["rend_var"].set(f"{item.rendimiento:.4f}")
         self._show_item_details(item)
 
@@ -1868,6 +1908,18 @@ class BudgetApp:
                     ),
                     tags=("resource",),
                 )
+            for resource_index, (resource, quantity, price) in enumerate(item.indirect_components()):
+                self.budget_tree.insert(
+                    item_iid, "end", iid=f"indirect:{index}:{resource_index}",
+                    text=resource.code,
+                    values=(
+                        CONCEPT_TYPES["%" if resource.ctype == "%" else "0"],
+                        resource.summary,
+                        f"{fmt_number(quantity, 4)} {resource.unit}".strip(),
+                        fmt_eur(quantity * price),
+                    ),
+                    tags=("resource",),
+                )
         self.budget_summary.config(text=f"Total del presupuesto: {fmt_eur(total)}")
         self._collapse_chapters_on_refresh = False
 
@@ -1923,6 +1975,8 @@ class BudgetApp:
         if self.budget_tree.identify_column(event.x) != "#1":
             return
         row = self.budget_tree.identify_row(event.y)
+        if row.startswith("indirect:"):
+            return "break"
         bbox = self.budget_tree.bbox(row, "tipo") if row else ()
         if not bbox:
             return
@@ -1954,6 +2008,8 @@ class BudgetApp:
 
     def _commit_budget_type(self, row: str, kind: str) -> None:
         """Aplica el tipo de concepto a la partida o recurso y refresca los importes visibles."""
+        if row.startswith("indirect:"):
+            return
         if row.startswith("chapter:"):
             if kind != "chapter":
                 messagebox.showwarning("Tipo no válido", "Los capítulos deben conservar su tipo.")
@@ -2018,6 +2074,13 @@ class BudgetApp:
                         fmt_eur(quantity * price),
                     )
                 )
+            for index, (component, quantity, price) in enumerate(item.indirect_components()):
+                self.component_tree.insert(
+                    "", "end", iid=f"indirect:{index}", values=(
+                        component.code, component.summary, fmt_number(quantity, 4),
+                        fmt_number(price, 4), fmt_eur(quantity * price),
+                    ),
+                )
             self._update_measurement_total(item)
 
         description = "" if item is None else (item.text or item.summary)
@@ -2034,14 +2097,17 @@ class BudgetApp:
     def _recalculate_component_cost(self, item: ProjectItem) -> None:
         """Recalcula el precio unitario sumando los costes de los componentes."""
         dataset = self._component_dataset(item)
-        if dataset is None or not item.decomposition:
+        if not item.decomposition or (
+            dataset is None and any(code not in item.component_prices for code, _ in item.decomposition)
+        ):
             return
-        item.unit_price = sum(
+        direct_price = sum(
             quantity * item.component_price(
-                code, dataset.concepts.get(code, Concept(code)).price
+                code, dataset.concepts.get(code, Concept(code)).price if dataset else 0.0
             )
             for code, quantity in item.decomposition
         )
+        item.set_indirect_costs(self.report_settings.indirect_costs, direct_price)
 
     def edit_component_cell(self, event):
         """Permite editar cantidad o precio de un recurso al hacer doble clic en su celda."""
@@ -2049,7 +2115,7 @@ class BudgetApp:
             return "break"
         row = self.component_tree.identify_row(event.y)
         column = self.component_tree.identify_column(event.x)
-        if not row or column not in {"#3", "#4"}:
+        if not row or row.startswith("indirect:") or column not in {"#3", "#4"}:
             return "break"
 
         self._close_component_editor()
@@ -2079,6 +2145,8 @@ class BudgetApp:
         """Valida y guarda cantidad o precio de un componente y recalcula la partida."""
         if self.selected_budget_index is None:
             return
+        if row.startswith("indirect:"):
+            return
         number = parse_float(value, float("nan"))
         if number != number:
             messagebox.showerror("Dato inválido", f"'{value}' no es un número válido.")
@@ -2093,7 +2161,8 @@ class BudgetApp:
         else:
             item.component_prices[code] = number
         self._recalculate_component_cost(item)
-        self.budget_fields["price_var"].set(f"{item.unit_price:.2f}")
+        direct_price = item.unit_price if item.direct_unit_price is None else item.direct_unit_price
+        self.budget_fields["price_var"].set(f"{direct_price:.2f}")
         self._show_item_details(item)
         self._refresh_item_row(self.selected_budget_index)
         self._set_status(f"Actualizado el coste de {code} en la partida {item.code}.")
@@ -2146,6 +2215,14 @@ class BudgetApp:
         iid = f"item:{index}"
         if self.budget_tree.exists(iid):
             self.budget_tree.item(iid, text=item.code, values=self._item_row_values(item))
+        for component_index, (component, quantity, price) in enumerate(item.indirect_components()):
+            row = f"indirect:{index}:{component_index}"
+            if self.budget_tree.exists(row):
+                self.budget_tree.item(row, values=(
+                    CONCEPT_TYPES["%" if component.ctype == "%" else "0"],
+                    component.summary, f"{fmt_number(quantity, 4)} {component.unit}".strip(),
+                    fmt_eur(quantity * price),
+                ))
 
         chapter_iid = self.chapter_iid_by_code.get(item.chapter)
         if chapter_iid and self.budget_tree.exists(chapter_iid):
@@ -2347,6 +2424,11 @@ class BudgetApp:
             return False
         self.default_report_settings = settings
         self.report_settings = ReportSettings.from_dict(settings.to_dict())
+        for item in self.budget_items:
+            item.set_indirect_costs(settings.indirect_costs)
+        self.refresh_budget_tree()
+        selected = self.selected_budget_index
+        self._show_item_details(self.budget_items[selected] if selected is not None else None)
         self._mark_dirty()
         if self.project_path is not None and not self._write_project_file(self.project_path):
             return False
@@ -2371,6 +2453,7 @@ class BudgetApp:
             ("Texto de firma / fecha", "signature"),
             ("Empresa contratista", "contractor"),
             ("Representante de la empresa", "contractor_representative"),
+            ("Costes Indirectos (%)", "indirect_costs"),
             ("Gastos generales (%)", "general_expenses"),
             ("Beneficio industrial (%)", "industrial_profit"), ("IVA (%)", "vat"),
             ("Baja de adjudicación (%)", "tender_discount"),
@@ -2667,6 +2750,9 @@ class BudgetApp:
             summary=str(data.get("summary", "")),
             measurement=float(data.get("measurement", 0.0)),
             unit_price=float(data.get("unit_price", 0.0)),
+            direct_unit_price=(
+                float(data["direct_unit_price"]) if data.get("direct_unit_price") is not None else None
+            ),
             rendimiento=float(data.get("rendimiento", 0.0)),
             source=str(data.get("source", "manual")),
             reference_base=str(data.get("reference_base", "")),
@@ -2724,6 +2810,7 @@ class BudgetApp:
                     "summary": item.summary,
                     "measurement": item.measurement,
                     "unit_price": item.unit_price,
+                    "direct_unit_price": item.direct_unit_price,
                     "rendimiento": item.rendimiento,
                     "source": item.source,
                     "reference_base": item.reference_base,
@@ -2794,6 +2881,8 @@ class BudgetApp:
             ]
             if len(self.budget_items) != len(payload["items"]):
                 raise ValueError("Hay una partida con datos no válidos.")
+            for item in self.budget_items:
+                item.set_indirect_costs(report_settings.indirect_costs)
             chapters = payload.get("chapters", {})
             order = chapters.get("order", []) if isinstance(chapters, dict) else []
             self.chapter_order = [str(chapter) for chapter in order] or self._chapters_from_items()
@@ -3027,7 +3116,7 @@ class BudgetApp:
                 )
             concept = concept or Concept(code=code, summary=code)
             rows.append((concept, quantity, item.component_price(code, concept.price)))
-        return rows
+        return rows + item.indirect_components()
 
     def export_resource_report(self, report: str) -> None:
         """Exporta recursos o descompuestos a una hoja de cálculo ODS."""

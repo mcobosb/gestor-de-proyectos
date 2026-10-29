@@ -30,7 +30,7 @@ REPORT_NAMES = (
     "Presupuesto resumen",
 )
 CERTIFICATION_REPORT_NAMES = ("Resumen certificaciones", "Certificaciones con mediciones")
-PERCENTAGE_FIELDS = {"general_expenses", "industrial_profit", "vat", "tender_discount"}
+PERCENTAGE_FIELDS = {"general_expenses", "industrial_profit", "vat", "tender_discount", "indirect_costs"}
 
 
 @dataclass
@@ -48,6 +48,7 @@ class ReportSettings:
     industrial_profit: float = 6.0
     vat: float = 21.0
     tender_discount: float = 0.0
+    indirect_costs: float = 0.0
 
     @classmethod
     def from_dict(cls, data: object) -> ReportSettings:

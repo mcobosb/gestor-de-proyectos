@@ -24,6 +24,8 @@ _TEXT = {
     "Abrir proyecto (JSON)…": ("Open project (JSON)…", "Ouvrir un projet (JSON)…"),
     "Guardar proyecto (JSON)…": ("Save project (JSON)…", "Enregistrer le projet (JSON)…"),
     "Configuración…": ("Settings…", "Paramètres…"),
+    "Costes Indirectos (%)": ("Indirect costs (%)", "Coûts indirects (%)"),
+    "Precio directo": ("Direct price", "Prix direct"),
     "Imprimir y exportar": ("Print and export", "Imprimer et exporter"),
     "Vista previa del presupuesto…": ("Budget preview…", "Aperçu du budget…"),
     "Imprimir presupuesto": ("Print budget", "Imprimer le budget"),
