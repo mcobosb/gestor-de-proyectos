@@ -70,6 +70,17 @@ La columna **Tipo** permite modificar la naturaleza de partidas y recursos.
 Revisa los tipos porque intervienen en los listados de materiales y precios.
 Al pasar el ratón por los botones se muestra su ayuda.
 
+El total del presupuesto aparece a la derecha de la barra azul y siempre
+corresponde al proyecto completo. El buscador situado bajo el panel del proyecto
+filtra por código, resumen y descripción; **Esc** borra la búsqueda.
+
+Junto a editar y duplicar, **↕** expande o contrae todos los capítulos y partidas.
+Los botones **⚙**, **♟** y **▧** muestran, respectivamente, maquinaria, mano de
+obra y materiales, conservando sus capítulos y partidas como contexto. Solo un
+filtro de naturaleza puede estar activo; pulsa otra vez para desactivarlo.
+Puedes combinarlo con el buscador. Estos controles solo cambian la vista:
+no alteran el presupuesto ni sus importes.
+
 ## 4. Editar las mediciones
 
 1. Selecciona una partida del presupuesto.

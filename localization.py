@@ -16,6 +16,11 @@ LANGUAGES = {
 }
 
 _TEXT = {
+    "Buscar en el proyecto:": ("Search project:", "Rechercher dans le projet :"),
+    "Expandir o contraer todos los capítulos y partidas.": (
+        "Expand or collapse all chapters and items.",
+        "Développer ou réduire tous les chapitres et postes.",
+    ),
     "Repositorio en GitHub": ("GitHub repository", "Dépôt GitHub"),
     "Repositorio abierto en el navegador.": (
         "Repository opened in the browser.", "Dépôt ouvert dans le navigateur.",

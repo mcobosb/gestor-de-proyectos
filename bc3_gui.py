@@ -674,6 +674,9 @@ class BudgetApp:
         self._adjusting_sash = False
         self._bcca_visible = True
         self._collapse_chapters_on_refresh = False
+        self._budget_detached: list[tuple[str, str, int]] = []
+        self._budget_filter_open_state: dict[str, bool] | None = None
+        self.budget_resource_filter = ""
         data_directory = user_data_directory(__file__)
         self.recent_projects_path = data_directory / "proyectos_recientes.json"
         self.recent_projects = self._read_recent_projects()
@@ -771,6 +774,12 @@ class BudgetApp:
         )
         info_menubutton["menu"] = info_menu
         info_menubutton.pack(side="left", padx=(0, 8))
+        self.budget_summary = ttk.Label(
+            toolbar,
+            text=f"Total del presupuesto: {self._format_currency(0)}",
+            style="Toolbar.TLabel",
+        )
+        self.budget_summary.pack(side="right", padx=(12, 0))
         self.bcca_visibility_text = tk.StringVar(value="▶")
 
         actions = ttk.Frame(self.root, padding=(10, 8))
@@ -823,6 +832,24 @@ class BudgetApp:
             "Duplicar la partida seleccionada. La copia marcada con * debe modificarse manualmente.",
         )):
             ToolTip(button, help_text)
+        expand_button = ttk.Button(
+            actions, text="↕", width=3, command=self.toggle_all_budget_nodes,
+        )
+        expand_button.pack(side="left", padx=(12, 4))
+        ToolTip(expand_button, "Expandir o contraer todos los capítulos y partidas.")
+        self.budget_filter_buttons: dict[str, ttk.Checkbutton] = {}
+        self.budget_filter_variables: dict[str, tk.BooleanVar] = {}
+        for kind in ("2", "1", "3"):
+            variable = tk.BooleanVar(value=False)
+            self.budget_filter_variables[kind] = variable
+            button = ttk.Checkbutton(
+                actions, text=CONCEPT_TYPES[kind].split()[0], width=3,
+                style="BudgetFilter.TCheckbutton", variable=variable,
+                command=lambda selected=kind: self.toggle_budget_resource_filter(selected),
+            )
+            button.pack(side="left", padx=(0, 4))
+            self.budget_filter_buttons[kind] = button
+            ToolTip(button, f"Filtrar recursos: {CONCEPT_TYPES[kind]}. Pulsar de nuevo para mostrar todos.")
 
         # Panel divisible: arranca al 50 % y el usuario puede reajustarlo.
         self.splitter = ttk.PanedWindow(self.root, orient="horizontal")
@@ -960,12 +987,15 @@ class BudgetApp:
 
         self.budget_fields = {key: tk.StringVar() for _label, key in ITEM_FIELDS}
 
-        self.budget_summary = ttk.Label(
-            self.left_panel,
-            text=f"Total del presupuesto: {self._format_currency(0)}",
-            style="Total.TLabel",
-        )
-        self.budget_summary.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        search_frame = ttk.Frame(self.left_panel)
+        search_frame.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        search_frame.columnconfigure(1, weight=1)
+        ttk.Label(search_frame, text="Buscar en el proyecto:").grid(row=0, column=0, padx=(0, 6))
+        self.budget_search_var = tk.StringVar()
+        self.budget_search = ttk.Entry(search_frame, textvariable=self.budget_search_var)
+        self.budget_search.grid(row=0, column=1, sticky="ew")
+        self.budget_search_var.trace_add("write", self.filter_budget)
+        self.budget_search.bind("<Escape>", lambda _event: self.budget_search_var.set(""))
 
         bcca_columns = ("codigo", "ud", "rend", "precio")
         self.bcca_tree = ttk.Treeview(self.right_panel, columns=bcca_columns, show="tree headings")
@@ -2122,6 +2152,7 @@ class BudgetApp:
     def refresh_budget_tree(self):
         """Reconstruye el árbol del presupuesto, sus capítulos, recursos y totales."""
         self._close_type_editor()
+        self._restore_budget_rows()
         for row in self.budget_tree.get_children():
             self.budget_tree.delete(row)
         self.budget_index_by_iid.clear()
@@ -2212,6 +2243,93 @@ class BudgetApp:
                 )
         self.budget_summary.config(text=f"Total del presupuesto: {self._format_currency(total)}")
         self._collapse_chapters_on_refresh = False
+        self.filter_budget()
+
+    def _restore_budget_rows(self) -> None:
+        """Reincorpora las filas ocultas sin alterar sus identificadores ni su orden."""
+        for iid, parent, index in self._budget_detached:
+            if self.budget_tree.exists(iid):
+                self.budget_tree.move(iid, parent, index)
+        self._budget_detached.clear()
+
+    def filter_budget(self, *_args) -> None:
+        """Filtra la vista por texto y naturaleza conservando los ancestros y los totales."""
+        selected = set(self.budget_tree.selection())
+        if self.selected_budget_index is not None:
+            selected.add(f"item:{self.selected_budget_index}")
+        if self.selected_chapter in self.chapter_iid_by_code:
+            selected.add(self.chapter_iid_by_code[self.selected_chapter])
+        self._restore_budget_rows()
+        term = self.budget_search_var.get().strip().casefold()
+        kind = self.budget_resource_filter
+        active = bool(term or kind)
+        if active and self._budget_filter_open_state is None:
+            self._budget_filter_open_state = {
+                iid: bool(self.budget_tree.item(iid, "open"))
+                for iid in (*self.chapter_iid_by_code.values(), *self.budget_index_by_iid)
+            }
+        hidden: list[tuple[str, str, int]] = []
+        visible: set[str] = set()
+        chapter_codes = {iid: code for code, iid in self.chapter_iid_by_code.items()}
+
+        def visit(parent: str, inherited_match: bool = False) -> bool:
+            """Evalúa cada rama antes de ocultarla, manteniendo su posición original."""
+            any_visible = False
+            for index, iid in enumerate(self.budget_tree.get_children(parent)):
+                values = self.budget_tree.item(iid, "values")
+                text = f"{self.budget_tree.item(iid, 'text')} {' '.join(map(str, values[:2]))}"
+                if iid in chapter_codes:
+                    text += " " + chapter_codes[iid]
+                if iid.startswith("item:"):
+                    text += " " + self.budget_items[self.budget_index_by_iid[iid]].text
+                matches = inherited_match or not term or term in text.casefold()
+                child_visible = visit(iid, matches)
+                is_leaf = not self.budget_tree.get_children(iid)
+                nature_matches = not kind or (
+                    is_leaf and not iid.startswith("chapter:") and
+                    bool(values) and values[0] == CONCEPT_TYPES[kind]
+                )
+                keep = child_visible or (matches and nature_matches)
+                if keep:
+                    visible.add(iid)
+                    any_visible = True
+                    if active and child_visible:
+                        self.budget_tree.item(iid, open=True)
+                else:
+                    hidden.append((iid, parent, index))
+            return any_visible
+
+        visit("")
+        for iid, parent, index in hidden:
+            self.budget_tree.detach(iid)
+            self._budget_detached.append((iid, parent, index))
+        if not active and self._budget_filter_open_state is not None:
+            for iid, opened in self._budget_filter_open_state.items():
+                if self.budget_tree.exists(iid):
+                    self.budget_tree.item(iid, open=opened)
+            self._budget_filter_open_state = None
+        if selected - visible:
+            self.budget_tree.selection_remove(*self.budget_tree.selection())
+            self.selected_budget_index = None
+            self.selected_chapter = None
+            self._show_item_details(None)
+
+    def toggle_budget_resource_filter(self, kind: str) -> None:
+        """Alterna un filtro exclusivo de recursos sin modificar el presupuesto."""
+        self.budget_resource_filter = "" if self.budget_resource_filter == kind else kind
+        for code, variable in self.budget_filter_variables.items():
+            variable.set(code == self.budget_resource_filter)
+        self.filter_budget()
+
+    def toggle_all_budget_nodes(self) -> None:
+        """Expande todas las ramas visibles o las contrae si ya estaban desplegadas."""
+        branches = [
+            iid for iid in (*self.chapter_iid_by_code.values(), *self.budget_index_by_iid)
+            if self.budget_tree.get_children(iid)
+        ]
+        expanded = not all(self.budget_tree.item(iid, "open") for iid in branches)
+        for iid in branches:
+            self.budget_tree.item(iid, open=expanded)
 
     def _chapter_title(self, chapter: str) -> str:
         """Obtiene el título del capítulo personalizado, de una base o de su código."""
@@ -2328,6 +2446,7 @@ class BudgetApp:
             self.budget_tree.item(iid, open=True)
         self.budget_tree.selection_set(row)
         self.budget_tree.see(row)
+        self.filter_budget()
         self._mark_dirty()
 
     def _close_type_editor(self) -> None:
@@ -2511,6 +2630,7 @@ class BudgetApp:
         """Actualiza la fila de partida, el total del capítulo y el total general."""
         if index is None:
             return
+        self._restore_budget_rows()
         item = self.budget_items[index]
         iid = f"item:{index}"
         if self.budget_tree.exists(iid):
@@ -2554,6 +2674,7 @@ class BudgetApp:
 
         total = sum(entry.import_total for entry in self.budget_items)
         self.budget_summary.config(text=f"Total del presupuesto: {self._format_currency(total)}")
+        self.filter_budget()
 
     def add_measurement_line(self):
         """Añade una línea inicial de medición a la partida seleccionada."""

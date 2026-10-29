@@ -83,6 +83,20 @@ def apply_theme(root: tk.Tk) -> None:
         font=("Segoe UI", 11, "bold"), padding=(10, 8),
     )
     style.configure("TButton", background=c["surface"], foreground=c["blue"], padding=(8, 4))
+    style.layout("BudgetFilter.TCheckbutton", [("Toolbutton.border", {
+        "sticky": "nswe", "children": [("Toolbutton.padding", {
+            "sticky": "nswe", "children": [("Toolbutton.label", {"sticky": "nswe"})],
+        })],
+    })])
+    style.configure(
+        "BudgetFilter.TCheckbutton", background=c["surface"],
+        foreground=c["blue"], padding=(8, 4),
+    )
+    style.map(
+        "BudgetFilter.TCheckbutton",
+        background=[("selected", c["blue"]), ("active", c["blue_soft"])],
+        foreground=[("selected", c["surface"])],
+    )
     style.map(
         "TButton", background=[("disabled", c["background"]), ("pressed", c["blue_soft"]),
                                ("active", c["blue_soft"])],

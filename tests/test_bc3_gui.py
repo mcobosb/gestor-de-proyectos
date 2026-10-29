@@ -661,17 +661,108 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         )
         self.assertEqual(self.app.description_text.cget("background"), COLORS["surface"])
         self.assertEqual(self.app.description_text.cget("selectbackground"), COLORS["blue"])
-        self.assertEqual(self.app.budget_summary.cget("style"), "Total.TLabel")
+        self.assertEqual(self.app.budget_summary.cget("style"), "Toolbar.TLabel")
         self.assertEqual(
             style.lookup("Reference.Section.TLabel", "background"), COLORS["teal"]
         )
 
     def test_toolbar_has_no_redundant_application_branding(self):
-        """Keep only menu buttons in the blue toolbar."""
+        """Replace redundant application branding with the budget total."""
         toolbar = self.root.grid_slaves(row=0, column=0)[0]
         self.assertTrue(toolbar.winfo_children())
-        self.assertTrue(all(isinstance(child, ttk.Menubutton)
+        self.assertEqual(self.app.budget_summary.master, toolbar)
+        self.assertEqual(self.app.budget_summary.pack_info()["side"], "right")
+        self.assertTrue(all(isinstance(child, ttk.Menubutton) or child == self.app.budget_summary
                             for child in toolbar.winfo_children()))
+
+    def test_project_search_preserves_totals_order_and_item_indexes(self):
+        """Search descriptions and codes without changing the model or the total."""
+        self.set_report_items()
+        self.app.refresh_budget_tree()
+        total = self.app.budget_summary.cget("text")
+        self.app.budget_items[1].text = "Detalle exclusivo de excavación"
+        self.app.budget_search_var.set("EXCAVACIÓN")
+        chapter = self.app.chapter_iid_by_code["CAP.01#"]
+        self.assertEqual(self.app.budget_tree.get_children(chapter), ("item:1",))
+        self.assertEqual(self.app.budget_index_by_iid["item:1"], 1)
+        self.assertEqual(self.app.budget_summary.cget("text"), total)
+        self.app.budget_search_var.set("no existe")
+        self.assertEqual(self.app.budget_tree.get_children(), ())
+        self.app.refresh_budget_tree()
+        self.app.budget_search_var.set("")
+        self.assertEqual(self.app.budget_tree.get_children(chapter),
+                         ("item:0", "item:1", "item:2"))
+        self.assertEqual(len(self.app.budget_items), 3)
+
+    def test_resource_filters_show_matching_resources_with_ancestors(self):
+        """Use the existing nature icons and combine exclusive filters with search."""
+        self.set_report_items()
+        self.app.budget_dataset.concepts["MAQ"] = Concept("MAQ", "h", "Excavadora", 20, "2")
+        self.app.budget_items[0].decomposition.append(("MAQ", 1))
+        self.app.refresh_budget_tree()
+        total = self.app.budget_summary.cget("text")
+        for kind, icon, expected in (("2", "⚙", ("resource:0:2",)),
+                                     ("1", "♟", ("resource:0:0",)),
+                                     ("3", "▧", ("resource:0:1",))):
+            with self.subTest(kind=kind):
+                self.assertEqual(self.app.budget_filter_buttons[kind].cget("text"), icon)
+                self.app.budget_filter_buttons[kind].invoke()
+                self.assertEqual(self.app.budget_tree.get_children("item:0"), expected)
+                self.assertTrue(self.app.budget_tree.item("item:0", "open"))
+                self.assertEqual(sum(var.get() for var in self.app.budget_filter_variables.values()), 1)
+                self.assertEqual(self.app.budget_summary.cget("text"), total)
+        self.app.budget_search_var.set("P2")
+        chapter = self.app.chapter_iid_by_code["CAP.01#"]
+        self.assertEqual(self.app.budget_tree.get_children(chapter), ("item:1",))
+        self.assertEqual(self.app.budget_tree.get_children("item:1"), ("resource:1:1",))
+        self.app.budget_filter_buttons["3"].invoke()
+        self.assertEqual(self.app.budget_tree.get_children("item:1"),
+                         ("resource:1:0", "resource:1:1"))
+        self.app.budget_search_var.set("")
+        self.assertEqual(self.app.budget_tree.get_children(chapter),
+                         ("item:0", "item:1", "item:2"))
+
+    def test_project_search_matches_resource_and_chapter_and_clears_hidden_selection(self):
+        """Keep ancestor context while removing stale selection from hidden rows."""
+        self.set_report_items()
+        self.app.refresh_budget_tree()
+        self.app.budget_tree.selection_set("item:2")
+        self.app.on_budget_select(None)
+        self.app.budget_search_var.set("Operario")
+        self.assertIsNone(self.app.selected_budget_index)
+        self.assertEqual(self.app.budget_tree.selection(), ())
+        self.assertEqual(self.app.budget_tree.get_children("item:0"), ("resource:0:0",))
+        self.app.budget_search_var.set("CAP.01")
+        chapter = self.app.chapter_iid_by_code["CAP.01#"]
+        self.assertEqual(len(self.app.budget_tree.get_children(chapter)), 3)
+        self.app.budget_search_var.set("")
+        self.app.toggle_all_budget_nodes()
+        for iid in (*self.app.chapter_iid_by_code.values(), *self.app.budget_index_by_iid):
+            if self.app.budget_tree.get_children(iid):
+                self.assertTrue(self.app.budget_tree.item(iid, "open"))
+        self.app.toggle_all_budget_nodes()
+        for iid in (*self.app.chapter_iid_by_code.values(), *self.app.budget_index_by_iid):
+            self.assertFalse(self.app.budget_tree.item(iid, "open"))
+
+    def test_project_filters_survive_edits_and_restore_all_chapters(self):
+        """Respect manual resource natures, edits, and original order across chapters."""
+        self.set_report_items()
+        self.app.budget_items[0].component_types["MAT"] = "2"
+        self.app.budget_items[2].chapter = "CAP.02#"
+        self.app.chapter_order = ["VACIO", "CAP.01#", "CAP.02#"]
+        self.app.refresh_budget_tree()
+        original_chapters = self.app.budget_tree.get_children()
+        self.app.toggle_budget_resource_filter("2")
+        self.assertEqual(self.app.budget_tree.get_children("item:0"), ("resource:0:1",))
+        self.app.budget_items[0].summary = "Resumen cambiado"
+        self.app._refresh_item_row(0)
+        self.assertEqual(self.app.budget_tree.get_children("item:0"), ("resource:0:1",))
+        self.app.refresh_budget_tree()
+        self.app.toggle_budget_resource_filter("2")
+        self.assertEqual(self.app.budget_tree.get_children(), original_chapters)
+        self.assertEqual(self.app.budget_tree.get_children("item:0"),
+                         ("resource:0:0", "resource:0:1"))
+        self.assertFalse(self.app.is_dirty)
 
     def test_window_title_stays_application_after_status_updates(self):
         """Preserve the window-frame title after status updates."""
@@ -955,13 +1046,14 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         """Verify icon buttons have hover help without replacing commands."""
         actions = self.root.grid_slaves(row=1, column=0)[0]
         buttons = actions.winfo_children()
-        self.assertEqual(len(buttons), 8)
+        self.assertEqual(len(buttons), 12)
         for button in buttons:
             self.assertTrue(button.bind("<Enter>"))
             self.assertTrue(button.bind("<Leave>"))
             self.assertTrue(button.bind("<ButtonPress>"))
             self.assertTrue(button.cget("command"))
-        self.assertEqual(buttons[-1].cget("text"), "⧉")
+        self.assertEqual([button.cget("text") for button in buttons[7:]],
+                         ["⧉", "↕", "⚙", "♟", "▧"])
 
     def test_duplicate_selected_item_is_independent_and_marked_for_manual_review(self):
         """Duplicate a work item, avoid copied tracking data, and flag manual review."""
