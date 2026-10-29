@@ -4,6 +4,42 @@ Aplicación de escritorio para Windows que permite trabajar con presupuestos
 FIEBDC-3 (BC3), editar mediciones y descomposiciones, planificar obras y gestionar
 certificaciones mensuales.
 
+## 🚀 Release v1.1.0 — ¡Primeros pasos!
+
+¡Hola a todos! 👋
+
+Aunque la versión marque **v1.1.0**, este es en realidad nuestro **primer
+lanzamiento oficial**. El proyecto nace con muchas ganas, dedicación y cariño,
+y queremos compartir este primer hito con vosotros.
+
+Por ahora incluye lo básico: todavía no está todo lo fino que nos gustaría,
+pero ya es funcional y permite trabajar con las tareas clave que se usan en
+aproximadamente el 95 % de las licitaciones. La intención es ir a lo esencial,
+sin añadir complejidad innecesaria.
+
+### ✨ ¿Qué vas a encontrar en esta primera entrega?
+
+- **Puesta a punto:** La estructura principal lista para empezar a trabajar.
+- **Funcionalidades core:** Herramientas iniciales para presupuestos,
+  mediciones, planificación y certificaciones.
+- **Primeros ajustes:** Un entorno funcional y estable para probarlo y
+  aprovecharlo desde el primer día.
+
+### 💖 Un mensaje de agradecimiento
+
+Si estás leyendo esto o probando el software, **gracias de corazón** por darle
+una oportunidad. Cualquier idea, reporte de fallo o sugerencia es bienvenida.
+Atenderemos las peticiones siempre que respeten la filosofía del software:
+centrarse en lo que realmente se utiliza y mantener el flujo de trabajo ágil y
+sencillo.
+
+Puedes descargar la versión publicada desde la
+[release v1.1.0](https://github.com/mcobosb/gestor-de-proyectos/releases/tag/v1.1.0).
+
+Esperamos que os sea muy útil. ¡Esto es solo el comienzo!
+
+*Hecho con cariño y muchas tazas de café.* ☕
+
 ## Instalación y arranque
 
 En Windows se puede crear e instalar una versión compilada con Nuitka. Una vez
