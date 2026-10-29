@@ -70,6 +70,7 @@ $distributionDirectory = Join-Path $nuitkaOutput "bc3_gui.dist"
     --include-data-dir=iconos=iconos `
     --include-data-dir=plantillas=plantillas `
     --include-package-data=matplotlib `
+    --include-package-data=pdfminer `
     --include-module=matplotlib.backends.backend_pdf `
     bc3_gui.py
 if ($LASTEXITCODE -ne 0) {

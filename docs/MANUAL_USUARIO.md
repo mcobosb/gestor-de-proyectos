@@ -215,7 +215,80 @@ cero impide calcular esa cantidad.
 **Informe de desviaciones** abre una vista HTML adicional para comparar previsión,
 certificado y justificación.
 
-## 10. Resolver problemas frecuentes
+## 10. Controlar la facturación
+
+Abre **Herramientas → Facturación**, elige la **Carpeta de facturas PDF** y pulsa
+**Continuar**. La carpeta se conserva dentro del proyecto; también puedes
+cambiarla desde **Carpeta…** en la tabla. Se leen todos los PDF de esa carpeta
+(no las subcarpetas), de forma local y sin enviarlos a servicios externos.
+
+La aplicación busca las palabras **Obra**, **Expediente**, **Fecha**, **Partida**
+e **Importe** y tablas con cabeceras **Partida / Importe**. También admite tablas
+sin bordes con columnas separadas por espacios. Los documentos escaneados,
+cifrados, dañados o con formatos no reconocidos se señalan para revisión:
+no se inventan importes ni se realiza OCR automáticamente. Cada PDF nuevo
+tiene su columna, aunque no se haya podido interpretar.
+
+### Costes y asignación de facturas
+
+- Cada fila representa un recurso dentro de una partida: material, mano de obra
+  o maquinaria. Los auxiliares se desglosan hasta sus recursos. Los porcentajes
+  no se consideran recursos facturables.
+- El coste previsto inicial es **medición de partida × rendimiento de recurso
+  × precio del recurso**, incluidos los precios editados del proyecto.
+- Si una partida no tiene desglose o faltan recursos, se crea una fila editable
+  de tipo **Otro** por su coste directo. Los recursos ausentes se notifican.
+- Solo se asignan automáticamente códigos de recurso exactos y únicos,
+  o combinaciones exactas **partida / recurso**. Revisa estas asignaciones.
+  Los códigos presentes en varias partidas y los textos ambiguos quedan pendientes.
+- Selecciona la factura y pulsa **Revisar líneas** para ver las incidencias y
+  asignar cada línea a la fila adecuada. Puedes añadir, editar, eliminar
+  o desasignar líneas. Para repartir un importe entre varios recursos, introduce
+  los importes repartidos directamente en sus celdas y revisa la diferencia.
+- **Sin asignar/diferencia** compara el importe leído/declarado con el total
+  introducido en la columna. Los importes sin asignar no se suman como facturados.
+  El importe leído/declarado inicial es la suma de las líneas reconocidas,
+  no una identificación automática del total fiscal de la factura.
+
+### Edición y guardado
+
+Las facturas se ordenan de la más antigua a la más reciente, tanto en el listado
+como en las columnas de costes. Se admiten fechas `dd/mm/aaaa`, `dd-mm-aaaa`,
+`dd.mm.aaaa`, `aaaa-mm-dd` y `aaaa/mm/dd`; las fechas vacías o no reconocidas
+quedan al final. Editar la fecha reordena la factura sin cambiar sus importes.
+
+El listado superior incluye **Nombre del fichero (clic para abrir)**, también
+para los PDF cuya lectura haya fallado. Pulsa ese nombre para abrir la factura
+en el visor predeterminado. Si se ha movido el archivo, corrige **Archivo PDF**
+desde **Editar factura**. Las columnas manuales sin PDF no tienen nombre de fichero.
+
+**Añadir factura** crea columnas manuales. **Editar factura** permite modificar
+su nombre, obra, expediente, fecha, importe declarado, ruta y observaciones.
+Haz doble clic en una celda de factura para editar su importe; se admiten
+abonos negativos. **Añadir/Editar coste** permite personalizar todos los datos
+de fila, incluido su coste previsto. Eliminar una factura no borra el PDF.
+
+Las columnas **Previsto**, **Facturado** y **Restante** permanecen fijas en el
+lateral derecho, incluso al desplazar las facturas horizontalmente.
+**Restante = Previsto − Facturado**; los excesos se muestran en rojo.
+
+**Leer PDF** incorpora documentos nuevos sin sobrescribir las ediciones ni
+duplicar archivos con el mismo contenido. Si cambia un PDF ya importado,
+se avisa: elimina su columna y vuelve a leerlo si quieres sustituirla.
+Los documentos retirados de la carpeta no se eliminan de la tabla automáticamente.
+
+Pulsa el **disquete** o **Ctrl+S** para conservar carpeta, filas, facturas,
+asignaciones y ediciones dentro del JSON del proyecto. El disquete aparece con
+fondo negro mientras hay cambios pendientes y recupera su color al guardar.
+Si aún no se ha guardado el proyecto, se solicita su ruta. Espera a que termine
+la lectura de PDF antes de guardar. Cerrar la ventana conserva los cambios
+en memoria, pero debes guardar el proyecto para persistirlos. Las filas son una
+instantánea editable del presupuesto al iniciar la facturación: los cambios
+posteriores del presupuesto no sustituyen los costes personalizados.
+Los importes deben usar un criterio homogéneo (por ejemplo, todos sin IVA);
+no se deducen ni se añaden impuestos automáticamente.
+
+## 11. Resolver problemas frecuentes
 
 | Problema | Comprobación |
 |---|---|
@@ -227,8 +300,10 @@ certificado y justificación.
 | El PDF no se abre | Ábrelo manualmente desde la ruta de guardado y comprueba la asociación de PDF en Windows |
 | No se guarda | Comprueba permisos de escritura y que el archivo no esté bloqueado |
 | No aparece una certificación en el informe | Selecciona la cabecera del mes y comprueba que tenga importes distintos de cero |
+| No se interpreta una factura | Revisa las cabeceras y los avisos; si es escaneada, realiza OCR externo o introduce sus datos manualmente |
+| Un importe de factura no se asigna | Usa Revisar líneas o reparte el importe en las celdas; los códigos ambiguos nunca se reparten automáticamente |
 
-## 11. Licencia y precauciones
+## 12. Licencia y precauciones
 
 En **Información → Licencia y responsabilidad…** puedes consultar el aviso MIT
 y la limitación de responsabilidad.

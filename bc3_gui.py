@@ -580,6 +580,8 @@ class BudgetApp:
         self.chapter_order: list[str] = []
         self.chapter_titles: dict[str, str] = {}
         self.planning_state: dict = {}
+        self.invoicing_state: dict = {}
+        self._invoicing_window: tk.Toplevel | None = None
         self.project_title: str | None = None
         self.project_path: Path | None = None
         self.source_budget_path: Path | None = None
@@ -671,6 +673,7 @@ class BudgetApp:
         tools_menu = tk.Menu(tools_menubutton, tearoff=False)
         tools_menu.add_command(label="Planificación", command=self.open_planning)
         tools_menu.add_command(label="Certificaciones", command=self.open_certifications)
+        tools_menu.add_command(label="Facturación", command=self.open_invoicing)
         tools_menubutton["menu"] = tools_menu
         tools_menubutton.pack(side="left", padx=(0, 8))
         info_menubutton = ttk.Menubutton(toolbar, text="Información", style="Toolbar.TMenubutton")
@@ -1253,6 +1256,7 @@ class BudgetApp:
                 if self._load_project_file(project_path, ds, path):
                     self._set_status(f"Presupuesto y estado de proyecto cargados: {path.name}")
                 return
+            self._dismiss_invoicing()
             self.budget_dataset = ds
             self.source_budget_path = path
             self.budget_items = ds.to_project_items()
@@ -1261,6 +1265,7 @@ class BudgetApp:
             self.chapter_order = self._chapters_from_items()
             self.chapter_titles.clear()
             self.planning_state = {}
+            self.invoicing_state = {}
             self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
             for item in self.budget_items:
                 item.set_indirect_costs(self.report_settings.indirect_costs)
@@ -1285,6 +1290,7 @@ class BudgetApp:
         )
         if project_title is None:
             return
+        self._dismiss_invoicing()
         self.budget_dataset = None
         self.budget_items = []
         self.selected_budget_index = None
@@ -1292,6 +1298,7 @@ class BudgetApp:
         self.chapter_order = []
         self.chapter_titles.clear()
         self.planning_state = {}
+        self.invoicing_state = {}
         self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
         self.project_title = project_title.strip() or "Nuevo proyecto"
         self.project_path = None
@@ -2801,6 +2808,7 @@ class BudgetApp:
                 "titles": self.chapter_titles,
             },
             "planning": self.planning_state,
+            "invoicing": self.invoicing_state,
             "report_settings": self.report_settings.to_dict(),
             "items": [
                 {
@@ -2856,6 +2864,9 @@ class BudgetApp:
             report_settings = ReportSettings.from_dict(
                 payload.get("report_settings", self.default_report_settings.to_dict())
             )
+            from invoicing import InvoiceState
+
+            invoicing_state = InvoiceState.from_dict(payload.get("invoicing", {})).to_dict()
             if source_budget_path is not None:
                 declared_source = payload.get("source_budget_bc3")
                 if declared_source is not None and Path(declared_source).name != source_budget_path.name:
@@ -2902,6 +2913,8 @@ class BudgetApp:
             messagebox.showerror("No se pudo abrir el proyecto", f"El archivo no es válido:\n{exc}")
             return False
 
+        self._dismiss_invoicing()
+        self.invoicing_state = invoicing_state
         self.budget_dataset = budget_dataset
         self.report_settings = report_settings
         self.project_path = project_path
@@ -3329,6 +3342,32 @@ th {{ background: #1f4e78; color: white; }}
             report_settings=lambda: self.report_settings,
             on_save=self.save_project,
             on_dirty_change=lambda dirty: self._mark_dirty() if dirty else None,
+        )
+
+    def _dismiss_invoicing(self) -> None:
+        """Cierra la ventana y su lectura pendiente antes de cambiar de proyecto."""
+        window = self._invoicing_window
+        if window is not None and window.winfo_exists():
+            window.destroy()
+        self._invoicing_window = None
+
+    def open_invoicing(self) -> None:
+        """Abre la facturación local vinculada al proyecto actual."""
+        if not self.budget_items:
+            messagebox.showinfo("Facturación", "Carga o crea un presupuesto antes de gestionar facturas.")
+            return
+        if self._invoicing_window is not None and self._invoicing_window.winfo_exists():
+            self._invoicing_window.lift()
+            return
+        from invoicing import InvoiceState, InvoicingWindow
+
+        def store(state: InvoiceState) -> None:
+            """Conserva las ediciones de facturación y marca el proyecto modificado."""
+            self.invoicing_state = state.to_dict()
+            self._mark_dirty()
+
+        self._invoicing_window = InvoicingWindow(
+            self.root, self, InvoiceState.from_dict(self.invoicing_state), store, self.save_project,
         )
 
     def show_application_info(self):

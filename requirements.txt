@@ -3,3 +3,4 @@ odfpy>=1.4.1
 reportlab>=4.0
 Pillow>=12.1
 matplotlib>=3.9
+pdfplumber>=0.11.10

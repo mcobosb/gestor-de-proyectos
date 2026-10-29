@@ -76,7 +76,7 @@ La imagen también se incluye en la versión instalada.
 3. Selecciona una partida y pulsa una celda de **Mediciones** para editarla.
 4. Completa **Archivo → Configuración** con la autoría y porcentajes.
 5. Guarda el proyecto en JSON y genera los documentos desde **Informes**.
-6. Utiliza **Herramientas → Planificación** y **Certificaciones** para el seguimiento.
+6. Utiliza **Herramientas → Planificación**, **Certificaciones** y **Facturación** para el seguimiento.
 
 Consulta el [manual de usuario](docs/MANUAL_USUARIO.md) para el procedimiento completo.
 
@@ -91,6 +91,7 @@ El archivo [requirements.txt](requirements.txt) contiene las dependencias de uso
 | openpyxl | Conversión independiente de planificación a XLSX |
 | ReportLab | Informes PDF |
 | Matplotlib | Diagramas de Gantt |
+| pdfplumber | Lectura local de tablas de facturas PDF |
 
 Los informes también se generan como ODT editable con los módulos estándar de Python.
 El formato se elige en **Archivo → Configuración…** y, de inicio, es PDF.
@@ -104,6 +105,7 @@ no abre una ventana, revisa la instalación de Python antes de iniciar la app.
 | [bc3_gui.py](bc3_gui.py) | Entrada de la aplicación, presupuesto y mediciones |
 | [planning.py](planning.py) | Planificación y secuencia de actividades |
 | [certifications.py](certifications.py) | Previsiones y certificaciones mensuales |
+| [invoicing.py](invoicing.py) | Facturas PDF y matriz editable de costes por recurso |
 | [budget_reports.py](budget_reports.py) | Configuración, cálculos e informes |
 | [report_layout.py](report_layout.py) | Estilos y maquetación PDF compartida |
 | [odt_reports.py](odt_reports.py) | Exportación editable de informes ODT |
