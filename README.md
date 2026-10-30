@@ -109,6 +109,13 @@ La imagen también se incluye en la versión instalada.
 6. Guarda el proyecto en JSON y genera los documentos desde **Informes**.
 7. Continúa con **Herramientas → Planificación**, **Certificaciones** y **Facturación** para el seguimiento.
 
+**Guardar** (Ctrl+S) conserva los cambios en el proyecto **JSON**, no en el BC3
+original. No hay autoguardado general; el indicador muestra los cambios pendientes.
+No se crean copias de seguridad automáticas al abrir o importar archivos.
+**Archivo → Guardar como (JSON)…** permite elegir siempre otra carpeta y nombre;
+después, **Guardar** y **Ctrl+S** utilizan la nueva ubicación.
+**Deshacer** (Ctrl+Z) revierte hasta las últimas 50 acciones de la sesión.
+
 Consulta el [manual de usuario](docs/MANUAL_USUARIO.md) para el procedimiento completo.
 
 ## Dependencias
@@ -154,13 +161,13 @@ se han trasladado a una carpeta externa; no son necesarios para ejecutarla.
 
 ### Datos no distribuidos
 
-Este repositorio **no contiene presupuestos BC3, bases BCCA, proyectos JSON,
+Este repositorio **no contiene presupuestos BC3 reales, bases BCCA, proyectos JSON,
 plantillas PDF originales, historial ni configuración personal**.
 El programa funciona con los archivos que aporte cada usuario.
 
 Los informes se reconstruyen mediante código; no requieren abrir los PDF
-originales de ejemplo. El recurso gráfico de la cabecera de los informes
-generales se encuentra en [iconos/report_header_logo.png](iconos/report_header_logo.png).
+originales de ejemplo. El recurso gráfico del logo se encuentra en
+[iconos/logo_odt.jpg](iconos/logo_odt.jpg).
 Los informes de certificación pueden usar la cabecera y el pie de
 [plantillas/plantilla.odt](plantillas/plantilla.odt), opción que se controla
 desde **Archivo → Configuración…**. La plantilla se incluye en el instalador.
@@ -178,10 +185,17 @@ guardada se conservan, pero no se abre ningún proyecto automáticamente.
 .\.venv\Scripts\python.exe -m unittest discover -v
 ```
 
-Las pruebas de interfaz necesitan un escritorio disponible. Algunas pruebas
-adicionales de regresión utilizan los BC3 locales originales y se omiten cuando
-no están presentes. Las pruebas sintéticas de lectura BC3, cálculos, PDF,
-mediciones, planificación y configuración no requieren esos datos privados.
+Las pruebas de interfaz necesitan un escritorio disponible. El presupuesto
+[tests/test.bc3](tests/test.bc3) contiene datos ficticios: se conserva la estructura
+de capítulos, partidas, recursos y mediciones del archivo aportado, pero se
+sustituyen metadatos, códigos, unidades, textos, precios, cantidades y dimensiones.
+No incluye los datos originales ni una tabla de correspondencias.
+Las pruebas de presupuesto, cálculos, PDF y reapertura utilizan este archivo y no
+se omiten si falta: su ausencia es un error.
+
+La prueba adicional de la base BCCA utiliza `tests/BCCA2023_V02.bc3` si se aporta
+localmente y se omite si no está disponible. Esa base no se modifica ni se
+incorpora al repositorio; continúa excluida por las reglas de Git.
 
 Todas las funciones y métodos incluyen docstrings. La suite comprueba su
 presencia y verifica que las dependencias y recursos internos siguen accesibles.

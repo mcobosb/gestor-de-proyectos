@@ -44,7 +44,10 @@ from budget_reports import (
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-BCCA_PATH, BUDGET_PATH = find_bc3_files(BASE_DIR)
+BUDGET_PATH = BASE_DIR / "tests" / "test.bc3"
+BCCA_PATH = BASE_DIR / "tests" / "BCCA2023_V02.bc3"
+if not BCCA_PATH.is_file():
+    BCCA_PATH = None
 
 
 def read_ods_rows(path: Path, sheet_index: int = 0) -> list[list[object]]:
@@ -81,17 +84,19 @@ class ParseFloatTests(unittest.TestCase):
 
 
 class IndirectCostsTests(unittest.TestCase):
-    @unittest.skipUnless((BASE_DIR / "Conectividad_PPO1v2.bc3").exists(), "Requiere el BC3 local.")
     def test_supplied_bc3_balances_all_items_with_and_without_configured_indirect_costs(self):
         """Verify all imported unit prices equal rounded components without modifying the source."""
         from decimal import Decimal, ROUND_HALF_UP
 
-        dataset = Bc3Dataset(BASE_DIR / "Conectividad_PPO1v2.bc3")
+        dataset = Bc3Dataset(BUDGET_PATH)
         for item in dataset.to_project_items():
             original = item.unit_price
             for percentage in (0, 3, 7.5, 0):
                 item.set_indirect_costs(percentage)
                 rows = item.cost_components(dataset) + item.indirect_components()
+                if not rows:
+                    direct = item.unit_price if item.direct_unit_price is None else item.direct_unit_price
+                    rows.insert(0, (Concept(item.code), 1, direct))
                 total = sum((
                     (Decimal(str(quantity)) * Decimal(str(price))).quantize(
                         Decimal(".01"), rounding=ROUND_HALF_UP,
@@ -191,11 +196,10 @@ class IndirectCostsTests(unittest.TestCase):
             ReportSettings.from_dict({"currency": "OTHER"})
 
 
-@unittest.skipUnless(BUDGET_PATH, "Requiere el presupuesto BC3 local, no distribuido.")
 class BudgetDatasetTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        """Load the optional local budget once for the dataset regression tests."""
+        """Load the anonymized fixture once for the dataset regression tests."""
         cls.dataset = Bc3Dataset(BUDGET_PATH)
         cls.items = cls.dataset.to_project_items()
 
@@ -205,24 +209,25 @@ class BudgetDatasetTests(unittest.TestCase):
             [format_chapter_code(code) for code in self.dataset.root_codes],
             [f"CAP. {number:02d}" for number in range(1, 10)],
         )
-        self.assertEqual(len(self.items), 37)
+        self.assertEqual(len(self.items), 71)
         self.assertTrue(all(item.chapter.upper().startswith("CAP") for item in self.items))
-        self.assertNotIn("TP00100", {item.code for item in self.items})
+        self.assertNotIn("R0001", {item.code for item in self.items})
 
     def test_preserves_prices_measurements_and_text(self):
         """Verify preserves prices measurements and text."""
-        first = next(item for item in self.items if item.code == "01UPP00082")
+        first = next(item for item in self.items if item.code == "P0001")
         self.assertEqual(format_chapter_code(first.chapter), "CAP. 01")
-        self.assertEqual(first.unit_price, 3.77)
-        self.assertEqual(first.measurement, 2417.13)
-        self.assertEqual(first.rendimiento, 0.018)
-        self.assertIn("FRESADO DE PAVIMENTO", first.text)
+        self.assertEqual(first.unit_price, 23.08)
+        self.assertEqual(first.measurement, 54)
+        self.assertEqual(first.rendimiento, 0.5)
+        self.assertEqual(first.text, "DESCRIPCION SINTETICA DEL CONCEPTO P0001.")
         self.assertTrue(first.measurement_detail)
 
     def test_reconstructed_total_matches_bc3_root_with_rounding_tolerance(self):
         """Verify reconstructed total matches bc3 root with rounding tolerance."""
         calculated = sum(item.import_total for item in self.items)
-        declared = self.dataset.concepts["CONECTIVIDAD PP01##"].price
+        declared = self.dataset.concepts["OBRA0001##"].price
+        self.assertEqual(declared, 49698.44)
         self.assertAlmostEqual(calculated, declared, delta=0.02)
 
 
@@ -324,7 +329,6 @@ class MeasurementLineTests(unittest.TestCase):
         self.assertAlmostEqual(item.import_total, 180.0)
 
 
-@unittest.skipUnless(BUDGET_PATH, "Requiere el presupuesto BC3 local, no distribuido.")
 class BudgetItemsFromBc3Tests(unittest.TestCase):
     def test_bc3_detail_lines_reproduce_declared_measurement(self):
         """Verify bc3 detail lines reproduce declared measurement."""
@@ -570,6 +574,307 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
             ),
             ProjectItem(code="P3", chapter="CAP.01#", unit="ud", summary="Partida sin descomponer", unit_price=5),
         ]
+
+    def prepare_history(self):
+        """Establece un proyecto conocido como punto inicial del historial."""
+        self.set_report_items()
+        self.app.chapter_order = ["CAP.01#"]
+        self.app.refresh_budget_tree()
+        self.app._reset_history()
+
+    def test_project_safety_open_does_not_copy_or_modify_json_until_saved(self):
+        """Abre el JSON sin escribir copias y lo actualiza solo al guardar."""
+        project = self.directory / "original.json"
+        original = b'{"title": "Original", "items": []}\r\n'
+        project.write_bytes(original)
+        self.assertTrue(self.app._load_project_file(project))
+        self.assertTrue(self.app._load_project_file(project))
+        self.assertEqual(project.read_bytes(), original)
+        self.assertFalse((self.directory / "copias_seguridad").exists())
+        self.app.project_title = "Editado"
+        self.app._mark_dirty()
+        self.assertTrue(self.app.save_project())
+        self.assertNotEqual(project.read_bytes(), original)
+        self.assertFalse((self.directory / "copias_seguridad").exists())
+
+    def test_project_safety_import_keeps_source_unchanged_without_copies(self):
+        """No copia ni modifica el BC3 importado y guarda las ediciones en JSON."""
+        from test_distribution import SYNTHETIC_BC3
+
+        source = self.directory / "presupuesto.bc3"
+        original = SYNTHETIC_BC3.encode("cp1252")
+        source.write_bytes(original)
+        self.app._load_budget_file(source)
+        self.assertEqual(self.app.project_path, source.with_suffix(".json"))
+        self.assertTrue(self.app.project_path.is_file())
+        self.assertFalse((self.directory / "copias_seguridad").exists())
+        self.app.budget_items[0].summary = "EDITADO"
+        self.app._mark_dirty()
+        self.assertTrue(self.app.save_project())
+        self.assertEqual(source.read_bytes(), original)
+        self.assertEqual(
+            json.loads(self.app.project_path.read_text(encoding="utf-8"))["items"][0]["summary"],
+            "EDITADO",
+        )
+        self.assertTrue(self.app._load_project_file(self.app.project_path))
+        self.assertFalse((self.directory / "copias_seguridad").exists())
+        self.assertEqual(source.read_bytes(), original)
+        self.assertEqual(self.app._undo_history, [])
+
+    def test_project_safety_failed_initial_import_save_keeps_pending_changes(self):
+        """Mantiene pendiente el BC3 importado si falla la creación del JSON inicial."""
+        from test_distribution import SYNTHETIC_BC3
+
+        source = self.directory / "presupuesto.bc3"
+        source.write_text(SYNTHETIC_BC3, encoding="cp1252")
+        with (
+            patch("bc3_gui.os.replace", side_effect=OSError("Sin espacio")),
+            patch("bc3_gui.messagebox.showerror") as error,
+        ):
+            self.app._load_budget_file(source)
+            error.assert_called_once()
+            self.assertFalse(self.app.save_project())
+        self.assertTrue(self.app.is_dirty)
+        self.assertFalse(source.with_suffix(".json").exists())
+        self.assertEqual(self.app.budget_items[0].code, "P1")
+        self.assertTrue(self.app.save_project())
+        self.assertFalse(self.app.is_dirty)
+
+    def test_project_safety_failed_atomic_save_preserves_previous_file_and_dirty_state(self):
+        """Un fallo al sustituir no trunca el JSON ni marca las ediciones como guardadas."""
+        self.prepare_history()
+        project = self.directory / "original.json"
+        self.assertTrue(self.app._write_project_file(project))
+        original = project.read_bytes()
+        self.app.budget_items[0].summary = "CAMBIO"
+        self.app._mark_dirty()
+        with (
+            patch("bc3_gui.os.replace", side_effect=OSError("Bloqueado")),
+            patch("bc3_gui.messagebox.showerror") as error,
+        ):
+            self.assertFalse(self.app.save_project())
+            error.assert_called_once()
+        self.assertEqual(project.read_bytes(), original)
+        self.assertTrue(self.app.is_dirty)
+        self.assertEqual(list(self.directory.glob("*.tmp")), [])
+        self.app.undo_last_action()
+        self.assertFalse(self.app.is_dirty)
+
+    def test_project_safety_undo_reverses_insert_delete_and_move(self):
+        """Revierte operaciones estructurales y conserva los datos y totales originales."""
+        self.prepare_history()
+        initial = self.app._capture_project_state()
+        inserted = ProjectItem("N", "02#", "ud", "Nueva", unit_price=7)
+        self.app._insert_item(inserted)
+        self.assertTrue(self.app.is_dirty)
+        self.app._move_item(inserted, -1)
+        self.assertEqual(len(self.app._undo_history), 2)
+        self.app.undo_last_action()
+        self.assertEqual(self.app.budget_items[-1].chapter, "02#")
+        self.app.selected_budget_index = len(self.app.budget_items) - 1
+        with patch("bc3_gui.messagebox.askyesno", return_value=True):
+            self.app.delete_selected_budget_entry()
+        self.app.undo_last_action()
+        self.assertEqual(self.app.budget_items[-1].code, "N")
+        self.app.undo_last_action()
+        self.assertEqual(self.app._capture_project_state(), initial)
+        self.assertFalse(self.app.is_dirty)
+        self.assertEqual(str(self.app.undo_button["state"]), "disabled")
+
+    def test_project_safety_undo_restores_measurements_components_and_description(self):
+        """Recupera mediciones, precios, tipos y textos sin compartir las copias."""
+        self.prepare_history()
+        initial = self.app._capture_project_state()
+        self.app.selected_budget_index = 0
+        self.app._show_item_details(self.app.budget_items[0])
+        self.app.add_measurement_line()
+        self.app._commit_measurement_cell("0", "#2", "3")
+        self.app._commit_component_cell("0", "#4", "25")
+        self.app._commit_budget_type("resource:0:0", "2")
+        self.app.selected_budget_index = 0
+        self.app.description_text.delete("1.0", "end")
+        self.app.description_text.insert("1.0", "TEXTO NUEVO")
+        self.app.on_description_edited()
+        self.assertEqual(len(self.app._undo_history), 5)
+        for _ in range(5):
+            self.app.undo_last_action()
+        self.assertEqual(self.app._capture_project_state(), initial)
+        self.assertFalse(self.app.is_dirty)
+        self.app.budget_items[0].component_prices["MO"] = 99
+        self.assertEqual(self.app._history_state["items"][0].component_prices["MO"], 14)
+
+    def test_project_safety_history_is_limited_to_exactly_50_real_changes(self):
+        """Conserva las últimas 50 acciones, ignorando avisos de cambio sin edición."""
+        self.prepare_history()
+        for value in range(1, 56):
+            self.app.budget_items[0].measurement = value
+            self.app._mark_dirty()
+            self.app._mark_dirty()
+        self.assertEqual(len(self.app._undo_history), 50)
+        for _ in range(50):
+            self.app.undo_last_action()
+        self.assertEqual(self.app.budget_items[0].measurement, 5)
+        self.assertEqual(self.app.undo_last_action(), "break")
+        self.assertEqual(self.app.budget_items[0].measurement, 5)
+
+    def test_project_safety_undo_across_save_does_not_write_to_disk(self):
+        """Deshacer después de guardar marca cambios sin alterar el JSON guardado."""
+        self.prepare_history()
+        project = self.directory / "working.json"
+        self.app.budget_items[0].summary = "GUARDADO"
+        self.app._mark_dirty()
+        self.assertTrue(self.app._write_project_file(project))
+        written = project.read_bytes()
+        self.app.budget_items[0].summary = "OTRO"
+        self.app._mark_dirty()
+        self.app.undo_last_action()
+        self.assertFalse(self.app.is_dirty)
+        self.app.undo_last_action()
+        self.assertTrue(self.app.is_dirty)
+        self.assertEqual(project.read_bytes(), written)
+        self.assertTrue(self.app.save_project())
+        self.assertNotEqual(project.read_bytes(), written)
+
+    def test_project_safety_undo_restores_tool_state_and_closes_stale_windows(self):
+        """Cierra vistas con referencias antiguas y restaura todos los estados asociados."""
+        self.prepare_history()
+        initial = self.app._capture_project_state()
+        window = tk.Toplevel(self.root)
+        self.app._project_windows.append(window)
+        self.app._rcd_window = tk.Toplevel(self.root)
+        self.app._safety_health_window = tk.Toplevel(self.root)
+        self.app._invoicing_window = tk.Toplevel(self.root)
+        self.app.planning_state = {"activities": [{"code": "P1"}]}
+        self.app.invoicing_state = {"marker": "modificado"}
+        self.app.rcd_state = {"marker": "modificado"}
+        self.app.budget_items[0].certifications["2026-10-01"] = 20
+        self.app.report_settings.indirect_costs = 5
+        self.app._mark_dirty()
+        self.app.undo_last_action()
+        self.assertFalse(window.winfo_exists())
+        self.assertEqual(self.app._project_windows, [])
+        self.assertIsNone(self.app._rcd_window)
+        self.assertIsNone(self.app._invoicing_window)
+        self.assertIsNone(self.app._safety_health_window)
+        self.assertEqual(self.app._capture_project_state(), initial)
+
+    def test_project_safety_buttons_shortcuts_and_pending_cell(self):
+        """Expone Guardar y Deshacer e impide guardar una celda sin confirmar."""
+        self.assertTrue(self.root.bind("<Control-s>"))
+        self.assertTrue(self.root.bind("<Control-z>"))
+        with patch.object(self.app, "save_project", return_value=True) as save:
+            self.assertEqual(self.app._save_shortcut(), "break")
+            save.assert_called_once()
+        project = self.directory / "button.json"
+        with patch("bc3_gui.filedialog.asksaveasfilename", return_value=str(project)):
+            self.app.save_button.invoke()
+        self.assertTrue(project.is_file())
+        self.app.project_title = "CAMBIO"
+        self.app._mark_dirty()
+        self.app.undo_button.invoke()
+        self.assertFalse(self.app.is_dirty)
+        self.app._measurement_editor = ttk.Entry(self.app.measurement_tree)
+        with (
+            patch("bc3_gui.messagebox.showwarning") as warning,
+            patch.object(self.app, "_write_project_file") as write,
+        ):
+            self.assertFalse(self.app.save_project())
+            warning.assert_called_once()
+            write.assert_not_called()
+        self.app._close_measurement_editor()
+
+    def test_project_safety_new_project_clears_history_and_asks_before_discarding(self):
+        """No mezcla sesiones ni descarta cambios sin confirmación."""
+        self.prepare_history()
+        self.app.budget_items[0].summary = "CAMBIO"
+        self.app._mark_dirty()
+        with (
+            patch("bc3_gui.simpledialog.askstring", return_value="Nuevo"),
+            patch("bc3_gui.messagebox.askyesnocancel", return_value=None),
+        ):
+            self.app.new_project()
+        self.assertEqual(len(self.app._undo_history), 1)
+        with (
+            patch("bc3_gui.simpledialog.askstring", return_value="Nuevo"),
+            patch("bc3_gui.messagebox.askyesnocancel", return_value=False),
+        ):
+            self.app.new_project()
+        self.assertEqual(self.app.budget_items, [])
+        self.assertEqual(self.app._undo_history, [])
+        self.assertFalse(self.app.is_dirty)
+
+    def test_save_as_menu_selects_folder_and_updates_subsequent_save_destination(self):
+        """Guardar como elige otra carpeta sin modificar el JSON anterior."""
+        self.prepare_history()
+        original = self.directory / "original.json"
+        self.assertTrue(self.app._write_project_file(original))
+        original_bytes = original.read_bytes()
+        self.app.budget_items[0].summary = "EDITADO"
+        self.app._mark_dirty()
+        folder = self.directory / "otra_carpeta"
+        folder.mkdir()
+        target = folder / "nuevo.json"
+        menu = self.app.file_menu
+        index = next(
+            index for index in range(menu.index("end") + 1)
+            if menu.type(index) == "command"
+            and menu.entrycget(index, "label") == "Guardar como (JSON)…"
+        )
+        self.assertEqual(menu.entrycget(index, "accelerator"), "")
+        with patch(
+            "bc3_gui.filedialog.asksaveasfilename", return_value=str(target),
+        ) as dialog:
+            menu.invoke(index)
+        self.assertEqual(dialog.call_args.kwargs["initialdir"], str(original.parent))
+        self.assertEqual(dialog.call_args.kwargs["initialfile"], original.name)
+        self.assertTrue(dialog.call_args.kwargs["confirmoverwrite"])
+        self.assertEqual(self.app.project_path, target)
+        self.assertEqual(self.app.recent_projects[0], target)
+        self.assertFalse(self.app.is_dirty)
+        self.assertEqual(original.read_bytes(), original_bytes)
+        self.assertEqual(
+            json.loads(target.read_text(encoding="utf-8"))["items"][0]["summary"], "EDITADO",
+        )
+        self.app.budget_items[0].summary = "SIGUIENTE"
+        self.app._mark_dirty()
+        with patch("bc3_gui.filedialog.asksaveasfilename") as dialog:
+            self.assertTrue(self.app.save_project())
+            dialog.assert_not_called()
+        self.assertEqual(
+            json.loads(target.read_text(encoding="utf-8"))["items"][0]["summary"], "SIGUIENTE",
+        )
+        self.assertEqual(original.read_bytes(), original_bytes)
+
+    def test_save_as_cancel_and_failure_keep_original_path_and_pending_changes(self):
+        """Cancelar o fallar no cambia la ruta ni descarta los cambios pendientes."""
+        self.prepare_history()
+        original = self.directory / "original.json"
+        self.assertTrue(self.app._write_project_file(original))
+        self.app.budget_items[0].summary = "PENDIENTE"
+        self.app._mark_dirty()
+        history = self.app._undo_history.copy()
+        recent = self.app.recent_projects.copy()
+        with (
+            patch("bc3_gui.filedialog.asksaveasfilename", return_value=""),
+            patch.object(self.app, "_write_project_file") as write,
+        ):
+            self.assertFalse(self.app.save_project_as())
+            write.assert_not_called()
+        self.assertEqual(self.app.project_path, original)
+        self.assertTrue(self.app.is_dirty)
+        self.assertEqual(self.app._undo_history, history)
+        target = self.directory / "nuevo.json"
+        with (
+            patch("bc3_gui.filedialog.asksaveasfilename", return_value=str(target)),
+            patch("bc3_gui.os.replace", side_effect=OSError("Bloqueado")),
+            patch("bc3_gui.messagebox.showerror") as error,
+        ):
+            self.assertFalse(self.app.save_project_as())
+            error.assert_called_once()
+        self.assertEqual(self.app.project_path, original)
+        self.assertTrue(self.app.is_dirty)
+        self.assertEqual(self.app.recent_projects, recent)
+        self.assertFalse(target.exists())
 
     def test_selected_chapter_name_can_be_edited_and_saved_in_project_data(self):
         """Verify chapter names remain editable while preserving their code."""
@@ -1045,14 +1350,21 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
     def test_icon_buttons_have_hover_help_without_replacing_commands(self):
         """Verify icon buttons have hover help without replacing commands."""
         actions = self.root.grid_slaves(row=1, column=0)[0]
-        buttons = actions.winfo_children()
-        self.assertEqual(len(buttons), 12)
+        buttons = [
+            child for child in actions.winfo_children()
+            if isinstance(child, (ttk.Button, ttk.Checkbutton))
+        ]
+        self.assertEqual(len(buttons), 14)
         for button in buttons:
             self.assertTrue(button.bind("<Enter>"))
             self.assertTrue(button.bind("<Leave>"))
             self.assertTrue(button.bind("<ButtonPress>"))
             self.assertTrue(button.cget("command"))
-        self.assertEqual([button.cget("text") for button in buttons[7:]],
+        icon_buttons = [
+            button for button in buttons
+            if button not in (self.app.save_button, self.app.undo_button)
+        ]
+        self.assertEqual([button.cget("text") for button in icon_buttons[7:]],
                          ["⧉", "↕", "⚙", "♟", "▧"])
 
     def test_duplicate_selected_item_is_independent_and_marked_for_manual_review(self):
@@ -1578,9 +1890,8 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
                 for expected in expectations[name]:
                     self.assertIn(expected, report_text)
 
-    @unittest.skipUnless(BUDGET_PATH, "Requiere el presupuesto BC3 local, no distribuido.")
     def test_all_pdf_models_generate_with_actual_budget_data(self):
-        """Verify all pdf models generate with actual budget data."""
+        """Verify all PDF models generate with the anonymized budget fixture."""
         from pypdf import PdfReader
 
         dataset = Bc3Dataset(BUDGET_PATH)
@@ -1608,7 +1919,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
                     self.assertIn("TOTAL EJECUCIÓN MATERIAL", report)
                     self.assertIn("COMENTARIO", report)
                 elif name == "Presupuesto resumen":
-                    self.assertIn("199.808,75", report)
+                    self.assertIn("71.560,79", report)
 
     def test_empty_cancelled_pdf_generation_does_not_create_files(self):
         """Verify empty cancelled pdf generation does not create files."""
@@ -1855,9 +2166,8 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
             error.assert_called_once()
             dialog.assert_not_called()
 
-    @unittest.skipUnless(BUDGET_PATH, "Requiere el presupuesto BC3 local, no distribuido.")
     def test_certification_details_paginate_large_actual_budget(self):
-        """Verify certification details paginate large actual budget."""
+        """Verify certification details paginate the large anonymized budget."""
         from pypdf import PdfReader
 
         dataset = Bc3Dataset(BUDGET_PATH)
@@ -1872,7 +2182,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         reader = PdfReader(target)
         self.assertGreaterEqual(len(reader.pages), 9)
         report = "\n".join(page.extract_text() for page in reader.pages)
-        self.assertIn("138.765,72", report)
+        self.assertIn("49.698,44", report)
         self.assertIn("TOTAL CAP. 09", report)
 
     def test_corrupt_recent_history_is_reported(self):
@@ -1925,7 +2235,6 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
             error.assert_called_once()
         self.assertEqual(self.app.recent_projects, [])
 
-    @unittest.skipUnless(BUDGET_PATH, "Requiere el presupuesto BC3 local, no distribuido.")
     def test_saved_project_reopens_with_source_dataset_and_edited_prices(self):
         """Verify saved project reopens with source dataset and edited prices."""
         self.app.source_budget_path = BUDGET_PATH
@@ -1944,7 +2253,6 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.assertEqual(components[0][2], 123.45)
         self.assertEqual(self.app.recent_projects, [project_path])
 
-    @unittest.skipUnless(BUDGET_PATH, "Requiere el presupuesto BC3 local, no distribuido.")
     def test_legacy_relative_source_is_resolved_next_to_project(self):
         """Verify legacy relative source is resolved next to project."""
         source = self.directory / BUDGET_PATH.name

@@ -16,6 +16,27 @@ LANGUAGES = {
 }
 
 _TEXT = {
+    "Deshacer": ("Undo", "Annuler"),
+    "Sin cambios pendientes": ("No pending changes", "Aucune modification en attente"),
+    "Cambios sin guardar": ("Unsaved changes", "Modifications non enregistrées"),
+    "Guardar el proyecto JSON (Ctrl+S). No modifica el BC3 original.": (
+        "Save the JSON project (Ctrl+S). Does not modify the original BC3.",
+        "Enregistrer le projet JSON (Ctrl+S). Ne modifie pas le BC3 original.",
+    ),
+    "Deshacer la última acción del proyecto (Ctrl+Z). Hasta 50 acciones.": (
+        "Undo the last project action (Ctrl+Z). Up to 50 actions.",
+        "Annuler la dernière action du projet (Ctrl+Z). Jusqu'à 50 actions.",
+    ),
+    "No hay acciones que deshacer.": ("There are no actions to undo.", "Aucune action à annuler."),
+    "Última acción deshecha. Guarda el proyecto para conservar este estado.": (
+        "Last action undone. Save the project to keep this state.",
+        "Dernière action annulée. Enregistrez le projet pour conserver cet état.",
+    ),
+    "Edición pendiente": ("Pending edit", "Modification en cours"),
+    "Confirma la celda con Intro o cancélala con Escape antes de guardar el proyecto.": (
+        "Confirm the cell with Enter or cancel it with Escape before saving the project.",
+        "Validez la cellule avec Entrée ou annulez avec Échap avant d'enregistrer le projet.",
+    ),
     "Buscar en el proyecto:": ("Search project:", "Rechercher dans le projet :"),
     "Expandir o contraer todos los capítulos y partidas.": (
         "Expand or collapse all chapters and items.",
@@ -32,6 +53,7 @@ _TEXT = {
     "Quitar base de referencia…": ("Remove reference database…", "Retirer la base de référence…"),
     "Abrir proyecto (JSON)…": ("Open project (JSON)…", "Ouvrir un projet (JSON)…"),
     "Guardar proyecto (JSON)…": ("Save project (JSON)…", "Enregistrer le projet (JSON)…"),
+    "Guardar como (JSON)…": ("Save as (JSON)…", "Enregistrer sous (JSON)…"),
     "Configuración…": ("Settings…", "Paramètres…"),
     "Costes Indirectos (%)": ("Indirect costs (%)", "Coûts indirects (%)"),
     "Precio directo": ("Direct price", "Prix direct"),

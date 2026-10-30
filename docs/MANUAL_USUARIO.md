@@ -200,12 +200,45 @@ de presupuesto.
 
 ## 6. Guardar
 
-Usa **Archivo → Guardar proyecto (JSON)…**. El JSON conserva partidas, mediciones,
+Usa el botón **Guardar** o **Ctrl+S** para actualizar el archivo actual.
+**Archivo → Guardar como (JSON)…** abre siempre el selector para elegir carpeta
+y nombre, aunque el proyecto ya tenga una ruta. Tras guardar correctamente,
+esa será la ubicación utilizada por **Guardar** y **Ctrl+S**. Cancelar el selector
+no cambia el proyecto ni su ruta.
+El JSON conserva partidas, mediciones,
 precios editados, planificación, certificaciones y configuración de informes.
 
-Los cambios de medición deben confirmarse antes de guardar. Al cerrar la app,
+El **BC3 es el presupuesto de origen**: se lee, pero no se reescribe al guardar.
+El **JSON es el proyecto de trabajo**: para continuar con los cambios otro día,
+abre ese JSON, no vuelvas a importar el BC3. Guardar no exporta un BC3 actualizado.
+
+No hay autoguardado general. La barra muestra **Cambios sin guardar** o
+**Sin cambios pendientes**. Al importar un BC3 se crea un JSON inicial;
+algunas herramientas y la configuración también guardan al pulsar sus botones de
+guardado. El resto de las ediciones queda en memoria hasta guardar el proyecto.
+
+Los cambios de celda deben confirmarse con **Intro** (o cancelarse con **Escape**)
+antes de guardar. Al cerrar la app o cambiar de proyecto,
 si quedan cambios pendientes, puedes guardarlos, descartarlos o cancelar el cierre.
 El guardado no sobrescribe el BC3 original.
+
+No se crean copias de seguridad automáticas al abrir o importar archivos.
+El BC3 de origen permanece intacto y el JSON se actualiza al guardar el proyecto.
+
+### Deshacer
+
+El botón **Deshacer** o **Ctrl+Z** revierte hasta las últimas **50 acciones**:
+altas, bajas, duplicados, movimientos, ediciones de partidas, mediciones,
+descompuestos, descripciones, tipos, configuración y cambios comunicados por
+las herramientas. No guarda automáticamente ni revierte archivos ya escritos.
+Puedes deshacer incluso después de guardar; para conservar ese estado debes
+guardar de nuevo. El historial se reinicia al crear o abrir otro proyecto y
+no se conserva al cerrar la aplicación. No hay botón Rehacer.
+
+Al deshacer se cierran las ventanas de herramientas y configuración para que no
+sigan editando partidas anteriores; puedes volver a abrirlas con el estado
+restaurado. Las preferencias globales (por ejemplo, idioma y configuración inicial
+para nuevos proyectos) y los informes exportados no forman parte del historial.
 
 Si tras trasladar el proyecto falta su BC3 de origen, puede abrirse el JSON,
 pero algunos informes de recursos necesitarán la base original o los precios

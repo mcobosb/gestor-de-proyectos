@@ -31,6 +31,56 @@ SYNTHETIC_BC3 = r"""~V|SYNTHETIC|FIEBDC-3/2016|Pruebas||
 class DistributionTests(unittest.TestCase):
     """Verifica que el código distribuido no requiere los datos del puesto de trabajo."""
 
+    def test_budget_fixture_contains_only_synthetic_records(self):
+        """Impide incorporar campos libres o metadatos privados en el BC3 de prueba."""
+        path = ROOT / "tests" / "test.bc3"
+        records = path.read_text(encoding="ascii").splitlines()
+        self.assertEqual(
+            records[0], "~V|SYNTHETIC TEST FIXTURE|FIEBDC-3/2016|DATOS FICTICIOS||",
+        )
+        dataset = Bc3Dataset(path)
+        code_pattern = r"(?:OBRA\d{4}##|CAP\.\d{2}#|P\d{4}|R\d{4}|%R\d{4})"
+        self.assertEqual(len(dataset.concepts), 218)
+        self.assertEqual(sum(len(c.children) for c in dataset.concepts.values()), 546)
+        for record in records[1:]:
+            fields = record.split("|")
+            kind = fields[0]
+            with self.subTest(kind=kind, code=fields[1]):
+                self.assertIn(kind, {"~C", "~T", "~D", "~M"})
+                self.assertEqual(fields[-1], "")
+                if kind != "~M":
+                    self.assertRegex(fields[1], f"^{code_pattern}$")
+                    self.assertIn(fields[1], dataset.concepts)
+                if kind == "~C":
+                    self.assertEqual(len(fields), 8)
+                    self.assertIn(fields[2], {"", "ud", "h", "%"})
+                    self.assertEqual(fields[3], f"CONCEPTO SINTETICO {fields[1]}")
+                    self.assertRegex(fields[4], r"^\d+\.\d{2}$")
+                    self.assertEqual(fields[5], "")
+                    self.assertIn(fields[6], {"0", "1", "2", "3"})
+                elif kind == "~T":
+                    self.assertEqual(len(fields), 4)
+                    self.assertEqual(
+                        fields[2], f"DESCRIPCION SINTETICA DEL CONCEPTO {fields[1]}.",
+                    )
+                elif kind == "~D":
+                    self.assertEqual(len(fields), 4)
+                    self.assertRegex(
+                        fields[2], rf"^(?:{code_pattern}\\1\\\d+(?:\.\d+)?\\)+$",
+                    )
+                    for child in fields[2].split("\\")[::3][:-1]:
+                        self.assertIn(child, dataset.concepts)
+                elif kind == "~M":
+                    self.assertEqual(len(fields), 6)
+                    parent, child = fields[1].split("\\")
+                    self.assertIn(parent, dataset.concepts)
+                    self.assertIn(child, dataset.concepts)
+                    self.assertEqual(fields[2], "1\\")
+                    self.assertRegex(fields[3], r"^\d+$")
+                    self.assertRegex(
+                        fields[4], r"^(?:\\TRAMO SINTETICO \d+\\[123]\\[1-5]\\\\\\)+$",
+                    )
+
     def test_splash_displays_image_for_two_seconds_and_closes(self):
         """Mantiene la imagen visible dos segundos sin mostrar la ventana principal."""
         root = tk.Tk()
@@ -166,7 +216,7 @@ class DistributionTests(unittest.TestCase):
             self.assertEqual(item.import_total, 40)
             self.assertEqual(item.decomposition, [("MO", 2)])
             self.assertEqual(item.measurement_lines[0].partial, 4)
-            self.assertEqual(item.text, "Descripcion ficticia de la partida.")
+            self.assertEqual(item.text, "DESCRIPCION FICTICIA DE LA PARTIDA.")
 
     def test_empty_installation_has_no_implicit_budget(self):
         """Permite arrancar una instalación limpia sin BC3 incluidos."""
@@ -202,7 +252,7 @@ class DistributionTests(unittest.TestCase):
         """Comprueba los recursos enlazados y las dependencias externas de la app."""
         self.assertTrue((ROOT / "iconos" / "logo.ico").is_file())
         self.assertTrue((ROOT / "iconos" / "Arranque.jpg").is_file())
-        self.assertTrue((ROOT / "iconos" / "report_header_logo.png").is_file())
+        self.assertTrue((ROOT / "iconos" / "logo_odt.jpg").is_file())
         requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8").lower()
         for name in ("odfpy", "openpyxl", "reportlab", "pillow", "matplotlib"):
             with self.subTest(package=name):

@@ -25,6 +25,7 @@ Desktop.ini
 # Presupuestos, bases de precios, proyectos y preferencias locales.
 *.bc3
 *.BC3
+!tests/test.bc3
 *.json
 
 # Plantillas originales y documentos e informes de trabajo.

@@ -656,6 +656,7 @@ class BudgetApp:
         self.rcd_state: dict = {}
         self._rcd_window: tk.Toplevel | None = None
         self._safety_health_window: tk.Toplevel | None = None
+        self._project_windows: list[tk.Toplevel] = []
         self.project_title: str | None = None
         self.project_path: Path | None = None
         self.source_budget_path: Path | None = None
@@ -691,6 +692,9 @@ class BudgetApp:
         self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
 
         self._build_ui()
+        self._reset_history()
+        self.root.bind("<Control-s>", self._save_shortcut)
+        self.root.bind("<Control-z>", self.undo_last_action)
         self.root.protocol("WM_DELETE_WINDOW", self._close_application)
 
     def _build_ui(self) -> None:
@@ -718,7 +722,9 @@ class BudgetApp:
         )
         file_menu.add_separator()
         file_menu.add_command(label="Abrir proyecto (JSON)…", command=self.load_project_dialog)
-        file_menu.add_command(label="Guardar proyecto (JSON)…", command=self.save_project)
+        file_menu.add_command(
+            label="Guardar como (JSON)…", command=self.save_project_as
+        )
         file_menu.add_separator()
         file_menu.add_command(label="Configuración…", command=self.open_report_settings)
         file_menubutton["menu"] = file_menu
@@ -786,6 +792,14 @@ class BudgetApp:
 
         actions = ttk.Frame(self.root, padding=(10, 8))
         actions.grid(row=1, column=0, sticky="ew")
+        self.save_button = ttk.Button(actions, text="Guardar", command=self.save_project)
+        self.save_button.pack(side="left", padx=(0, 4))
+        ToolTip(self.save_button, translate("Guardar el proyecto JSON (Ctrl+S). No modifica el BC3 original."))
+        self.undo_button = ttk.Button(actions, text="Deshacer", command=self.undo_last_action)
+        self.undo_button.pack(side="left", padx=(0, 8))
+        ToolTip(self.undo_button, translate("Deshacer la última acción del proyecto (Ctrl+Z). Hasta 50 acciones."))
+        self.save_state_label = ttk.Label(actions, style="Muted.TLabel")
+        self.save_state_label.pack(side="right", padx=(8, 0))
         self.add_button = ttk.Button(
             actions, text="+", width=3, command=self.show_add_menu, style="Accent.TButton"
         )
@@ -823,7 +837,10 @@ class BudgetApp:
             width=3,
             command=self.duplicate_selected_budget_item,
         ).pack(side="left", padx=(4, 0))
-        for button, help_text in zip(actions.winfo_children(), (
+        for button, help_text in zip((
+            child for child in actions.winfo_children()
+            if child not in (self.save_button, self.undo_button, self.save_state_label)
+        ), (
             "Añadir un capítulo o una partida al presupuesto.",
             "Eliminar la partida o el capítulo seleccionado.",
             "Añadir al presupuesto la partida o el capítulo completo seleccionado en la base de referencia.",
@@ -1351,9 +1368,9 @@ class BudgetApp:
             ds = Bc3Dataset(path)
             project_path = path.with_suffix(".json")
             if project_path.exists():
-                if self._load_project_file(project_path, ds, path):
-                    self._set_status(f"Presupuesto y estado de proyecto cargados: {path.name}")
+                self._load_project_file(project_path, ds, path)
                 return
+            self._dismiss_project_windows()
             self._dismiss_invoicing()
             self._dismiss_rcds()
             self._dismiss_safety_health()
@@ -1375,6 +1392,7 @@ class BudgetApp:
             self.project_panel_title.set(f"Proyecto: {self._project_title()}")
             self._collapse_chapters_on_refresh = True
             self.refresh_budget_tree()
+            self._reset_history(saved=False)
             if not self._write_project_file(self.project_path):
                 return
             self._set_status(f"Presupuesto cargado: {path.name}")
@@ -1391,6 +1409,9 @@ class BudgetApp:
         )
         if project_title is None:
             return
+        if not self._confirm_project_change():
+            return
+        self._dismiss_project_windows()
         self._dismiss_invoicing()
         self._dismiss_rcds()
         self._dismiss_safety_health()
@@ -1412,6 +1433,7 @@ class BudgetApp:
         self._collapse_chapters_on_refresh = True
         self.refresh_budget_tree()
         self._show_item_details(None)
+        self._reset_history()
         self._set_status("Nuevo proyecto vacío creado.")
 
     def _chapters_from_items(self) -> list[str]:
@@ -1577,6 +1599,7 @@ class BudgetApp:
             self.planning_state = {}
             self.refresh_budget_tree()
             self._show_item_details(None)
+            self._mark_dirty()
             self._set_status(f"Eliminado el capítulo {format_chapter_code(chapter)}.")
             return
 
@@ -1599,6 +1622,7 @@ class BudgetApp:
         self.planning_state = {}
         self.refresh_budget_tree()
         self._show_item_details(None)
+        self._mark_dirty()
         self._set_status(f"Eliminada la partida {item.code}.")
 
     def _format_currency(self, value: float) -> str:
@@ -1652,7 +1676,7 @@ class BudgetApp:
     def load_budget_dialog(self):
         """Abre el selector de archivos para importar un presupuesto BC3."""
         path = filedialog.askopenfilename(title="Selecciona un presupuesto .bc3", filetypes=[("BC3", "*.bc3")])
-        if path:
+        if path and self._confirm_project_change():
             self._load_budget_file(Path(path))
 
     def load_bcca_dialog(self):
@@ -1769,6 +1793,7 @@ class BudgetApp:
             self.budget_tree.selection_set(iid)
             self.budget_tree.see(iid)
         self._set_status(f"Partida añadida a {item.chapter}: {item.code} - {item.summary}")
+        self._mark_dirty()
 
     def add_selected_bcca_to_budget(self):
         """Añade al presupuesto la partida o capítulo de referencia seleccionado."""
@@ -1928,6 +1953,7 @@ class BudgetApp:
         iid = self.chapter_iid_by_code[chapter]
         self.budget_tree.selection_set(iid)
         self.budget_tree.see(iid)
+        self._mark_dirty()
         self._set_status(f"Movido el capítulo {format_chapter_code(chapter)}.")
 
     def _move_item(self, item: ProjectItem, direction: int) -> None:
@@ -1974,6 +2000,7 @@ class BudgetApp:
                 for candidate in items_by_chapter[chapter_code]
             ]
         self._select_budget_item(item)
+        self._mark_dirty()
         self._set_status(f"Movida la partida {item.code}.")
 
     def update_selected_budget_item(self):
@@ -2550,6 +2577,8 @@ class BudgetApp:
 
         def commit(_event=None):
             """Confirma el valor introducido en la celda de componente editable."""
+            if self._component_editor is not editor:
+                return
             value = editor.get()
             self._close_component_editor()
             self._commit_component_cell(row, column, value)
@@ -2590,6 +2619,7 @@ class BudgetApp:
         self.budget_fields["price_var"].set(f"{direct_price:.2f}")
         self._show_item_details(item)
         self._refresh_item_row(self.selected_budget_index)
+        self._mark_dirty()
         self._set_status(f"Actualizado el coste de {code} en la partida {item.code}.")
 
     def _close_component_editor(self) -> None:
@@ -2790,8 +2820,91 @@ class BudgetApp:
         self._mark_dirty()
 
     def _mark_dirty(self) -> None:
-        """Marca el proyecto como modificado desde su último guardado."""
-        self.is_dirty = True
+        """Registra una edición real y actualiza el indicador de cambios pendientes."""
+        state = self._capture_project_state()
+        if state != self._history_state:
+            self._undo_history.append(self._history_state)
+            del self._undo_history[:-50]
+            self._history_state = state
+        self.is_dirty = state != self._saved_state
+        self._update_save_controls()
+
+    def _capture_project_state(self) -> dict:
+        """Copia los datos editables sin duplicar bases BC3 ni objetos de interfaz."""
+        return deepcopy({
+            "items": self.budget_items,
+            "order": self.chapter_order,
+            "titles": self.chapter_titles,
+            "planning": self.planning_state,
+            "invoicing": self.invoicing_state,
+            "rcds": self.rcd_state,
+            "settings": self.report_settings,
+            "title": self.project_title,
+        })
+
+    def _reset_history(self, saved: bool = True) -> None:
+        """Establece el estado inicial de una sesión y descarta el historial anterior."""
+        self._undo_history: list[dict] = []
+        self._history_state = self._capture_project_state()
+        self._saved_state: dict | None = self._history_state if saved else None
+        self.is_dirty = not saved
+        self._update_save_controls()
+
+    def _update_save_controls(self) -> None:
+        """Muestra si quedan cambios pendientes y si existe alguna acción reversible."""
+        self.undo_button.configure(state="normal" if self._undo_history else "disabled")
+        self.save_state_label.configure(
+            text=translate("Cambios sin guardar" if self.is_dirty else "Sin cambios pendientes")
+        )
+
+    def undo_last_action(self, event=None) -> str:
+        """Restaura la última edición sin modificar los archivos guardados en disco."""
+        self._close_measurement_editor()
+        self._close_component_editor()
+        self._close_type_editor()
+        if not self._undo_history:
+            self._set_status("No hay acciones que deshacer.")
+            return "break"
+        self._dismiss_project_windows()
+        self._dismiss_invoicing()
+        self._dismiss_rcds()
+        self._dismiss_safety_health()
+        state = self._undo_history.pop()
+        restored = deepcopy(state)
+        self.budget_items = restored["items"]
+        self.chapter_order = restored["order"]
+        self.chapter_titles = restored["titles"]
+        self.planning_state = restored["planning"]
+        self.invoicing_state = restored["invoicing"]
+        self.rcd_state = restored["rcds"]
+        self.report_settings = restored["settings"]
+        self.project_title = restored["title"]
+        self.selected_budget_index = None
+        self.selected_chapter = None
+        self._history_state = state
+        self.is_dirty = state != self._saved_state
+        self.refresh_budget_tree()
+        self._show_item_details(None)
+        self.project_panel_title.set(f"Proyecto: {self._project_title()}")
+        self._update_save_controls()
+        self._set_status("Última acción deshecha. Guarda el proyecto para conservar este estado.")
+        return "break"
+
+    def _save_shortcut(self, event=None) -> str:
+        """Guarda el proyecto desde el teclado sin propagar el atajo."""
+        self.save_project()
+        return "break"
+
+    def _confirm_project_change(self) -> bool:
+        """Ofrece guardar antes de sustituir un proyecto con cambios pendientes."""
+        if not self.is_dirty:
+            return True
+        choice = messagebox.askyesnocancel(
+            "Cambios sin guardar",
+            "Hay cambios sin guardar. ¿Quieres guardarlos antes de abrir otro proyecto?",
+            parent=self.root,
+        )
+        return choice is not None and (not choice or self.save_project())
 
     def _read_language_preference(self) -> str:
         """Lee el idioma global guardado y avisa si el archivo no es válido."""
@@ -2882,6 +2995,7 @@ class BudgetApp:
     def open_report_settings(self) -> None:
         """Abre las pestañas de configuración de informes e idioma."""
         window = tk.Toplevel(self.root)
+        self._project_windows.append(window)
         window.title("Configuración de informes")
         window.transient(self.root)
         window.resizable(True, False)
@@ -3182,32 +3296,38 @@ class BudgetApp:
 
     def open_recent_project(self, path: Path) -> None:
         """Abre un proyecto reciente tras ofrecer guardar los cambios pendientes."""
-        if self.is_dirty:
-            choice = messagebox.askyesnocancel(
-                "Cambios sin guardar",
-                "Hay cambios sin guardar. ¿Quieres guardarlos antes de abrir otro proyecto?",
-                parent=self.root,
-            )
-            if choice is None or (choice and not self.save_project()):
-                return
-        self._load_project_file(path)
+        if self._confirm_project_change():
+            self._load_project_file(path)
 
     def _write_project_file(self, path: Path) -> bool:
-        """Serializa el estado actual del proyecto y registra su ruta como reciente."""
+        """Guarda el JSON mediante sustitución atómica para no truncar el anterior."""
+        temporary: Path | None = None
         try:
             from rcd import RCD_BUDGET_SOURCE, RcdState, synchronize_budget
 
             if self.rcd_state and any(item.source.startswith(RCD_BUDGET_SOURCE) for item in self.budget_items):
                 synchronize_budget(self, RcdState.from_dict(self.rcd_state))
-            path.write_text(
-                json.dumps(self._project_payload(), ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
+            self._mark_dirty()
+            content = json.dumps(self._project_payload(), ensure_ascii=False, indent=2)
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=path.parent, suffix=".tmp", delete=False,
+            ) as output:
+                temporary = Path(output.name)
+                output.write(content)
+            os.replace(temporary, path)
         except (OSError, ValueError) as exc:
-            messagebox.showerror("No se pudo guardar el proyecto", f"No se pudo escribir el archivo:\n{exc}")
+            message = str(exc)
+            if temporary is not None:
+                try:
+                    temporary.unlink(missing_ok=True)
+                except OSError as cleanup_error:
+                    message += f"\nNo se pudo eliminar el archivo temporal: {cleanup_error}"
+            messagebox.showerror("No se pudo guardar el proyecto", f"No se pudo escribir el archivo:\n{message}")
             return False
         self.project_path = path
+        self._saved_state = self._history_state
         self.is_dirty = False
+        self._update_save_controls()
         self._remember_recent_project(path)
         return True
 
@@ -3388,38 +3508,45 @@ class BudgetApp:
                         missing_source = source_budget_path
                 if missing_source is None:
                     budget_dataset = Bc3Dataset(source_budget_path)
-            self.budget_items = [
+            items = [
                 self._item_from_project_data(entry)
                 for entry in payload["items"]
                 if isinstance(entry, dict)
             ]
-            if len(self.budget_items) != len(payload["items"]):
+            if len(items) != len(payload["items"]):
                 raise ValueError("Hay una partida con datos no válidos.")
-            for item in self.budget_items:
+            for item in items:
                 item.set_indirect_costs(report_settings.indirect_costs)
             chapters = payload.get("chapters", {})
             order = chapters.get("order", []) if isinstance(chapters, dict) else []
-            self.chapter_order = [str(chapter) for chapter in order] or self._chapters_from_items()
-            for chapter in self._chapters_from_items():
-                self._ensure_chapter(chapter)
+            chapter_order = [str(chapter) for chapter in order]
+            for item in items:
+                if item.chapter not in chapter_order:
+                    chapter_order.append(item.chapter)
             titles = chapters.get("titles", {}) if isinstance(chapters, dict) else {}
-            self.chapter_titles = (
+            chapter_titles = (
                 {str(chapter): str(title) for chapter, title in titles.items()}
                 if isinstance(titles, dict)
                 else {}
             )
             planning = payload.get("planning", {})
-            self.planning_state = planning if isinstance(planning, dict) else {}
+            planning_state = planning if isinstance(planning, dict) else {}
             title = payload.get("title")
-            self.project_title = str(title) if title else None
+            project_title = str(title) if title else None
         except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
             messagebox.showerror("No se pudo abrir el proyecto", f"El archivo no es válido:\n{exc}")
             return False
 
+        self._dismiss_project_windows()
         self._dismiss_invoicing()
         self._dismiss_rcds()
         self._dismiss_safety_health()
         self.invoicing_state = invoicing_state
+        self.budget_items = items
+        self.chapter_order = chapter_order
+        self.chapter_titles = chapter_titles
+        self.planning_state = planning_state
+        self.project_title = project_title
         self.rcd_state = rcd_state
         self.budget_dataset = budget_dataset
         self.report_settings = report_settings
@@ -3431,7 +3558,7 @@ class BudgetApp:
         self.refresh_budget_tree()
         self._show_item_details(None)
         self.project_panel_title.set(f"Proyecto: {self._project_title()}")
-        self.is_dirty = False
+        self._reset_history()
         self._remember_recent_project(project_path)
         if missing_source is not None:
             messagebox.showwarning(
@@ -3449,21 +3576,41 @@ class BudgetApp:
             title="Abrir proyecto guardado",
             filetypes=[("Proyecto JSON", "*.json")],
         )
-        if file_path:
+        if file_path and self._confirm_project_change():
             self._load_project_file(Path(file_path))
 
     def save_project(self) -> bool:
         """Guarda el proyecto actual, solicitando una ruta si aún no tiene ninguna."""
-        if self.project_path is None:
+        return self._save_project(choose_path=False)
+
+    def save_project_as(self) -> bool:
+        """Permite elegir siempre carpeta y nombre para guardar el proyecto JSON."""
+        return self._save_project(choose_path=True)
+
+    def _save_project(self, *, choose_path: bool) -> bool:
+        """Valida las ediciones y guarda en la ruta actual o en una elegida."""
+        if self._measurement_editor is not None or self._component_editor is not None:
+            messagebox.showwarning(
+                "Edición pendiente",
+                "Confirma la celda con Intro o cancélala con Escape antes de guardar el proyecto.",
+                parent=self.root,
+            )
+            return False
+        path = self.project_path
+        if choose_path or path is None:
             file_path = filedialog.asksaveasfilename(
+                parent=self.root,
                 defaultextension=".json",
                 filetypes=[("JSON", "*.json")],
-                title="Guardar proyecto",
+                title="Guardar como (JSON)…",
+                initialdir=str(path.parent if path else Path.cwd()),
+                initialfile=path.name if path else "proyecto.json",
+                confirmoverwrite=True,
             )
             if not file_path:
                 return False
-            self.project_path = Path(file_path)
-        if not self._write_project_file(self.project_path):
+            path = Path(file_path)
+        if not self._write_project_file(path):
             return False
         self._set_status(f"Proyecto guardado en {self.project_path}")
         return True
@@ -3812,7 +3959,7 @@ th {{ background: #1f4e78; color: white; }}
             return
         from planning import PlanningWindow
 
-        PlanningWindow(
+        window = PlanningWindow(
             self.root,
             self.budget_items,
             self._chapter_title,
@@ -3823,6 +3970,7 @@ th {{ background: #1f4e78; color: white; }}
             on_dirty_change=lambda dirty: self._mark_dirty() if dirty else None,
             currency_formatter=self._format_currency,
         )
+        self._project_windows.append(window)
 
     def _store_planning_state(self, state: dict) -> None:
         """Actualiza el estado de planificación recibido desde su ventana de edición."""
@@ -3837,7 +3985,7 @@ th {{ background: #1f4e78; color: white; }}
             return
         from certifications import CertificationWindow
 
-        CertificationWindow(
+        window = CertificationWindow(
             self.root,
             self.budget_items,
             self._chapter_title,
@@ -3847,6 +3995,14 @@ th {{ background: #1f4e78; color: white; }}
             on_save=self.save_project,
             on_dirty_change=lambda dirty: self._mark_dirty() if dirty else None,
         )
+        self._project_windows.append(window)
+
+    def _dismiss_project_windows(self) -> None:
+        """Cierra vistas con referencias a partidas que van a ser sustituidas."""
+        for window in self._project_windows:
+            if window.winfo_exists():
+                window.destroy()
+        self._project_windows.clear()
 
     def _dismiss_rcds(self) -> None:
         """Cierra la herramienta RCDs antes de sustituir el proyecto activo."""

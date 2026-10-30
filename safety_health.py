@@ -31,6 +31,7 @@ class SafetyLine:
 
 
 def _decimal(value: object) -> Decimal:
+    """Convierte un valor a decimal admitiendo la coma como separador."""
     return Decimal(str(value).replace(",", "."))
 
 
@@ -153,6 +154,7 @@ def write_report(app: BudgetApp, target: Path) -> None:
 class SafetyHealthWindow(tk.Toplevel):
     """Permite revisar las partidas sugeridas antes de incorporarlas al presupuesto."""
     def __init__(self, master: tk.Misc, app: BudgetApp):
+        """Carga las propuestas y construye los controles para revisar su inclusión."""
         super().__init__(master)
         self.app = app
         self.title("Seguridad y salud")
@@ -204,6 +206,7 @@ class SafetyHealthWindow(tk.Toplevel):
         )
 
     def _toggle(self, event=None):
+        """Alterna la inclusión de la partida seleccionada y actualiza su marca."""
         row = self.tree.identify_row(event.y) if event is not None else (self.tree.selection() or ("",))[0]
         if row and (event is None or self.tree.identify_column(event.x) == "#1"):
             line = next(line for line in self.lines if line.code == row)
