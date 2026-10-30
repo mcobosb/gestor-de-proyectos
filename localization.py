@@ -153,6 +153,11 @@ _TEXT = {
     "Capítulo": ("Chapter", "Chapitre"),
     "Código": ("Code", "Code"),
     "Unidad": ("Unit", "Unité"),
+    "Unidad de obra": ("Work item", "Poste de travaux"),
+    "Se muestran los primeros 500 recursos. Acota la búsqueda.": (
+        "Showing the first 500 resources. Refine your search.",
+        "Les 500 premières ressources sont affichées. Affinez la recherche.",
+    ),
     "Resumen": ("Summary", "Résumé"),
     "Medición": ("Measurement", "Métré"),
     "Precio": ("Price", "Prix"),
@@ -169,6 +174,47 @@ _TEXT = {
     "Detalle de la selección": ("Selection details", "Détails de la sélection"),
     "Precio unit.": ("Unit price", "Prix unitaire"),
     "Cantidad": ("Quantity", "Quantité"),
+    "Añadir la partida o el capítulo de referencia al presupuesto, o el precio básico al descompuesto seleccionado.": (
+        "Add the reference item or chapter to the budget, or the basic price to the selected breakdown.",
+        "Ajouter le poste ou le chapitre de référence au budget, ou le prix élémentaire à la décomposition sélectionnée.",
+    ),
+    "Subir el recurso, la partida o el capítulo seleccionado.": (
+        "Move the selected resource, item or chapter up.",
+        "Monter la ressource, le poste ou le chapitre sélectionné.",
+    ),
+    "Bajar el recurso, la partida o el capítulo seleccionado.": (
+        "Move the selected resource, item or chapter down.",
+        "Descendre la ressource, le poste ou le chapitre sélectionné.",
+    ),
+    "Doble clic en descripción, cantidad o precio unitario para editar el recurso. El rendimiento se edita con el botón ↻.": (
+        "Double-click description, quantity or unit price to edit the resource. Edit performance with ↻.",
+        "Double-cliquez sur la description, la quantité ou le prix unitaire pour modifier la ressource. Modifiez le rendement avec ↻.",
+    ),
+    "Selecciona una partida de destino en el presupuesto.": (
+        "Select a destination work item in the budget.",
+        "Sélectionnez un poste de destination dans le budget.",
+    ),
+    "Recurso existente": ("Existing resource", "Ressource existante"),
+    "La partida ya contiene este código. Edita su cantidad en el descompuesto.": (
+        "This work item already contains this code. Edit its quantity in the breakdown.",
+        "Ce poste contient déjà ce code. Modifiez sa quantité dans la décomposition.",
+    ),
+    "La descripción no puede estar vacía.": (
+        "The description cannot be empty.", "La description ne peut pas être vide.",
+    ),
+    "La cantidad debe ser positiva y el precio debe ser finito.": (
+        "The quantity must be positive and the price must be finite.",
+        "La quantité doit être positive et le prix doit être fini.",
+    ),
+    "No se pudo añadir el recurso": ("Could not add resource", "Impossible d'ajouter la ressource"),
+    "No se pudo mover el recurso": ("Could not move resource", "Impossible de déplacer la ressource"),
+    "Las líneas calculadas no se pueden mover.": (
+        "Calculated rows cannot be moved.", "Les lignes calculées ne peuvent pas être déplacées.",
+    ),
+    "El recurso ya está en el extremo del descompuesto.": (
+        "The resource is already at the end of the breakdown.",
+        "La ressource est déjà à l'extrémité de la décomposition.",
+    ),
     "Coste": ("Cost", "Coût"),
     "Doble clic en cantidad o precio unitario para modificar el coste. El rendimiento se edita con el botón ↻.": (
         "Double-click quantity or unit price to edit the cost. Performance is edited with the ↻ button.",

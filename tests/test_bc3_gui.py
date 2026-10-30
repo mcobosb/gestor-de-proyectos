@@ -703,6 +703,206 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.app.budget_items[0].component_prices["MO"] = 99
         self.assertEqual(self.app._history_state["items"][0].component_prices["MO"], 14)
 
+    def test_component_descriptions_are_local_persistent_and_used_in_reports(self):
+        """Edit all basic natures without changing shared source concepts or prices."""
+        self.prepare_history()
+        self.app.budget_dataset.concepts["MAT"].ctype = "2"
+        item = self.app.budget_items[0]
+        self.app.selected_budget_index = 0
+        original_price = item.unit_price
+        for row, text in (("0", "Operario especializado"), ("1", "Maquina propia")):
+            self.app._commit_component_cell(row, "#2", text)
+            self.assertEqual(self.app.component_tree.set(row, "descripcion"), text)
+            self.assertEqual(self.app.budget_tree.set(f"resource:0:{row}", "texto"), text)
+        self.assertEqual(item.unit_price, original_price)
+        self.assertEqual(self.app.budget_dataset.concepts["MO"].summary, "Operario")
+        self.assertEqual(self.app.budget_items[1].cost_components(self.app.budget_dataset)[0][0].summary,
+                         "Operario")
+        self.assertIn("Operario especializado", self.app._price_report_html(2))
+        payload = json.loads(json.dumps(self.app._project_payload()))
+        restored = self.app._item_from_project_data(payload["items"][0])
+        self.assertEqual(restored.component_concepts, item.component_concepts)
+        self.assertEqual(restored.cost_components(self.app.budget_dataset)[1][0].summary,
+                         "Maquina propia")
+        self.app.undo_last_action()
+        self.assertNotIn("MAT", self.app.budget_items[0].component_concepts)
+        self.app.undo_last_action()
+        self.assertFalse(self.app.budget_items[0].component_concepts)
+
+    def test_component_description_editor_accepts_text_and_rejects_empty_values(self):
+        """Open the description cell editor and reject an empty description."""
+        self.prepare_history()
+        self.app.selected_budget_index = 0
+        self.app._show_item_details(self.app.budget_items[0])
+        event = tk.Event()
+        event.x = event.y = 0
+        with (
+            patch.object(self.app.component_tree, "identify_row", return_value="0"),
+            patch.object(self.app.component_tree, "identify_column", return_value="#2"),
+            patch.object(self.app.component_tree, "bbox", return_value=(0, 0, 200, 24)),
+        ):
+            self.app.edit_component_cell(event)
+        self.assertIsNotNone(self.app._component_editor)
+        self.app._component_editor.delete(0, "end")
+        self.app._component_editor.insert(0, "Texto editado")
+        self.app._close_component_editor()
+        self.app._commit_component_cell("0", "#2", "Texto editado")
+        with patch("bc3_gui.messagebox.showerror") as error:
+            self.app._commit_component_cell("0", "#2", "  ")
+        error.assert_called_once()
+        self.assertEqual(self.app.budget_items[0].component_concepts["MO"].summary, "Texto editado")
+
+    def test_copy_basic_from_reference_to_selected_breakdown_and_save_without_base(self):
+        """Copy each nature into a manual item and retain the data without its base."""
+        base = self.set_reference_filter_base()
+        self.app.budget_items = [ProjectItem("P", "01#", "ud", "Partida")]
+        self.app.refresh_budget_tree()
+        self.app._reset_history()
+        self.app.selected_budget_index = 0
+        self.app.selected_bcca_base = base
+        for code, quantity in (("MAT", 2), ("MO", 3), ("MAQ", 0.5)):
+            self.app.selected_bcca_code = code
+            with patch("bc3_gui.simpledialog.askfloat", return_value=quantity):
+                self.app.add_selected_bcca_to_budget()
+        item = self.app.budget_items[0]
+        self.assertEqual(item.decomposition, [("MAT", 2), ("MO", 3), ("MAQ", 0.5)])
+        self.assertEqual(item.unit_price, 46)
+        self.assertEqual(item.rendimiento, 3)
+        self.assertEqual(item.component_types, {"MAT": "3", "MO": "1", "MAQ": "2"})
+        self.assertIsNot(item.component_concepts["MAT"], base.concepts["MAT"])
+        self.app._commit_component_cell("0", "#2", "Cemento propio")
+        self.assertEqual(base.concepts["MAT"].summary, "Cemento")
+        project = self.directory / "basicos.json"
+        self.assertTrue(self.app._write_project_file(project))
+        self.app.reference_bases.clear()
+        self.assertTrue(self.app._load_project_file(project))
+        item = self.app.budget_items[0]
+        self.assertEqual(item.unit_price, 46)
+        rows = self.app._report_components(item)
+        self.assertEqual([(concept.unit, concept.summary, price) for concept, _, price in rows],
+                         [("kg", "Cemento propio", 3), ("h", "Operario", 10), ("h", "Grua", 20)])
+
+    def test_copy_basic_validation_and_undo(self):
+        """Handle missing targets, duplicate codes, invalid quantities and cancellation."""
+        base = self.set_reference_filter_base()
+        self.app.budget_items = [ProjectItem("P", "01#", "ud", "Partida")]
+        self.app.refresh_budget_tree()
+        self.app._reset_history()
+        initial = self.app._capture_project_state()
+        with patch("bc3_gui.messagebox.showwarning") as warning:
+            self.app._add_basic_to_item(base.concepts["MAT"], None)
+        warning.assert_called_once()
+        for quantity in (None, 0, -1, float("inf")):
+            with (
+                patch("bc3_gui.simpledialog.askfloat", return_value=quantity),
+                patch("bc3_gui.messagebox.showerror"),
+            ):
+                self.app._add_basic_to_item(base.concepts["MAT"], 0)
+            self.assertEqual(self.app._capture_project_state(), initial)
+        with patch("bc3_gui.simpledialog.askfloat", return_value=2):
+            self.app._add_basic_to_item(base.concepts["MAT"], 0)
+        with (
+            patch("bc3_gui.simpledialog.askfloat") as quantity,
+            patch("bc3_gui.messagebox.showwarning") as warning,
+        ):
+            self.app._add_basic_to_item(base.concepts["MAT"], 0)
+        warning.assert_called_once()
+        quantity.assert_not_called()
+        self.app.undo_last_action()
+        self.assertEqual(self.app._capture_project_state(), initial)
+
+    def test_resource_arrows_reorder_breakdown_not_items_and_recalculate_percentages(self):
+        """Move components in both trees, preserve metadata, and undo the operation."""
+        self.prepare_history()
+        item = self.app.budget_items[0]
+        self.app.budget_dataset.concepts["%A"] = Concept("%A", "%", "Auxiliares", ctype="%")
+        item.decomposition.append(("%A", 0.1))
+        self.app.selected_budget_index = 0
+        self.app._commit_component_cell("0", "#2", "Operario propio")
+        self.app._recalculate_component_cost(item)
+        self.app.refresh_budget_tree()
+        self.app._reset_history()
+        original = self.app._capture_project_state()
+        self.app.budget_tree.selection_set("resource:0:1")
+        self.app.on_budget_select(None)
+        self.app.move_selected_budget_entry(1)
+        self.assertEqual(item.decomposition, [("MO", 2), ("%A", 0.1), ("MAT", 1)])
+        self.assertEqual(item.unit_price, 33.8)
+        self.assertEqual([entry.code for entry in self.app.budget_items], ["P1", "P2", "P3"])
+        self.assertEqual(self.app.budget_tree.selection(), ("resource:0:2",))
+        self.app.component_tree.selection_set("2")
+        self.app.move_selected_budget_entry(-1)
+        self.assertEqual(item.decomposition, [("MO", 2), ("MAT", 1), ("%A", 0.1)])
+        self.assertEqual(item.unit_price, 34.1)
+        self.assertEqual(item.component_concepts["MO"].summary, "Operario propio")
+        self.app.undo_last_action()
+        self.app.undo_last_action()
+        self.assertEqual(self.app._capture_project_state(), original)
+
+    def test_drag_basic_uses_the_drop_item_instead_of_the_previous_selection(self):
+        """Insert a dragged basic into the row under the pointer and reject chapters."""
+        self.prepare_history()
+        base = self.set_reference_filter_base()
+        event = tk.Event()
+        event.x_root = event.y_root = 5
+        tree = self.app.budget_tree
+        for row, expected_calls in (("item:1", 1), ("chapter:0", 0)):
+            self.app._drag_code = "MAQ"
+            self.app._drag_base = base
+            self.app._dragging = True
+            self.app.selected_budget_index = 0
+            with (
+                patch.object(tree, "winfo_rootx", return_value=0),
+                patch.object(tree, "winfo_rooty", return_value=0),
+                patch.object(tree, "winfo_width", return_value=100),
+                patch.object(tree, "winfo_height", return_value=100),
+                patch.object(tree, "identify_row", return_value=row),
+                patch("bc3_gui.simpledialog.askfloat", return_value=0.5) as quantity,
+                patch("bc3_gui.messagebox.showwarning") as warning,
+            ):
+                self.app.drop_on_budget(event)
+            self.assertEqual(quantity.call_count, expected_calls)
+            self.assertEqual(warning.call_count, 1 - expected_calls)
+        self.assertNotIn("MAQ", dict(self.app.budget_items[0].decomposition))
+        self.assertEqual(self.app.budget_items[1].decomposition[-1], ("MAQ", 0.5))
+        self.assertEqual(self.app.budget_items[1].unit_price, 33)
+
+    def test_resource_moving_preserves_prices_boundaries_and_filtered_view(self):
+        """Keep stored prices and resource metadata while moving in a filtered view."""
+        self.prepare_history()
+        item = self.app.budget_items[0]
+        self.app.toggle_budget_resource_filter("3")
+        self.app.budget_tree.selection_set("resource:0:1")
+        self.app.on_budget_select(None)
+        self.app.move_selected_budget_entry(-1)
+        self.assertEqual(item.unit_price, 32)
+        self.assertEqual(item.decomposition, [("MAT", 1), ("MO", 2)])
+        self.assertEqual(self.app.budget_tree.selection(), ("resource:0:0",))
+        self.assertEqual(self.app.budget_tree.get_children(), ("resource:0:0", "resource:1:1"))
+        self.app.root.update()
+        self.app.move_selected_budget_entry(-1)
+        self.assertEqual(item.decomposition, [("MAT", 1), ("MO", 2)])
+        self.app.move_selected_budget_entry(1)
+        self.assertEqual(item.decomposition, [("MO", 2), ("MAT", 1)])
+        self.assertEqual(item.unit_price, 32)
+        self.assertEqual(len(self.app._undo_history), 2)
+
+    def test_editing_filtered_resources_keeps_the_destination_selected(self):
+        """Retain the selected parent while editing descriptions in the resource table."""
+        self.prepare_history()
+        self.app.toggle_budget_resource_filter("3")
+        self.app.budget_tree.selection_set("resource:0:1")
+        self.app.on_budget_select(None)
+        self.app._commit_component_cell("1", "#2", "Material editado")
+        self.assertEqual(self.app.selected_budget_index, 0)
+        self.assertEqual(self.app.component_tree.set("1", "descripcion"), "Material editado")
+        base = self.set_reference_filter_base()
+        with patch("bc3_gui.simpledialog.askfloat", return_value=2):
+            self.app._add_basic_to_item(base.concepts["LIBRE"], self.app.selected_budget_index)
+        self.assertEqual(self.app.selected_budget_index, 0)
+        self.app._commit_component_cell("2", "#2", "Otro material")
+        self.assertEqual(self.app.budget_tree.set("resource:0:2", "texto"), "Otro material")
+
     def test_project_safety_history_is_limited_to_exactly_50_real_changes(self):
         """Conserva las últimas 50 acciones, ignorando avisos de cambio sin edición."""
         self.prepare_history()
@@ -999,33 +1199,242 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
                          ("item:0", "item:1", "item:2"))
         self.assertEqual(len(self.app.budget_items), 3)
 
-    def test_resource_filters_show_matching_resources_with_ancestors(self):
-        """Use the existing nature icons and combine exclusive filters with search."""
+    def test_resource_filters_show_context_to_the_left_of_resource_rows(self):
+        """Show only resource leaves, with chapter and work item columns to the left."""
         self.set_report_items()
         self.app.budget_dataset.concepts["MAQ"] = Concept("MAQ", "h", "Excavadora", 20, "2")
         self.app.budget_items[0].decomposition.append(("MAQ", 1))
         self.app.refresh_budget_tree()
         total = self.app.budget_summary.cget("text")
+        original_components = self.app.budget_tree.get_children("item:0")
+        self.app.chapter_titles["CAP.01#"] = "Trabajos"
         for kind, icon, expected in (("2", "⚙", ("resource:0:2",)),
-                                     ("1", "♟", ("resource:0:0",)),
-                                     ("3", "▧", ("resource:0:1",))):
+                                     ("1", "♟", ("resource:0:0", "resource:1:0")),
+                                     ("3", "▧", ("resource:0:1", "resource:1:1"))):
             with self.subTest(kind=kind):
                 self.assertEqual(self.app.budget_filter_buttons[kind].cget("text"), icon)
                 self.app.budget_filter_buttons[kind].invoke()
-                self.assertEqual(self.app.budget_tree.get_children("item:0"), expected)
-                self.assertTrue(self.app.budget_tree.item("item:0", "open"))
+                self.assertEqual(self.app.budget_tree.get_children(), expected)
+                self.assertEqual(tuple(map(str, self.app.budget_tree.cget("show"))), ("headings",))
+                self.assertEqual(tuple(self.app.budget_tree.cget("displaycolumns")),
+                                 ("capitulo", "partida", "codigo", "tipo", "texto", "medicion", "importe"))
+                for row in expected:
+                    self.assertEqual(self.app.budget_tree.get_children(row), ())
+                    self.assertEqual(self.app.budget_tree.set(row, "capitulo"), "CAP. 01 · Trabajos")
+                    index = int(row.split(":")[1])
+                    item = self.app.budget_items[index]
+                    self.assertEqual(self.app.budget_tree.set(row, "partida"),
+                                     f"{item.code} · {item.summary}")
+                    self.assertEqual(self.app.budget_tree.set(row, "codigo"),
+                                     self.app.budget_tree.item(row, "text"))
                 self.assertEqual(sum(var.get() for var in self.app.budget_filter_variables.values()), 1)
                 self.assertEqual(self.app.budget_summary.cget("text"), total)
         self.app.budget_search_var.set("P2")
         chapter = self.app.chapter_iid_by_code["CAP.01#"]
-        self.assertEqual(self.app.budget_tree.get_children(chapter), ("item:1",))
-        self.assertEqual(self.app.budget_tree.get_children("item:1"), ("resource:1:1",))
+        self.assertEqual(self.app.budget_tree.get_children(), ("resource:1:1",))
         self.app.budget_filter_buttons["3"].invoke()
+        self.assertEqual(tuple(map(str, self.app.budget_tree.cget("show"))), ("tree", "headings"))
+        self.assertEqual(tuple(self.app.budget_tree.cget("displaycolumns")),
+                         ("tipo", "texto", "medicion", "importe"))
+        self.assertEqual(self.app.budget_tree.get_children(chapter), ("item:1",))
         self.assertEqual(self.app.budget_tree.get_children("item:1"),
                          ("resource:1:0", "resource:1:1"))
         self.app.budget_search_var.set("")
         self.assertEqual(self.app.budget_tree.get_children(chapter),
                          ("item:0", "item:1", "item:2"))
+        self.assertEqual(self.app.budget_tree.get_children("item:0"), original_components)
+
+    def test_resource_table_handles_empty_results_standalone_items_and_repeated_searches(self):
+        """Restore hierarchy, row values and open states after repeated flat projections."""
+        self.set_report_items()
+        self.app.budget_items[2].concept_type = "3"
+        self.app.budget_items[2].chapter = "CAP.02#"
+        self.app.chapter_order = ["VACIO", "CAP.01#", "CAP.02#"]
+        self.app.refresh_budget_tree()
+        chapters = self.app.budget_tree.get_children()
+        self.app.budget_tree.item(chapters[1], open=False)
+        self.app.budget_tree.item("item:0", open=True)
+        original_values = self.app.budget_tree.item("resource:0:1", "values")
+        for _ in range(2):
+            self.app.toggle_budget_resource_filter("3")
+            self.assertEqual(self.app.budget_tree.get_children(),
+                             ("resource:0:1", "resource:1:1", "item:2"))
+            self.assertEqual(self.app.budget_tree.set("item:2", "codigo"), "P3")
+            self.assertEqual(self.app.budget_tree.set("item:2", "partida"), "")
+            self.assertEqual(self.app.budget_tree.item("resource:0:1", "values")[:4],
+                             original_values)
+            for term, expected in (
+                ("CAP.02", ("item:2",)),
+                ("P1", ("resource:0:1",)),
+                ("Material", ("resource:0:1", "resource:1:1", "item:2")),
+                ("no existe", ()),
+                ("", ("resource:0:1", "resource:1:1", "item:2")),
+            ):
+                self.app.budget_search_var.set(term)
+                self.assertEqual(self.app.budget_tree.get_children(), expected)
+            self.app.toggle_budget_resource_filter("3")
+            self.assertEqual(self.app.budget_tree.get_children(), chapters)
+            self.assertEqual(self.app.budget_tree.get_children(chapters[1]), ("item:0", "item:1"))
+            self.assertEqual(self.app.budget_tree.get_children(chapters[2]), ("item:2",))
+            self.assertEqual(self.app.budget_tree.get_children("item:0"),
+                             ("resource:0:0", "resource:0:1"))
+            self.assertFalse(self.app.budget_tree.item(chapters[1], "open"))
+            self.assertTrue(self.app.budget_tree.item("item:0", "open"))
+        self.app.toggle_budget_resource_filter("2")
+        self.assertEqual(self.app.budget_tree.get_children(), ())
+        self.app.toggle_budget_resource_filter("2")
+        self.assertEqual(self.app.budget_tree.get_children(), chapters)
+
+    def test_resource_table_type_editor_uses_the_reordered_type_column(self):
+        """Edit nature in the flat table and immediately reapply the active filter."""
+        self.set_report_items()
+        self.app.refresh_budget_tree()
+        self.app.toggle_budget_resource_filter("3")
+        event = tk.Event()
+        event.x = 0
+        event.y = 0
+        tree = self.app.budget_tree
+        self.assertEqual(tree.column("#4", "id"), "tipo")
+        with (
+            patch.object(tree, "identify_region", return_value="cell"),
+            patch.object(tree, "identify_column", return_value="#4"),
+            patch.object(tree, "identify_row", return_value="resource:0:1"),
+            patch.object(tree, "bbox", return_value=(0, 0, 120, 24)),
+        ):
+            self.app.edit_budget_type(event)
+        editor = self.app._type_editor
+        self.assertIsNotNone(editor)
+        editor.set("⚙ Maquinaria")
+        editor.event_generate("<<ComboboxSelected>>")
+        self.assertEqual(self.app.budget_items[0].component_types["MAT"], "2")
+        self.assertEqual(tree.get_children(), ("resource:1:1",))
+        self.assertTrue(self.app.is_dirty)
+        self.app.toggle_budget_resource_filter("2")
+        self.assertEqual(tree.get_children(), ("resource:0:1",))
+        self.app.toggle_budget_resource_filter("2")
+        self.assertEqual(tree.get_children("item:0"), ("resource:0:0", "resource:0:1"))
+
+    def set_reference_filter_base(self, name="Referencia"):
+        """Create a reference with shared resources and an unexpanded auxiliary."""
+        base = Bc3Dataset.__new__(Bc3Dataset)
+        base.path = self.directory / f"{name}.bc3"
+        base.root_codes = ["01#"]
+        base.concepts = {
+            "01#": Concept("01#", summary="Cimentacion", children=[("P1", 1), ("P2", 1)]),
+            "P1": Concept("P1", "m3", "Hormigon", children=[("AUX", 2), ("MAQ", 0.5)]),
+            "P2": Concept("P2", "m2", "Encofrado", children=[("MAT", 3)]),
+            "AUX": Concept("AUX", children=[("MO", 2), ("MAT", 4)]),
+            "MO": Concept("MO", "h", "Operario", 10, "1"),
+            "MAQ": Concept("MAQ", "h", "Grua", 20, "2"),
+            "MAT": Concept("MAT", "kg", "Cemento", 3, "3"),
+            "LIBRE": Concept("LIBRE", "ud", "Recurso suelto", 1, "3"),
+        }
+        base.chapter_children = {
+            code: [child for child, _ in concept.children]
+            for code, concept in base.concepts.items()
+        }
+        self.app.reference_bases.append(base)
+        return base
+
+    def test_reference_filter_buttons_are_above_the_reference_tree_and_independent(self):
+        """Place exclusive nature controls in the reference header, not the toolbar."""
+        self.set_reference_filter_base()
+        self.app._refresh_reference_views()
+        self.app.toggle_budget_resource_filter("1")
+        for kind, icon, expected in (
+            ("2", "⚙", ["MAQ"]), ("1", "♟", ["MO"]),
+            ("3", "▧", ["MAT", "MAT", "LIBRE"]),
+        ):
+            button = self.app.bcca_filter_buttons[kind]
+            self.assertEqual(button.cget("text"), icon)
+            self.assertEqual(button.master.master, self.app.right_panel)
+            self.assertEqual(int(button.master.grid_info()["row"]), 0)
+            button.invoke()
+            self.assertEqual(self.app.bcca_resource_filter, kind)
+            self.assertEqual(self.app.budget_resource_filter, "1")
+            self.assertEqual(sum(var.get() for var in self.app.bcca_filter_variables.values()), 1)
+            rows = self.app.bcca_tree.get_children()
+            self.assertEqual([self.app.bcca_code_by_iid[row] for row in rows], expected)
+            self.assertTrue(all(not self.app.bcca_tree.get_children(row) for row in rows))
+        rows = self.app.bcca_tree.get_children()
+        self.assertEqual(tuple(self.app.bcca_tree.cget("displaycolumns")),
+                         ("base", "capitulo", "partida", "codigo", "texto", "ud", "precio"))
+        self.assertEqual(self.app.bcca_tree.set(rows[0], "capitulo"), "CAP. 01 · Cimentacion")
+        self.assertEqual(self.app.bcca_tree.set(rows[0], "partida"), "P1 · Hormigon")
+        self.assertEqual(self.app.bcca_tree.set(rows[0], "ud"), "4,0000 kg")
+        self.assertEqual(self.app.bcca_tree.set(rows[1], "partida"), "P2 · Encofrado")
+        self.assertEqual(self.app.bcca_tree.set(rows[2], "capitulo"), "")
+        self.assertEqual(self.app.bcca_tree.set(rows[2], "partida"), "")
+        self.app.bcca_search.insert(0, "P1")
+        self.app.bcca_filter_buttons["3"].invoke()
+        self.assertEqual(self.app.bcca_resource_filter, "")
+        self.assertFalse(any(var.get() for var in self.app.bcca_filter_variables.values()))
+        self.assertEqual(list(self.app.bcca_code_by_iid.values()), ["P1"])
+        self.app.bcca_search.delete(0, "end")
+        self.app.filter_bcca()
+        root = self.app.bcca_tree.get_children()[0]
+        self.assertEqual(self.app.bcca_code_by_iid[root], "01#")
+        self.assertEqual(len(self.app.bcca_tree.get_children(root)), 2)
+        self.assertEqual(tuple(map(str, self.app.bcca_tree.cget("show"))), ("tree", "headings"))
+        self.assertFalse(self.app.is_dirty)
+
+    def test_reference_filters_search_context_and_preserve_base_identity(self):
+        """Combine resource and ancestor searches across bases and clear stale selection."""
+        first = self.set_reference_filter_base("Primera")
+        second = self.set_reference_filter_base("Segunda")
+        self.app.toggle_bcca_resource_filter("3")
+        tree = self.app.bcca_tree
+        rows = tree.get_children()
+        self.assertEqual(len(rows), 6)
+        for row, base in ((rows[0], first), (rows[3], second)):
+            self.assertIs(self.app.bcca_base_by_iid[row], base)
+            self.assertEqual(tree.set(row, "base"), base.path.stem)
+        tree.selection_set(rows[3])
+        self.app.on_bcca_select(None)
+        self.assertEqual(self.app.selected_bcca_code, "MAT")
+        self.assertIs(self.app.selected_bcca_base, second)
+        for term, expected in (
+            ("P1", ["MAT", "MAT"]), ("Cimentacion", ["MAT"] * 4),
+            ("cemento", ["MAT"] * 4), ("no existe", []), ("", ["MAT", "MAT", "LIBRE"] * 2),
+        ):
+            self.app.bcca_search.delete(0, "end")
+            self.app.bcca_search.insert(0, term)
+            self.app.filter_bcca()
+            self.assertEqual(
+                [self.app.bcca_code_by_iid[row] for row in tree.get_children()], expected,
+            )
+            self.assertIsNone(self.app.selected_bcca_code)
+            self.assertIsNone(self.app.selected_bcca_base)
+            self.assertEqual(self.app.bcca_detail_text.get("1.0", "end").strip(), "")
+        self.app.reference_bases.remove(first)
+        self.app._refresh_reference_views()
+        self.assertEqual(len(tree.get_children()), 3)
+        self.assertTrue(all(base is second for base in self.app.bcca_base_by_iid.values()))
+        self.app.reference_bases.clear()
+        self.app._refresh_reference_views()
+        self.assertEqual(tree.get_children(), ())
+        self.app.toggle_bcca_resource_filter("3")
+        self.assertEqual(tree.get_children(), ())
+
+    def test_reference_resource_limit_and_cycles(self):
+        """Bound filtered results and terminate cyclic decompositions without placeholders."""
+        base = self.set_reference_filter_base()
+        base.concepts["AUX"].children.append(("AUX", 1))
+        self.app.toggle_bcca_resource_filter("1")
+        self.assertEqual(len(self.app.bcca_tree.get_children()), 1)
+        base.concepts.update({
+            f"M{index}": Concept(f"M{index}", summary="Material", ctype="3")
+            for index in range(510)
+        })
+        with patch.object(self.app, "_set_status") as status:
+            self.app.toggle_bcca_resource_filter("3")
+        self.assertEqual(len(self.app.bcca_tree.get_children()), 500)
+        self.assertIn("500", status.call_args.args[0])
+        self.app.bcca_search.insert(0, "M509")
+        self.app.filter_bcca()
+        self.assertEqual(
+            list(self.app.bcca_code_by_iid.values()), ["M509"],
+        )
 
     def test_project_search_matches_resource_and_chapter_and_clears_hidden_selection(self):
         """Keep ancestor context while removing stale selection from hidden rows."""
@@ -1058,10 +1467,12 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.app.refresh_budget_tree()
         original_chapters = self.app.budget_tree.get_children()
         self.app.toggle_budget_resource_filter("2")
-        self.assertEqual(self.app.budget_tree.get_children("item:0"), ("resource:0:1",))
+        self.assertEqual(self.app.budget_tree.get_children(), ("resource:0:1",))
         self.app.budget_items[0].summary = "Resumen cambiado"
         self.app._refresh_item_row(0)
-        self.assertEqual(self.app.budget_tree.get_children("item:0"), ("resource:0:1",))
+        self.assertEqual(self.app.budget_tree.get_children(), ("resource:0:1",))
+        self.assertEqual(self.app.budget_tree.set("resource:0:1", "partida"),
+                         "P1 · Resumen cambiado")
         self.app.refresh_budget_tree()
         self.app.toggle_budget_resource_filter("2")
         self.assertEqual(self.app.budget_tree.get_children(), original_chapters)

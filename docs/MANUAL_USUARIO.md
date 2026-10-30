@@ -82,10 +82,37 @@ filtra por código, resumen y descripción; **Esc** borra la búsqueda.
 
 Junto a editar y duplicar, **↕** expande o contrae todos los capítulos y partidas.
 Los botones **⚙**, **♟** y **▧** muestran, respectivamente, maquinaria, mano de
-obra y materiales, conservando sus capítulos y partidas como contexto. Solo un
-filtro de naturaleza puede estar activo; pulsa otra vez para desactivarlo.
+obra y materiales en una tabla con una fila por recurso. El capítulo y la unidad
+de obra aparecen en columnas a su izquierda, en vez de en filas superiores.
+Solo un filtro de naturaleza puede estar activo; pulsa otra vez para desactivarlo
+y recuperar el árbol de capítulos y partidas.
 Puedes combinarlo con el buscador. Estos controles solo cambian la vista:
 no alteran el presupuesto ni sus importes.
+
+Sobre el marco de las bases de referencia aparecen también **⚙**, **♟** y **▧**.
+Estos filtros son independientes de los del proyecto y se combinan con el
+buscador de la referencia. Muestran una fila por uso del recurso, con la base,
+el capítulo y la unidad de obra a su izquierda, incluidos los recursos de
+descomposiciones todavía sin desplegar. Los recursos sin capítulo o partida
+se muestran con ese contexto vacío. Se muestran hasta 500 resultados;
+acota la búsqueda si se alcanza ese límite. Pulsa de nuevo el filtro activo
+para volver al árbol habitual.
+
+Para copiar un precio básico (material, maquinaria o mano de obra), selecciona
+la partida de destino en tu presupuesto y el recurso en la referencia; pulsa
+la flecha hacia la izquierda e introduce su cantidad por unidad de obra.
+También puedes arrastrarlo sobre la partida o uno de sus componentes.
+Se copia al descompuesto con su código, unidad, descripción, tipo y precio,
+sin modificar la base original. Si el código ya existe en esa partida, edita
+su cantidad en lugar de añadirlo otra vez.
+
+En **Costes y rendimientos**, haz doble clic en la descripción de un componente
+para modificarla solo en esa partida. Los textos editados y los precios básicos
+copiados se guardan en el JSON del proyecto y se usan en los informes.
+Selecciona un componente en esta tabla o en el árbol y pulsa **↑** o **↓**
+para moverlo dentro de su descompuesto. Los porcentajes se recalculan según
+su nueva posición; las líneas calculadas de redondeo e indirectos no se mueven.
+Estas operaciones admiten **Deshacer**.
 
 ## 4. Editar las mediciones
 

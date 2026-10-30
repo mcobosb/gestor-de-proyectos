@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from collections.abc import Iterator
 from copy import deepcopy
 import html
 import json
@@ -325,6 +326,7 @@ class ProjectItem:
     certification_justifications: dict[str, str] = field(default_factory=dict)
     concept_type: str = ""
     component_types: dict[str, str] = field(default_factory=dict)
+    component_concepts: dict[str, Concept] = field(default_factory=dict)
     direct_unit_price: float | None = None
     indirect_costs: float = 0.0
     round_import_total: bool = False
@@ -387,7 +389,9 @@ class ProjectItem:
         rows = []
         accumulated = Decimal(0)
         for code, quantity in self.decomposition:
-            concept = dataset.concepts.get(code) if dataset else None
+            concept = self.component_concepts.get(code)
+            if concept is None:
+                concept = dataset.concepts.get(code) if dataset else None
             if concept is None and code not in self.component_prices and strict:
                 raise ValueError(
                     f"No se dispone del precio del recurso {code} de la partida {self.code}. "
@@ -677,8 +681,10 @@ class BudgetApp:
         self._bcca_visible = True
         self._collapse_chapters_on_refresh = False
         self._budget_detached: list[tuple[str, str, int]] = []
+        self._budget_flattened: list[tuple[str, str, int]] = []
         self._budget_filter_open_state: dict[str, bool] | None = None
         self.budget_resource_filter = ""
+        self.bcca_resource_filter = ""
         data_directory = user_data_directory(__file__)
         self.recent_projects_path = data_directory / "proyectos_recientes.json"
         self.recent_projects = self._read_recent_projects()
@@ -843,9 +849,9 @@ class BudgetApp:
         ), (
             "Añadir un capítulo o una partida al presupuesto.",
             "Eliminar la partida o el capítulo seleccionado.",
-            "Añadir al presupuesto la partida o el capítulo completo seleccionado en la base de referencia.",
-            "Subir la partida o el capítulo seleccionado.",
-            "Bajar la partida o el capítulo seleccionado.",
+            "Añadir la partida o el capítulo de referencia al presupuesto, o el precio básico al descompuesto seleccionado.",
+            "Subir el recurso, la partida o el capítulo seleccionado.",
+            "Bajar el recurso, la partida o el capítulo seleccionado.",
             "Mostrar u ocultar el panel de la base de referencia.",
             "Editar el código y nombre del capítulo o los datos de la partida seleccionada.",
             "Duplicar la partida seleccionada. La copia marcada con * debe modificarse manualmente.",
@@ -892,10 +898,26 @@ class BudgetApp:
         )
         left_title.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         self.reference_panel_title = tk.StringVar(value="Base de referencia: Sin cargar")
+        reference_header = ttk.Frame(self.right_panel)
+        reference_header.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        reference_header.columnconfigure(0, weight=1)
         right_title = ttk.Label(
-            self.right_panel, textvariable=self.reference_panel_title, style="Reference.Section.TLabel"
+            reference_header, textvariable=self.reference_panel_title, style="Reference.Section.TLabel"
         )
-        right_title.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        right_title.grid(row=0, column=0, sticky="ew")
+        self.bcca_filter_buttons: dict[str, ttk.Checkbutton] = {}
+        self.bcca_filter_variables: dict[str, tk.BooleanVar] = {}
+        for column, kind in enumerate(("2", "1", "3"), start=1):
+            variable = tk.BooleanVar(value=False)
+            self.bcca_filter_variables[kind] = variable
+            button = ttk.Checkbutton(
+                reference_header, text=CONCEPT_TYPES[kind].split()[0], width=3,
+                style="BudgetFilter.TCheckbutton", variable=variable,
+                command=lambda selected=kind: self.toggle_bcca_resource_filter(selected),
+            )
+            button.grid(row=0, column=column, padx=(4, 0))
+            self.bcca_filter_buttons[kind] = button
+            ToolTip(button, f"Filtrar recursos: {CONCEPT_TYPES[kind]}. Pulsar de nuevo para mostrar todos.")
 
         self.budget_splitter = ttk.PanedWindow(self.left_panel, orient="vertical")
         self.budget_splitter.grid(row=1, column=0, sticky="nsew")
@@ -905,7 +927,17 @@ class BudgetApp:
         self.budget_splitter.add(tree_frame, weight=3)
 
         columns_budget = ("tipo", "texto", "medicion", "importe")
-        self.budget_tree = ttk.Treeview(tree_frame, columns=columns_budget, show="tree headings")
+        self.budget_tree = ttk.Treeview(
+            tree_frame, columns=(*columns_budget, "capitulo", "partida", "codigo"),
+            displaycolumns=columns_budget, show="tree headings",
+        )
+        for column, heading, width in (
+            ("capitulo", "Capítulo", 220),
+            ("partida", "Unidad de obra", 260),
+            ("codigo", "Código", 130),
+        ):
+            self.budget_tree.heading(column, text=heading)
+            self.budget_tree.column(column, width=width, minwidth=100, stretch=False)
         self.budget_tree.heading("#0", text="Código")
         self.budget_tree.column("#0", width=130, minwidth=100, stretch=False)
         self.budget_tree.heading("tipo", text="Tipo ▾")
@@ -929,6 +961,11 @@ class BudgetApp:
         self.budget_tree.tag_configure("resource", background=COLORS["background"], foreground=COLORS["muted"])
 
         self.budget_tree.grid(row=0, column=0, sticky="nsew")
+        budget_scroll = ttk.Scrollbar(
+            tree_frame, orient="horizontal", command=self.budget_tree.xview,
+        )
+        budget_scroll.grid(row=1, column=0, sticky="ew")
+        self.budget_tree.configure(xscrollcommand=budget_scroll.set)
         self.budget_tree.bind("<<TreeviewSelect>>", self.on_budget_select)
         self.budget_tree.bind("<Double-1>", self.toggle_budget_node)
         self.budget_tree.bind("<ButtonRelease-1>", self.edit_budget_type)
@@ -999,7 +1036,7 @@ class BudgetApp:
         self.component_tree.bind("<Double-1>", self.edit_component_cell)
         ttk.Label(
             components_frame,
-            text="Doble clic en cantidad o precio unitario para modificar el coste. "
+            text="Doble clic en descripción, cantidad o precio unitario para editar el recurso. "
                  "El rendimiento se edita con el botón ↻.",
             style="Muted.TLabel",
         ).grid(row=1, column=0, sticky="w", pady=(5, 0))
@@ -1017,7 +1054,21 @@ class BudgetApp:
         self.budget_search.bind("<Escape>", lambda _event: self.budget_search_var.set(""))
 
         bcca_columns = ("codigo", "ud", "rend", "precio")
-        self.bcca_tree = ttk.Treeview(self.right_panel, columns=bcca_columns, show="tree headings")
+        reference_tree_frame = ttk.Frame(self.right_panel)
+        reference_tree_frame.grid(row=1, column=0, sticky="nsew")
+        reference_tree_frame.columnconfigure(0, weight=1)
+        reference_tree_frame.rowconfigure(0, weight=1)
+        self.bcca_tree = ttk.Treeview(
+            reference_tree_frame,
+            columns=(*bcca_columns, "base", "capitulo", "partida", "texto"),
+            displaycolumns=bcca_columns, show="tree headings",
+        )
+        for column, heading, width in (
+            ("base", "Base de referencia", 160), ("capitulo", "Capítulo", 220),
+            ("partida", "Unidad de obra", 260), ("texto", "Texto", 300),
+        ):
+            self.bcca_tree.heading(column, text=heading)
+            self.bcca_tree.column(column, width=width, minwidth=100, stretch=column == "texto")
         self.bcca_tree.heading("#0", text="Capítulo / partida")
         self.bcca_tree.column("#0", width=300, minwidth=180, stretch=True)
         self.bcca_tree.heading("codigo", text="Código")
@@ -1037,7 +1088,12 @@ class BudgetApp:
         self.bcca_tree.tag_configure("bcca_machinery", background="#FDF0DC", foreground="#8A5200")
         self.bcca_tree.tag_configure("bcca_material", background="#E6F0FA", foreground="#17456E")
 
-        self.bcca_tree.grid(row=1, column=0, sticky="nsew")
+        self.bcca_tree.grid(row=0, column=0, sticky="nsew")
+        reference_scroll = ttk.Scrollbar(
+            reference_tree_frame, orient="horizontal", command=self.bcca_tree.xview,
+        )
+        reference_scroll.grid(row=1, column=0, sticky="ew")
+        self.bcca_tree.configure(xscrollcommand=reference_scroll.set)
         self.bcca_tree.bind("<<TreeviewSelect>>", self.on_bcca_select)
         self.bcca_tree.bind("<<TreeviewOpen>>", self.load_bcca_node)
         self.bcca_tree.bind("<Double-1>", self.toggle_bcca_node)
@@ -1110,6 +1166,9 @@ class BudgetApp:
     def _populate_bcca_tree(self):
         """Rellena el árbol de referencia con los capítulos de las bases cargadas."""
         self._clear_bcca_tree()
+        self.bcca_tree.configure(
+            show="tree headings", displaycolumns=("codigo", "ud", "rend", "precio"),
+        )
         grouped = len(self.reference_bases) > 1
         for base in self.reference_bases:
             parent = self._insert_base_header(base, open_=False) if grouped else ""
@@ -1121,6 +1180,11 @@ class BudgetApp:
         self.bcca_code_by_iid.clear()
         self.bcca_base_by_iid.clear()
         self._bcca_iid_counter = 0
+        self.selected_bcca_code = None
+        self.selected_bcca_base = None
+        self.bcca_detail_text.configure(state="normal")
+        self.bcca_detail_text.delete("1.0", "end")
+        self.bcca_detail_text.configure(state="disabled")
 
     def _insert_base_header(self, base: Bc3Dataset, open_: bool, count: int | None = None) -> str:
         """Añade al árbol el encabezado de una base y devuelve su identificador."""
@@ -1203,13 +1267,17 @@ class BudgetApp:
 
     def filter_bcca(self, event=None):
         """Filtra las partidas de las bases cargadas y limita los resultados mostrados."""
-        if not self.reference_bases:
-            return
         term = (self.bcca_search.get() or "").strip().lower()
+        if self.bcca_resource_filter:
+            self._filter_bcca_resources(term)
+            return
         if not term:
             self._populate_bcca_tree()
             return
         self._clear_bcca_tree()
+        self.bcca_tree.configure(
+            show="tree headings", displaycolumns=("codigo", "ud", "rend", "precio"),
+        )
         grouped = len(self.reference_bases) > 1
         remaining = 500
         for base in self.reference_bases:
@@ -1222,6 +1290,78 @@ class BudgetApp:
             for code in codes[:remaining]:
                 self._insert_bcca_node(base, parent, code)
             remaining -= len(codes)
+
+    def toggle_bcca_resource_filter(self, kind: str) -> None:
+        """Alterna el filtro exclusivo de naturaleza de las bases de referencia."""
+        self.bcca_resource_filter = "" if self.bcca_resource_filter == kind else kind
+        for code, variable in self.bcca_filter_variables.items():
+            variable.set(code == self.bcca_resource_filter)
+        self.filter_bcca()
+
+    def _filter_bcca_resources(self, term: str) -> None:
+        """Muestra recursos con su base, capítulo y unidad de obra a la izquierda."""
+        self._clear_bcca_tree()
+        self.bcca_tree.configure(
+            show="headings",
+            displaycolumns=("base", "capitulo", "partida", "codigo", "texto", "ud", "precio"),
+        )
+        count = 0
+        for base in self.reference_bases:
+            reached: set[str] = set()
+
+            def visit(
+                code: str, chapter: str = "", item: str = "",
+                quantity: float | None = None, path: tuple[str, ...] = (),
+                inherited_match: bool = False,
+            ) -> Iterator[tuple[str, str, str, float | None]]:
+                """Recorre cada uso del recurso sin expandir el árbol ni seguir ciclos."""
+                if code in path or code not in base.concepts:
+                    return
+                reached.add(code)
+                concept = base.concepts[code]
+                matches = inherited_match or not term or term in (
+                    f"{code} {concept.summary} {concept.text}".lower()
+                )
+                if is_chapter_code(code):
+                    chapter = f"{format_chapter_code(code)} · {concept.summary}"
+                elif concept.ctype == "0" and not item:
+                    item = f"{code} · {concept.summary}"
+                if concept.ctype == self.bcca_resource_filter and not is_chapter_code(code):
+                    if matches:
+                        yield code, chapter, item, quantity
+                for child_code, child_quantity in concept.children:
+                    yield from visit(
+                        child_code, chapter, item, child_quantity, (*path, code), matches,
+                    )
+
+            referenced = {
+                child for concept in base.concepts.values() for child, _ in concept.children
+            }
+            roots = [code for code in base.concepts if code not in referenced]
+            for root in (*base.root_codes, *roots, *base.concepts):
+                if root in reached:
+                    continue
+                for code, chapter, item, quantity in visit(root):
+                    if count >= 500:
+                        self._set_status("Se muestran los primeros 500 recursos. Acota la búsqueda.")
+                        return
+                    concept = base.concepts[code]
+                    iid = self._next_bcca_iid()
+                    self.bcca_code_by_iid[iid] = code
+                    self.bcca_base_by_iid[iid] = base
+                    amount = (
+                        f"{fmt_number(quantity, 4)} {concept.unit}".strip()
+                        if quantity is not None else concept.unit
+                    )
+                    self.bcca_tree.insert(
+                        "", "end", iid=iid, text=concept.summary or code,
+                        values=(
+                            code, amount, "", fmt_number(concept.price), base.path.stem,
+                            chapter, item, concept.summary or code,
+                        ),
+                        tags=(RESOURCE_TAGS[concept.ctype],),
+                    )
+                    count += 1
 
     def toggle_bcca_node(self, event=None):
         """Abre o cierra el nodo de referencia bajo el puntero, cargándolo si procede."""
@@ -1807,11 +1947,75 @@ class BudgetApp:
         if is_chapter_code(self.selected_bcca_code):
             self._insert_bcca_chapter(self.selected_bcca_code, self.selected_bcca_base)
             return
+        concept = self.selected_bcca_base.concepts.get(self.selected_bcca_code)
+        if concept is not None and concept.ctype in {"1", "2", "3"}:
+            self._add_basic_to_item(concept, self.selected_budget_index)
+            return
         item = self._build_item_from_bcca(self.selected_bcca_code, self.selected_bcca_base)
         if item is None:
             return
         chapter = self._default_target_chapter(item.chapter)
         self._insert_item(item, self._end_of_chapter(chapter), chapter)
+
+    def _add_basic_to_item(self, concept: Concept, index: int | None) -> None:
+        """Copia un precio básico al descompuesto sin modificar su base original."""
+        if index is None:
+            messagebox.showwarning(
+                "Sin selección", "Selecciona una partida de destino en el presupuesto.",
+                parent=self.root,
+            )
+            return
+        item = self.budget_items[index]
+        if any(code == concept.code for code, _quantity in item.decomposition):
+            messagebox.showwarning(
+                "Recurso existente",
+                "La partida ya contiene este código. Edita su cantidad en el descompuesto.",
+                parent=self.root,
+            )
+            return
+        quantity = simpledialog.askfloat(
+            "Cantidad", f"Cantidad de {concept.code} por {item.unit or 'unidad de obra'}:",
+            initialvalue=1.0, minvalue=0.0, parent=self.root,
+        )
+        if quantity is None:
+            return
+        if not isfinite(quantity) or quantity <= 0 or not isfinite(concept.price):
+            messagebox.showerror(
+                "Dato inválido", "La cantidad debe ser positiva y el precio debe ser finito.",
+                parent=self.root,
+            )
+            return
+        candidate = deepcopy(item)
+        candidate.decomposition.append((concept.code, quantity))
+        candidate.component_concepts[concept.code] = deepcopy(concept)
+        candidate.component_prices[concept.code] = concept.price
+        candidate.component_types[concept.code] = concept.ctype
+        try:
+            self._recalculate_component_cost(candidate)
+            candidate.cost_components(self._component_dataset(candidate))
+        except ValueError as exc:
+            messagebox.showerror("No se pudo añadir el recurso", str(exc), parent=self.root)
+            return
+        item.decomposition = candidate.decomposition
+        item.component_concepts = candidate.component_concepts
+        item.component_prices = candidate.component_prices
+        item.component_types = candidate.component_types
+        item.unit_price = candidate.unit_price
+        item.direct_unit_price = candidate.direct_unit_price
+        item.indirect_costs = candidate.indirect_costs
+        item.rendimiento = sum(
+            amount for code, amount in item.decomposition
+            if self._budget_concept_type(item, code) == "1"
+        )
+        self.selected_budget_index = index
+        self.selected_chapter = None
+        self.budget_fields["price_var"].set(
+            f"{item.unit_price if item.direct_unit_price is None else item.direct_unit_price:.2f}"
+        )
+        self._show_item_details(item)
+        self.refresh_budget_tree()
+        self._mark_dirty()
+        self._set_status(f"Recurso {concept.code} añadido a la partida {item.code}.")
 
     def _default_target_chapter(self, fallback: str) -> str:
         """Elige el capítulo de destino usando la selección actual o el capítulo alternativo."""
@@ -1853,6 +2057,18 @@ class BudgetApp:
         self._drag_code, self._drag_base, self._dragging = None, None, False
         self.bcca_tree.config(cursor="")
         if not code or not dragging:
+            return
+        concept = base.concepts.get(code) if base is not None else None
+        if concept is not None and concept.ctype in {"1", "2", "3"}:
+            x = event.x_root - self.budget_tree.winfo_rootx()
+            y = event.y_root - self.budget_tree.winfo_rooty()
+            if not (0 <= x <= self.budget_tree.winfo_width() and 0 <= y <= self.budget_tree.winfo_height()):
+                return
+            row = self.budget_tree.identify_row(y)
+            index = self.budget_index_by_iid.get(row)
+            if row.startswith("resource:"):
+                index = int(row.split(":")[1])
+            self._add_basic_to_item(concept, index)
             return
         target = self._budget_drop_target(event)
         if is_chapter_code(code):
@@ -1921,7 +2137,23 @@ class BudgetApp:
         self.budget_tree.see(iid)
 
     def move_selected_budget_entry(self, direction: int) -> None:
-        """Desplaza el capítulo o la partida seleccionados en la dirección solicitada."""
+        """Desplaza el recurso, capítulo o partida seleccionados en la dirección solicitada."""
+        components = self.component_tree.selection()
+        if components:
+            if components[0].startswith("indirect:"):
+                self._set_status("Las líneas calculadas no se pueden mover.")
+                return
+            if self.selected_budget_index is not None:
+                self._move_component(self.selected_budget_index, int(components[0]), direction)
+                return
+        selection = self.budget_tree.selection()
+        if selection and selection[0].startswith("resource:"):
+            _, index, component = selection[0].split(":")
+            self._move_component(int(index), int(component), direction)
+            return
+        if selection and selection[0].startswith("indirect:"):
+            self._set_status("Las líneas calculadas no se pueden mover.")
+            return
         if self.selected_chapter is not None:
             self._move_chapter(self.selected_chapter, direction)
             return
@@ -1929,6 +2161,55 @@ class BudgetApp:
             messagebox.showwarning("Sin selección", "Selecciona un capítulo o una partida del presupuesto.")
             return
         self._move_item(self.budget_items[self.selected_budget_index], direction)
+
+    def _move_component(self, index: int, component: int, direction: int) -> None:
+        """Reordena un descompuesto y recalcula sus porcentajes dependientes del orden."""
+        item = self.budget_items[index]
+        target = component + direction
+        if not 0 <= target < len(item.decomposition):
+            self._set_status("El recurso ya está en el extremo del descompuesto.")
+            return
+        candidate = deepcopy(item)
+        candidate.decomposition[component], candidate.decomposition[target] = (
+            candidate.decomposition[target], candidate.decomposition[component],
+        )
+
+        def direct_cost(entry: ProjectItem) -> Decimal:
+            """Compara costes sin ajustes para conservar el precio si solo cambia el orden."""
+            return sum((
+                (Decimal(str(quantity)) * Decimal(str(price))).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP,
+                )
+                for _, quantity, price in entry.cost_components(
+                    self._component_dataset(entry), reconcile=False,
+                )
+            ), Decimal(0))
+
+        try:
+            if direct_cost(candidate) != direct_cost(item):
+                self._recalculate_component_cost(candidate)
+        except ValueError as exc:
+            messagebox.showerror("No se pudo mover el recurso", str(exc), parent=self.root)
+            return
+        item.decomposition = candidate.decomposition
+        item.unit_price = candidate.unit_price
+        item.direct_unit_price = candidate.direct_unit_price
+        item.indirect_costs = candidate.indirect_costs
+        self.selected_budget_index = index
+        self.selected_chapter = None
+        self._show_item_details(item)
+        self.budget_fields["price_var"].set(
+            f"{item.unit_price if item.direct_unit_price is None else item.direct_unit_price:.2f}"
+        )
+        self.refresh_budget_tree()
+        row = f"resource:{index}:{target}"
+        self.budget_tree.selection_set(row)
+        self.budget_tree.see(row)
+        self.on_budget_select(None)
+        self.component_tree.selection_set(str(target))
+        self.component_tree.focus(str(target))
+        self._mark_dirty()
+        self._set_status(f"Movido el recurso {item.decomposition[target][0]} en {item.code}.")
 
     def _move_chapter(self, chapter: str, direction: int) -> None:
         """Reordena un capítulo y agrupa de nuevo sus partidas según el nuevo orden."""
@@ -2167,6 +2448,8 @@ class BudgetApp:
             self._show_item_details(None)
             return
         index = self.budget_index_by_iid.get(selected_iid)
+        if index is None and selected_iid.startswith("resource:"):
+            index = int(selected_iid.split(":")[1])
         if index is None:
             return
         self.selected_budget_index = index
@@ -2280,13 +2563,18 @@ class BudgetApp:
 
     def _restore_budget_rows(self) -> None:
         """Reincorpora las filas ocultas sin alterar sus identificadores ni su orden."""
+        for iid, parent, index in self._budget_flattened:
+            if self.budget_tree.exists(iid):
+                self.budget_tree.move(iid, parent, index)
+        self._budget_flattened.clear()
         for iid, parent, index in self._budget_detached:
             if self.budget_tree.exists(iid):
                 self.budget_tree.move(iid, parent, index)
         self._budget_detached.clear()
 
     def filter_budget(self, *_args) -> None:
-        """Filtra la vista por texto y naturaleza conservando los ancestros y los totales."""
+        """Filtra por texto y naturaleza, mostrando el contexto a la izquierda del recurso."""
+        self._close_type_editor()
         selected = set(self.budget_tree.selection())
         if self.selected_budget_index is not None:
             selected.add(f"item:{self.selected_budget_index}")
@@ -2302,6 +2590,7 @@ class BudgetApp:
                 for iid in (*self.chapter_iid_by_code.values(), *self.budget_index_by_iid)
             }
         hidden: list[tuple[str, str, int]] = []
+        leaves: list[tuple[str, str, int]] = []
         visible: set[str] = set()
         chapter_codes = {iid: code for code, iid in self.chapter_iid_by_code.items()}
 
@@ -2328,6 +2617,8 @@ class BudgetApp:
                     any_visible = True
                     if active and child_visible:
                         self.budget_tree.item(iid, open=True)
+                    if kind and is_leaf:
+                        leaves.append((iid, parent, index))
                 else:
                     hidden.append((iid, parent, index))
             return any_visible
@@ -2336,6 +2627,35 @@ class BudgetApp:
         for iid, parent, index in hidden:
             self.budget_tree.detach(iid)
             self._budget_detached.append((iid, parent, index))
+        if kind:
+            for iid, parent, index in leaves:
+                item_index = (
+                    self.budget_index_by_iid[iid] if iid.startswith("item:")
+                    else int(iid.split(":")[1])
+                )
+                item = self.budget_items[item_index]
+                self.budget_tree.set(
+                    iid, "capitulo",
+                    f"{format_chapter_code(item.chapter)} · {self._chapter_title(item.chapter)}",
+                )
+                self.budget_tree.set(
+                    iid, "partida",
+                    f"{item.code} · {item.summary}" if iid.startswith("resource:") else "",
+                )
+                self.budget_tree.set(iid, "codigo", self.budget_tree.item(iid, "text"))
+                self.budget_tree.move(iid, "", "end")
+                self._budget_flattened.append((iid, parent, index))
+            for index, iid in enumerate(self.chapter_iid_by_code.values()):
+                if iid in visible:
+                    self.budget_tree.detach(iid)
+                    self._budget_detached.append((iid, "", index))
+        self.budget_tree.configure(
+            show="headings" if kind else "tree headings",
+            displaycolumns=(
+                ("capitulo", "partida", "codigo", "tipo", "texto", "medicion", "importe")
+                if kind else ("tipo", "texto", "medicion", "importe")
+            ),
+        )
         if not active and self._budget_filter_open_state is not None:
             for iid, opened in self._budget_filter_open_state.items():
                 if self.budget_tree.exists(iid):
@@ -2386,6 +2706,8 @@ class BudgetApp:
 
     def toggle_budget_node(self, event=None):
         """Alterna el despliegue de una fila del árbol del presupuesto."""
+        if self.budget_resource_filter:
+            return "break"
         if event and self.budget_tree.identify_column(event.x) == "#1":
             return "break"
         row = self.budget_tree.identify_row(event.y) if event else ""
@@ -2402,7 +2724,9 @@ class BudgetApp:
         if code.startswith("%"):
             return "%"
         dataset = self._component_dataset(item)
-        concept = dataset.concepts.get(code) if dataset else None
+        concept = item.component_concepts.get(code) if component_code is not None else None
+        if concept is None:
+            concept = dataset.concepts.get(code) if dataset else None
         if concept is None:
             return "0"
         if concept.ctype == "0" and component_code is not None and concept.children:
@@ -2413,7 +2737,8 @@ class BudgetApp:
         """Abre un selector en la columna Tipo y confirma el cambio elegido por el usuario."""
         if self.budget_tree.identify_region(event.x, event.y) != "cell":
             return
-        if self.budget_tree.identify_column(event.x) != "#1":
+        column = self.budget_tree.identify_column(event.x)
+        if not column or self.budget_tree.column(column, "id") != "tipo":
             return
         row = self.budget_tree.identify_row(event.y)
         if row.startswith("indirect:"):
@@ -2543,7 +2868,10 @@ class BudgetApp:
         """Recalcula el precio unitario sumando los costes de los componentes."""
         dataset = self._component_dataset(item)
         if not item.decomposition or (
-            dataset is None and any(code not in item.component_prices for code, _ in item.decomposition)
+            dataset is None and any(
+                code not in item.component_prices and code not in item.component_concepts
+                for code, _ in item.decomposition
+            )
         ):
             return
         direct_price = float(sum((
@@ -2555,12 +2883,12 @@ class BudgetApp:
         item.set_indirect_costs(self.report_settings.indirect_costs, direct_price)
 
     def edit_component_cell(self, event):
-        """Permite editar cantidad o precio de un recurso al hacer doble clic en su celda."""
+        """Permite editar descripción, cantidad o precio de un recurso con doble clic."""
         if self.selected_budget_index is None:
             return "break"
         row = self.component_tree.identify_row(event.y)
         column = self.component_tree.identify_column(event.x)
-        if not row or row.startswith("indirect:") or column not in {"#3", "#4"}:
+        if not row or row.startswith("indirect:") or column not in {"#2", "#3", "#4"}:
             return "break"
 
         self._close_component_editor()
@@ -2589,20 +2917,37 @@ class BudgetApp:
         return "break"
 
     def _commit_component_cell(self, row: str, column: str, value: str) -> None:
-        """Valida y guarda cantidad o precio de un componente y recalcula la partida."""
+        """Guarda la descripción local o recalcula cantidad y precio de un componente."""
         if self.selected_budget_index is None:
             return
         if row.startswith("indirect:"):
-            return
-        number = parse_float(value, float("nan"))
-        if number != number:
-            messagebox.showerror("Dato inválido", f"'{value}' no es un número válido.")
             return
         item = self.budget_items[self.selected_budget_index]
         component_index = int(row)
         if component_index >= len(item.decomposition):
             return
         code, _quantity = item.decomposition[component_index]
+        if column == "#2":
+            summary = value.strip()
+            if not summary:
+                messagebox.showerror("Dato inválido", "La descripción no puede estar vacía.")
+                return
+            dataset = self._component_dataset(item)
+            original = item.component_concepts.get(code)
+            if original is None:
+                original = dataset.concepts.get(code) if dataset else None
+            item.component_concepts[code] = replace(
+                original or Concept(code, summary=code), summary=summary,
+            )
+            self._show_item_details(item)
+            self._refresh_item_row(self.selected_budget_index)
+            self._mark_dirty()
+            self._set_status(f"Actualizada la descripción de {code} en la partida {item.code}.")
+            return
+        number = parse_float(value, float("nan"))
+        if not isfinite(number):
+            messagebox.showerror("Dato inválido", f"'{value}' no es un número válido.")
+            return
         if "%" in code and column == "#4":
             messagebox.showwarning(
                 "Precio calculado",
@@ -3393,6 +3738,17 @@ class BudgetApp:
                 str(code): str(kind)
                 for code, kind in data.get("component_types", {}).items()
             },
+            component_concepts={
+                str(code): Concept(
+                    code=str(code), unit=str(concept.get("unit", "")),
+                    summary=str(concept.get("summary", "")),
+                    price=float(concept.get("price", 0.0)),
+                    ctype=str(concept.get("ctype", "0")),
+                    text=str(concept.get("text", "")),
+                    children=[(str(child), float(quantity)) for child, quantity in concept.get("children", [])],
+                )
+                for code, concept in data.get("component_concepts", {}).items()
+            },
             measurement_lines=measurement_lines,
             planned_amounts={
                 str(month): float(amount)
@@ -3444,6 +3800,14 @@ class BudgetApp:
                     "component_prices": item.component_prices,
                     "concept_type": item.concept_type,
                     "component_types": item.component_types,
+                    "component_concepts": {
+                        code: {
+                            "unit": concept.unit, "summary": concept.summary,
+                            "price": concept.price, "ctype": concept.ctype,
+                            "text": concept.text, "children": concept.children,
+                        }
+                        for code, concept in item.component_concepts.items()
+                    },
                     "planned_amounts": item.planned_amounts,
                     "certifications": item.certifications,
                     "certification_plans": item.certification_plans,
