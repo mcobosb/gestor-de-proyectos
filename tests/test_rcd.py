@@ -335,6 +335,7 @@ class RcdWindowTests(unittest.TestCase):
         ):
             self.app = BudgetApp(self.root)
         set_items(self.app)
+        self.app.chapter_titles["03#"] = "Otros costes"
 
     def open(self):
         self.app.open_rcds()
@@ -731,6 +732,7 @@ class RcdWindowTests(unittest.TestCase):
             window.review_demolition()
             info.assert_called_once()
         set_items(self.app)
+        self.app.chapter_titles["03#"] = "Otros costes"
         self.app.budget_items.extend([
             ProjectItem("T1", "03#", "m³", "Transporte a vertedero"),
             ProjectItem("T2", "03#", "m³", "Transporte de residuos a gestor"),

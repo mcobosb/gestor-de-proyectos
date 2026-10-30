@@ -22,6 +22,8 @@ certificaciones mensuales.
   las UO BCCA y permite revisarlas antes de crear el capítulo correspondiente.
 - Porcentaje orientativo configurable y matriz CSV incluida en la aplicación.
 - Informe PDF del capítulo con presupuesto y mediciones.
+- La selección y el porcentaje aceptados se guardan en JSON; al reabrir la
+  herramienta se recuperan sin consultar de nuevo la matriz ni recalcular el capítulo.
 
 ### Gestión de RCDs
 
@@ -37,6 +39,15 @@ certificaciones mensuales.
 La estimación debe revisarse por el técnico responsable; no acredita cumplimiento
 normativo ni sustituye la identificación de residuos peligrosos. El ODS de trabajo
 no es necesario para ejecutar la herramienta y no se incluye en el instalador.
+
+Si un presupuesto BC3 ya incluye capítulos de RCDs o de Seguridad y Salud, su
+herramienta correspondiente queda desactivada para evitar duplicarlos o recalcularlos.
+Se reconocen por el nombre o código del capítulo (residuos, escombros, RCDs,
+seguridad y salud, seguridad e higiene o prevención de riesgos).
+Los capítulos generados por este programa conservan el acceso: al abrir la
+herramienta desde su proyecto JSON se cargan los datos guardados sin recalcular
+ni modificar las partidas. Los cambios se aplican al aceptarlos o guardarlos
+expresamente en la herramienta.
 
 ## 🚀 Release v1.1.0 — ¡Primeros pasos!
 

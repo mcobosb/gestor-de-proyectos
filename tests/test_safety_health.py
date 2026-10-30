@@ -6,10 +6,28 @@ import unittest
 
 from bc3_gui import ProjectItem
 from pypdf import PdfReader
-from safety_health import SAFETY_BUDGET_SOURCE, proposed_lines, synchronize_budget, write_report
+from safety_health import (
+    SAFETY_BUDGET_SOURCE, SafetyLine, proposed_lines, restore_state, serialize_state,
+    synchronize_budget, write_report,
+)
 
 
 class SafetyHealthTests(unittest.TestCase):
+    def test_saved_review_validation_and_roundtrip(self):
+        """Validate saved selections and reject malformed or nonfinite project data."""
+        lines = [SafetyLine("A", "ud", "Casco", Decimal("3.50"), Decimal("2"), False)]
+        state = serialize_state(lines, Decimal("2.5"))
+        self.assertEqual(restore_state(state), (lines, Decimal("2.5")))
+        for invalid in (
+            [], {"lines": []}, {**state, "percentage": "NaN"},
+            {**state, "percentage": -1},
+            {**state, "lines": [state["lines"][0], state["lines"][0]]},
+            {**state, "lines": [{**state["lines"][0], "price": "inf"}]},
+            {**state, "lines": [{**state["lines"][0], "selected": "yes"}]},
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                restore_state(invalid)
+
     def test_proposal_and_generated_chapter_preserve_the_original_budget(self):
         source = ProjectItem(
             "01AAB00001", "01#", "m2", "Demolición de bóveda",

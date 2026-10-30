@@ -299,6 +299,21 @@ referencia o completa los precios necesarios antes de volver a generarlo.
 
 ## 8. Estimar residuos de construcción y demolición (RCDs)
 
+Si el presupuesto importado ya tiene un capítulo de gestión de residuos, RCDs
+o escombros no creado por la herramienta, **Herramientas → RCDs** queda
+desactivada. No se recalculan sus importes ni se crea otro capítulo.
+Lo mismo se aplica a **Herramientas → Seguridad y salud** si existe un capítulo
+externo de seguridad y salud, seguridad e higiene o prevención de riesgos.
+
+Los capítulos generados por el programa mantienen su herramienta habilitada.
+Al abrirlos desde el proyecto JSON, RCDs recupera sus datos de cálculo y marcas;
+Seguridad y Salud recupera la propuesta aceptada, incluidas las partidas
+desmarcadas y el porcentaje. Abrir la ventana no vuelve a calcular ni modifica
+el presupuesto. En JSON antiguos sin la revisión de Seguridad y Salud, se
+muestran las partidas generadas ya guardadas en el presupuesto, sin consultar
+de nuevo la matriz. Para aplicar cambios hay que aceptarlos o guardarlos
+expresamente en la herramienta.
+
 Abre **Herramientas → RCDs**, primera entrada del menú. El modelo procede de las
 hojas **Resumen**, **Lista MAM** y **Presupuesto** del ODS aportado, pero no
 necesita ese archivo para funcionar. Es una estimación revisable, no una

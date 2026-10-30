@@ -1579,6 +1579,190 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
                     self.assertEqual(menu.entrycget(index, "state"),
                                      "disabled" if index < 3 else "normal")
 
+    def test_external_specialty_chapter_names_disable_only_the_corresponding_tool(self):
+        """Recognize common imported chapter names without examining resource descriptions."""
+        for title, tool in (
+            ("GESTIÓN DE RESIDUOS DE CONSTRUCCIÓN Y DEMOLICIÓN", "rcd"),
+            ("R.C.D.s", "rcd"), ("Retirada de escombros", "rcd"),
+            ("RCDS", "rcd"), ("SEGURIDAD Y SALUD", "safety"),
+            ("Seguridad e higiene", "safety"), ("Prevención de riesgos laborales", "safety"),
+            ("Seguridad", "safety"), ("Estudio básico de seguridad", "safety"),
+            ("S. Y S.", "safety"),
+        ):
+            with self.subTest(title=title):
+                self.app.budget_items = [ProjectItem("P", "09#", "ud", "Partida", source="BC3")]
+                self.app.chapter_order = ["09#"]
+                self.app.chapter_titles = {"09#": title}
+                self.app.refresh_budget_tree()
+                index = 0 if tool == "rcd" else 1
+                self.assertEqual(self.app.tools_menu.entrycget(index, "state"), "disabled")
+                self.assertEqual(self.app.tools_menu.entrycget(1 - index, "state"), "normal")
+                before = self.app._project_payload()
+                with (
+                    patch("bc3_gui.messagebox.showwarning") as warning,
+                    patch("rcd.RcdWindow") as rcd_window,
+                    patch("safety_health.SafetyHealthWindow") as safety_window,
+                ):
+                    (self.app.open_rcds if tool == "rcd" else self.app.open_safety_health)()
+                warning.assert_called_once()
+                rcd_window.assert_not_called()
+                safety_window.assert_not_called()
+                self.assertEqual(self.app._project_payload(), before)
+        self.app.chapter_titles["09#"] = "Albañilería"
+        self.app.budget_items[0].summary = "Contenedor de residuos y casco de seguridad"
+        self.app.refresh_budget_tree()
+        self.assertEqual(self.app.tools_menu.entrycget(0, "state"), "normal")
+        self.assertEqual(self.app.tools_menu.entrycget(1, "state"), "normal")
+
+    def test_imported_specialty_chapters_remain_locked_after_json_save(self):
+        """Read chapter titles from BC3 and retain external ownership in its JSON sidecar."""
+        path = self.directory / "specialties.bc3"
+        path.write_text(
+            "~V|TEST|FIEBDC-3/2016|\n"
+            "~C|ROOT##||OBRA|0||0|\n"
+            "~C|01#||GESTION DE RESIDUOS|0||0|\n"
+            "~C|02#||SEGURIDAD Y SALUD|0||0|\n"
+            "~C|P1|ud|Residuos|123.45||0|\n"
+            "~C|P2|ud|Protecciones|67.89||0|\n"
+            "~D|ROOT##|01#\\1\\1\\02#\\1\\1\\|\n"
+            "~D|01#|P1\\1\\2\\|\n"
+            "~D|02#|P2\\1\\3\\|\n", encoding="utf-8",
+        )
+        self.app._load_budget_file(path)
+        self.assertEqual(len(self.app.budget_items), 2)
+        before = self.app._project_payload()
+        self.assertEqual(self.app.tools_menu.entrycget(0, "state"), "disabled")
+        self.assertEqual(self.app.tools_menu.entrycget(1, "state"), "disabled")
+        self.assertTrue(self.app._load_project_file(path.with_suffix(".json")))
+        self.assertEqual(self.app._project_payload()["items"], before["items"])
+        self.assertEqual(self.app.tools_menu.entrycget(0, "state"), "disabled")
+        self.assertEqual(self.app.tools_menu.entrycget(1, "state"), "disabled")
+        path.unlink()
+        with patch("bc3_gui.messagebox.showwarning"):
+            self.assertTrue(self.app._load_project_file(path.with_suffix(".json")))
+        self.assertEqual(self.app.tools_menu.entrycget(0, "state"), "disabled")
+        self.assertEqual(self.app.tools_menu.entrycget(1, "state"), "disabled")
+
+    def test_safety_review_roundtrip_opens_saved_selection_without_recalculation(self):
+        """Restore selected and excluded lines and percentage without reading the matrix."""
+        from decimal import Decimal
+        from safety_health import SafetyLine, synchronize_budget
+
+        self.app.budget_items = [ProjectItem("P", "01#", "ud", "Obra", unit_price=1000)]
+        self.app.chapter_order = ["01#"]
+        lines = [
+            SafetyLine("A", "ud", "Protección", Decimal("12"), Decimal("3")),
+            SafetyLine("B", "ud", "Señal", Decimal("9"), Decimal("1"), False),
+        ]
+        synchronize_budget(self.app, lines, Decimal("3.5"))
+        path = self.directory / "safety.json"
+        self.assertTrue(self.app._write_project_file(path))
+        before = self.app._project_payload()
+        with (
+            patch("safety_health.proposed_lines", side_effect=AssertionError("matrix read")),
+            patch("safety_health.synchronize_budget", side_effect=AssertionError("recalculation")),
+        ):
+            self.assertTrue(self.app._load_project_file(path))
+            loaded = self.app._capture_project_state()
+            self.app.open_safety_health()
+            window = self.app._safety_health_window
+            self.assertEqual(window.percentage.get(), "3.5")
+            self.assertEqual(window.lines, lines)
+            self.assertEqual(window.tree.set("B", "selected"), "")
+            self.app.open_safety_health()
+            self.assertIs(self.app._safety_health_window, window)
+        self.assertEqual(self.app.tools_menu.entrycget(1, "state"), "normal")
+        self.assertEqual(self.app._project_payload()["items"], before["items"])
+        self.assertEqual(self.app._capture_project_state(), loaded)
+        self.assertFalse(self.app.is_dirty)
+
+    def test_legacy_safety_json_uses_generated_items_without_new_proposal(self):
+        """Older project JSON already contains the generated safety chapter and its prices."""
+        self.app.budget_items = [
+            ProjectItem("SS-A", "SS#", "ud", "Protección existente", measurement=7,
+                        unit_price=11, source="SS:A"),
+        ]
+        self.app.chapter_order = ["SS#"]
+        self.app.chapter_titles = {"SS#": "SEGURIDAD Y SALUD"}
+        self.app.refresh_budget_tree()
+        before = self.app._project_payload()
+        with patch("safety_health.proposed_lines", side_effect=AssertionError("matrix read")):
+            self.app.open_safety_health()
+        window = self.app._safety_health_window
+        self.assertEqual(window.lines[0].price, 11)
+        self.assertEqual(window.lines[0].weight, 77)
+        self.assertEqual(self.app._project_payload(), before)
+
+    def test_rcd_json_opens_saved_inputs_without_recalculating_generated_budget(self):
+        """Opening saved RCD data must not invoke initial recovery or calculation."""
+        from rcd import RcdState, synchronize_budget
+
+        self.app.budget_items = [ProjectItem("P", "01#", "ud", "Obra", unit_price=1000)]
+        self.app.chapter_order = ["01#"]
+        state = RcdState()
+        state.inputs.update(surface=20, budget=1000, earth_budget=0, earth_volume=3)
+        synchronize_budget(self.app, state)
+        self.app.rcd_state = state.to_dict()
+        path = self.directory / "rcd.json"
+        self.assertTrue(self.app._write_project_file(path))
+        before = self.app._project_payload()
+        with (
+            patch("rcd.initial_state", side_effect=AssertionError("initial recovery")),
+            patch("rcd.calculate", side_effect=AssertionError("calculation")),
+            patch("rcd.synchronize_budget", side_effect=AssertionError("budget sync")),
+        ):
+            self.assertTrue(self.app._load_project_file(path))
+            loaded = self.app._capture_project_state()
+            self.app.open_rcds()
+            window = self.app._rcd_window
+            self.assertEqual(window.data.to_dict(), state.to_dict())
+            self.assertEqual(window.variables["surface"].get(), "20.0")
+        self.assertEqual(self.app.tools_menu.entrycget(0, "state"), "normal")
+        self.assertEqual(self.app._project_payload()["items"], before["items"])
+        self.assertEqual(self.app._capture_project_state(), loaded)
+        self.assertFalse(self.app.is_dirty)
+
+    def test_safety_review_participates_in_undo_and_new_project_reset(self):
+        """Undo accepted safety reviews and clear them when starting another project."""
+        from decimal import Decimal
+        from safety_health import SafetyLine, synchronize_budget
+
+        self.prepare_history()
+        lines = [SafetyLine("A", "ud", "Protección", Decimal("12"), Decimal("3"))]
+        synchronize_budget(self.app, lines, Decimal("2"))
+        self.assertTrue(self.app.safety_health_state)
+        self.app.open_safety_health()
+        self.app.undo_last_action()
+        self.assertEqual(self.app.safety_health_state, {})
+        self.assertIsNone(self.app._safety_health_window)
+        self.assertFalse(any(item.source.startswith("SS:") for item in self.app.budget_items))
+        synchronize_budget(self.app, lines, Decimal("2"))
+        with (
+            patch("bc3_gui.simpledialog.askstring", return_value="Nuevo"),
+            patch.object(self.app, "_confirm_project_change", return_value=True),
+        ):
+            self.app.new_project()
+        self.assertEqual(self.app.safety_health_state, {})
+        self.assertEqual(self.app.tools_menu.entrycget(1, "state"), "normal")
+
+    def test_external_chapter_is_not_synced_on_save_even_with_stale_rcd_state(self):
+        """A saved estimate must not override a separately imported waste chapter."""
+        from rcd import RcdState
+
+        self.app.budget_items = [
+            ProjectItem("P", "RCD#", "ud", "Importado", unit_price=321, source="BC3"),
+        ]
+        self.app.chapter_order = ["RCD#"]
+        self.app.rcd_state = RcdState().to_dict()
+        self.app.budget_items.append(
+            ProjectItem("OLD", "OLD#", "ud", "Generado antiguo", source="RCD:earth")
+        )
+        self.app.chapter_order.append("OLD#")
+        before = self.app._project_payload()["items"]
+        with patch("rcd.synchronize_budget", side_effect=AssertionError("budget sync")):
+            self.assertTrue(self.app._write_project_file(self.directory / "external.json"))
+        self.assertEqual(self.app._project_payload()["items"], before)
+
     def test_repository_browser_failures_are_reported(self):
         """Report a refused or failed browser launch without claiming success."""
         for result in (False, OSError("browser unavailable"), ValueError("invalid browser")):

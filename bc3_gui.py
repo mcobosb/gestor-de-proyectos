@@ -9,6 +9,7 @@ import os
 import re
 import tempfile
 import tkinter as tk
+import unicodedata
 import webbrowser
 from dataclasses import dataclass, field, replace
 from datetime import date
@@ -674,6 +675,7 @@ class BudgetApp:
         self.invoicing_state: dict = {}
         self._invoicing_window: tk.Toplevel | None = None
         self.rcd_state: dict = {}
+        self.safety_health_state: dict = {}
         self._rcd_window: tk.Toplevel | None = None
         self._safety_health_window: tk.Toplevel | None = None
         self._project_windows: list[tk.Toplevel] = []
@@ -775,7 +777,10 @@ class BudgetApp:
         export_menu.add_command(label="Exportar descompuestos a ODS…", command=lambda: self.export_resource_report("Descompuestos"))
 
         tools_menubutton = ttk.Menubutton(toolbar, text="Herramientas", style="Toolbar.TMenubutton")
-        tools_menu = tk.Menu(tools_menubutton, tearoff=False)
+        tools_menu = tk.Menu(
+            tools_menubutton, tearoff=False, postcommand=self._refresh_tool_menu
+        )
+        self.tools_menu = tools_menu
         tools_menu.add_command(label="RCDs", command=self.open_rcds)
         tools_menu.add_command(label="Seguridad y salud", command=self.open_safety_health)
         tools_menu.add_command(label="Planificación", command=self.open_planning)
@@ -1554,10 +1559,14 @@ class BudgetApp:
             self.selected_budget_index = None
             self.selected_chapter = None
             self.chapter_order = self._chapters_from_items()
-            self.chapter_titles.clear()
+            self.chapter_titles = {
+                code: concept.summary for code, concept in ds.concepts.items()
+                if is_chapter_code(code) and not code.endswith("##")
+            }
             self.planning_state = {}
             self.invoicing_state = {}
             self.rcd_state = {}
+            self.safety_health_state = {}
             self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
             for item in self.budget_items:
                 item.set_indirect_costs(self.report_settings.indirect_costs)
@@ -1598,6 +1607,7 @@ class BudgetApp:
         self.planning_state = {}
         self.invoicing_state = {}
         self.rcd_state = {}
+        self.safety_health_state = {}
         self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
         self.project_title = project_title.strip() or "Nuevo proyecto"
         self.project_path = None
@@ -2501,6 +2511,7 @@ class BudgetApp:
 
     def refresh_budget_tree(self):
         """Reconstruye el árbol del presupuesto, sus capítulos, recursos y totales."""
+        self._refresh_tool_menu()
         self._close_type_editor()
         self._restore_budget_rows()
         for row in self.budget_tree.get_children():
@@ -3217,6 +3228,7 @@ class BudgetApp:
             "planning": self.planning_state,
             "invoicing": self.invoicing_state,
             "rcds": self.rcd_state,
+            "safety_health": self.safety_health_state,
             "settings": self.report_settings,
             "title": self.project_title,
         })
@@ -3256,6 +3268,7 @@ class BudgetApp:
         self.planning_state = restored["planning"]
         self.invoicing_state = restored["invoicing"]
         self.rcd_state = restored["rcds"]
+        self.safety_health_state = restored["safety_health"]
         self.report_settings = restored["settings"]
         self.project_title = restored["title"]
         self.selected_budget_index = None
@@ -3684,7 +3697,8 @@ class BudgetApp:
         try:
             from rcd import RCD_BUDGET_SOURCE, RcdState, synchronize_budget
 
-            if self.rcd_state and any(item.source.startswith(RCD_BUDGET_SOURCE) for item in self.budget_items):
+            if (self.rcd_state and not self._has_external_tool_chapter("rcd")
+                    and any(item.source.startswith(RCD_BUDGET_SOURCE) for item in self.budget_items)):
                 synchronize_budget(self, RcdState.from_dict(self.rcd_state))
             self._mark_dirty()
             content = json.dumps(self._project_payload(), ensure_ascii=False, indent=2)
@@ -3815,6 +3829,7 @@ class BudgetApp:
             "planning": self.planning_state,
             "invoicing": self.invoicing_state,
             "rcds": self.rcd_state,
+            "safety_health": self.safety_health_state,
             "report_settings": self.report_settings.to_dict(),
             "items": [
                 {
@@ -3888,6 +3903,14 @@ class BudgetApp:
             rcd_state = RcdState.from_dict(raw_rcds).to_dict() if raw_rcds else {}
             if not isinstance(raw_rcds, dict):
                 raise ValueError("Los datos RCDs deben ser un objeto JSON.")
+            from safety_health import restore_state, serialize_state
+
+            raw_safety = payload.get("safety_health", {})
+            if not isinstance(raw_safety, dict):
+                raise ValueError("Los datos de Seguridad y Salud deben ser un objeto JSON.")
+            safety_health_state = (
+                serialize_state(*restore_state(raw_safety)) if raw_safety else {}
+            )
             if source_budget_path is not None:
                 declared_source = payload.get("source_budget_bc3")
                 if declared_source is not None and Path(declared_source).name != source_budget_path.name:
@@ -3927,6 +3950,10 @@ class BudgetApp:
                 if isinstance(titles, dict)
                 else {}
             )
+            if budget_dataset is not None:
+                for code, concept in budget_dataset.concepts.items():
+                    if is_chapter_code(code) and not code.endswith("##"):
+                        chapter_titles.setdefault(code, concept.summary)
             planning = payload.get("planning", {})
             planning_state = planning if isinstance(planning, dict) else {}
             title = payload.get("title")
@@ -3946,6 +3973,7 @@ class BudgetApp:
         self.planning_state = planning_state
         self.project_title = project_title
         self.rcd_state = rcd_state
+        self.safety_health_state = safety_health_state
         self.budget_dataset = budget_dataset
         self.report_settings = report_settings
         self.project_path = project_path
@@ -4408,6 +4436,52 @@ th {{ background: #1f4e78; color: white; }}
             self._rcd_window.destroy()
         self._rcd_window = None
 
+    def _has_external_tool_chapter(self, tool: str) -> bool:
+        """Detecta capítulos de la especialidad que no fueron generados por su herramienta."""
+        prefix = "RCD:" if tool == "rcd" else "SS:"
+        chapters = set(self.chapter_order) | set(self.chapter_titles)
+        chapters.update(item.chapter for item in self.budget_items)
+        for chapter in chapters:
+            title = self._chapter_title(chapter)
+            normalized = unicodedata.normalize("NFKD", f"{chapter} {title}".casefold())
+            text = re.sub(r"[^a-z0-9]+", " ", "".join(
+                char for char in normalized if not unicodedata.combining(char)
+            )).strip()
+            code = re.sub(r"[^a-z0-9]", "", chapter.casefold())
+            if tool == "rcd":
+                matches = (re.search(r"\b(?:rcds?|residuos?|escombros?)\b", text)
+                           or re.search(r"\br\s+c\s+d\s*s?\b", text)
+                           or re.fullmatch(r"rcds?\d*", code))
+            else:
+                matches = (re.search(
+                    r"\b(?:seguridad|salud)\b|\bprevencion\b.*\briesgos\b|"
+                    r"\bs\s+(?:y\s+)?s\b",
+                    text,
+                ) or re.fullmatch(r"(?:ss|sys)\d*", code))
+            members = [item for item in self.budget_items if item.chapter == chapter]
+            if matches and not any(item.source.startswith(prefix) for item in members):
+                return True
+        return False
+
+    def _refresh_tool_menu(self) -> None:
+        """Desactiva las herramientas que duplicarían capítulos importados."""
+        for index, tool in enumerate(("rcd", "safety")):
+            self.tools_menu.entryconfigure(
+                index, state="disabled" if self._has_external_tool_chapter(tool) else "normal"
+            )
+
+    def _tool_chapter_available(self, tool: str) -> bool:
+        """Impide también el acceso directo a herramientas con capítulos ajenos."""
+        if not self._has_external_tool_chapter(tool):
+            return True
+        messagebox.showwarning(
+            "RCDs" if tool == "rcd" else "Seguridad y salud",
+            "El presupuesto ya contiene un capítulo de esta especialidad no generado "
+            "por la herramienta. Se conserva sin recalcular ni crear otro capítulo.",
+            parent=self.root,
+        )
+        return False
+
     def _dismiss_safety_health(self) -> None:
         """Cierra la ventana de Seguridad y Salud antes de cambiar de proyecto."""
         if self._safety_health_window is not None and self._safety_health_window.winfo_exists():
@@ -4416,6 +4490,8 @@ th {{ background: #1f4e78; color: white; }}
 
     def open_rcds(self) -> None:
         """Abre la estimación de residuos y sus datos guardados en el proyecto."""
+        if not self._tool_chapter_available("rcd"):
+            return
         if not self.budget_items:
             messagebox.showinfo("RCDs", "Carga o crea un presupuesto antes de estimar residuos.")
             return
@@ -4428,6 +4504,8 @@ th {{ background: #1f4e78; color: white; }}
 
     def open_safety_health(self) -> None:
         """Propone y revisa las partidas de Seguridad y Salud del presupuesto activo."""
+        if not self._tool_chapter_available("safety"):
+            return
         if not self.budget_items:
             messagebox.showinfo(
                 "Seguridad y salud",

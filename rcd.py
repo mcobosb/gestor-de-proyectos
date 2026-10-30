@@ -934,6 +934,8 @@ class RcdWindow(tk.Toplevel):
 
     def save(self):
         """Incorpora el presupuesto RCDs al proyecto antes de guardarlo."""
+        if not self.app._tool_chapter_available("rcd"):
+            return
         try:
             synchronize_budget(self.app, self.data)
         except ValueError as exc:

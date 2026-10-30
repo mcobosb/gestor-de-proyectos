@@ -35,6 +35,47 @@ def _decimal(value: object) -> Decimal:
     return Decimal(str(value).replace(",", "."))
 
 
+def serialize_state(lines: list[SafetyLine], percentage: Decimal) -> dict:
+    """Conserva la revisión completa, incluidas las partidas desmarcadas."""
+    return {
+        "percentage": str(percentage),
+        "lines": [
+            {"code": line.code, "unit": line.unit, "summary": line.summary,
+             "price": str(line.price), "weight": str(line.weight), "selected": line.selected}
+            for line in lines
+        ],
+    }
+
+
+def restore_state(data: object) -> tuple[list[SafetyLine], Decimal]:
+    """Valida la revisión JSON sin consultar la matriz ni recalcular el presupuesto."""
+    if not isinstance(data, dict) or not isinstance(data.get("lines"), list):
+        raise ValueError("Los datos de Seguridad y Salud no contienen una revisión válida.")
+    lines = []
+    codes = set()
+    try:
+        percentage = _decimal(data["percentage"])
+        if not percentage.is_finite() or not 0 <= percentage <= 100:
+            raise ValueError("El porcentaje debe estar entre 0 y 100.")
+        for row in data["lines"]:
+            if not isinstance(row, dict):
+                raise ValueError("Hay una partida de Seguridad y Salud no válida.")
+            if any(not isinstance(row.get(key), str) for key in ("code", "unit", "summary")):
+                raise ValueError("Los textos de Seguridad y Salud no son válidos.")
+            if not row["code"] or row["code"] in codes or not isinstance(row.get("selected"), bool):
+                raise ValueError("La selección de Seguridad y Salud no es válida.")
+            price, weight = _decimal(row["price"]), _decimal(row["weight"])
+            if (not price.is_finite() or not weight.is_finite() or price <= 0 or weight < 0):
+                raise ValueError("Los precios y pesos de Seguridad y Salud no son válidos.")
+            lines.append(SafetyLine(
+                row["code"], row["unit"], row["summary"], price, weight, row["selected"],
+            ))
+            codes.add(row["code"])
+    except (KeyError, ArithmeticError, TypeError) as exc:
+        raise ValueError("Los datos numéricos de Seguridad y Salud no son válidos.") from exc
+    return lines, percentage
+
+
 def proposed_lines(items: list[ProjectItem]) -> list[SafetyLine]:
     """Agrupa las partidas SS de la matriz que corresponden a las UO del presupuesto."""
     item_codes = {item.code for item in items if not item.source.startswith(SAFETY_BUDGET_SOURCE)}
@@ -103,6 +144,7 @@ def synchronize_budget(app: BudgetApp, lines: list[SafetyLine], percentage: Deci
         app.budget_items.append(item)
     app._ensure_chapter(chapter)
     app.chapter_titles[chapter] = "SEGURIDAD Y SALUD"
+    app.safety_health_state = serialize_state(lines, percentage)
     app.refresh_budget_tree()
     app._mark_dirty()
 
@@ -161,12 +203,31 @@ class SafetyHealthWindow(tk.Toplevel):
         self.geometry("1060x620")
         self.minsize(850, 480)
         try:
-            self.lines = proposed_lines(app.budget_items)
+            if app.safety_health_state:
+                self.lines, percentage = restore_state(app.safety_health_state)
+            else:
+                generated = [
+                    item for item in app.budget_items
+                    if item.source.startswith(SAFETY_BUDGET_SOURCE)
+                ]
+                self.lines = []
+                for item in generated:
+                    price = Decimal(str(
+                        item.unit_price if item.direct_unit_price is None else item.direct_unit_price
+                    ))
+                    self.lines.append(SafetyLine(
+                        item.source.removeprefix(SAFETY_BUDGET_SOURCE),
+                        item.unit, item.summary, price,
+                        Decimal(str(item.measurement)) * price,
+                    ))
+                if not generated:
+                    self.lines = proposed_lines(app.budget_items)
+                percentage = Decimal(str(app.report_settings.safety_health_percentage))
         except ValueError as exc:
             messagebox.showerror("Seguridad y salud", str(exc), parent=self)
             self.after_idle(self.destroy)
             return
-        self.percentage = tk.StringVar(value=str(app.report_settings.safety_health_percentage))
+        self.percentage = tk.StringVar(value=str(percentage))
         ttk.Label(self, text="Seguridad y salud — propuesta revisable", style="Total.TLabel").pack(
             anchor="w", padx=12, pady=(12, 4)
         )
@@ -192,7 +253,8 @@ class SafetyHealthWindow(tk.Toplevel):
         self.tree.pack(fill="both", expand=True, padx=12, pady=4)
         for line in self.lines:
             self.tree.insert("", "end", iid=line.code, values=(
-                "X", line.code, line.summary, line.unit, f"{line.price:.2f}", f"{line.weight:.2f}",
+                "X" if line.selected else "", line.code, line.summary, line.unit,
+                f"{line.price:.2f}", f"{line.weight:.2f}",
             ))
         self.tree.bind("<ButtonRelease-1>", self._toggle)
         self.tree.bind("<space>", self._toggle)
@@ -220,6 +282,8 @@ class SafetyHealthWindow(tk.Toplevel):
 
     def _create_chapter(self) -> bool:
         """Incorpora la selección actual y permite continuar revisando o emitir el informe."""
+        if not self.app._tool_chapter_available("safety"):
+            return False
         try:
             percentage = _decimal(self.percentage.get())
             if not Decimal() <= percentage <= 100:
