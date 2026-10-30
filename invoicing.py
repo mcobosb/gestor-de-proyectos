@@ -474,6 +474,7 @@ class InvoicingWindow(tk.Toplevel):
         self._invoice_ids: list[str] = []
         self._visible_invoice_ids: list[str] = []
         self.resource_filter = ""
+        self.unify_resources = tk.BooleanVar(self, value=False)
         self._cell_editor: ttk.Entry | None = None
         self._cell_commit: Callable[[], bool] | None = None
         self._committing_cell = False
@@ -556,6 +557,19 @@ class InvoicingWindow(tk.Toplevel):
         ToolTip(self.save_button, "Guardar los cambios de facturación en el proyecto (Ctrl+S).")
         self.bind("<Control-s>", lambda _event: self.save())
         self._set_dirty(self._is_dirty)
+        view_controls = ttk.Frame(self.billing_panel, padding=(8, 0))
+        view_controls.pack(fill="x")
+        self.unify_button = ttk.Checkbutton(
+            view_controls, text="Unificar recursos", variable=self.unify_resources,
+            command=self._refresh,
+        )
+        self.unify_button.pack(side="left")
+        ToolTip(
+            self.unify_button,
+            "Sumar recursos iguales entre partidas. Vista de solo lectura.",
+        )
+        self.view_notice = ttk.Label(view_controls)
+        self.view_notice.pack(side="left", padx=8)
         ttk.Label(self.billing_panel, textvariable=self.folder, wraplength=600).pack(fill="x", padx=8)
         filters = ttk.Frame(self.billing_panel, padding=(8, 0))
         filters.pack(fill="x")
@@ -623,7 +637,7 @@ class InvoicingWindow(tk.Toplevel):
         self.totals.grid(row=0, column=1, sticky="ns")
         for column, heading in (("budget", "Previsto"), ("billed", "Facturado"), ("remaining", "Restante")):
             self.totals.heading(column, text=heading)
-            self.totals.column(column, width=110, stretch=False, anchor="e")
+            self.totals.column(column, width=90, stretch=False, anchor="e")
         self.totals.tag_configure("over", foreground="#B91C1C")
         horizontal = ttk.Scrollbar(container, orient="horizontal", command=self.tree.xview)
         horizontal.grid(row=1, column=0, sticky="ew")
@@ -829,31 +843,44 @@ class InvoicingWindow(tk.Toplevel):
         rows = [row for row in self.data.rows if not self.resource_filter or row.kind == self.resource_filter]
         columns = ["chapter", "item", "resource", "description", "kind", "unit"]
         columns.extend(self._visible_invoice_ids)
-        self.tree.configure(columns=columns)
+        unified = self.unify_resources.get()
+        self.tree.configure(columns=columns, displaycolumns=columns[2:] if unified else columns)
+        self.view_notice.configure(text=translate("Solo lectura") if unified else "")
+        groups: dict[tuple[str, ...], list[CostRow]] = {}
+        for row in rows:
+            key = (
+                (row.resource, row.description, row.kind, row.unit)
+                if unified and row.resource else (row.id,)
+            )
+            groups.setdefault(key, []).append(row)
         for column, heading, width in (
-            ("chapter", "Capítulo", 90), ("item", "Partida", 100), ("resource", "Recurso", 100),
-            ("description", "Descripción", 240), ("kind", "Tipo", 105), ("unit", "Unidad", 60),
+            ("chapter", "Capítulo", 65), ("item", "Partida", 75), ("resource", "Recurso", 80),
+            ("description", "Descripción", 240), ("kind", "Tipo", 85), ("unit", "Unidad", 50),
         ):
             self.tree.heading(column, text=heading)
             self.tree.column(column, width=width, stretch=False)
         if active_invoice is not None:
             self.tree.heading(active_invoice.id, text=active_invoice.date or translate("Sin fecha"))
-            self.tree.column(active_invoice.id, width=140, stretch=False, anchor="e")
+            self.tree.column(active_invoice.id, width=110, stretch=False, anchor="e")
         for tree in (self.tree, self.totals):
             for row_id in tree.get_children():
                 tree.delete(row_id)
-        for row in rows:
-            billed = total(invoice.amounts.get(row.id, 0) for invoice in invoices)
-            remaining = total((row.budget, -billed))
+        for members in groups.values():
+            row = members[0]
+            row_budget = total(member.budget for member in members)
+            billed = total(
+                invoice.amounts.get(member.id, 0) for invoice in invoices for member in members
+            )
+            remaining = total((row_budget, -billed))
             self.tree.insert("", "end", iid=row.id, values=(
                 row.chapter, row.item, row.resource, row.description, row.kind, row.unit,
                 *(
-                    (fmt_eur(active_invoice.amounts.get(row.id, 0)),)
+                    (fmt_eur(total(active_invoice.amounts.get(member.id, 0) for member in members)),)
                     if active_invoice is not None else ()
                 ),
             ))
             self.totals.insert("", "end", iid=row.id, values=(
-                fmt_eur(row.budget), fmt_eur(billed), fmt_eur(remaining),
+                fmt_eur(row_budget), fmt_eur(billed), fmt_eur(remaining),
             ), tags=("over",) if remaining < 0 else ())
         if selected and self.tree.exists(selected[0]):
             self.tree.selection_set(selected)
@@ -1156,6 +1183,8 @@ class InvoicingWindow(tk.Toplevel):
 
     def edit_cell(self, event):
         """Edita sobre la tabla únicamente el importe de la factura seleccionada."""
+        if self.unify_resources.get():
+            return
         row_id = self.tree.identify_row(event.y)
         column = self.tree.identify_column(event.x)
         if not row_id or column != "#7" or not self._visible_invoice_ids:
@@ -1192,6 +1221,11 @@ class InvoicingWindow(tk.Toplevel):
 
     def _commit_cell(self, invoice_id: str, row_id: str, raw: str) -> bool:
         """Valida una asignación manual sin modificar otros costes ni otras facturas."""
+        if self.unify_resources.get():
+            messagebox.showinfo(
+                "Facturación", "Desactiva Unificar recursos para editar los importes.", parent=self,
+            )
+            return False
         if self._visible_invoice_ids != [invoice_id] or not self.tree.exists(row_id):
             messagebox.showerror("Facturación", "La selección ha cambiado. Vuelve a editar el importe.", parent=self)
             return False

@@ -13,6 +13,7 @@ import webbrowser
 from dataclasses import dataclass, field, replace
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
+from functools import partial
 from math import isfinite
 from pathlib import Path
 from tkinter import ttk
@@ -29,8 +30,23 @@ from odt_reports import write_report_odt
 
 APPLICATION_NAME = "Gestor de Proyectos"
 APPLICATION_VERSION = "1.5.0"
+APPLICATION_RELEASE_DATE = date(2026, 10, 30)
 REPOSITORY_URL = "https://github.com/mcobosb/gestor-de-proyectos"
 BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/mcobosb"
+REFERENCE_PRICE_DATABASES = (
+    (
+        "Andalucía (JA) — BCCA",
+        "https://www.juntadeandalucia.es/organismos/viviendajuventudyordenaciondelterritorio/areas/vivienda-rehabilitacion/planes-instrumentos/paginas/vivienda-bcca.html",
+    ),
+    (
+        "Extremadura — Base de precios",
+        "https://www.juntaex.es/w/base-precios-construccion-2026",
+    ),
+    (
+        "Madrid — Base de Datos de la Construcción",
+        "https://www.comunidad.madrid/vivienda/base-datos-construccion",
+    ),
+)
 
 CONCEPT_TYPES = {
     "chapter": "▣ Capítulo",
@@ -770,16 +786,34 @@ class BudgetApp:
         info_menubutton = ttk.Menubutton(toolbar, text="Información", style="Toolbar.TMenubutton")
         info_menu = tk.Menu(info_menubutton, tearoff=False)
         info_menu.add_command(label=APPLICATION_NAME, state="disabled")
-        info_menu.add_separator()
         info_menu.add_command(
-            label="Repositorio en GitHub", command=self.open_repository_page
+            label=translate("Versión {version} — {date}").format(
+                version=APPLICATION_VERSION,
+                date=APPLICATION_RELEASE_DATE.strftime("%d/%m/%Y"),
+            ),
+            state="disabled",
         )
-        info_menu.add_separator()
         info_menu.add_command(
             label="Presupuestos BC3, mediciones, planificación y certificaciones",
             state="disabled",
         )
         info_menu.add_separator()
+        reference_prices_menu = tk.Menu(info_menu, tearoff=False)
+        for label, url in REFERENCE_PRICE_DATABASES:
+            reference_prices_menu.add_command(
+                label=label,
+                command=partial(
+                    self._open_web_page, url, "Bases de precios de referencia",
+                    "Base de precios abierta en el navegador.",
+                ),
+            )
+        info_menu.add_cascade(
+            label="Bases de precios de referencia", menu=reference_prices_menu
+        )
+        info_menu.add_separator()
+        info_menu.add_command(
+            label="Repositorio en GitHub", command=self.open_repository_page
+        )
         info_menu.add_command(
             label="Licencia y responsabilidad…", command=self.show_license_info
         )
@@ -4447,22 +4481,31 @@ th {{ background: #1f4e78; color: white; }}
 
     def open_repository_page(self) -> None:
         """Abre el repositorio del proyecto en el navegador predeterminado."""
+        self._open_web_page(
+            REPOSITORY_URL, "Repositorio en GitHub",
+            "Repositorio abierto en el navegador.",
+        )
+
+    def _open_web_page(self, url: str, title: str, success_status: str) -> None:
+        """Abre una web e informa si no se puede iniciar el navegador."""
         try:
-            if not webbrowser.open(REPOSITORY_URL):
+            if not webbrowser.open(url):
                 messagebox.showerror(
-                    "Repositorio en GitHub",
-                    f"No se pudo abrir el navegador. Visita:\n{REPOSITORY_URL}",
+                    title,
+                    translate("No se pudo abrir el navegador. Visita:\n{url}").format(url=url),
                     parent=self.root,
                 )
                 return
         except (OSError, ValueError) as exc:
             messagebox.showerror(
-                "Repositorio en GitHub",
-                f"No se pudo abrir el navegador:\n{exc}\n\nVisita:\n{REPOSITORY_URL}",
+                title,
+                translate("No se pudo abrir el navegador:\n{error}\n\nVisita:\n{url}").format(
+                    error=exc, url=url,
+                ),
                 parent=self.root,
             )
             return
-        self._set_status("Repositorio abierto en el navegador.")
+        self._set_status(success_status)
 
     def open_donation_page(self) -> None:
         """Abre la página de apoyo del proyecto en el navegador predeterminado."""

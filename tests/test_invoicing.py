@@ -681,6 +681,22 @@ class InvoiceWindowTests(unittest.TestCase):
         self.root.update()
         self.assertEqual(self.window.tree.selection(), ("r50",))
 
+    def test_compact_columns_preserve_description_space_in_both_views(self):
+        """Keep secondary fields compact without reducing the description column."""
+        window = self.window
+        window.data.invoices = [Invoice("invoice", "Factura", date="30/10/2026")]
+        window._refresh()
+        for unified in (True, False):
+            window.unify_button.invoke()
+            self.assertEqual(window.unify_resources.get(), unified)
+            for column, width in (
+                ("chapter", 65), ("item", 75), ("resource", 80),
+                ("description", 240), ("kind", 85), ("unit", 50), ("invoice", 110),
+            ):
+                self.assertEqual(window.tree.column(column, "width"), width)
+            for column in ("budget", "billed", "remaining"):
+                self.assertEqual(window.totals.column(column, "width"), 90)
+
     def test_window_opens_directly_without_folder_dialog_or_automatic_reading(self):
         self.assertTrue(self.window.tree.winfo_exists())
         self.assertFalse(hasattr(self.window, "start"))
@@ -974,6 +990,97 @@ class InvoiceWindowTests(unittest.TestCase):
         self.assertIn("Selecciona una factura", window.pdf_status.cget("text"))
         self.assertEqual(str(window.pdf_next.cget("state")), "disabled")
         self.assertEqual(str(window.pdf_previous.cget("state")), "disabled")
+
+    def test_unified_resources_sum_all_items_invoices_and_periods_without_mutation(self):
+        window = self.window
+        window.data.rows = [
+            CostRow(f"r{index}", chapter=f"{index}#", item=f"P{index}",
+                    resource="HORM", description="Hormigon", kind="Material", unit="m3",
+                    budget=10 + index)
+            for index in range(10)
+        ]
+        window.data.rows.append(CostRow(
+            "maq", resource="MAQ", description="Grua", kind="Maquinaria", budget=100,
+        ))
+        window.data.invoices = [
+            Invoice("jan", "Enero", date="31/01/2026",
+                    amounts={f"r{index}": 1 + index for index in range(10)}),
+            Invoice("feb", "Febrero", date="28/02/2026", amounts={"r0": 200, "r9": -5}),
+        ]
+        window._refresh()
+        original = window.data.to_dict()
+        window.unify_button.invoke()
+        self.assertEqual(window.tree.get_children(), ("r0", "maq"))
+        self.assertEqual(window.totals.get_children(), ("r0", "maq"))
+        self.assertEqual(window.tree.cget("displaycolumns"),
+                         ("resource", "description", "kind", "unit", "jan"))
+        self.assertEqual(window.tree.item("r0", "values")[-1], "55,00 €")
+        self.assertEqual(window.totals.item("r0", "values"),
+                         ("145,00 €", "250,00 €", "-105,00 €"))
+        self.assertIn("over", window.totals.item("r0", "tags"))
+        window.select_invoice("feb")
+        self.assertEqual(window.tree.item("r0", "values")[-1], "195,00 €")
+        window.period_selector.set("2026-01")
+        window._refresh()
+        self.assertEqual(window.totals.item("r0", "values"),
+                         ("145,00 €", "55,00 €", "90,00 €"))
+        self.assertEqual(window.tree.item("r0", "values")[-1], "195,00 €")
+        window.filter_buttons["Material"].invoke()
+        self.assertEqual(window.tree.get_children(), ("r0",))
+        window.filter_buttons["RCDs"].invoke()
+        self.assertEqual(window.tree.get_children(), ())
+        window.filter_buttons["RCDs"].invoke()
+        window.unify_button.invoke()
+        self.assertEqual(len(window.tree.get_children()), 11)
+        self.assertEqual(window.tree.cget("displaycolumns")[:2], ("chapter", "item"))
+        self.assertEqual(window.view_notice.cget("text"), "")
+        self.assertEqual(window.data.to_dict(), original)
+
+    def test_unified_resources_keep_incompatible_or_uncoded_costs_separate(self):
+        window = self.window
+        window.data.rows = [
+            CostRow("one", resource="MAT", description="Hormigon", kind="Material", unit="m3", budget=1),
+            CostRow("two", resource="MAT", description="Hormigon", kind="Material", unit="m3", budget=2),
+            CostRow("unit", resource="MAT", description="Hormigon", kind="Material", unit="kg", budget=3),
+            CostRow("kind", resource="MAT", description="Hormigon", kind="Maquinaria", unit="m3", budget=4),
+            CostRow("text", resource="MAT", description="Otro hormigon", kind="Material", unit="m3", budget=5),
+            CostRow("empty1", description="Sin codigo", budget=6),
+            CostRow("empty2", description="Sin codigo", budget=7),
+        ]
+        window.unify_button.invoke()
+        self.assertEqual(window.tree.get_children(), ("one", "unit", "kind", "text", "empty1", "empty2"))
+        self.assertEqual(window.totals.item("one", "values"),
+                         ("3,00 €", "0,00 €", "3,00 €"))
+        self.assertEqual(len(window.tree.cget("displaycolumns")), 4)
+
+    def test_unified_resources_disable_editing_and_cancel_pending_cell(self):
+        window = self.window
+        row = window.data.rows[0]
+        window.data.invoices = [Invoice("i", "Factura", amounts={row.id: 20})]
+        window._refresh()
+        event = SimpleNamespace(x=1, y=1)
+        with (
+            patch.object(window.tree, "identify_row", return_value=row.id),
+            patch.object(window.tree, "identify_column", return_value="#7"),
+            patch.object(window.tree, "bbox", return_value=(0, 0, 140, 24)),
+        ):
+            window.edit_cell(event)
+            self.assertIsNotNone(window._cell_editor)
+            window._cell_editor.delete(0, "end")
+            window._cell_editor.insert(0, "999")
+            window.unify_button.invoke()
+            self.assertIsNone(window._cell_editor)
+            window.edit_cell(event)
+            self.assertIsNone(window._cell_editor)
+        before = window.data.to_dict()
+        with patch("invoicing.messagebox.showinfo") as info:
+            self.assertFalse(window._commit_cell("i", row.id, "999"))
+        info.assert_called_once()
+        self.assertEqual(window.data.to_dict(), before)
+        self.assertEqual(window.view_notice.cget("text"), "Solo lectura")
+        window.unify_button.invoke()
+        self.assertTrue(window._commit_cell("i", row.id, "25"))
+        self.assertEqual(window.data.invoices[0].amounts[row.id], 25)
 
     def test_pdf_preview_real_pages_zoom_and_selection_preserve_invoice_amounts(self):
         from reportlab.pdfgen import canvas

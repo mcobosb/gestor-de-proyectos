@@ -549,6 +549,15 @@ tiene su columna, aunque no se haya podido interpretar.
 
 ### Costes y asignación de facturas
 
+- **Unificar recursos** muestra una sola fila por recurso con el mismo código,
+  descripción, tipo y unidad, sumando sus importes entre todas las partidas.
+  Los precios distintos también se acumulan si corresponden al mismo recurso;
+  los costes sin código de recurso permanecen separados.
+  Oculta **Capítulo** y **Partida** y muestra **Solo lectura**: no se pueden
+  editar importes en la tabla agrupada. La columna de la factura seleccionada,
+  el previsto, el facturado global o acumulado y la diferencia se suman por grupo.
+  Se mantienen los filtros y el periodo elegido. Desactiva el botón para volver
+  al detalle editable; no se modifican las filas ni las asignaciones guardadas.
 - Cada fila representa un recurso dentro de una partida: material, mano de obra
   o maquinaria. Los auxiliares se desglosan hasta sus recursos. Los porcentajes
   no se consideran recursos facturables.
@@ -671,8 +680,17 @@ no se deducen ni se añaden impuestos automáticamente.
 
 ## 13. Licencia y precauciones
 
+El menú **Información** se organiza en tres bloques separados por líneas:
+nombre, versión, fecha de la versión y resumen del programa en gris; bases de
+precios de referencia; y enlaces al repositorio, licencia y apoyo al proyecto.
+
 En **Información → Repositorio en GitHub** puedes abrir el repositorio del
 proyecto en el navegador. El menú no muestra datos personales de autoría.
+
+En **Información → Bases de precios de referencia**, sitúa el puntero sobre
+la opción para desplegar los enlaces de Andalucía (JA), Extremadura y Madrid.
+Pulsa uno de ellos para abrir su web oficial en el navegador y consultar las
+opciones de descarga.
 
 En **Información → Licencia y responsabilidad…** puedes consultar el aviso MIT
 y la limitación de responsabilidad.

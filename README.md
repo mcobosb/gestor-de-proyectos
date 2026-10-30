@@ -106,7 +106,7 @@ La imagen también se incluye en la versión instalada.
 ## Uso rápido
 
 1. Abre **Archivo → Nuevo proyecto** o importa tu presupuesto BC3.
-2. Añade una base BCCA si necesitas incorporar partidas de referencia.
+2. Añade una base de precios en formato BC3 si necesitas incorporar partidas de referencia.
 3. Selecciona una partida y pulsa una celda de **Mediciones** para editarla.
 4. Completa **Archivo → Configuración** con la autoría y porcentajes.
 5. Completa **Herramientas → RCDs** y guarda para incorporar la gestión de residuos al presupuesto.
@@ -121,6 +121,42 @@ después, **Guardar** y **Ctrl+S** utilizan la nueva ubicación.
 **Deshacer** (Ctrl+Z) revierte hasta las últimas 50 acciones de la sesión.
 
 Consulta el [manual de usuario](docs/MANUAL_USUARIO.md) para el procedimiento completo.
+
+## Bases de precios de referencia
+
+Las bases de precios reúnen partidas, descompuestos y precios básicos de materiales,
+maquinaria y mano de obra. Puedes utilizarlas como referencia para preparar tu
+presupuesto; no se incluyen en la aplicación y deben descargarse por separado.
+
+Estas son algunas fuentes oficiales donde consultar las bases y sus opciones de descarga:
+
+También puedes abrir estas tres webs desde **Información → Bases de precios de
+referencia** en la pantalla principal: al situarte sobre esa opción se despliega
+el submenú y, al pulsar una base, se abre su página en el navegador.
+
+| Ámbito | Base y organismo | Consulta y descarga |
+|---|---|---|
+| Andalucía (JA) | Base de Costes de la Construcción de Andalucía (BCCA), Junta de Andalucía | [Ediciones y descargas de la BCCA](https://www.juntadeandalucia.es/organismos/viviendajuventudyordenaciondelterritorio/areas/vivienda-rehabilitacion/planes-instrumentos/paginas/vivienda-bcca.html) |
+| Extremadura | Base de precios de la construcción, Junta de Extremadura | [Edición 2026: publicación con descarga en BC3](https://www.juntaex.es/w/base-precios-construccion-2026) |
+| Madrid | Base de Datos de la Construcción, Comunidad de Madrid | [Información oficial](https://www.comunidad.madrid/vivienda/base-datos-construccion) y [acceso a la base](https://gestiona.comunidad.madrid/bdco_inter/) |
+
+Para incorporarlas al programa:
+
+1. Accede a la web del organismo y elige la edición que necesites.
+2. Descarga la base en **BC3 (FIEBDC-3)**, cuando esté disponible. Si se entrega
+   comprimida, extrae primero el archivo `.bc3`. Los documentos PDF y los archivos
+   de formatos propietarios no sustituyen al BC3 para esta carga.
+3. En el programa, abre **Archivo → Añadir base de referencia BCCA…** y selecciona
+   el archivo `.bc3`. Aunque el menú menciona BCCA, permite seleccionar bases BC3
+   de otros organismos.
+4. Consulta la base en el panel de referencia y copia las partidas o precios
+   básicos que necesites a tu presupuesto.
+
+Revisa siempre la fecha, el ámbito territorial, las condiciones de uso y los
+criterios de precios de cada publicación. Los importes son una referencia y deben
+adaptarse a las condiciones reales de la obra. Los formatos y requisitos de
+acceso o descarga dependen de cada organismo; los enlaces apuntan a sus páginas,
+no a copias redistribuidas por este proyecto.
 
 ## Dependencias
 

@@ -14,6 +14,7 @@ import planning
 
 from bc3_gui import (
     APPLICATION_NAME,
+    APPLICATION_RELEASE_DATE,
     APPLICATION_VERSION,
     Bc3Dataset,
     BudgetApp,
@@ -1511,6 +1512,72 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         with patch("bc3_gui.webbrowser.open", return_value=True) as browser:
             menu.invoke(index)
         browser.assert_called_once_with("https://github.com/mcobosb/gestor-de-proyectos")
+
+    def test_information_menu_reference_price_database_links(self):
+        """Expose a native cascade and open each official README link."""
+        toolbar = self.root.grid_slaves(row=0, column=0)[0]
+        button = next(child for child in toolbar.winfo_children()
+                      if child.cget("text") == "Información")
+        menu = self.root.nametowidget(button.cget("menu"))
+        index = next(i for i in range(menu.index("end") + 1)
+                     if menu.type(i) == "cascade" and
+                     menu.entrycget(i, "label") == "Bases de precios de referencia")
+        submenu = self.root.nametowidget(menu.entrycget(index, "menu"))
+        self.assertFalse(submenu.cget("tearoff"))
+        expected = (
+            ("Andalucía (JA) — BCCA",
+             "https://www.juntadeandalucia.es/organismos/viviendajuventudyordenaciondelterritorio/areas/vivienda-rehabilitacion/planes-instrumentos/paginas/vivienda-bcca.html"),
+            ("Extremadura — Base de precios",
+             "https://www.juntaex.es/w/base-precios-construccion-2026"),
+            ("Madrid — Base de Datos de la Construcción",
+             "https://www.comunidad.madrid/vivienda/base-datos-construccion"),
+        )
+        self.assertEqual(submenu.index("end"), 2)
+        for index, (label, url) in enumerate(expected):
+            with self.subTest(label=label):
+                self.assertEqual(submenu.entrycget(index, "label"), label)
+                with patch("bc3_gui.webbrowser.open", return_value=True) as browser:
+                    submenu.invoke(index)
+                browser.assert_called_once_with(url)
+                for result in (False, OSError("browser unavailable"), ValueError("invalid browser")):
+                    with (
+                        patch("bc3_gui.webbrowser.open", return_value=False,
+                              side_effect=result if isinstance(result, Exception) else None),
+                        patch("bc3_gui.messagebox.showerror") as error,
+                        patch.object(self.app, "_set_status") as status,
+                    ):
+                        submenu.invoke(index)
+                    error.assert_called_once()
+                    self.assertIn(url, error.call_args.args[1])
+                    self.assertEqual(error.call_args.kwargs["parent"], self.root)
+                    status.assert_not_called()
+
+    def test_information_menu_groups_metadata_reference_links_and_project_links(self):
+        """Keep release metadata disabled and separate the three menu blocks."""
+        toolbar = self.root.grid_slaves(row=0, column=0)[0]
+        button = next(child for child in toolbar.winfo_children()
+                      if child.cget("text") == "Información")
+        menu = self.root.nametowidget(button.cget("menu"))
+        self.assertEqual(menu.index("end"), 8)
+        expected = (
+            ("command", APPLICATION_NAME),
+            ("command", f"Versión {APPLICATION_VERSION} — "
+             f"{APPLICATION_RELEASE_DATE.strftime('%d/%m/%Y')}"),
+            ("command", "Presupuestos BC3, mediciones, planificación y certificaciones"),
+            ("separator", None),
+            ("cascade", "Bases de precios de referencia"),
+            ("separator", None),
+            ("command", "Repositorio en GitHub"),
+            ("command", "Licencia y responsabilidad…"),
+            ("command", "Apoyar el proyecto (Buy Me a Coffee)"),
+        )
+        for index, (entry_type, label) in enumerate(expected):
+            with self.subTest(index=index):
+                self.assertEqual(menu.type(index), entry_type)
+                if label is not None:
+                    self.assertEqual(menu.entrycget(index, "label"), label)
+                    self.assertEqual(menu.entrycget(index, "state"),
+                                     "disabled" if index < 3 else "normal")
 
     def test_repository_browser_failures_are_reported(self):
         """Report a refused or failed browser launch without claiming success."""

@@ -115,6 +115,16 @@ _TEXT = {
     "Carpeta…": ("Folder…", "Dossier…"),
     "Leer PDF": ("Read PDFs", "Lire les PDF"),
     "Actualizar lectura": ("Refresh invoices", "Actualiser la lecture"),
+    "Unificar recursos": ("Combine resources", "Regrouper les ressources"),
+    "Solo lectura": ("Read only", "Lecture seule"),
+    "Sumar recursos iguales entre partidas. Vista de solo lectura.": (
+        "Sum identical resources across work items. Read-only view.",
+        "Additionner les ressources identiques entre postes. Vue en lecture seule.",
+    ),
+    "Desactiva Unificar recursos para editar los importes.": (
+        "Turn off Combine resources to edit amounts.",
+        "Désactivez Regrouper les ressources pour modifier les montants.",
+    ),
     "Página anterior": ("Previous page", "Page précédente"),
     "Página siguiente": ("Next page", "Page suivante"),
     "Zoom respecto al ancho del panel": ("Zoom relative to panel width", "Zoom relatif à la largeur du panneau"),
@@ -195,6 +205,28 @@ _TEXT = {
     "Eliminar línea": ("Delete line", "Supprimer la ligne"),
     "Editar línea de factura": ("Edit invoice line", "Modifier la ligne de facture"),
     "Información": ("About", "À propos"),
+    "Versión {version} — {date}": ("Version {version} — {date}", "Version {version} — {date}"),
+    "Presupuestos BC3, mediciones, planificación y certificaciones": (
+        "BC3 budgets, measurements, planning and certifications",
+        "Budgets BC3, métrés, planification et certifications",
+    ),
+    "Bases de precios de referencia": ("Reference price databases", "Bases de prix de référence"),
+    "Andalucía (JA) — BCCA": ("Andalusia (JA) — BCCA", "Andalousie (JA) — BCCA"),
+    "Extremadura — Base de precios": ("Extremadura — Price database", "Estrémadure — Base de prix"),
+    "Madrid — Base de Datos de la Construcción": (
+        "Madrid — Construction database", "Madrid — Base de données de la construction",
+    ),
+    "Base de precios abierta en el navegador.": (
+        "Price database opened in the browser.", "Base de prix ouverte dans le navigateur.",
+    ),
+    "No se pudo abrir el navegador. Visita:\n{url}": (
+        "Could not open the browser. Visit:\n{url}",
+        "Impossible d'ouvrir le navigateur. Consultez :\n{url}",
+    ),
+    "No se pudo abrir el navegador:\n{error}\n\nVisita:\n{url}": (
+        "Could not open the browser:\n{error}\n\nVisit:\n{url}",
+        "Impossible d'ouvrir le navigateur :\n{error}\n\nConsultez :\n{url}",
+    ),
     "Licencia y responsabilidad…": ("License and disclaimer…", "Licence et responsabilité…"),
     "Añadir un capítulo al presupuesto.": ("Add a chapter to the budget.", "Ajouter un chapitre au budget."),
     "Eliminar la partida o el capítulo seleccionado.": ("Delete the selected item or chapter.", "Supprimer le poste ou le chapitre sélectionné."),
