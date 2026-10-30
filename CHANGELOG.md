@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.5.0
+
+### Añadido
+- Facturación por recurso con lectura y actualización local de facturas PDF,
+  asignación de importes en tabla y filtros de materiales, maquinaria y RCDs.
+- Comparación del coste previsto con lo facturado, global o acumulado por mes.
+- Visor PDF integrado junto a la tabla, con navegación de páginas y zoom.
+- Filtros de recursos en las bases de referencia, edición de descripciones
+  y copia de precios básicos al descompuesto de la partida seleccionada.
+
+### Cambiado
+- Recursos filtrados con capítulo y unidad de obra a su izquierda.
+- Reordenación de componentes con los botones de subir y bajar.
+- Aplicación, compilación e instalador actualizados a 1.5.0.
+
 ## 1.4.0
 
 ### Añadido

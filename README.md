@@ -4,7 +4,11 @@ Aplicación de escritorio para Windows que permite trabajar con presupuestos
 FIEBDC-3 (BC3), editar mediciones y descomposiciones, planificar obras y gestionar
 certificaciones mensuales.
 
-## Versión 1.4.0 — Seguridad y salud
+## Versión 1.5.0 — Facturación
+
+- Facturación por recurso con filtros de materiales, maquinaria y RCDs.
+- Asignación de importes en tabla y comparación global o acumulada por mes.
+- Visor PDF integrado junto a la facturación, con páginas y zoom.
 
 - Informes PDF y ODT editables con estilos, cabeceras y firmas configurables.
 - Informe de mediciones y exportación del informe de desviaciones en PDF u ODT.
@@ -73,7 +77,7 @@ Esperamos que os sea muy útil. ¡Esto es solo el comienzo!
 ## Instalación y arranque
 
 En Windows se puede crear e instalar una versión compilada con Nuitka. Una vez
-generado, el instalador `GestorDeProyectos-Setup-1.4.0.exe` no requiere Python.
+generado, el instalador `GestorDeProyectos-Setup-1.5.0.exe` no requiere Python.
 Incluye los componentes necesarios, pero no los archivos fuente `.py`. La
 compilación Nuitka dificulta recuperar el código, aunque no puede impedir
 completamente la ingeniería inversa.
@@ -130,6 +134,7 @@ El archivo [requirements.txt](requirements.txt) contiene las dependencias de uso
 | ReportLab | Informes PDF |
 | Matplotlib | Diagramas de Gantt |
 | pdfplumber | Lectura local de tablas de facturas PDF |
+| pypdfium2 | Visor PDF integrado de facturas |
 
 Los informes también se generan como ODT editable con los módulos estándar de Python.
 El formato se elige en **Archivo → Configuración…** y, de inicio, es PDF.
@@ -215,7 +220,7 @@ Después, desde PowerShell en la carpeta del proyecto:
 .\build_installer.ps1
 ```
 
-El instalador generado aparece en `dist\GestorDeProyectos-Setup-1.4.0.exe`.
+El instalador generado aparece en `dist\GestorDeProyectos-Setup-1.5.0.exe`.
 El script usa automáticamente `.\.venv\Scripts\python.exe` si existe; en caso
 contrario, utiliza el comando `python` disponible en el sistema.
 La distribución incluye la licencia y el manual, pero no los presupuestos ni

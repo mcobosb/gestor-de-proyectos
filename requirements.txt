@@ -5,3 +5,4 @@ Pillow>=12.1
 matplotlib>=3.9
 pdfplumber>=0.11.10
 pdfminer.six
+pypdfium2>=4.18

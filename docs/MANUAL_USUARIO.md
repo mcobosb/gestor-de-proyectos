@@ -1,6 +1,6 @@
 # Manual de usuario
 
-## Gestor de Proyectos (v1.4.0)
+## Gestor de Proyectos (v1.5.0)
 
 Herramienta para preparar presupuestos, mediciones, planificación de obra y
 certificaciones. Los ejemplos de rutas de este manual son ficticios.
@@ -533,8 +533,10 @@ ajuste del plan, como los indicadores de desviación de la tabla.
 
 ## 11. Controlar la facturación
 
-Abre **Herramientas → Facturación**, elige la **Carpeta de facturas PDF** y pulsa
-**Continuar**. La carpeta se conserva dentro del proyecto; también puedes
+Abre **Herramientas → Facturación** para acceder directamente a la tabla.
+Pulsa **Carpeta…** para elegir la carpeta de facturas PDF. La selección inicia
+su lectura; **Actualizar lectura** vuelve a leer todos sus PDF cuando lo necesites.
+La carpeta se conserva dentro del proyecto; también puedes
 cambiarla desde **Carpeta…** en la tabla. Se leen todos los PDF de esa carpeta
 (no las subcarpetas), de forma local y sin enviarlos a servicios externos.
 
@@ -550,6 +552,12 @@ tiene su columna, aunque no se haya podido interpretar.
 - Cada fila representa un recurso dentro de una partida: material, mano de obra
   o maquinaria. Los auxiliares se desglosan hasta sus recursos. Los porcentajes
   no se consideran recursos facturables.
+- Los botones **▧**, **⚙** y **RCDs** filtran materiales, maquinaria y gestión de
+  residuos, respectivamente. Solo uno puede estar activo; pulsa otra vez para
+  mostrar todas las filas, incluida la mano de obra y los costes de tipo Otro.
+  Los filtros no modifican importes ni asignaciones.
+- Las partidas de gestión y transporte generadas desde RCDs aparecen como
+  **RCDs**, por su coste directo total, sin duplicar sus componentes.
 - El coste previsto inicial es **medición de partida × rendimiento de recurso
   × precio del recurso**, incluidos los precios editados del proyecto.
 - Si una partida no tiene desglose o faltan recursos, se crea una fila editable
@@ -561,6 +569,17 @@ tiene su columna, aunque no se haya podido interpretar.
   asignar cada línea a la fila adecuada. Puedes añadir, editar, eliminar
   o desasignar líneas. Para repartir un importe entre varios recursos, introduce
   los importes repartidos directamente en sus celdas y revisa la diferencia.
+- Selecciona una factura en el desplegable o en el listado superior. La tabla
+  muestra solo su columna, identificada por la **fecha de la factura**. El
+  desplegable conserva fecha y nombre para distinguir facturas del mismo día.
+- Haz doble clic en el importe de esa columna, sobre la fila del material,
+  maquinaria o RCD correspondiente, para asignarlo o modificarlo directamente.
+  **Enter** o salir de la celda confirma; **Esc** cancela. Solo se modifican los
+  importes de la factura seleccionada; los datos del coste y el previsto no
+  son editables. Un cero retira el importe y se admiten abonos negativos.
+- Si sustituyes manualmente el importe de una fila con líneas PDF asignadas,
+  esas líneas quedan pendientes: el nuevo importe se conserva como asignación
+  manual. Esto evita que una reasignación posterior descuente importes antiguos.
 - **Sin asignar/diferencia** compara el importe leído/declarado con el total
   introducido en la columna. Los importes sin asignar no se suman como facturados.
   El importe leído/declarado inicial es la suma de las líneas reconocidas,
@@ -571,26 +590,57 @@ tiene su columna, aunque no se haya podido interpretar.
 Las facturas se ordenan de la más antigua a la más reciente, tanto en el listado
 como en las columnas de costes. Se admiten fechas `dd/mm/aaaa`, `dd-mm-aaaa`,
 `dd.mm.aaaa`, `aaaa-mm-dd` y `aaaa/mm/dd`; las fechas vacías o no reconocidas
-quedan al final. Editar la fecha reordena la factura sin cambiar sus importes.
+quedan al final. Las fechas y demás datos de cabecera se obtienen del PDF,
+no se añaden ni editan facturas manualmente.
 
-El listado superior incluye **Nombre del fichero (clic para abrir)**, también
-para los PDF cuya lectura haya fallado. Pulsa ese nombre para abrir la factura
-en el visor predeterminado. Si se ha movido el archivo, corrige **Archivo PDF**
-desde **Editar factura**. Las columnas manuales sin PDF no tienen nombre de fichero.
+La ventana se divide verticalmente al 50 %: facturación a la izquierda y
+visor PDF integrado a la derecha. Arrastra la separación para reajustarlos.
+El listado superior muestra solo **Fecha** y **Nombre del fichero (clic para abrir)**,
+sin repetir el nombre de la factura, también para los PDF cuya lectura haya fallado.
+Al seleccionar una factura en el listado o desplegable, su PDF se muestra a la
+derecha sin abrir otra ventana. Puedes cambiar de página con **← / →**, ajustar
+el zoom y desplazarte con las barras o la rueda. El zoom del 100 % ajusta la página
+al ancho del panel. **Abrir PDF externo** conserva la opción del visor predeterminado.
+Los documentos escaneados también pueden visualizarse aunque no se extraigan
+sus datos. Los errores de apertura aparecen en el panel sin impedir la facturación.
 
-**Añadir factura** crea columnas manuales. **Editar factura** permite modificar
-su nombre, obra, expediente, fecha, importe declarado, ruta y observaciones.
-Haz doble clic en una celda de factura para editar su importe; se admiten
-abonos negativos. **Añadir/Editar coste** permite personalizar todos los datos
-de fila, incluido su coste previsto. Eliminar una factura no borra el PDF.
+Si has movido el archivo, selecciona su nueva
+carpeta y actualiza la lectura: se recupera la ruta de un PDF idéntico cuyo
+archivo original ya no exista, conservando sus asignaciones.
+
+No hay botones para añadir, editar o eliminar costes: las filas proceden del
+presupuesto. Las filas personalizadas de proyectos anteriores se conservan.
+**Eliminar factura** retira sus asignaciones del proyecto, pero no borra el PDF;
+si sigue en la carpeta, la siguiente lectura volverá a incorporarlo.
 
 Las columnas **Previsto**, **Facturado** y **Restante** permanecen fijas en el
 lateral derecho, incluso al desplazar las facturas horizontalmente.
 **Restante = Previsto − Facturado**; los excesos se muestran en rojo.
 
-**Leer PDF** incorpora documentos nuevos sin sobrescribir las ediciones ni
-duplicar archivos con el mismo contenido. Si cambia un PDF ya importado,
-se avisa: elimina su columna y vuelve a leerlo si quieres sustituirla.
+En **Periodo acumulado**, **Todo el proyecto** compara el coste previsto total
+de cada fila con todas sus facturas asignadas. Al elegir un mes `aaaa-mm`,
+**Acumulado** suma solo facturas con fecha válida hasta el último día de ese
+mes, incluidas las de años anteriores y los abonos; la **Diferencia** es el
+previsto total del proyecto menos ese acumulado. No se distribuye el previsto
+por meses. Este selector afecta a los totales de la derecha, no a la factura
+que estás editando: la tabla mantiene exclusivamente la factura seleccionada,
+aunque su fecha quede fuera del periodo de comparación.
+
+Las facturas sin fecha o con fecha no reconocida se incluyen en el total global,
+pero no en ningún acumulado mensual; se indica cuántas quedan excluidas.
+**Sin fecha válida** permite revisar exclusivamente esos importes. Corrige su
+fecha en el documento de origen y actualiza la lectura para que se incorporen
+al mes correspondiente.
+El pie resume solo las filas del filtro activo y el periodo elegido. Cambiar
+filtros o periodo no altera los datos guardados.
+
+**Actualizar lectura** relee todos los PDF, incorpora documentos nuevos sin
+duplicar archivos con el mismo contenido y actualiza las cabeceras, fechas,
+líneas e importes leídos de los ya importados. Conserva sus identificadores
+y los importes asignados a cada recurso. Las líneas que no hayan cambiado
+conservan también su asociación. Si desaparecen o cambian líneas asignadas,
+sus importes permanecen como asignaciones manuales y se avisa para revisar
+la diferencia. Si falla la relectura, se notificará y conservará la factura anterior.
 Los documentos retirados de la carpeta no se eliminan de la tabla automáticamente.
 
 Pulsa el **disquete** o **Ctrl+S** para conservar carpeta, filas, facturas,

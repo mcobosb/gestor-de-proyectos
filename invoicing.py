@@ -16,13 +16,48 @@ from typing import TYPE_CHECKING, Callable
 import unicodedata
 from uuid import uuid4
 
-from localization import filedialog, localize_widget_tree, messagebox, simpledialog
+from localization import filedialog, localize_widget_tree, messagebox, translate
 
 if TYPE_CHECKING:
-    from bc3_gui import BudgetApp
+    from bc3_gui import BudgetApp, ProjectItem
+    from PIL import Image
 
 
 KEYWORDS = ("obra", "expediente", "fecha", "partida", "importe")
+ALL_PERIODS = "Todo el proyecto"
+UNDATED_PERIOD = "Sin fecha válida"
+
+
+def render_invoice_page(
+    path: Path, page_index: int, width: int, zoom: float,
+) -> tuple[Image.Image, int]:
+    """Renderiza una sola página local con memoria acotada y libera los objetos PDF."""
+    import pypdfium2 as pdfium
+
+    try:
+        with pdfium.PdfDocument(path) as document:
+            count = len(document)
+            if not 0 <= page_index < count:
+                raise ValueError("La página solicitada no existe en el PDF.")
+            page = document[page_index]
+            try:
+                page_width, page_height = page.get_size()
+                if page_width <= 0 or page_height <= 0:
+                    raise ValueError("La página PDF tiene dimensiones no válidas.")
+                scale = min(
+                    max(100, width) * zoom / page_width,
+                    (4_000_000 / (page_width * page_height)) ** 0.5,
+                    8000 / max(page_width, page_height),
+                )
+                bitmap = page.render(scale=scale)
+                try:
+                    return bitmap.to_pil().convert("RGB"), count
+                finally:
+                    bitmap.close()
+            finally:
+                page.close()
+    except pdfium.PdfiumError as exc:
+        raise ValueError(f"No se pudo visualizar el PDF: {exc}") from exc
 
 
 def normalized(value: str) -> str:
@@ -118,6 +153,26 @@ def invoice_sort_key(invoice: Invoice) -> tuple[date, str, str]:
     return parsed, normalized(invoice.name), invoice.id
 
 
+def invoice_month(invoice: Invoice) -> str:
+    """Obtiene el mes de la fecha reconocida o identifica las facturas sin fecha."""
+    parsed = invoice_sort_key(invoice)[0]
+    return parsed.strftime("%Y-%m") if parsed != date.max else UNDATED_PERIOD
+
+
+def period_invoices(invoices: list[Invoice], period: str) -> list[Invoice]:
+    """Selecciona todas las facturas, las no fechadas o el acumulado hasta un mes."""
+    if period == ALL_PERIODS:
+        return list(invoices)
+    if period == UNDATED_PERIOD:
+        return [invoice for invoice in invoices if invoice_month(invoice) == UNDATED_PERIOD]
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", period):
+        raise ValueError(f"Periodo de facturación no válido: {period}")
+    return [
+        invoice for invoice in invoices
+        if invoice_month(invoice) != UNDATED_PERIOD and invoice_month(invoice) <= period
+    ]
+
+
 @dataclass
 class InvoiceState:
     folder: str = ""
@@ -187,11 +242,27 @@ class InvoiceState:
         return cls(text(data, "folder"), rows, invoices)
 
 
+def is_rcd_item(item: ProjectItem) -> bool:
+    """Reconoce gestión y transporte generados por RCDs mediante sus marcas persistentes."""
+    from rcd import RCD_BUDGET_SOURCE, TRANSPORT_PREFIX
+
+    return item.source.startswith(RCD_BUDGET_SOURCE) or any(
+        line.comment.startswith(TRANSPORT_PREFIX) for line in item.measurement_lines
+    )
+
+
 def budget_rows(app: BudgetApp) -> tuple[list[CostRow], list[str]]:
     """Desglosa auxiliares; no incluye porcentajes ni inventa precios ausentes."""
     rows: list[CostRow] = []
     warnings: list[str] = []
     for item in app.budget_items:
+        if is_rcd_item(item):
+            direct = item.unit_price if item.direct_unit_price is None else item.direct_unit_price
+            rows.append(CostRow(
+                identifier(), item.chapter, item.code, item.code, item.summary, "RCDs", item.unit,
+                amount(Decimal(str(direct)) * Decimal(str(item.measurement))),
+            ))
+            continue
         grouped: dict[tuple[str, str, float], CostRow] = {}
         costs: dict[tuple[str, str, float], Decimal] = {}
         dataset = app._component_dataset(item)
@@ -390,7 +461,7 @@ class InvoicingWindow(tk.Toplevel):
         self, master: tk.Misc, app: BudgetApp, state: InvoiceState,
         on_change: Callable[[InvoiceState], None], on_save: Callable[[], bool],
     ):
-        """Prepara la selección de carpeta con una copia validada del estado."""
+        """Abre directamente la tabla con una copia validada del estado del proyecto."""
         super().__init__(master)
         self.title("Facturación")
         self.geometry("1450x760")
@@ -401,65 +472,43 @@ class InvoicingWindow(tk.Toplevel):
         self.on_save = on_save
         self._is_dirty = False
         self._invoice_ids: list[str] = []
+        self._visible_invoice_ids: list[str] = []
+        self.resource_filter = ""
+        self._cell_editor: ttk.Entry | None = None
+        self._cell_commit: Callable[[], bool] | None = None
+        self._committing_cell = False
         self._closed = threading.Event()
         self._results: queue.Queue[Invoice | None] = queue.Queue()
         self._scanning = False
         self._syncing = False
         self._scan_notices: list[str] = []
         self._after: str | None = None
+        self._pdf_after: str | None = None
+        self._pdf_source: tuple[str, str, str] | None = None
+        self._pdf_page = 0
+        self._pdf_pages = 0
+        self._pdf_zoom = 1.0
+        self._pdf_photo = None
+        self._pdf_failed = False
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.bind("<Destroy>", self._destroyed, add="+")
         self.folder = tk.StringVar(value=self.data.folder)
-        self._build_folder_page()
-        localize_widget_tree(self)
-
-    def _build_folder_page(self):
-        """Muestra el primer paso de selección de la carpeta de facturas."""
-        self.start = ttk.Frame(self, padding=24)
-        self.start.pack(fill="both", expand=True)
-        ttk.Label(self.start, text="Carpeta de facturas PDF").pack(anchor="w", pady=8)
-        ttk.Entry(self.start, textvariable=self.folder, width=100).pack(fill="x", pady=8)
-        ttk.Button(self.start, text="Examinar…", command=self.choose_folder).pack(anchor="w")
-        ttk.Label(
-            self.start, wraplength=850,
-            text="Se leerán los PDF de esta carpeta, sin enviarlos a ningún servicio externo. "
-            "Los PDF escaneados y los datos no reconocidos se señalarán para revisión manual. "
-            "Las facturas ya importadas no se duplican ni sobrescriben.",
-        ).pack(anchor="w", pady=16)
-        ttk.Button(self.start, text="Continuar", command=self.continue_to_table,
-                   style="Accent.TButton").pack(anchor="e", pady=12)
-
-    def choose_folder(self):
-        """Selecciona la carpeta inicial sin leer documentos todavía."""
-        chosen = filedialog.askdirectory(parent=self, initialdir=self.folder.get() or None)
-        if chosen:
-            self.folder.set(chosen)
-
-    def continue_to_table(self):
-        """Valida la carpeta y el lector antes de generar la matriz y leer PDF."""
-        path = Path(self.folder.get()).expanduser()
-        if not self.folder.get().strip() or not path.is_dir():
-            messagebox.showerror("Facturación", "Selecciona una carpeta existente.", parent=self)
-            return
-        try:
-            import pdfplumber
-        except ImportError as exc:
-            messagebox.showerror(
-                "Facturación",
-                f"Falta pdfplumber. Instala las dependencias con:\n"
-                f"python -m pip install -r requirements.txt\n\n{exc}", parent=self,
-            )
-            return
-        self.data.folder = str(path.resolve())
         if not self.data.rows:
             self.data.rows, warnings = budget_rows(self.app)
             if warnings:
                 messagebox.showwarning("Facturación", "\n".join(warnings), parent=self)
-        self.start.destroy()
+        else:
+            rcd_items = {
+                (item.chapter, item.code) for item in self.app.budget_items
+                if is_rcd_item(item)
+            }
+            for row in self.data.rows:
+                if row.kind == "Otro" and (row.chapter, row.item) in rcd_items:
+                    row.kind = "RCDs"
         self._build_matrix()
         self._refresh()
-        self.changed()
-        self.scan()
+        if self.data.to_dict() != state.to_dict():
+            self.changed()
 
     def changed(self):
         """Publica una copia validada de los cambios en el proyecto activo."""
@@ -482,14 +531,20 @@ class InvoicingWindow(tk.Toplevel):
         """Construye la matriz editable con los totales en un panel fijo."""
         from bc3_gui import ToolTip
 
-        toolbar = ttk.Frame(self, padding=8)
+        self.splitter = ttk.PanedWindow(self, orient="horizontal")
+        self.splitter.pack(fill="both", expand=True)
+        self.billing_panel = ttk.Frame(self.splitter)
+        self.pdf_panel = ttk.Frame(self.splitter, padding=8)
+        self.splitter.add(self.billing_panel, weight=1)
+        self.splitter.add(self.pdf_panel, weight=1)
+        self._split_initialized = False
+        self.splitter.bind("<Configure>", self._initialize_split)
+        self._build_pdf_viewer()
+        toolbar = ttk.Frame(self.billing_panel, padding=8)
         toolbar.pack(fill="x")
         for index, (label, command) in enumerate((
-            ("Carpeta…", self.change_folder), ("Leer PDF", self.scan),
-            ("Añadir factura", self.add_invoice), ("Editar factura", self.edit_invoice),
+            ("Carpeta…", self.change_folder), ("Actualizar lectura", self.scan),
             ("Revisar líneas", self.review_lines), ("Eliminar factura", self.delete_invoice),
-            ("Añadir coste", self.add_row), ("Editar coste", self.edit_row),
-            ("Eliminar coste", self.delete_row),
         )):
             ttk.Button(toolbar, text=label, command=command).grid(
                 row=index // 6, column=index % 6, sticky="w", padx=2, pady=2,
@@ -497,26 +552,53 @@ class InvoicingWindow(tk.Toplevel):
         self.save_button = tk.Button(toolbar, text="💾", width=3, command=self.save)
         self._save_button_background = self.save_button.cget("background")
         self._save_button_foreground = self.save_button.cget("foreground")
-        self.save_button.grid(row=1, column=5, sticky="e", padx=2, pady=2)
+        self.save_button.grid(row=0, column=4, sticky="e", padx=2, pady=2)
         ToolTip(self.save_button, "Guardar los cambios de facturación en el proyecto (Ctrl+S).")
         self.bind("<Control-s>", lambda _event: self.save())
         self._set_dirty(self._is_dirty)
-        selector = ttk.Frame(self, padding=(8, 0))
+        ttk.Label(self.billing_panel, textvariable=self.folder, wraplength=600).pack(fill="x", padx=8)
+        filters = ttk.Frame(self.billing_panel, padding=(8, 0))
+        filters.pack(fill="x")
+        self.filter_buttons: dict[str, ttk.Checkbutton] = {}
+        self.filter_variables: dict[str, tk.BooleanVar] = {}
+        for kind, label in (("Material", "▧"), ("Maquinaria", "⚙"), ("RCDs", "RCDs")):
+            variable = tk.BooleanVar(self, value=False)
+            button = ttk.Checkbutton(
+                filters, text=label, variable=variable, style="BudgetFilter.TCheckbutton",
+                command=lambda selected=kind: self.toggle_resource_filter(selected),
+            )
+            button.pack(side="left", padx=(0, 6))
+            self.filter_buttons[kind] = button
+            self.filter_variables[kind] = variable
+            ToolTip(button, f"Filtrar costes: {kind}. Pulsar de nuevo para mostrar todos.")
+        ttk.Label(filters, text="Periodo acumulado:").pack(side="left", padx=(12, 6))
+        self.period_selector = ttk.Combobox(
+            filters, state="readonly", values=[ALL_PERIODS], width=24,
+        )
+        self.period_selector.set(translate(ALL_PERIODS))
+        self.period_selector.pack(side="left")
+        self.period_selector.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
+        selector = ttk.Frame(self.billing_panel, padding=(8, 0))
         selector.pack(fill="x")
         ttk.Label(selector, text="Factura:").pack(side="left")
         self.invoice_selector = ttk.Combobox(selector, state="readonly", width=55)
-        self.invoice_selector.pack(side="left", padx=8)
-        self.invoice_selector.bind("<<ComboboxSelected>>", self.show_invoice_status)
-        register_frame = ttk.Frame(self, padding=(8, 6))
+        self.invoice_selector.pack(side="left", fill="x", expand=True, padx=8)
+        self.invoice_selector.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
+        ttk.Label(
+            self.billing_panel, wraplength=600,
+            text="Doble clic en el importe de la factura seleccionada para vincularlo a un recurso. "
+                 "Enter confirma; Esc cancela. Los totales de la derecha corresponden al periodo acumulado.",
+        ).pack(fill="x", padx=8, pady=(4, 0))
+        register_frame = ttk.Frame(self.billing_panel, padding=(8, 6))
         register_frame.pack(fill="x")
         register_frame.columnconfigure(0, weight=1)
         self.invoice_register = ttk.Treeview(
-            register_frame, columns=("date", "name", "filename"),
+            register_frame, columns=("date", "filename"),
             show="headings", selectmode="browse", height=4,
         )
         for column, heading, width in (
-            ("date", "Fecha", 110), ("name", "Factura", 250),
-            ("filename", "Nombre del fichero (clic para abrir)", 500),
+            ("date", "Fecha", 110),
+            ("filename", "Nombre del fichero (clic para abrir)", 350),
         ):
             self.invoice_register.heading(column, text=heading)
             self.invoice_register.column(column, width=width, stretch=column == "filename")
@@ -526,9 +608,9 @@ class InvoicingWindow(tk.Toplevel):
         self.invoice_register.configure(yscrollcommand=register_scroll.set)
         self.invoice_register.bind("<<TreeviewSelect>>", self._select_registered_invoice)
         self.invoice_register.bind("<ButtonRelease-1>", self.open_invoice_file)
-        self.status = ttk.Label(self, wraplength=1300)
+        self.status = ttk.Label(self.billing_panel, wraplength=600)
         self.status.pack(fill="x", padx=8, pady=6)
-        container = ttk.Frame(self, padding=8)
+        container = ttk.Frame(self.billing_panel, padding=8)
         container.pack(fill="both", expand=True)
         container.columnconfigure(0, weight=1)
         container.rowconfigure(0, weight=1)
@@ -553,13 +635,148 @@ class InvoicingWindow(tk.Toplevel):
         for tree in (self.tree, self.totals):
             tree.bind("<<TreeviewSelect>>", lambda _event, source=tree: self._sync_selection(source))
         self.tree.bind("<Double-1>", self.edit_cell)
-        self.totals.bind("<Double-1>", lambda _event: self.edit_row())
-        self.footer = ttk.Label(self, style="Total.TLabel")
+        self.tree.bind("<Configure>", lambda _event: self._close_cell_editor())
+        self.footer = ttk.Label(self.billing_panel, style="Total.TLabel", wraplength=600)
         self.footer.pack(fill="x", padx=8, pady=8)
         localize_widget_tree(self)
 
+    def _initialize_split(self, event=None) -> None:
+        """Coloca la separación inicial al 50 % sin impedir ajustes posteriores."""
+        width = self.splitter.winfo_width()
+        if not self._split_initialized and width > 100:
+            self.splitter.sashpos(0, width // 2)
+            self._split_initialized = True
+
+    def _build_pdf_viewer(self) -> None:
+        """Prepara el visor con navegación, zoom y barras de desplazamiento."""
+        from bc3_gui import ToolTip
+
+        self.pdf_panel.columnconfigure(0, weight=1)
+        self.pdf_panel.rowconfigure(2, weight=1)
+        controls = ttk.Frame(self.pdf_panel)
+        controls.grid(row=0, column=0, sticky="ew")
+        self.pdf_previous = ttk.Button(controls, text="←", width=3, command=lambda: self._change_pdf_page(-1))
+        self.pdf_previous.pack(side="left")
+        ToolTip(self.pdf_previous, "Página anterior")
+        self.pdf_next = ttk.Button(controls, text="→", width=3, command=lambda: self._change_pdf_page(1))
+        self.pdf_next.pack(side="left", padx=4)
+        ToolTip(self.pdf_next, "Página siguiente")
+        self.pdf_page_label = ttk.Label(controls)
+        self.pdf_page_label.pack(side="left", padx=4)
+        self.pdf_zoom_selector = ttk.Combobox(
+            controls, values=("50%", "75%", "100%", "125%", "150%", "200%"),
+            state="readonly", width=6,
+        )
+        self.pdf_zoom_selector.set("100%")
+        self.pdf_zoom_selector.pack(side="left", padx=4)
+        self.pdf_zoom_selector.bind("<<ComboboxSelected>>", self._change_pdf_zoom)
+        ToolTip(self.pdf_zoom_selector, "Zoom respecto al ancho del panel")
+        ttk.Button(controls, text="Abrir PDF externo", command=self.open_external_pdf).pack(side="right")
+        self.pdf_status = ttk.Label(self.pdf_panel, wraplength=600)
+        self.pdf_status.grid(row=1, column=0, sticky="ew", pady=6)
+        canvas_frame = ttk.Frame(self.pdf_panel)
+        canvas_frame.grid(row=2, column=0, sticky="nsew")
+        canvas_frame.columnconfigure(0, weight=1)
+        canvas_frame.rowconfigure(0, weight=1)
+        self.pdf_canvas = tk.Canvas(canvas_frame, background="#505050", highlightthickness=0)
+        self.pdf_canvas.grid(row=0, column=0, sticky="nsew")
+        vertical = ttk.Scrollbar(canvas_frame, command=self.pdf_canvas.yview)
+        vertical.grid(row=0, column=1, sticky="ns")
+        horizontal = ttk.Scrollbar(canvas_frame, orient="horizontal", command=self.pdf_canvas.xview)
+        horizontal.grid(row=1, column=0, sticky="ew")
+        self.pdf_canvas.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
+        self.pdf_canvas.bind("<Configure>", self._schedule_pdf_render)
+        self.pdf_canvas.bind("<MouseWheel>", self._scroll_pdf)
+
+    def _scroll_pdf(self, event) -> str:
+        """Desplaza el documento con la rueda sin afectar a la tabla de facturación."""
+        self.pdf_canvas.yview_scroll(-int(event.delta / 120), "units")
+        return "break"
+
+    def _show_invoice_pdf(self, invoice: Invoice | None) -> None:
+        """Sincroniza el documento con la factura y conserva la página al editar costes."""
+        source = (invoice.id, invoice.path, invoice.digest) if invoice else None
+        if source == self._pdf_source:
+            if source is None:
+                self._render_pdf()
+            return
+        self._pdf_source = source
+        self._pdf_page = 0
+        self._pdf_pages = 0
+        self._pdf_failed = False
+        self.pdf_canvas.delete("all")
+        self._pdf_photo = None
+        self._render_pdf()
+
+    def _schedule_pdf_render(self, _event=None) -> None:
+        """Agrupa redimensionados para ajustar la página al ancho disponible."""
+        if self._pdf_after is not None:
+            self.after_cancel(self._pdf_after)
+        self._pdf_after = self.after(180, self._render_pdf)
+
+    def _render_pdf(self) -> None:
+        """Dibuja la página actual o muestra explícitamente el error en el panel."""
+        from PIL import ImageTk
+
+        if self._pdf_after is not None:
+            self.after_cancel(self._pdf_after)
+            self._pdf_after = None
+        source = self._pdf_source
+        self.pdf_previous.configure(state="disabled")
+        self.pdf_next.configure(state="disabled")
+        if source is None:
+            self.pdf_status.configure(text=translate("Selecciona una factura para visualizar su PDF."))
+            self.pdf_page_label.configure(text="")
+            return
+        if self._pdf_failed:
+            return
+        path = Path(source[1]).expanduser()
+        try:
+            if not source[1].strip() or path.suffix.lower() != ".pdf" or not path.is_file():
+                raise ValueError(f"No se encuentra un PDF válido:\n{source[1]}")
+            image, count = render_invoice_page(
+                path, self._pdf_page, max(100, self.pdf_canvas.winfo_width() - 16), self._pdf_zoom,
+            )
+            try:
+                self._pdf_photo = ImageTk.PhotoImage(image, master=self.pdf_canvas)
+            finally:
+                image.close()
+        except (ImportError, OSError, ValueError, RuntimeError) as exc:
+            self.pdf_canvas.delete("all")
+            self._pdf_photo = None
+            self._pdf_pages = 0
+            self._pdf_failed = True
+            self.pdf_page_label.configure(text="")
+            self.pdf_status.configure(text=f"{translate('No se pudo visualizar la factura:')} {exc}")
+            return
+        self._pdf_pages = count
+        self.pdf_canvas.delete("all")
+        self.pdf_canvas.create_image(8, 8, anchor="nw", image=self._pdf_photo)
+        self.pdf_canvas.configure(
+            scrollregion=(0, 0, self._pdf_photo.width() + 16, self._pdf_photo.height() + 16),
+        )
+        self.pdf_status.configure(text=path.name)
+        self.pdf_page_label.configure(text=f"{self._pdf_page + 1} / {count}")
+        self.pdf_previous.configure(state="normal" if self._pdf_page > 0 else "disabled")
+        self.pdf_next.configure(state="normal" if self._pdf_page + 1 < count else "disabled")
+
+    def _change_pdf_page(self, direction: int) -> None:
+        """Cambia de página dentro de los límites del documento seleccionado."""
+        target = self._pdf_page + direction
+        if 0 <= target < self._pdf_pages:
+            self._pdf_page = target
+            self._render_pdf()
+            self.pdf_canvas.yview_moveto(0)
+            self.pdf_canvas.xview_moveto(0)
+
+    def _change_pdf_zoom(self, _event=None) -> None:
+        """Ajusta el tamaño de la página sin cambiar la factura activa."""
+        self._pdf_zoom = int(self.pdf_zoom_selector.get().rstrip("%")) / 100
+        self._render_pdf()
+
     def _scroll(self, *args):
         """Desplaza verticalmente ambos paneles mediante una sola barra."""
+        self._close_cell_editor()
         self.tree.yview(*args)
         self.totals.yview(*args)
 
@@ -582,14 +799,36 @@ class InvoicingWindow(tk.Toplevel):
         """Reconstruye las columnas y calcula los saldos de todos los costes."""
         from bc3_gui import fmt_eur
 
+        self._close_cell_editor()
         selected = self.tree.selection()
         invoice_index = self.invoice_selector.current()
         selected_invoice_id = (
             self._invoice_ids[invoice_index] if 0 <= invoice_index < len(self._invoice_ids) else None
         )
         self.data.invoices.sort(key=invoice_sort_key)
+        active_invoice = next(
+            (invoice for invoice in self.data.invoices if invoice.id == selected_invoice_id),
+            self.data.invoices[0] if self.data.invoices else None,
+        )
+        period_label = self.period_selector.get()
+        period = (
+            ALL_PERIODS if period_label == translate(ALL_PERIODS)
+            else UNDATED_PERIOD if period_label == translate(UNDATED_PERIOD) else period_label
+        )
+        months = sorted({
+            invoice_month(invoice) for invoice in self.data.invoices
+            if invoice_month(invoice) != UNDATED_PERIOD
+        })
+        periods = [ALL_PERIODS, *months, UNDATED_PERIOD]
+        self.period_selector.configure(values=[translate(value) for value in periods])
+        if period not in periods:
+            period = ALL_PERIODS
+            self.period_selector.set(translate(period))
+        invoices = period_invoices(self.data.invoices, period)
+        self._visible_invoice_ids = [active_invoice.id] if active_invoice is not None else []
+        rows = [row for row in self.data.rows if not self.resource_filter or row.kind == self.resource_filter]
         columns = ["chapter", "item", "resource", "description", "kind", "unit"]
-        columns.extend(invoice.id for invoice in self.data.invoices)
+        columns.extend(self._visible_invoice_ids)
         self.tree.configure(columns=columns)
         for column, heading, width in (
             ("chapter", "Capítulo", 90), ("item", "Partida", 100), ("resource", "Recurso", 100),
@@ -597,43 +836,67 @@ class InvoicingWindow(tk.Toplevel):
         ):
             self.tree.heading(column, text=heading)
             self.tree.column(column, width=width, stretch=False)
-        for invoice in self.data.invoices:
-            self.tree.heading(invoice.id, text=invoice.name,
-                              command=lambda selected=invoice.id: self.select_invoice(selected))
-            self.tree.column(invoice.id, width=140, stretch=False, anchor="e")
+        if active_invoice is not None:
+            self.tree.heading(active_invoice.id, text=active_invoice.date or translate("Sin fecha"))
+            self.tree.column(active_invoice.id, width=140, stretch=False, anchor="e")
         for tree in (self.tree, self.totals):
             for row_id in tree.get_children():
                 tree.delete(row_id)
-        for row in self.data.rows:
-            billed = total(invoice.amounts.get(row.id, 0) for invoice in self.data.invoices)
+        for row in rows:
+            billed = total(invoice.amounts.get(row.id, 0) for invoice in invoices)
             remaining = total((row.budget, -billed))
             self.tree.insert("", "end", iid=row.id, values=(
                 row.chapter, row.item, row.resource, row.description, row.kind, row.unit,
-                *(fmt_eur(invoice.amounts.get(row.id, 0)) for invoice in self.data.invoices),
+                *(
+                    (fmt_eur(active_invoice.amounts.get(row.id, 0)),)
+                    if active_invoice is not None else ()
+                ),
             ))
             self.totals.insert("", "end", iid=row.id, values=(
                 fmt_eur(row.budget), fmt_eur(billed), fmt_eur(remaining),
             ), tags=("over",) if remaining < 0 else ())
         if selected and self.tree.exists(selected[0]):
             self.tree.selection_set(selected)
-        self.invoice_selector.configure(values=[invoice.name for invoice in self.data.invoices])
+        self.invoice_selector.configure(values=[
+            f"{invoice.date or translate('Sin fecha')} — {invoice.name}"
+            for invoice in self.data.invoices
+        ])
         self._invoice_ids = [invoice.id for invoice in self.data.invoices]
         for invoice_id in self.invoice_register.get_children():
             self.invoice_register.delete(invoice_id)
         for invoice in self.data.invoices:
             self.invoice_register.insert("", "end", iid=invoice.id, values=(
-                invoice.date, invoice.name, Path(invoice.path).name if invoice.path else "",
+                invoice.date, Path(invoice.path).name if invoice.path else "",
             ))
         if self.data.invoices:
             index = self._invoice_ids.index(selected_invoice_id) if selected_invoice_id in self._invoice_ids else 0
             self.invoice_selector.current(index)
         else:
             self.invoice_selector.set("")
-        budget = total(row.budget for row in self.data.rows)
-        billed = total(value for invoice in self.data.invoices for value in invoice.amounts.values())
+        budget = total(row.budget for row in rows)
+        billed = total(invoice.amounts.get(row.id, 0) for invoice in invoices for row in rows)
+        billed_heading = (
+            "Facturado" if period == ALL_PERIODS else
+            "Sin fecha" if period == UNDATED_PERIOD else "Acumulado"
+        )
+        self.totals.heading("billed", text=translate(billed_heading))
+        self.totals.heading("remaining", text=translate("Restante" if period == ALL_PERIODS else "Diferencia"))
+        undated = sum(invoice_month(invoice) == UNDATED_PERIOD for invoice in self.data.invoices)
+        context = (
+            "" if period == ALL_PERIODS else
+            f" | Sin fecha válida ({undated} facturas)" if period == UNDATED_PERIOD else
+            f" | Acumulado hasta {period} | Sin fecha válida excluidas: {undated}"
+        )
         self.footer.config(text=f"Previsto: {fmt_eur(budget)}    Facturado: {fmt_eur(billed)}    "
-                           f"Restante: {fmt_eur(total((budget, -billed)))}")
+                           f"Restante: {fmt_eur(total((budget, -billed)))}{context}")
         self.show_invoice_status()
+
+    def toggle_resource_filter(self, kind: str) -> None:
+        """Filtra las filas sin modificar sus identificadores ni sus asignaciones."""
+        self.resource_filter = "" if self.resource_filter == kind else kind
+        for code, variable in self.filter_variables.items():
+            variable.set(code == self.resource_filter)
+        self._refresh()
 
     def selected_invoice(self) -> Invoice | None:
         """Obtiene la factura seleccionada o indica que falta seleccionarla."""
@@ -647,10 +910,10 @@ class InvoicingWindow(tk.Toplevel):
         return None
 
     def select_invoice(self, invoice_id: str):
-        """Selecciona una factura al pulsar su cabecera de columna."""
+        """Selecciona una factura y reconstruye su única columna editable."""
         index = next(index for index, invoice in enumerate(self.data.invoices) if invoice.id == invoice_id)
         self.invoice_selector.current(index)
-        self.show_invoice_status()
+        self._refresh()
 
     def show_invoice_status(self, _event=None):
         """Muestra los datos, incidencias y diferencias de la factura activa."""
@@ -658,7 +921,8 @@ class InvoicingWindow(tk.Toplevel):
 
         index = self.invoice_selector.current()
         if index < 0 or index >= len(self._invoice_ids):
-            self.status.config(text="Sin facturas. Puedes añadir columnas manuales.")
+            self.status.config(text="Selecciona una carpeta y pulsa Actualizar lectura para cargar las facturas.")
+            self._show_invoice_pdf(None)
             return
         invoice_id = self._invoice_ids[index]
         invoice = next((invoice for invoice in self.data.invoices if invoice.id == invoice_id), None)
@@ -675,24 +939,36 @@ class InvoicingWindow(tk.Toplevel):
             f"Sin asignar/diferencia: {fmt_eur(difference)} | Líneas pendientes: {pending}\n"
             f"{invoice.notes[:500]}"
         ))
+        self._show_invoice_pdf(invoice)
 
     def _select_registered_invoice(self, _event=None):
         """Sincroniza el listado de archivos con la factura activa de la matriz."""
         selection = self.invoice_register.selection()
-        if selection and selection[0] in self._invoice_ids:
+        index = self.invoice_selector.current()
+        current = self._invoice_ids[index] if 0 <= index < len(self._invoice_ids) else None
+        if selection and selection[0] in self._invoice_ids and selection[0] != current:
             self.select_invoice(selection[0])
 
     def open_invoice_file(self, event):
-        """Abre únicamente el PDF local pulsado y notifica archivos ausentes o errores."""
+        """Muestra en el visor integrado la factura cuyo fichero se ha pulsado."""
         if self.invoice_register.identify_region(event.x, event.y) != "cell":
             return
-        if self.invoice_register.identify_column(event.x) != "#3":
+        if self.invoice_register.identify_column(event.x) != "#2":
             return
         invoice_id = self.invoice_register.identify_row(event.y)
         invoice = next((invoice for invoice in self.data.invoices if invoice.id == invoice_id), None)
         if invoice is None:
             return
         self.select_invoice(invoice.id)
+        if self._pdf_failed:
+            self._pdf_failed = False
+            self._render_pdf()
+
+    def open_external_pdf(self) -> None:
+        """Permite abrir opcionalmente el PDF seleccionado en el visor del sistema."""
+        invoice = self.selected_invoice()
+        if invoice is None:
+            return
         path = Path(invoice.path).expanduser()
         if not invoice.path.strip() or path.suffix.lower() != ".pdf" or not path.is_file():
             messagebox.showerror("Facturación", f"No se encuentra un PDF válido:\n{invoice.path}", parent=self)
@@ -703,7 +979,10 @@ class InvoicingWindow(tk.Toplevel):
             messagebox.showerror("Facturación", f"No se pudo abrir la factura:\n{exc}", parent=self)
 
     def change_folder(self):
-        """Guarda otra carpeta y busca sus documentos sin perder columnas previas."""
+        """Guarda otra carpeta y relee sus documentos sin perder asignaciones previas."""
+        if self._scanning:
+            messagebox.showinfo("Facturación", "Espera a que termine la lectura antes de cambiar de carpeta.", parent=self)
+            return
         chosen = filedialog.askdirectory(parent=self, initialdir=self.data.folder)
         if chosen:
             self.data.folder = chosen
@@ -716,6 +995,18 @@ class InvoicingWindow(tk.Toplevel):
         if self._scanning:
             messagebox.showinfo("Facturación", "La lectura de PDF sigue en curso.", parent=self)
             return
+        if not self.data.folder.strip():
+            messagebox.showinfo("Facturación", "Selecciona una carpeta con el botón Carpeta…", parent=self)
+            return
+        try:
+            import pdfplumber
+        except ImportError as exc:
+            messagebox.showerror(
+                "Facturación",
+                f"Falta pdfplumber. Instala las dependencias con:\n"
+                f"python -m pip install -r requirements.txt\n\n{exc}", parent=self,
+            )
+            return
         folder = Path(self.data.folder)
         try:
             paths = sorted(path for path in folder.iterdir() if path.is_file() and path.suffix.lower() == ".pdf")
@@ -723,6 +1014,7 @@ class InvoicingWindow(tk.Toplevel):
             messagebox.showerror("Facturación", f"No se pudo leer la carpeta:\n{exc}", parent=self)
             return
         self._scanning = True
+        self._close_cell_editor()
         self._scan_notices = []
         self.status.config(text=f"Leyendo {len(paths)} PDF…")
         closed = self._closed
@@ -764,11 +1056,34 @@ class InvoicingWindow(tk.Toplevel):
             duplicate = next((invoice for invoice in self.data.invoices
                               if result.digest and invoice.digest == result.digest), None)
             if same_path:
-                if same_path.digest != result.digest:
-                    notices.append(f"{result.name}: el PDF ha cambiado. Se conserva la columna editada; "
-                                   "elimínala y vuelve a leerlo para sustituirla.")
+                if "No se pudo leer el PDF:" in result.notes or "Error al procesar el PDF:" in result.notes:
+                    notices.append(f"{result.name}: {result.notes}. Se conservan los datos anteriores.")
+                    continue
+                previous = list(same_path.lines)
+                for line in result.lines:
+                    match = next(
+                        (old for old in previous if old.item == line.item and old.amount == line.amount),
+                        None,
+                    )
+                    if match is not None:
+                        line.row_id = match.row_id
+                        previous.remove(match)
+                if any(line.row_id for line in previous):
+                    result.notes += (
+                        "\nHay líneas asignadas que han cambiado o desaparecido del PDF. "
+                        "Sus importes se conservan como asignaciones manuales; revisa la diferencia."
+                    )
+                for key in ("name", "digest", "work", "reference", "date", "declared", "notes", "lines"):
+                    setattr(same_path, key, getattr(result, key))
+                imported = True
+                if result.notes:
+                    notices.append(f"{result.name}: {result.notes}")
                 continue
             if duplicate:
+                if not Path(duplicate.path).is_file():
+                    duplicate.path = result.path
+                    imported = True
+                    continue
                 notices.append(f"{result.name}: PDF duplicado de {duplicate.name}; no se ha añadido.")
                 continue
             assign_matching_lines(result, self.data.rows)
@@ -790,7 +1105,7 @@ class InvoicingWindow(tk.Toplevel):
                     summary = summary[:2000] + "\n… Consulta Revisar líneas en cada factura para ver sus incidencias."
                 messagebox.showwarning("Revisión de facturas", summary, parent=self)
             if not self.data.invoices:
-                self.status.config(text="No se encontraron PDF. Puedes añadir facturas manualmente.")
+                self.status.config(text="No se encontraron PDF en la carpeta seleccionada.")
         else:
             self._after = self.after(100, self._poll)
 
@@ -830,32 +1145,6 @@ class InvoicingWindow(tk.Toplevel):
         localize_widget_tree(dialog)
         dialog.grab_set()
 
-    def add_invoice(self):
-        """Crea una columna manual mediante el formulario de factura."""
-        self.edit_invoice(Invoice(identifier(), f"Factura {len(self.data.invoices) + 1}"))
-
-    def edit_invoice(self, invoice: Invoice | None = None):
-        """Permite modificar todos los metadatos de una columna de factura."""
-        invoice = invoice or self.selected_invoice()
-        if invoice is None:
-            return
-
-        def accept(values):
-            """Valida el total declarado antes de modificar los metadatos."""
-            declared = amount(values["declared"])
-            if not values["name"].strip():
-                raise ValueError("La factura necesita un nombre.")
-            for key, value in values.items():
-                setattr(invoice, key, declared if key == "declared" else value)
-            if invoice not in self.data.invoices:
-                self.data.invoices.append(invoice)
-
-        self.form("Editar factura", [
-            ("name", "Nombre de columna"), ("work", "Obra"), ("reference", "Expediente"),
-            ("date", "Fecha"), ("declared", "Importe leído/declarado"),
-            ("path", "Archivo PDF"), ("notes", "Observaciones"),
-        ], asdict(invoice), accept)
-
     def delete_invoice(self):
         """Elimina una columna con confirmación, sin modificar el PDF original."""
         invoice = self.selected_invoice()
@@ -865,80 +1154,68 @@ class InvoicingWindow(tk.Toplevel):
             self.changed()
             self._refresh()
 
-    def selected_row(self) -> CostRow | None:
-        """Obtiene el coste seleccionado o solicita seleccionar una fila."""
-        selection = self.tree.selection()
-        if selection:
-            return next(row for row in self.data.rows if row.id == selection[0])
-        messagebox.showinfo("Facturación", "Selecciona una fila de coste.", parent=self)
-        return None
-
-    def add_row(self):
-        """Añade un coste personalizado mediante el formulario de fila."""
-        self.edit_row(CostRow(identifier()))
-
-    def edit_row(self, row: CostRow | None = None):
-        """Edita los datos identificativos y el importe previsto de un coste."""
-        row = row or self.selected_row()
-        if row is None:
-            return
-
-        def accept(values):
-            """Valida el coste previsto antes de modificar la fila."""
-            budget = amount(values["budget"])
-            for key, value in values.items():
-                setattr(row, key, budget if key == "budget" else value)
-            if row not in self.data.rows:
-                self.data.rows.append(row)
-
-        self.form("Editar coste", [
-            ("chapter", "Capítulo"), ("item", "Partida"), ("resource", "Recurso"),
-            ("description", "Descripción"), ("kind", "Tipo"), ("unit", "Unidad"),
-            ("budget", "Coste previsto (€)"),
-        ], asdict(row), accept)
-
-    def delete_row(self):
-        """Elimina un coste y devuelve sus líneas de factura al estado pendiente."""
-        row = self.selected_row()
-        if row and messagebox.askyesno(
-            "Facturación", "¿Eliminar el coste y sus importes asignados? "
-            "Las líneas de PDF asignadas a esta fila volverán a quedar pendientes.", parent=self,
-        ):
-            for invoice in self.data.invoices:
-                invoice.amounts.pop(row.id, None)
-                for line in invoice.lines:
-                    if line.row_id == row.id:
-                        line.row_id = ""
-            self.data.rows.remove(row)
-            self.changed()
-            self._refresh()
-
     def edit_cell(self, event):
-        """Edita un importe monetario o abre los datos de la fila seleccionada."""
+        """Edita sobre la tabla únicamente el importe de la factura seleccionada."""
         row_id = self.tree.identify_row(event.y)
         column = self.tree.identify_column(event.x)
-        if not row_id or not column:
+        if not row_id or column != "#7" or not self._visible_invoice_ids:
             return
         self.tree.selection_set(row_id)
-        index = int(column[1:]) - 1
-        if index < 6:
-            self.edit_row()
+        invoice_id = self._visible_invoice_ids[0]
+        invoice = next(invoice for invoice in self.data.invoices if invoice.id == invoice_id)
+        bbox = self.tree.bbox(row_id, column)
+        if not bbox:
             return
-        invoice = self.data.invoices[index - 6]
-        raw = simpledialog.askstring(
-            "Importe facturado", invoice.name, parent=self,
-            initialvalue=str(invoice.amounts.get(row_id, 0)),
-        )
-        if raw is None:
-            return
+        self._close_cell_editor()
+        editor = ttk.Entry(self.tree, justify="right")
+        editor.insert(0, str(invoice.amounts.get(row_id, 0)))
+        editor.select_range(0, "end")
+        x, y, width, height = bbox
+        editor.place(x=x, y=y, width=width, height=height)
+        editor.focus_set()
+        self._cell_editor = editor
+
+        def commit(_event=None):
+            """Confirma el importe contra la identidad de la factura que abrió la celda."""
+            if self._cell_editor is not editor or self._committing_cell:
+                return False
+            self._committing_cell = True
+            try:
+                return self._commit_cell(invoice_id, row_id, editor.get())
+            finally:
+                self._committing_cell = False
+
+        self._cell_commit = commit
+        editor.bind("<Return>", commit)
+        editor.bind("<FocusOut>", commit)
+        editor.bind("<Escape>", lambda _event: self._close_cell_editor())
+
+    def _commit_cell(self, invoice_id: str, row_id: str, raw: str) -> bool:
+        """Valida una asignación manual sin modificar otros costes ni otras facturas."""
+        if self._visible_invoice_ids != [invoice_id] or not self.tree.exists(row_id):
+            messagebox.showerror("Facturación", "La selección ha cambiado. Vuelve a editar el importe.", parent=self)
+            return False
         try:
             value = amount(raw)
         except ValueError as exc:
             messagebox.showerror("Facturación", str(exc), parent=self)
-            return
+            return False
+        invoice = next(invoice for invoice in self.data.invoices if invoice.id == invoice_id)
+        for line in invoice.lines:
+            if line.row_id == row_id:
+                line.row_id = ""
         invoice.amounts[row_id] = value
         self.changed()
         self._refresh()
+        return True
+
+    def _close_cell_editor(self) -> None:
+        """Cancela una edición pendiente al cambiar de factura, filtro o tabla."""
+        editor = self._cell_editor
+        if editor is not None:
+            self._cell_editor = None
+            self._cell_commit = None
+            editor.destroy()
 
     def review_lines(self):
         """Permite revisar, corregir y reasignar las líneas extraídas del PDF."""
@@ -951,7 +1228,7 @@ class InvoicingWindow(tk.Toplevel):
         dialog.transient(self)
         detail = tk.Text(dialog, height=6, wrap="word")
         detail.pack(fill="x", padx=8, pady=8)
-        detail.insert("1.0", f"{invoice.path}\n{invoice.notes}")
+        detail.insert("1.0", f"{invoice.name} | {invoice.date}\n{invoice.path}\n{invoice.notes}")
         detail.configure(state="disabled")
         container = ttk.Frame(dialog)
         container.pack(fill="both", expand=True, padx=8)
@@ -965,18 +1242,23 @@ class InvoicingWindow(tk.Toplevel):
         scrollbar = ttk.Scrollbar(container, command=tree.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         tree.configure(yscrollcommand=scrollbar.set)
-        options = [f"{index + 1}. {row.item} / {row.resource} — {row.description}"
+        options = [f"{index + 1}. {row.chapter} / {row.item} / {row.resource} — {row.description} ({row.kind})"
                    for index, row in enumerate(self.data.rows)]
         selector = ttk.Combobox(dialog, values=options, state="readonly", width=100)
         selector.pack(fill="x", padx=8, pady=8)
         if options:
-            selector.current(0)
+            selected = self.tree.selection()
+            index = next(
+                (index for index, row in enumerate(self.data.rows) if selected and row.id == selected[0]),
+                0,
+            )
+            selector.current(index)
 
         def refresh():
             """Actualiza el detalle de las líneas con sus asignaciones actuales."""
             for child in tree.get_children():
                 tree.delete(child)
-            names = {row.id: f"{row.item} / {row.resource}" for row in self.data.rows}
+            names = {row.id: f"{row.chapter} / {row.item} / {row.resource}" for row in self.data.rows}
             for index, line in enumerate(invoice.lines):
                 tree.insert("", "end", iid=str(index), values=(
                     line.item, f"{line.amount:.2f}", names.get(line.row_id, "Pendiente"),
@@ -1059,6 +1341,8 @@ class InvoicingWindow(tk.Toplevel):
 
     def save(self):
         """Publica el estado y solicita guardar el proyecto completo."""
+        if self._cell_commit is not None and not self._cell_commit():
+            return
         if self._scanning:
             messagebox.showinfo("Facturación", "Espera a que termine la lectura antes de guardar.", parent=self)
             return
@@ -1069,6 +1353,8 @@ class InvoicingWindow(tk.Toplevel):
 
     def close(self):
         """Cancela lecturas pendientes y conserva los datos ya incorporados."""
+        if self._cell_commit is not None and not self._cell_commit():
+            return
         if self._scanning and not messagebox.askyesno(
             "Facturación", "La lectura sigue en curso. ¿Cancelar y cerrar? "
             "Puedes volver a leer la carpeta más adelante.", parent=self,
@@ -1084,6 +1370,10 @@ class InvoicingWindow(tk.Toplevel):
         """Cancela los callbacks incluso si el proyecto o la aplicación se cierran."""
         if event.widget is self:
             self._closed.set()
+            if self._pdf_after is not None:
+                self.after_cancel(self._pdf_after)
+                self._pdf_after = None
+            self._pdf_photo = None
             if self._after is not None:
                 self.after_cancel(self._after)
                 self._after = None
