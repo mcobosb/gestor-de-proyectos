@@ -30,7 +30,7 @@ from odt_reports import write_report_odt
 
 
 APPLICATION_NAME = "Gestor de Proyectos"
-APPLICATION_VERSION = "1.5.0"
+APPLICATION_VERSION = "1.5.1"
 APPLICATION_RELEASE_DATE = date(2026, 10, 30)
 REPOSITORY_URL = "https://github.com/mcobosb/gestor-de-proyectos"
 BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/mcobosb"

@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.5.1
+
+### Añadido
+- Vista de solo lectura en Facturación para unificar y sumar los recursos
+  iguales de distintas partidas.
+- Enlace a la Base de Precios de Referencia desde la información de la
+  aplicación.
+
+### Cambiado
+- Los filtros de recursos del presupuesto se sitúan junto al título del
+  proyecto.
+- Las herramientas RCDs y Seguridad y salud se desactivan cuando el presupuesto
+  ya contiene capítulos de esas especialidades no generados por la aplicación,
+  para evitar duplicidades y preservar sus datos.
+
+### Corregido
+- Expansión de los elementos de la Base de Precios de Referencia y restauración
+  del divisor al volver a mostrar las bases de referencia.
+
 ## 1.5.0
 
 ### Añadido
