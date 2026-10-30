@@ -78,6 +78,7 @@ def apply_theme(root: tk.Tk) -> None:
         font=("Segoe UI", 11, "bold"), padding=(10, 8),
     )
     style.configure("Reference.Section.TLabel", background=c["teal"])
+    style.configure("BudgetHeader.TFrame", background=c["blue"])
     style.configure(
         "Total.TLabel", background=c["teal_soft"], foreground=c["teal_text"],
         font=("Segoe UI", 11, "bold"), padding=(10, 8),

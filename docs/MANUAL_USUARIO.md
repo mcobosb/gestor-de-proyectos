@@ -81,13 +81,18 @@ corresponde al proyecto completo. El buscador situado bajo el panel del proyecto
 filtra por código, resumen y descripción; **Esc** borra la búsqueda.
 
 Junto a editar y duplicar, **↕** expande o contrae todos los capítulos y partidas.
-Los botones **⚙**, **♟** y **▧** muestran, respectivamente, maquinaria, mano de
+En la cabecera azul del presupuesto, alineados con los filtros de las bases de
+referencia, los botones **⚙**, **♟** y **▧** muestran maquinaria, mano de
 obra y materiales en una tabla con una fila por recurso. El capítulo y la unidad
 de obra aparecen en columnas a su izquierda, en vez de en filas superiores.
 Solo un filtro de naturaleza puede estar activo; pulsa otra vez para desactivarlo
 y recuperar el árbol de capítulos y partidas.
 Puedes combinarlo con el buscador. Estos controles solo cambian la vista:
 no alteran el presupuesto ni sus importes.
+
+El botón de flecha de la barra de acciones oculta o muestra el panel de
+referencia. Al volver a mostrarlo se restablece la división al 50 % sin tener
+que minimizar ni maximizar la ventana.
 
 Sobre el marco de las bases de referencia aparecen también **⚙**, **♟** y **▧**.
 Estos filtros son independientes de los del proyecto y se combinan con el

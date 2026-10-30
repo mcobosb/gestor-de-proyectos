@@ -901,20 +901,6 @@ class BudgetApp:
         )
         expand_button.pack(side="left", padx=(12, 4))
         ToolTip(expand_button, "Expandir o contraer todos los capítulos y partidas.")
-        self.budget_filter_buttons: dict[str, ttk.Checkbutton] = {}
-        self.budget_filter_variables: dict[str, tk.BooleanVar] = {}
-        for kind in ("2", "1", "3"):
-            variable = tk.BooleanVar(value=False)
-            self.budget_filter_variables[kind] = variable
-            button = ttk.Checkbutton(
-                actions, text=CONCEPT_TYPES[kind].split()[0], width=3,
-                style="BudgetFilter.TCheckbutton", variable=variable,
-                command=lambda selected=kind: self.toggle_budget_resource_filter(selected),
-            )
-            button.pack(side="left", padx=(0, 4))
-            self.budget_filter_buttons[kind] = button
-            ToolTip(button, f"Filtrar recursos: {CONCEPT_TYPES[kind]}. Pulsar de nuevo para mostrar todos.")
-
         # Panel divisible: arranca al 50 % y el usuario puede reajustarlo.
         self.splitter = ttk.PanedWindow(self.root, orient="horizontal")
         self.splitter.grid(row=2, column=0, sticky="nsew")
@@ -932,10 +918,26 @@ class BudgetApp:
         self.right_panel.rowconfigure(1, weight=1)
 
         self.project_panel_title = tk.StringVar(value="Proyecto: Sin título")
+        budget_header = ttk.Frame(self.left_panel, style="BudgetHeader.TFrame")
+        budget_header.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        budget_header.columnconfigure(0, weight=1)
         left_title = ttk.Label(
-            self.left_panel, textvariable=self.project_panel_title, style="Section.TLabel"
+            budget_header, textvariable=self.project_panel_title, style="Section.TLabel"
         )
-        left_title.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        left_title.grid(row=0, column=0, sticky="ew")
+        self.budget_filter_buttons: dict[str, ttk.Checkbutton] = {}
+        self.budget_filter_variables: dict[str, tk.BooleanVar] = {}
+        for column, kind in enumerate(("2", "1", "3"), start=1):
+            variable = tk.BooleanVar(value=False)
+            self.budget_filter_variables[kind] = variable
+            button = ttk.Checkbutton(
+                budget_header, text=CONCEPT_TYPES[kind].split()[0], width=3,
+                style="BudgetFilter.TCheckbutton", variable=variable,
+                command=lambda selected=kind: self.toggle_budget_resource_filter(selected),
+            )
+            button.grid(row=0, column=column, padx=(4, 0))
+            self.budget_filter_buttons[kind] = button
+            ToolTip(button, f"Filtrar recursos: {CONCEPT_TYPES[kind]}. Pulsar de nuevo para mostrar todos.")
         self.reference_panel_title = tk.StringVar(value="Base de referencia: Sin cargar")
         reference_header = ttk.Frame(self.right_panel)
         reference_header.grid(row=0, column=0, sticky="ew", pady=(0, 8))
@@ -1159,7 +1161,8 @@ class BudgetApp:
 
     def _keep_even_split(self, event=None) -> None:
         """Mantiene la división vertical al 50 % mientras el usuario no la mueva."""
-        if self._sash_moved_by_user or self._adjusting_sash:
+        if (not self._bcca_visible or len(self.splitter.panes()) != 2
+                or self._sash_moved_by_user or self._adjusting_sash):
             return
         width = self.splitter.winfo_width()
         if width <= 1:
@@ -1199,8 +1202,15 @@ class BudgetApp:
         self._bcca_visible = True
         self.bcca_visibility_text.set("▶")
         self._sash_moved_by_user = False
-        self.root.after_idle(self._keep_even_split)
+        self.root.after_idle(self._restore_reference_split)
         self._set_status("BCCA mostrado.")
+
+    def _restore_reference_split(self) -> None:
+        """Espera la geometría del panel añadido antes de situar su separador."""
+        if not self._bcca_visible:
+            return
+        self.splitter.update_idletasks()
+        self._keep_even_split()
 
     def _populate_bcca_tree(self):
         """Rellena el árbol de referencia con los capítulos de las bases cargadas."""

@@ -1198,6 +1198,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.app.budget_search_var.set("")
         self.assertEqual(self.app.budget_tree.get_children(chapter),
                          ("item:0", "item:1", "item:2"))
+        self.assertEqual(self.app.budget_tree.get_children("item:0"), original_components)
         self.assertEqual(len(self.app.budget_items), 3)
 
     def test_resource_filters_show_context_to_the_left_of_resource_rows(self):
@@ -1243,8 +1244,57 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.app.budget_search_var.set("")
         self.assertEqual(self.app.budget_tree.get_children(chapter),
                          ("item:0", "item:1", "item:2"))
-        self.assertEqual(self.app.budget_tree.get_children("item:0"), original_components)
 
+    def test_budget_filter_buttons_share_header_row_with_reference_filters(self):
+        """Align both independent filter groups above their respective trees."""
+        self.root.geometry("1400x800")
+        self.root.deiconify()
+        self.root.update()
+        for column, kind in enumerate(("2", "1", "3"), start=1):
+            budget = self.app.budget_filter_buttons[kind]
+            reference = self.app.bcca_filter_buttons[kind]
+            self.assertEqual(budget.master.master, self.app.left_panel)
+            self.assertEqual(budget.master.cget("style"), "BudgetHeader.TFrame")
+            self.assertEqual(int(budget.master.grid_info()["row"]), 0)
+            self.assertEqual(int(budget.grid_info()["column"]), column)
+            self.assertEqual(budget.winfo_rooty(), reference.winfo_rooty())
+            self.assertEqual(budget.winfo_height(), reference.winfo_height())
+        self.app.budget_filter_buttons["2"].invoke()
+        self.assertEqual(self.app.budget_resource_filter, "2")
+        self.assertEqual(self.app.bcca_resource_filter, "")
+
+    def test_reference_panel_reappears_without_resizing_and_survives_hidden_resize(self):
+        """Restore a mapped half-width reference pane after repeated hide/show cycles."""
+        self.root.geometry("1400x800")
+        self.root.deiconify()
+        self.root.update()
+        self.app.splitter.sashpos(0, 900)
+        self.app._sash_moved_by_user = True
+        with patch.object(self.root, "report_callback_exception") as errors:
+            for width in (1400, 1500, 1400):
+                with self.subTest(width=width):
+                    self.app.toggle_bcca_panel()
+                    self.root.update()
+                    self.assertFalse(self.app.right_panel.winfo_ismapped())
+                    self.root.geometry(f"{width}x800")
+                    self.root.update()
+                    self.assertEqual(len(self.app.splitter.panes()), 1)
+                    self.app.toggle_bcca_panel()
+                    self.root.update()
+                    self.assertTrue(self.app.right_panel.winfo_ismapped())
+                    total_width = self.app.splitter.winfo_width()
+                    self.assertAlmostEqual(self.app.splitter.sashpos(0), total_width / 2, delta=3)
+                    self.assertGreater(self.app.right_panel.winfo_width(), total_width * 0.45)
+                    self.assertFalse(self.app._sash_moved_by_user)
+            self.app.toggle_bcca_panel()
+            self.app.toggle_bcca_panel()
+            self.app.toggle_bcca_panel()
+            self.root.update()
+            self.assertEqual(len(self.app.splitter.panes()), 1)
+            self.app.reset_split()
+            self.root.update()
+            self.assertTrue(self.app.right_panel.winfo_ismapped())
+            errors.assert_not_called()
     def test_resource_table_handles_empty_results_standalone_items_and_repeated_searches(self):
         """Restore hierarchy, row values and open states after repeated flat projections."""
         self.set_report_items()
