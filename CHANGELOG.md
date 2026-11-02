@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.2
+
+### Corregido
+- Inclusión explícita del módulo de figura de planificación y del backend
+  no interactivo de Matplotlib en el instalador, para generar el diagrama de
+  Gantt desde la aplicación distribuida.
+
 ## 1.5.1
 
 ### Añadido
