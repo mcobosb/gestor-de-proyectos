@@ -35,6 +35,7 @@ plantillas/*
 *.xlsx
 *.xls
 *.csv
+/plantilla.odt
 !datos/seguridad_salud_relaciones_bcca2023.csv
 
 # Resultados de pruebas y archivos temporales.

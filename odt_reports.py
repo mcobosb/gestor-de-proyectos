@@ -49,6 +49,7 @@ class _OdtReport:
         self, title: str, project_title: str, author: str, *,
         image_data: bytes | None = None, image_path: str = "", image_type: str = "",
         image_width: float = 0, image_height: float = 0, footer: str = "",
+        template_header=None, template_footer=None, template_resources=(),
         layout: ReportLayout | None = None,
     ):
         """Prepara el cuerpo editable y los datos de cabecera y pie del informe."""
@@ -67,6 +68,9 @@ class _OdtReport:
         self.image_width = image_width
         self.image_height = image_height
         self.footer = footer
+        self.template_header = template_header
+        self.template_footer = template_footer
+        self.template_resources = template_resources
         self.template_borders: dict[str, dict[str, str]] = {}
         self.table_number = 0
         self.content_root = ET.Element(_tag("office:document-content"), {
@@ -242,7 +246,9 @@ class _OdtReport:
             archive.writestr("styles.xml", styles, compress_type=ZIP_DEFLATED)
             archive.writestr("meta.xml", metadata, compress_type=ZIP_DEFLATED)
             archive.writestr("META-INF/manifest.xml", manifest, compress_type=ZIP_DEFLATED)
-            if self.image_data is not None:
+            for image_path, _, image_data in self.template_resources:
+                archive.writestr(image_path, image_data, compress_type=ZIP_DEFLATED)
+            if self.image_data is not None and not self.template_resources:
                 archive.writestr(self.image_path, self.image_data, compress_type=ZIP_DEFLATED)
 
     def _styles_xml(self) -> bytes:
@@ -250,7 +256,14 @@ class _OdtReport:
         root = ET.Element(_tag("office:document-styles"), {
             _tag("office:version"): "1.3",
         })
+        if self.template_header is not None:
+            font_decls = ET.SubElement(root, _tag("office:font-face-decls"))
+            for font_face in self.template_header["font_faces"]:
+                font_decls.append(deepcopy(font_face))
         styles = ET.SubElement(root, _tag("office:styles"))
+        if self.template_header is not None:
+            for style in self.template_header["styles"]:
+                styles.append(deepcopy(style))
         self._paragraph_style(styles, "Normal")
         self._paragraph_style(styles, "Project", size="10pt", bold=True, after="0.08in")
         self._paragraph_style(styles, "Title", size="16pt", bold=True, after="0.12in")
@@ -300,6 +313,9 @@ class _OdtReport:
                 for edge, value in borders.items():
                     properties.set(_tag(f"fo:border-{edge}"), value)
         automatic = ET.SubElement(root, _tag("office:automatic-styles"))
+        if self.template_header is not None:
+            for style in self.template_header["automatic_styles"]:
+                automatic.append(deepcopy(style))
         for name, background in (("HeaderCell", "#FFFFFF"), ("BodyCell", "#FFFFFF"),
                                  ("TotalCell", "#FFFFFF"), ("ChapterCell", (
                                      "#00EEEE" if self.layout and self.layout.certification
@@ -444,7 +460,10 @@ class _OdtReport:
             _tag("style:name"): name,
             _tag("style:page-layout-name"): "PageLayout",
         })
-        if self.image_data is not None:
+        if self.template_header is not None:
+            master_page.append(deepcopy(self.template_header["header"]))
+            header = master_page.find(_tag("style:header"))
+        elif self.image_data is not None:
             header = ET.SubElement(master_page, _tag("style:header"))
             paragraph = ET.SubElement(header, _tag("text:p"), {
                 _tag("text:style-name"): "ReportHeader",
@@ -478,7 +497,9 @@ class _OdtReport:
         }).text = self.project_title
         if self.header_columns:
             self._header_table(header, styles)
-        if self.footer:
+        if self.template_footer is not None:
+            master_page.append(deepcopy(self.template_footer))
+        elif self.footer:
             footer = ET.SubElement(master_page, _tag("style:footer"))
             paragraph = ET.SubElement(footer, _tag("text:p"), {
                 _tag("text:style-name"): "FooterText",
@@ -551,7 +572,13 @@ class _OdtReport:
                 _tag("manifest:full-path"): name,
                 _tag("manifest:media-type"): media_type,
             })
-        if self.image_data is not None:
+        if self.template_resources:
+            for image_path, media_type, _ in self.template_resources:
+                ET.SubElement(root, _tag("manifest:file-entry"), {
+                    _tag("manifest:full-path"): image_path,
+                    _tag("manifest:media-type"): media_type,
+                })
+        elif self.image_data is not None:
             ET.SubElement(root, _tag("manifest:file-entry"), {
                 _tag("manifest:full-path"): self.image_path,
                 _tag("manifest:media-type"): self.image_type,
@@ -561,15 +588,21 @@ class _OdtReport:
 
 def _new_report(title: str, project_title: str, settings: ReportSettings, *, certification=False):
     """Crea un documento y prepara la identidad visual correspondiente al informe."""
-    from report_layout import _read_report_template, _read_report_template_borders
+    from report_layout import (
+        _read_report_template, _read_report_template_borders, _read_report_template_header,
+    )
 
     image, image_path, width, height, footer = _read_report_template(settings.template_path)
+    template = _read_report_template_header(settings.template_path)
     document = _OdtReport(
         title, report_project_label(project_title), settings.author, image_data=image,
         image_path=f"Pictures/report-template{Path(image_path).suffix.lower()}",
         image_type="image/jpeg" if Path(image_path).suffix.lower() in {".jpg", ".jpeg"}
         else "image/png",
         image_width=width, image_height=height, footer=footer,
+        template_header=template,
+        template_footer=template["footer"],
+        template_resources=template["resources"],
         layout=ReportLayout(certification=certification, template_path=settings.template_path),
     )
     document.template_borders = _read_report_template_borders(settings.template_path)

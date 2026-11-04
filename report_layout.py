@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import re
+from copy import deepcopy
 from datetime import date
 from io import BytesIO
 from html import escape
@@ -64,7 +65,7 @@ def budget_report_columns(report: str):
 
 def _template_length_to_points(value: str) -> float:
     """Convierte una longitud ODF en puntos PDF."""
-    match = re.fullmatch(r"(\d+(?:\.\d+)?)(cm|mm|in|pt|pc)", value)
+    match = re.fullmatch(r"(-?\d+(?:\.\d+)?)(cm|mm|in|pt|pc)", value)
     if not match:
         raise ValueError(f"Longitud no válida en la plantilla ODT: {value!r}.")
     number = float(match.group(1))
@@ -120,6 +121,263 @@ def _read_report_template(template_path: str = ""):
             f"No se pudo leer la plantilla de informes {path}: {exc}"
         ) from exc
     return image_data, image_path, image_width, image_height, footer_text
+
+
+def _read_report_template_header(template_path: str = ""):
+    """Carga cabecera y pie ODT completos, sus estilos y recursos gráficos."""
+    namespaces = {
+        "office": "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
+        "style": "urn:oasis:names:tc:opendocument:xmlns:style:1.0",
+        "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
+        "table": "urn:oasis:names:tc:opendocument:xmlns:table:1.0",
+        "draw": "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0",
+        "svg": "urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0",
+        "fo": "urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0",
+        "xlink": "http://www.w3.org/1999/xlink",
+    }
+    path = Path(template_path).expanduser() if template_path.strip() else DEFAULT_TEMPLATE_PATH
+    style_name = f"{{{namespaces['style']}}}name"
+    try:
+        with ZipFile(path) as archive:
+            root = ElementTree.fromstring(archive.read("styles.xml"))
+            master_page = root.find(".//style:master-page", namespaces)
+            header = master_page.find("style:header", namespaces) if master_page is not None else None
+            if header is None:
+                raise ValueError("La plantilla ODT no contiene una cabecera.")
+            header = deepcopy(header)
+            footer = master_page.find("style:footer", namespaces)
+            if footer is None:
+                raise ValueError("La plantilla ODT no contiene un pie de página.")
+            footer = deepcopy(footer)
+            styles_section = root.find("office:styles", namespaces)
+            automatic_section = root.find("office:automatic-styles", namespaces)
+            source_styles = [
+                deepcopy(element) for element in styles_section
+                if element.tag == f"{{{namespaces['style']}}}style"
+            ] if styles_section is not None else []
+            source_automatic_styles = (
+                list(automatic_section) if automatic_section is not None else []
+            )
+            style_names = {
+                element.get(style_name)
+                for element in (*source_styles, *source_automatic_styles)
+                if element.get(style_name)
+            }
+            renamed_styles = {name: f"Template{name}" for name in style_names}
+
+            def remap_style_references(element):
+                for key, value in list(element.attrib.items()):
+                    local_name = key.rsplit("}", 1)[-1]
+                    if key == style_name and value in renamed_styles:
+                        element.set(key, renamed_styles[value])
+                    elif local_name.endswith("style-name") and value in renamed_styles:
+                        element.set(key, renamed_styles[value])
+                for child in element:
+                    remap_style_references(child)
+
+            for element in (*source_styles, *source_automatic_styles, header, footer):
+                remap_style_references(element)
+
+            style_definitions = {
+                element.get(style_name): element
+                for element in (*source_styles, *source_automatic_styles)
+                if element.get(style_name)
+            }
+            table_sections = {"header": [], "footer": []}
+            section_tables = {
+                section_name: section.findall(".//table:table", namespaces)
+                for section_name, section in (("header", header), ("footer", footer))
+            }
+            for section_name, tables in section_tables.items():
+                for table in tables:
+                    table_style = style_definitions.get(table.get(
+                        f"{{{namespaces['table']}}}style-name", "",
+                    ))
+                    table_properties = table_style.find("style:table-properties", namespaces) if table_style is not None else None
+                    widths = []
+                    for column in table.findall("table:table-column", namespaces):
+                        column_style = style_definitions.get(column.get(
+                            f"{{{namespaces['table']}}}style-name", "",
+                        ))
+                        properties = column_style.find("style:table-column-properties", namespaces) if column_style is not None else None
+                        width = _template_length_to_points(
+                            properties.get(f"{{{namespaces['style']}}}column-width", "")
+                        ) if properties is not None and properties.get(f"{{{namespaces['style']}}}column-width") else 0
+                        repeated = int(column.get(f"{{{namespaces['table']}}}number-columns-repeated", "1"))
+                        widths.extend([width] * repeated)
+                    rows = []
+                    row_heights = []
+                    for row in table.findall(".//table:table-row", namespaces):
+                        row_style = style_definitions.get(row.get(
+                            f"{{{namespaces['table']}}}style-name", "",
+                        ))
+                        row_properties = row_style.find("style:table-row-properties", namespaces) if row_style is not None else None
+                        height = 0
+                        if row_properties is not None:
+                            height_value = row_properties.get(
+                                f"{{{namespaces['style']}}}row-height",
+                                row_properties.get(f"{{{namespaces['style']}}}min-row-height", ""),
+                            )
+                            if height_value:
+                                height = _template_length_to_points(height_value)
+                        row_heights.append(height)
+                        row_cells = []
+                        for cell in row.findall("table:table-cell", namespaces):
+                            cell_style = style_definitions.get(cell.get(
+                                f"{{{namespaces['table']}}}style-name", "",
+                            ))
+                            cell_properties = cell_style.find("style:table-cell-properties", namespaces) if cell_style is not None else None
+                            cell_borders = {}
+                            padding = 0
+                            if cell_properties is not None:
+                                padding_value = cell_properties.get(f"{{{namespaces['fo']}}}padding", "0pt")
+                                padding = _template_length_to_points(padding_value)
+                                for edge in ("top", "right", "bottom", "left"):
+                                    border = cell_properties.get(
+                                        f"{{{namespaces['fo']}}}border-{edge}",
+                                        cell_properties.get(f"{{{namespaces['fo']}}}border", "none"),
+                                    )
+                                    if border not in {"none", "hidden"}:
+                                        cell_borders[edge] = border
+                            paragraph = cell.find(".//text:p", namespaces)
+                            paragraph_style = style_definitions.get(
+                                paragraph.get(f"{{{namespaces['text']}}}style-name", "")
+                            ) if paragraph is not None else None
+                            paragraph_properties = paragraph_style.find(
+                                "style:paragraph-properties", namespaces,
+                            ) if paragraph_style is not None else None
+                            text_properties = paragraph_style.find(
+                                "style:text-properties", namespaces,
+                            ) if paragraph_style is not None else None
+                            font_size_value = text_properties.get(
+                                f"{{{namespaces['fo']}}}font-size", "8pt",
+                            ) if text_properties is not None else "8pt"
+                            try:
+                                font_size = _template_length_to_points(font_size_value)
+                            except ValueError:
+                                font_size = 8
+                            row_cells.append({
+                                "text": "\n".join(
+                                    "".join(paragraph.itertext()).strip()
+                                    for paragraph in cell.findall(".//text:p", namespaces)
+                                    if "".join(paragraph.itertext()).strip()
+                                ),
+                                "padding": padding,
+                                "borders": cell_borders,
+                                "alignment": paragraph_properties.get(
+                                    f"{{{namespaces['fo']}}}text-align", "start",
+                                ) if paragraph_properties is not None else "start",
+                                "font_size": font_size,
+                                "bold": text_properties is not None and text_properties.get(
+                                    f"{{{namespaces['fo']}}}font-weight"
+                                ) == "bold",
+                            })
+                        rows.append(row_cells)
+                    table_width = 0
+                    align = "margins"
+                    if table_properties is not None:
+                        width_value = table_properties.get(f"{{{namespaces['style']}}}width", "")
+                        if width_value:
+                            table_width = _template_length_to_points(width_value)
+                        align = table_properties.get(f"{{{namespaces['table']}}}align", align)
+                    table_sections[section_name].append({
+                        "width": table_width or sum(widths),
+                        "widths": widths,
+                        "align": align,
+                        "rows": rows,
+                        "row_heights": row_heights,
+                    })
+
+            resources = []
+            first_frame = None
+            graphics = []
+            sections = (header, footer)
+            images = [image for section in sections for image in section.findall(".//draw:image", namespaces)]
+            for index, image in enumerate(images):
+                image_path = image.get(f"{{{namespaces['xlink']}}}href", "")
+                if not image_path or image_path.startswith("/") or ".." in Path(image_path).parts:
+                    raise ValueError("La ruta de una imagen de cabecera ODT no es válida.")
+                extension = Path(image_path).suffix.lower() or ".png"
+                output_path = (
+                    f"Pictures/report-template{extension}" if index == 0 else
+                    f"Pictures/report-template-{index}{extension}"
+                )
+                image.set(f"{{{namespaces['xlink']}}}href", output_path)
+                image_data = archive.read(image_path)
+                media_type = "image/jpeg" if extension in {".jpg", ".jpeg"} else "image/png"
+                resources.append((output_path, media_type, image_data))
+                section = next(section for section in sections if image in list(section.iter()))
+                frame = next(
+                    frame for frame in section.findall(".//draw:frame", namespaces)
+                    if image in list(frame.iter())
+                )
+                graphics.append({
+                    "section": "header" if section is header else "footer",
+                    "table_index": next((
+                        index for index, table in enumerate(section_tables[
+                            "header" if section is header else "footer"
+                        ]) if image in list(table.iter())
+                    ), None),
+                    "data": image_data,
+                    "x": _template_length_to_points(
+                        frame.get(f"{{{namespaces['svg']}}}x", "0pt")
+                    ),
+                    "y": _template_length_to_points(
+                        frame.get(f"{{{namespaces['svg']}}}y", "0pt")
+                    ),
+                    "width": _template_length_to_points(
+                        frame.get(f"{{{namespaces['svg']}}}width", "")
+                    ),
+                    "height": _template_length_to_points(
+                        frame.get(f"{{{namespaces['svg']}}}height", "")
+                    ),
+                })
+                if section is header and first_frame is None:
+                    first_frame = frame
+            if first_frame is None:
+                raise ValueError("La plantilla ODT no contiene una imagen en la cabecera.")
+            header_table_paragraphs = {
+                paragraph for table in section_tables["header"]
+                for paragraph in table.findall(".//text:p", namespaces)
+            }
+            footer_table_paragraphs = {
+                paragraph for table in section_tables["footer"]
+                for paragraph in table.findall(".//text:p", namespaces)
+            }
+            header_text = "\n".join(
+                "".join(paragraph.itertext()).strip()
+                for paragraph in header.findall(".//text:p", namespaces)
+                if paragraph not in header_table_paragraphs and "".join(paragraph.itertext()).strip()
+            )
+            footer_text = " ".join(
+                " ".join("".join(paragraph.itertext()).split())
+                for paragraph in footer.findall(".//text:p", namespaces)
+                if paragraph not in footer_table_paragraphs
+            )
+            frame_x = _template_length_to_points(
+                first_frame.get(f"{{{namespaces['svg']}}}x", "0pt")
+            )
+            frame_y = _template_length_to_points(
+                first_frame.get(f"{{{namespaces['svg']}}}y", "0pt")
+            )
+            font_decls = root.find("office:font-face-decls", namespaces)
+            font_faces = [deepcopy(element) for element in font_decls] if font_decls is not None else []
+    except (OSError, KeyError, BadZipFile, ElementTree.ParseError) as exc:
+        raise ValueError(f"No se pudo leer la cabecera de la plantilla ODT {path}: {exc}") from exc
+    return {
+        "header": header,
+        "styles": source_styles,
+        "automatic_styles": source_automatic_styles,
+        "font_faces": font_faces,
+        "resources": resources,
+        "graphics": graphics,
+        "tables": table_sections,
+        "footer": footer,
+        "text": header_text,
+        "footer_text": footer_text,
+        "frame_x": frame_x,
+        "frame_y": frame_y,
+    }
 
 
 def _read_report_template_borders(template_path: str = "") -> dict[str, dict[str, str]]:
@@ -228,6 +486,15 @@ class ReportLayout:
             image_data, self.template_image_path, self.logo_width, self.logo_height,
             self.template_footer,
         ) = _read_report_template(template_path)
+        template_header = _read_report_template_header(template_path)
+        self.template_header_section = template_header["header"]
+        self.template_footer_section = template_header["footer"]
+        self.template_header_text = template_header["text"]
+        self.template_footer = template_header["footer_text"]
+        self.template_graphics = template_header["graphics"]
+        self.template_tables = template_header["tables"]
+        self.template_frame_x = template_header["frame_x"]
+        self.template_frame_y = template_header["frame_y"]
         self.template_borders = _read_report_template_borders(template_path)
         self.logo = ImageReader(BytesIO(image_data))
 
@@ -240,6 +507,92 @@ class ReportLayout:
     def description(self, value):
         """Crea una descripción con la sangría y tipografía del modelo."""
         return self.text(value, self.description_style)
+
+    def _template_table_flowable(self, template_table):
+        """Reproduce una tabla de cabecera o pie con sus columnas, bordes y texto."""
+        from reportlab.lib import colors
+        from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_RIGHT
+        from reportlab.lib.styles import ParagraphStyle
+        from reportlab.platypus import Table, TableStyle
+
+        data = []
+        cell_styles = []
+        for row_index, row in enumerate(template_table["rows"]):
+            data_row = []
+            style_row = []
+            for column_index, cell in enumerate(row):
+                alignment = {"center": TA_CENTER, "end": TA_RIGHT, "justify": TA_JUSTIFY}.get(
+                    cell["alignment"], 0,
+                )
+                cell_style = ParagraphStyle(
+                    f"template-cell-{row_index}-{column_index}",
+                    parent=self.normal,
+                    fontName=self.bold_font if cell["bold"] else self.regular_font,
+                    fontSize=cell["font_size"],
+                    leading=cell["font_size"] + 1,
+                    alignment=alignment,
+                )
+                data_row.append(self.text(cell["text"], cell_style) if cell["text"] else "")
+                style_row.append(cell)
+            data.append(data_row)
+            cell_styles.append(style_row)
+
+        column_widths = template_table["widths"]
+        if len(column_widths) != max((len(row) for row in data), default=0):
+            count = max((len(row) for row in data), default=1)
+            column_widths = [template_table["width"] / count] * count
+        row_heights = [
+            height if height > 0 else 20 for height in template_table["row_heights"]
+        ]
+        block = Table(data, colWidths=column_widths, rowHeights=row_heights, hAlign="LEFT")
+        commands = [("VALIGN", (0, 0), (-1, -1), "TOP")]
+        for row_index, row in enumerate(cell_styles):
+            for column_index, cell in enumerate(row):
+                padding = cell["padding"]
+                for side in ("LEFT", "RIGHT", "TOP", "BOTTOM"):
+                    commands.append((f"{side}PADDING", (column_index, row_index),
+                                     (column_index, row_index), padding))
+                for edge, border in cell["borders"].items():
+                    parts = border.split()
+                    if len(parts) != 3:
+                        continue
+                    width = _template_length_to_points(parts[0])
+                    color = colors.HexColor(parts[2])
+                    command = {
+                        "top": "LINEABOVE", "bottom": "LINEBELOW",
+                        "left": "LINEBEFORE", "right": "LINEAFTER",
+                    }[edge]
+                    commands.append((command, (column_index, row_index),
+                                     (column_index, row_index), width, color))
+        block.setStyle(TableStyle(commands))
+        return block
+
+    def _draw_template_tables(self, canvas, section, *, top=None, bottom=None):
+        """Draw source template tables and return their PDF origins for anchored frames."""
+        from reportlab.lib.pagesizes import A4
+
+        origins = {}
+        cursor = top if top is not None else bottom
+        for index, template_table in enumerate(self.template_tables[section]):
+            block = self._template_table_flowable(template_table)
+            width, height = block.wrap(template_table["width"], 1000)
+            if template_table["align"] == "margins":
+                x = LEFT_MARGIN + (CONTENT_WIDTH - width) / 2
+            elif template_table["align"] == "center":
+                x = (PAGE_WIDTH - width) / 2
+            elif template_table["align"] == "right":
+                x = PAGE_WIDTH - RIGHT_MARGIN - width
+            else:
+                x = LEFT_MARGIN
+            if top is not None:
+                y = cursor - height
+                cursor = y - 3
+            else:
+                y = cursor
+                cursor = y + height + 3
+            block.drawOn(canvas, x, y)
+            origins[index] = (x, y, width, height)
+        return origins
 
     def leader(self, value, style=None):
         """Crea un párrafo con puntos guía hasta el final de su columna."""
@@ -362,27 +715,65 @@ class ReportLayout:
 
     @property
     def header_logo_height(self) -> float:
-        """Reserva la altura del logo de la plantilla y una separación antes del título."""
-        return self.logo_height + 8
+        """Reserva la cabecera de plantilla y una separación antes del título."""
+        text_height = 0
+        if self.template_header_text:
+            text_width = max(1, self.template_frame_x - 8) if self.template_frame_x else (
+                CONTENT_WIDTH - self.logo_width - 8
+            )
+            _, text_height = self.text(self.template_header_text, self.normal).wrap(text_width, 1000)
+        graphic_height = max(
+            (graphic["y"] + graphic["height"] for graphic in self.template_graphics
+             if graphic["section"] == "header"),
+            default=self.template_frame_y + self.logo_height,
+        )
+        table_height = max((
+            sum(template_table["row_heights"])
+            for template_table in self.template_tables["header"]
+        ), default=0)
+        return max(graphic_height, text_height, table_height) + 8
 
     def bottom_margin(self) -> float:
         """Reserva el pie dentro del margen exterior de 2,5 cm y separa el cuerpo."""
         _, height = self.text(self.template_footer, self.normal).wrap(CONTENT_WIDTH - 20, 1000)
-        return PAGE_MARGIN + max(22, height + 12)
+        table_height = max((
+            sum(template_table["row_heights"])
+            for template_table in self.template_tables["footer"]
+        ), default=0)
+        return PAGE_MARGIN + max(22, height + 12, table_height + height + 12)
 
     def header(self, canvas, document, title, project_title, *, footer="", column_headers=(), ratios=()):
         """Dibuja el logo institucional, títulos, columnas y pie numerado de una página."""
         from reportlab.lib.pagesizes import A4
+        from reportlab.lib.utils import ImageReader
 
         canvas.saveState()
         top = A4[1]
-        logo_width = self.logo_width
-        logo_y = top - PAGE_MARGIN - self.logo_height
         heading_y = top - PAGE_MARGIN - self.header_logo_height
-        if self.logo is not None:
+        header_tables = self._draw_template_tables(
+            canvas, "header", top=top - PAGE_MARGIN,
+        )
+        if self.template_header_text:
+            text_width = max(1, self.template_frame_x - 8) if self.template_frame_x else (
+                CONTENT_WIDTH - self.logo_width - 8
+            )
+            template_text = self.text(self.template_header_text, self.normal)
+            _, text_height = template_text.wrap(text_width, 1000)
+            template_text.drawOn(canvas, LEFT_MARGIN, top - PAGE_MARGIN - text_height)
+        for graphic in self.template_graphics:
+            if graphic["section"] != "header":
+                continue
+            if graphic["table_index"] is not None and graphic["table_index"] in header_tables:
+                table_x, table_y, _, table_height = header_tables[graphic["table_index"]]
+                graphic_x = table_x + graphic["x"]
+                graphic_y = table_y + table_height - graphic["y"] - graphic["height"]
+            else:
+                graphic_x = LEFT_MARGIN + graphic["x"]
+                graphic_y = top - PAGE_MARGIN - graphic["y"] - graphic["height"]
             canvas.drawImage(
-                self.logo, LEFT_MARGIN, logo_y, width=logo_width,
-                height=self.logo_height,
+                ImageReader(BytesIO(graphic["data"])),
+                graphic_x, graphic_y,
+                width=graphic["width"], height=graphic["height"],
                 preserveAspectRatio=False, mask="auto",
             )
         heading = self.text(title, self.title_style)
@@ -407,6 +798,25 @@ class ReportLayout:
         footer_block = self.text(self.template_footer, footer_style)
         _, footer_height = footer_block.wrap(CONTENT_WIDTH - 20, 1000)
         footer_block.drawOn(canvas, LEFT_MARGIN, PAGE_MARGIN)
+        footer_tables = self._draw_template_tables(
+            canvas, "footer", bottom=PAGE_MARGIN + footer_height + 4,
+        )
+        for graphic in self.template_graphics:
+            if graphic["section"] != "footer":
+                continue
+            if graphic["table_index"] is not None and graphic["table_index"] in footer_tables:
+                table_x, table_y, _, table_height = footer_tables[graphic["table_index"]]
+                graphic_x = table_x + graphic["x"]
+                graphic_y = table_y + table_height - graphic["y"] - graphic["height"]
+            else:
+                graphic_x = LEFT_MARGIN + graphic["x"]
+                graphic_y = PAGE_MARGIN + graphic["y"]
+            canvas.drawImage(
+                ImageReader(BytesIO(graphic["data"])),
+                graphic_x, graphic_y,
+                width=graphic["width"], height=graphic["height"],
+                preserveAspectRatio=False, mask="auto",
+            )
         canvas.setFont(self.regular_font, 6)
         canvas.drawRightString(PAGE_WIDTH - RIGHT_MARGIN, PAGE_MARGIN + 1, str(document.page))
         for section, borders in self.template_borders.items():
@@ -428,7 +838,8 @@ class ReportLayout:
                     canvas.setDash()
                 else:
                     raise ValueError(f"Tipo de borde ODT no compatible: {pattern!r}.")
-                y = (top - PAGE_MARGIN if edge == "top" else logo_y - 4) if section == "header" else (
+                header_bottom = top - PAGE_MARGIN - self.header_logo_height + 4
+                y = (top - PAGE_MARGIN if edge == "top" else header_bottom) if section == "header" else (
                     PAGE_MARGIN + footer_height + 4 if edge == "top" else PAGE_MARGIN
                 )
                 if pattern == "double":
