@@ -17,6 +17,34 @@ import unicodedata
 from uuid import uuid4
 
 from localization import filedialog, localize_widget_tree, messagebox, translate
+from ._budget_sources import RCD_BUDGET_SOURCE, TRANSPORT_PREFIX
+
+TOOL_LABEL = "Facturación"
+TOOL_ORDER = 50
+
+
+def open_tool(app: BudgetApp) -> None:
+    """Abre o recupera la facturacion local vinculada al proyecto."""
+    if not app.budget_items:
+        messagebox.showinfo(TOOL_LABEL, "Carga o crea un presupuesto antes de gestionar facturas.")
+        return
+    if app._invoicing_window is not None and app._invoicing_window.winfo_exists():
+        app._invoicing_window.lift()
+        return
+
+    def store(state: InvoiceState) -> None:
+        """Conserva las ediciones y marca el proyecto modificado."""
+        app.invoicing_state = state.to_dict()
+        app._mark_dirty()
+
+    app._invoicing_window = InvoicingWindow(
+        app.root, app, InvoiceState.from_dict(app.invoicing_state), store, app.save_project,
+    )
+
+
+def restore_project_state(data: dict) -> dict:
+    """Valida las facturas y asignaciones guardadas en el proyecto."""
+    return InvoiceState.from_dict(data).to_dict()
 
 if TYPE_CHECKING:
     from bc3_gui import BudgetApp, ProjectItem
@@ -244,8 +272,6 @@ class InvoiceState:
 
 def is_rcd_item(item: ProjectItem) -> bool:
     """Reconoce gestión y transporte generados por RCDs mediante sus marcas persistentes."""
-    from rcd import RCD_BUDGET_SOURCE, TRANSPORT_PREFIX
-
     return item.source.startswith(RCD_BUDGET_SOURCE) or any(
         line.comment.startswith(TRANSPORT_PREFIX) for line in item.measurement_lines
     )

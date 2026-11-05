@@ -241,11 +241,11 @@ class DistributionTests(unittest.TestCase):
     def test_every_function_has_a_nonempty_docstring(self):
         """Exige documentación integrada en las funciones y métodos distribuidos."""
         missing = []
-        for path in ROOT.glob("*.py"):
+        for path in [*ROOT.glob("*.py"), *(ROOT / "tools").rglob("*.py")]:
             tree = ast.parse(path.read_text(encoding="utf-8-sig"))
             for node in ast.walk(tree):
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and not ast.get_docstring(node):
-                    missing.append(f"{path.name}:{node.lineno} {node.name}")
+                    missing.append(f"{path.relative_to(ROOT)}:{node.lineno} {node.name}")
         self.assertEqual(missing, [], "\n".join(missing))
 
     def test_runtime_assets_and_dependency_manifests_are_present(self):
@@ -263,12 +263,19 @@ class DistributionTests(unittest.TestCase):
         self.assertTrue((ROOT / "build_installer.ps1").is_file())
         build_script = (ROOT / "build_installer.ps1").read_text(encoding="utf-8").lower()
         for module in (
-            "figura_gantt",
             "matplotlib.backends.backend_agg",
             "matplotlib.backends.backend_pdf",
         ):
             with self.subTest(module=module):
                 self.assertIn(f"--include-module={module}", build_script)
+        self.assertIn("--module", build_script)
+        self.assertIn("--nofollow-imports", build_script)
+        self.assertIn('"tools"', build_script)
+        self.assertIn('copy-item', build_script)
+        self.assertIn("discover_tools", build_script)
+        self.assertIn("--msvc=latest", build_script)
+        for package in ("matplotlib", "openpyxl", "pdfplumber", "pypdfium2"):
+            self.assertIn(f"--include-package={package}", build_script)
         self.assertTrue((ROOT / "installer" / "GestorDeProyectos.iss").is_file())
 
 

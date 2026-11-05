@@ -12,7 +12,7 @@ from unittest.mock import patch
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
 
 from bc3_gui import Bc3Dataset, BudgetApp, Concept, MeasurementLine, ProjectItem
-from invoicing import (
+from tools.invoicing import (
     CostRow, Invoice, InvoiceLine, InvoiceState, InvoicingWindow, amount,
     assign_line, assign_matching_lines, budget_rows, parse_invoice_tables,
     ALL_PERIODS, UNDATED_PERIOD, invoice_month, period_invoices,
@@ -89,7 +89,7 @@ class InvoiceModelTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual((rows[0].kind, rows[0].resource, rows[0].budget),
                          ("RCDs", "RCD-EARTH", 40))
-        from rcd import TRANSPORT_PREFIX
+        from tools.rcd import TRANSPORT_PREFIX
 
         app.budget_items = [ProjectItem(
             "RCD-TRANS", "01#", "m3", "Transporte", measurement=5, unit_price=7,
@@ -532,14 +532,14 @@ class InvoiceWindowTests(unittest.TestCase):
         self.assertEqual(invoice.amounts[first_row.id], 123)
         copy = self.folder / "copy.pdf"
         copy.write_bytes(path.read_bytes())
-        with patch("invoicing.messagebox.showwarning") as warning:
+        with patch("tools.invoicing.messagebox.showwarning") as warning:
             self.window.scan()
             self.wait_scan()
             self.assertEqual(len(self.window.data.invoices), 1)
             self.assertIn("duplicado", warning.call_args.args[1])
         copy.unlink()
         create_invoice(path, [("MAT", "999,00")])
-        with patch("invoicing.messagebox.showwarning") as warning:
+        with patch("tools.invoicing.messagebox.showwarning") as warning:
             self.window.scan()
             self.wait_scan()
             self.assertIn("han cambiado", warning.call_args.args[1])
@@ -575,11 +575,11 @@ class InvoiceWindowTests(unittest.TestCase):
         editor.event_generate("<FocusOut>")
         self.assertEqual(invoice.amounts[row.id], 125.5)
         self.assertEqual(self.window.totals.item(row.id, "values"), ("48,00 €", "125,50 €", "-77,50 €"))
-        with patch("invoicing.messagebox.showerror") as error:
+        with patch("tools.invoicing.messagebox.showerror") as error:
             self.window._commit_cell(invoice.id, row.id, "nan")
             error.assert_called_once()
         self.assertEqual(invoice.amounts[row.id], 125.5)
-        with patch("invoicing.messagebox.askyesno", return_value=True):
+        with patch("tools.invoicing.messagebox.askyesno", return_value=True):
             self.window.delete_invoice()
         self.assertFalse(self.window.data.invoices)
         self.assertTrue(self.app.is_dirty)
@@ -599,7 +599,7 @@ class InvoiceWindowTests(unittest.TestCase):
 
     def test_invalid_folder_and_old_projects(self):
         self.window.data.folder = str(self.folder / "missing")
-        with patch("invoicing.messagebox.showerror") as error:
+        with patch("tools.invoicing.messagebox.showerror") as error:
             self.window.scan()
             error.assert_called_once()
         path = self.folder / "old.json"
@@ -618,7 +618,7 @@ class InvoiceWindowTests(unittest.TestCase):
         import sys
 
         self.window.data.folder = str(self.folder)
-        with patch.dict(sys.modules, {"pdfplumber": None}), patch("invoicing.messagebox.showerror") as error:
+        with patch.dict(sys.modules, {"pdfplumber": None}), patch("tools.invoicing.messagebox.showerror") as error:
             self.window.scan()
             self.assertIn("pdfplumber", error.call_args.args[1])
         self.assertTrue(self.window.tree.winfo_exists())
@@ -659,7 +659,7 @@ class InvoiceWindowTests(unittest.TestCase):
         self.assertEqual(invoice.lines[0].row_id, "")
         self.assertEqual(invoice.amounts[row.id], 0)
         tree.selection_set("0")
-        with patch("invoicing.messagebox.askyesno", return_value=True):
+        with patch("tools.invoicing.messagebox.askyesno", return_value=True):
             click("Eliminar línea")
         self.assertFalse(invoice.lines)
 
@@ -706,13 +706,13 @@ class InvoiceWindowTests(unittest.TestCase):
                   if isinstance(child, ttk.Button)]
         self.assertEqual(labels, ["Carpeta…", "Actualizar lectura", "Revisar líneas", "Eliminar factura"])
         self.assertFalse(any(isinstance(child, tk.Toplevel) for child in self.window.winfo_children()))
-        with patch("invoicing.messagebox.showinfo") as info:
+        with patch("tools.invoicing.messagebox.showinfo") as info:
             self.window.scan()
         info.assert_called_once()
-        with patch("invoicing.filedialog.askdirectory", return_value=""):
+        with patch("tools.invoicing.filedialog.askdirectory", return_value=""):
             self.window.change_folder()
         self.assertEqual(self.window.data.folder, "")
-        with patch("invoicing.filedialog.askdirectory", return_value=str(self.folder)):
+        with patch("tools.invoicing.filedialog.askdirectory", return_value=str(self.folder)):
             self.window.change_folder()
         self.wait_scan()
         self.assertEqual(self.window.data.folder, str(self.folder))
@@ -733,7 +733,7 @@ class InvoiceWindowTests(unittest.TestCase):
         self.assertEqual(self.window.tree.heading("two", "text"), "01/02/2026")
         self.assertEqual(self.window.tree.item(row.id, "values")[-1], "30,00 €")
         before = self.window.data.to_dict()
-        with patch("invoicing.messagebox.showerror") as error:
+        with patch("tools.invoicing.messagebox.showerror") as error:
             self.assertFalse(self.window._commit_cell("one", row.id, "999"))
         error.assert_called_once()
         self.assertEqual(self.window.data.to_dict(), before)
@@ -781,7 +781,7 @@ class InvoiceWindowTests(unittest.TestCase):
         editor = self.window._cell_editor
         editor.delete(0, "end")
         editor.insert(0, "nan")
-        with patch("invoicing.messagebox.showerror"), patch.object(self.window, "on_save") as save:
+        with patch("tools.invoicing.messagebox.showerror"), patch.object(self.window, "on_save") as save:
             self.window.save()
         save.assert_not_called()
         self.assertIs(self.window._cell_editor, editor)
@@ -807,8 +807,8 @@ class InvoiceWindowTests(unittest.TestCase):
         self.window._commit_cell(invoice.id, material.id, "123")
         create_invoice(first, [("MAT", "999,00")])
         with (
-            patch("invoicing.read_invoice", wraps=read_invoice) as read,
-            patch("invoicing.messagebox.showwarning"),
+            patch("tools.invoicing.read_invoice", wraps=read_invoice) as read,
+            patch("tools.invoicing.messagebox.showwarning"),
         ):
             self.window.scan()
             self.wait_scan()
@@ -820,7 +820,7 @@ class InvoiceWindowTests(unittest.TestCase):
         for current in self.window.data.invoices:
             self.assertIs(current, originals[current.path])
         first.write_bytes(b"invalid pdf")
-        with patch("invoicing.messagebox.showwarning") as warning:
+        with patch("tools.invoicing.messagebox.showwarning") as warning:
             self.window.scan()
             self.wait_scan()
         self.assertIn("datos anteriores", warning.call_args.args[1])
@@ -852,7 +852,7 @@ class InvoiceWindowTests(unittest.TestCase):
             "new-reading-id", invoice.name, path=invoice.path, digest="updated",
             date="15/02/2026", declared=30, lines=[InvoiceLine("MAT", 30)],
         )
-        with patch("invoicing.read_invoice", return_value=updated):
+        with patch("tools.invoicing.read_invoice", return_value=updated):
             self.window.scan()
             self.wait_scan()
         self.assertEqual(invoice.id, original_id)
@@ -901,7 +901,7 @@ class InvoiceWindowTests(unittest.TestCase):
     def test_one_corrupt_pdf_does_not_hide_other_invoices(self):
         create_invoice(self.folder / "valid.pdf")
         (self.folder / "invalid.pdf").write_bytes(b"not a pdf")
-        with patch("invoicing.messagebox.showwarning") as warning:
+        with patch("tools.invoicing.messagebox.showwarning") as warning:
             self.start()
             warning.assert_called_once()
             self.assertIn("No se pudo leer", warning.call_args.args[1])
@@ -950,8 +950,8 @@ class InvoiceWindowTests(unittest.TestCase):
             patch.object(self.window.invoice_register, "identify_region", return_value="cell"),
             patch.object(self.window.invoice_register, "identify_column", return_value="#2"),
             patch.object(self.window.invoice_register, "identify_row", return_value=invoice.id),
-            patch("invoicing.os.startfile") as open_file,
-            patch("invoicing.messagebox.showerror") as error,
+            patch("tools.invoicing.os.startfile") as open_file,
+            patch("tools.invoicing.messagebox.showerror") as error,
         ):
             self.window.open_invoice_file(event)
             self.assertIsNotNone(self.window._pdf_photo)
@@ -1073,7 +1073,7 @@ class InvoiceWindowTests(unittest.TestCase):
             window.edit_cell(event)
             self.assertIsNone(window._cell_editor)
         before = window.data.to_dict()
-        with patch("invoicing.messagebox.showinfo") as info:
+        with patch("tools.invoicing.messagebox.showinfo") as info:
             self.assertFalse(window._commit_cell("i", row.id, "999"))
         info.assert_called_once()
         self.assertEqual(window.data.to_dict(), before)
@@ -1116,7 +1116,7 @@ class InvoiceWindowTests(unittest.TestCase):
         window.pdf_zoom_selector.event_generate("<<ComboboxSelected>>")
         self.assertGreater(window._pdf_photo.width(), width)
         self.assertEqual(window._pdf_page, 1)
-        with patch("invoicing.render_invoice_page", wraps=render_invoice_page) as render:
+        with patch("tools.invoicing.render_invoice_page", wraps=render_invoice_page) as render:
             window._refresh()
             render.assert_not_called()
         window.select_invoice("two")
@@ -1158,7 +1158,7 @@ class InvoiceWindowTests(unittest.TestCase):
         window._refresh()
         self.assertIsNotNone(window._pdf_photo)
         self.assertEqual(window._pdf_pages, 1)
-        with patch("invoicing.render_invoice_page", side_effect=ImportError("renderer missing")):
+        with patch("tools.invoicing.render_invoice_page", side_effect=ImportError("renderer missing")):
             invoice.digest = "changed"
             window._refresh()
         self.assertIn("renderer missing", window.pdf_status.cget("text"))
@@ -1196,7 +1196,7 @@ class InvoiceWindowTests(unittest.TestCase):
     def test_save_waits_for_scan(self):
         self.start()
         self.window._scanning = True
-        with patch("invoicing.messagebox.showinfo") as info, patch.object(self.window, "on_save") as save:
+        with patch("tools.invoicing.messagebox.showinfo") as info, patch.object(self.window, "on_save") as save:
             self.window.save()
             save.assert_not_called()
             info.assert_called_once()

@@ -14,9 +14,44 @@ from typing import TYPE_CHECKING
 import unicodedata
 
 from localization import filedialog, localize_widget_tree, messagebox
+from ._budget_sources import RCD_BUDGET_SOURCE, TRANSPORT_PREFIX
 
 if TYPE_CHECKING:
     from bc3_gui import BudgetApp, ProjectItem
+
+
+TOOL_LABEL = "RCDs"
+TOOL_ORDER = 10
+
+
+def is_available(app: BudgetApp) -> bool:
+    """Evita duplicar capitulos de residuos importados de otro presupuesto."""
+    return not app._has_external_tool_chapter("rcd")
+
+
+def open_tool(app: BudgetApp) -> None:
+    """Abre o recupera la ventana de RCDs del proyecto activo."""
+    if not app._tool_chapter_available("rcd"):
+        return
+    if not app.budget_items:
+        messagebox.showinfo("RCDs", "Carga o crea un presupuesto antes de estimar residuos.")
+        return
+    if app._rcd_window is not None and app._rcd_window.winfo_exists():
+        app._rcd_window.lift()
+        return
+    app._rcd_window = RcdWindow(app.root, app)
+
+
+def restore_project_state(data: dict) -> dict:
+    """Valida el estado guardado sin generar ni modificar partidas."""
+    return RcdState.from_dict(data).to_dict() if data else {}
+
+
+def before_project_save(app: BudgetApp) -> None:
+    """Actualiza solo un presupuesto de RCDs previamente generado y revisado."""
+    if (app.rcd_state and is_available(app)
+            and any(item.source.startswith(RCD_BUDGET_SOURCE) for item in app.budget_items)):
+        synchronize_budget(app, RcdState.from_dict(app.rcd_state))
 
 
 # Porcentajes y densidades del modelo, no tasas de generación medidas en la obra.
@@ -328,7 +363,6 @@ def demolition_measurements(app: BudgetApp, state: RcdState) -> list[DemolitionM
     return rows
 
 
-TRANSPORT_PREFIX = "[RCD demolición] "
 TRANSPORT_REVIEW = (
     "Partida creada automáticamente por RCDs. REVISIÓN PENDIENTE: coste/precio unitario, "
     "rendimiento, descomposición, distancia, esponjamiento y condiciones de transporte y vertido. "
@@ -576,7 +610,6 @@ def calculate(state: RcdState) -> tuple[list[tuple[str, list[list[str]]]], list[
     return sections, details
 
 
-RCD_BUDGET_SOURCE = "RCD:"
 
 
 def synchronize_budget(app: BudgetApp, state: RcdState) -> None:

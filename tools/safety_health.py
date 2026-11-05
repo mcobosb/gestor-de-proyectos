@@ -16,8 +16,37 @@ if TYPE_CHECKING:
     from bc3_gui import BudgetApp, ProjectItem
 
 
+TOOL_LABEL = "Seguridad y salud"
+TOOL_ORDER = 20
+
+
+def is_available(app: BudgetApp) -> bool:
+    """Evita recalcular capitulos de seguridad y salud importados."""
+    return not app._has_external_tool_chapter("safety")
+
+
+def open_tool(app: BudgetApp) -> None:
+    """Abre o recupera la revision de seguridad y salud del proyecto."""
+    if not app._tool_chapter_available("safety"):
+        return
+    if not app.budget_items:
+        messagebox.showinfo(
+            TOOL_LABEL, "Carga o crea un presupuesto antes de analizar Seguridad y Salud.",
+        )
+        return
+    if app._safety_health_window is not None and app._safety_health_window.winfo_exists():
+        app._safety_health_window.lift()
+        return
+    app._safety_health_window = SafetyHealthWindow(app.root, app)
+
+
+def restore_project_state(data: dict) -> dict:
+    """Valida la revision guardada sin volver a consultar la matriz."""
+    return serialize_state(*restore_state(data)) if data else {}
+
+
 SAFETY_BUDGET_SOURCE = "SS:"
-RELATIONSHIP_PATH = application_directory(__file__) / "datos" / "seguridad_salud_relaciones_bcca2023.csv"
+RELATIONSHIP_PATH = application_directory(str(Path(__file__).parent.parent / "bc3_gui.py")) / "datos" / "seguridad_salud_relaciones_bcca2023.csv"
 
 
 @dataclass

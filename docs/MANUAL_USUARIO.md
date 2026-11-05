@@ -19,7 +19,16 @@ python -m venv .venv
 ```
 
 En las siguientes ocasiones basta con ejecutar el último comando. Mantén juntos
-los módulos Python y la carpeta `iconos`.
+los módulos principales y las carpetas `iconos`, `datos` y `tools`.
+
+Al arrancar, el programa examina `tools` junto a la aplicación y añade al menú
+**Herramientas** los módulos disponibles. Para añadir o retirar una herramienta,
+coloca o mueve su módulo y reinicia. En código fuente son archivos `.py`; en la
+versión instalada son extensiones `.pyd`. Conserva los auxiliares cuyo nombre
+empieza por `_`, ya que pueden ser compartidos por otras herramientas.
+Si `tools` falta o está vacía, puedes seguir editando presupuestos. Los datos
+guardados de las herramientas ausentes se conservan en el JSON sin recalcularse;
+se muestra un aviso al abrir esos proyectos. Instala solo módulos de confianza.
 
 El idioma se puede cambiar desde **Archivo → Configuración… → Idioma**.
 Están disponibles español, inglés y francés. La preferencia se guarda en el
@@ -143,6 +152,10 @@ de recursos de la descomposición.
 
 Abre **Archivo → Configuración…** y completa:
 
+- Título del proyecto, en el apartado **Proyecto** al comienzo de la pestaña
+  **Informes**. Se aplica al pulsar **Guardar informes**, actualiza el encabezado
+  y los informes y se conserva en el JSON del proyecto. No puede estar vacío y
+  no se utiliza como título predeterminado para nuevos proyectos.
 - Autoría, cargo o titulación, entidad o servicio.
 - Localidad y texto de firma o fecha.
 - Empresa constructora y responsable de la empresa constructora. En ambos

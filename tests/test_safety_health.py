@@ -6,7 +6,7 @@ import unittest
 
 from bc3_gui import ProjectItem
 from pypdf import PdfReader
-from safety_health import (
+from tools.safety_health import (
     SAFETY_BUDGET_SOURCE, SafetyLine, proposed_lines, restore_state, serialize_state,
     synchronize_budget, write_report,
 )
