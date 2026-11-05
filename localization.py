@@ -353,6 +353,11 @@ _TEXT = {
     "Certificaciones con mediciones": ("Certifications with measurements", "Situations avec métrés"),
     "Aplicación": ("Application", "Application"),
     "Configuración de informes": ("Report settings", "Paramètres des rapports"),
+    "Título del proyecto": ("Project title", "Titre du projet"),
+    "El título del proyecto no puede estar vacío.": (
+        "The project title cannot be empty.",
+        "Le titre du projet ne peut pas être vide.",
+    ),
     "Autoría / nombre": ("Author / name", "Auteur / nom"),
     "Cargo / titulación": ("Role / title", "Fonction / titre"),
     "Entidad / servicio": ("Organization / department", "Organisme / service"),

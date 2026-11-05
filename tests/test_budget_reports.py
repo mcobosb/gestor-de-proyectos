@@ -728,6 +728,68 @@ class ReportLayoutTests(unittest.TestCase):
                     self.assertEqual(logo.get(_tag("svg:y")), "0pt")
                     self.assert_odt_styles(archive)
 
+    def test_template_header_text_and_frame_are_preserved_in_pdf_and_odt(self):
+        """Preserve template tables, text and image frames in both report formats."""
+        from copy import deepcopy
+        from odt_reports import _tag
+        from pypdf import PdfReader
+        from report_layout import DEFAULT_TEMPLATE_PATH
+
+        marker = "TEXTO DE CABECERA PERSONALIZADO"
+        footer_marker = "TEXTO DE PIE PERSONALIZADO"
+        template = self.folder / "custom-header.odt"
+        with ZipFile(DEFAULT_TEMPLATE_PATH) as source, ZipFile(template, "w") as target:
+            for entry in source.infolist():
+                data = source.read(entry.filename)
+                if entry.filename == "styles.xml":
+                    root = ElementTree.fromstring(data)
+                    header = root.find(f".//{_tag('style:header')}")
+                    paragraph = header.find(f".//{_tag('text:p')}")
+                    span = paragraph.find(f".//{_tag('text:span')}")
+                    span.text = marker
+                    frame = header.find(f".//{_tag('draw:frame')}")
+                    frame.set(_tag("svg:x"), "9cm")
+                    frame.set(_tag("draw:name"), "MarcoPersonalizado")
+                    footer = root.find(f".//{_tag('style:footer')}")
+                    footer_paragraph = footer.find(f".//{_tag('text:p')}")
+                    ElementTree.SubElement(footer_paragraph, _tag("text:span")).text = footer_marker
+                    footer_frame = deepcopy(frame)
+                    footer_frame.set(_tag("draw:name"), "MarcoPiePersonalizado")
+                    footer_frame.set(_tag("svg:x"), "1cm")
+                    footer_paragraph.append(footer_frame)
+                    data = ElementTree.tostring(root, encoding="utf-8")
+                target.writestr(entry, data)
+
+        self.app.report_settings.template_path = str(template)
+        pdf = self.folder / "custom-header.pdf"
+        write_pdf(self.app, "Presupuesto resumen", pdf)
+        reader = PdfReader(pdf)
+        pdf_text = "\n".join(page.extract_text() for page in reader.pages)
+        self.assertIn(marker, pdf_text)
+        self.assertIn(footer_marker, pdf_text)
+        image_draws = reader.pages[0].get_contents().get_data().count(b" Do")
+        self.assertGreaterEqual(image_draws, 2)
+
+        odt = self.folder / "custom-header-output.odt"
+        write_report_odt(self.app, "Presupuesto resumen", odt)
+        with ZipFile(odt) as archive:
+            styles = ElementTree.fromstring(archive.read("styles.xml"))
+            header = styles.find(f".//{_tag('style:header')}")
+            self.assertIn(marker, " ".join(header.itertext()))
+            table = header.find(f".//{_tag('table:table')}")
+            self.assertIsNotNone(table)
+            frame = table.find(f".//{_tag('draw:frame')}")
+            self.assertEqual(frame.get(_tag("draw:name")), "MarcoPersonalizado")
+            self.assertEqual(frame.get(_tag("svg:x")), "9cm")
+            footer = styles.find(f".//{_tag('style:footer')}")
+            self.assertIn(footer_marker, " ".join(footer.itertext()))
+            self.assertEqual(
+                footer.find(f".//{_tag('draw:frame')}").get(_tag("draw:name")),
+                "MarcoPiePersonalizado",
+            )
+            self.assertTrue(any(name.startswith("Pictures/report-template") for name in archive.namelist()))
+            self.assert_odt_styles(archive)
+
     def test_logo_size_date_and_measurement_alignment_on_continuation_pages(self):
         """Check actual multipage output repeats a correctly sized header and aligned totals."""
         import os

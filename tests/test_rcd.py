@@ -14,7 +14,7 @@ from pypdf import PdfReader
 
 from bc3_gui import APPLICATION_VERSION, BudgetApp, MeasurementLine, ProjectItem
 from budget_reports import ReportSettings
-from rcd import (
+from tools.rcd import (
     GROUPS, HEADERS, INPUTS, WASTES, DemolitionDialog, DemolitionMeasurement,
     RCD_BUDGET_SOURCE, RcdState, RcdWindow, TRANSPORT_PREFIX, TRANSPORT_REVIEW, calculate,
     demolition_measurements, detect_wastes, initial_state, number, synchronize_budget,
@@ -365,7 +365,7 @@ class RcdWindowTests(unittest.TestCase):
         window = self.open()
         self.assertEqual(window.variables["surface"].get(), "")
         self.assertEqual(window.variables["earth_volume"].get(), "10.0")
-        with patch("rcd.messagebox.showerror") as error:
+        with patch("tools.rcd.messagebox.showerror") as error:
             window.accept_inputs()
             error.assert_called_once()
             self.assertFalse(hasattr(window, "tree"))
@@ -542,7 +542,7 @@ class RcdWindowTests(unittest.TestCase):
         self.accept(window)
         previous = self.app._project_payload()
         window.data.inputs["budget"] = 0
-        with patch("rcd.messagebox.showerror") as error, patch.object(self.app, "save_project") as save:
+        with patch("tools.rcd.messagebox.showerror") as error, patch.object(self.app, "save_project") as save:
             window.save()
             error.assert_called_once()
             save.assert_not_called()
@@ -561,17 +561,17 @@ class RcdWindowTests(unittest.TestCase):
             self.app.report_settings.output_format = output
             path = self.folder / f"report.{output}"
             with (
-                patch("rcd.filedialog.asksaveasfilename", return_value=str(path)),
-                patch("rcd.os.startfile") as open_file,
+                patch("tools.rcd.filedialog.asksaveasfilename", return_value=str(path)),
+                patch("tools.rcd.os.startfile") as open_file,
             ):
                 window.generate_report()
                 open_file.assert_called_once_with(str(path))
             self.assertTrue(path.is_file())
             old = path.read_bytes()
             with (
-                patch("rcd.filedialog.asksaveasfilename", return_value=str(path)),
-                patch("rcd.write_report", side_effect=ValueError("Plantilla no válida")),
-                patch("rcd.messagebox.showerror") as error,
+                patch("tools.rcd.filedialog.asksaveasfilename", return_value=str(path)),
+                patch("tools.rcd.write_report", side_effect=ValueError("Plantilla no válida")),
+                patch("tools.rcd.messagebox.showerror") as error,
             ):
                 window.generate_report()
                 error.assert_called_once()
@@ -617,12 +617,12 @@ class RcdWindowTests(unittest.TestCase):
                       child.cget("text") == "Llevar mediciones de demolición a transporte a vertedero")
         button.invoke()
         dialog = next(child for child in window.winfo_children() if isinstance(child, DemolitionDialog))
-        with patch("rcd.messagebox.showerror") as error:
+        with patch("tools.rcd.messagebox.showerror") as error:
             dialog.apply()
             error.assert_called_once()
         self.assertEqual(len(self.app.budget_items), 4)
         dialog.edits[0][1].set("0,2")
-        with patch("rcd.messagebox.showwarning") as warning:
+        with patch("tools.rcd.messagebox.showwarning") as warning:
             dialog.apply()
             self.assertIn("REVISIÓN PENDIENTE", warning.call_args.args[1])
         target = next(item for item in self.app.budget_items if item.code == "RCD-TRANS")
@@ -728,7 +728,7 @@ class RcdWindowTests(unittest.TestCase):
     def test_demolition_review_no_candidates_or_multiple_targets(self):
         window = self.open()
         self.app.budget_items = [self.app.budget_items[0]]
-        with patch("rcd.messagebox.showinfo") as info:
+        with patch("tools.rcd.messagebox.showinfo") as info:
             window.review_demolition()
             info.assert_called_once()
         set_items(self.app)
@@ -740,7 +740,7 @@ class RcdWindowTests(unittest.TestCase):
         window.review_demolition()
         dialog = next(child for child in window.winfo_children() if isinstance(child, DemolitionDialog))
         self.assertEqual(dialog.target_choice.current(), -1)
-        with patch("rcd.messagebox.showerror") as error:
+        with patch("tools.rcd.messagebox.showerror") as error:
             dialog.apply()
             error.assert_called_once()
         dialog.destroy()

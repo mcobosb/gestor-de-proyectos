@@ -2,7 +2,7 @@
 a partir de un presupuesto en formato FIEBDC-3 (.bc3).
 
 Uso:
-    python bc3_to_xlsx_plan.py [archivo.bc3] [salida.xlsx]
+    python -m tools._bc3_to_xlsx_plan [archivo.bc3] [salida.xlsx]
 
 Sin archivo de entrada, busca un único .bc3 en la carpeta del script.
 Si no hay ninguno o hay varios, muestra un error y no genera el Excel.
@@ -55,7 +55,7 @@ except ImportError as exc:  # pragma: no cover
 # --------------------------------------------------------------------------
 # Configuración
 # --------------------------------------------------------------------------
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def find_unique_input(directory: Path, suffix: str) -> Path:

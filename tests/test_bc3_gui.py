@@ -10,7 +10,7 @@ from unittest.mock import patch
 from xml.etree import ElementTree
 from zipfile import ZipFile
 
-import planning
+from tools import _planning as planning
 
 from bc3_gui import (
     APPLICATION_NAME,
@@ -29,7 +29,7 @@ from bc3_gui import (
     parse_float,
     parse_measurement_lines,
 )
-from certifications import (
+from tools.certifications import (
     CertificationWindow,
     EconomicMonth,
     certification_report_html,
@@ -1650,8 +1650,8 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
                 before = self.app._project_payload()
                 with (
                     patch("bc3_gui.messagebox.showwarning") as warning,
-                    patch("rcd.RcdWindow") as rcd_window,
-                    patch("safety_health.SafetyHealthWindow") as safety_window,
+                    patch("tools.rcd.RcdWindow") as rcd_window,
+                    patch("tools.safety_health.SafetyHealthWindow") as safety_window,
                 ):
                     (self.app.open_rcds if tool == "rcd" else self.app.open_safety_health)()
                 warning.assert_called_once()
@@ -1696,7 +1696,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
     def test_safety_review_roundtrip_opens_saved_selection_without_recalculation(self):
         """Restore selected and excluded lines and percentage without reading the matrix."""
         from decimal import Decimal
-        from safety_health import SafetyLine, synchronize_budget
+        from tools.safety_health import SafetyLine, synchronize_budget
 
         self.app.budget_items = [ProjectItem("P", "01#", "ud", "Obra", unit_price=1000)]
         self.app.chapter_order = ["01#"]
@@ -1709,8 +1709,8 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.assertTrue(self.app._write_project_file(path))
         before = self.app._project_payload()
         with (
-            patch("safety_health.proposed_lines", side_effect=AssertionError("matrix read")),
-            patch("safety_health.synchronize_budget", side_effect=AssertionError("recalculation")),
+            patch("tools.safety_health.proposed_lines", side_effect=AssertionError("matrix read")),
+            patch("tools.safety_health.synchronize_budget", side_effect=AssertionError("recalculation")),
         ):
             self.assertTrue(self.app._load_project_file(path))
             loaded = self.app._capture_project_state()
@@ -1736,7 +1736,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.app.chapter_titles = {"SS#": "SEGURIDAD Y SALUD"}
         self.app.refresh_budget_tree()
         before = self.app._project_payload()
-        with patch("safety_health.proposed_lines", side_effect=AssertionError("matrix read")):
+        with patch("tools.safety_health.proposed_lines", side_effect=AssertionError("matrix read")):
             self.app.open_safety_health()
         window = self.app._safety_health_window
         self.assertEqual(window.lines[0].price, 11)
@@ -1745,7 +1745,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
 
     def test_rcd_json_opens_saved_inputs_without_recalculating_generated_budget(self):
         """Opening saved RCD data must not invoke initial recovery or calculation."""
-        from rcd import RcdState, synchronize_budget
+        from tools.rcd import RcdState, synchronize_budget
 
         self.app.budget_items = [ProjectItem("P", "01#", "ud", "Obra", unit_price=1000)]
         self.app.chapter_order = ["01#"]
@@ -1757,9 +1757,9 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.assertTrue(self.app._write_project_file(path))
         before = self.app._project_payload()
         with (
-            patch("rcd.initial_state", side_effect=AssertionError("initial recovery")),
-            patch("rcd.calculate", side_effect=AssertionError("calculation")),
-            patch("rcd.synchronize_budget", side_effect=AssertionError("budget sync")),
+            patch("tools.rcd.initial_state", side_effect=AssertionError("initial recovery")),
+            patch("tools.rcd.calculate", side_effect=AssertionError("calculation")),
+            patch("tools.rcd.synchronize_budget", side_effect=AssertionError("budget sync")),
         ):
             self.assertTrue(self.app._load_project_file(path))
             loaded = self.app._capture_project_state()
@@ -1775,7 +1775,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
     def test_safety_review_participates_in_undo_and_new_project_reset(self):
         """Undo accepted safety reviews and clear them when starting another project."""
         from decimal import Decimal
-        from safety_health import SafetyLine, synchronize_budget
+        from tools.safety_health import SafetyLine, synchronize_budget
 
         self.prepare_history()
         lines = [SafetyLine("A", "ud", "Protección", Decimal("12"), Decimal("3"))]
@@ -1797,7 +1797,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
 
     def test_external_chapter_is_not_synced_on_save_even_with_stale_rcd_state(self):
         """A saved estimate must not override a separately imported waste chapter."""
-        from rcd import RcdState
+        from tools.rcd import RcdState
 
         self.app.budget_items = [
             ProjectItem("P", "RCD#", "ud", "Importado", unit_price=321, source="BC3"),
@@ -1809,7 +1809,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         )
         self.app.chapter_order.append("OLD#")
         before = self.app._project_payload()["items"]
-        with patch("rcd.synchronize_budget", side_effect=AssertionError("budget sync")):
+        with patch("tools.rcd.synchronize_budget", side_effect=AssertionError("budget sync")):
             self.assertTrue(self.app._write_project_file(self.directory / "external.json"))
         self.assertEqual(self.app._project_payload()["items"], before)
 
@@ -2467,6 +2467,71 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.assertEqual(saved.indirect_costs, 3.5)
         self.assertEqual(saved.currency, "USD")
 
+    def test_settings_project_title_section_saves_only_to_project(self):
+        """Edita el titulo desde el primer apartado y lo recupera del JSON."""
+        self.app.project_title = "Titulo anterior"
+        self.app.project_path = self.directory / "titulo.json"
+        self.app._reset_history()
+        self.app.open_report_settings()
+        window = next(child for child in self.root.winfo_children() if isinstance(child, tk.Toplevel))
+        notebook = next(child for child in window.winfo_children() if isinstance(child, ttk.Notebook))
+        reports_tab = window.nametowidget(notebook.tabs()[0])
+        section = next(child for child in reports_tab.winfo_children() if isinstance(child, ttk.LabelFrame))
+        self.assertEqual(int(section.grid_info()["row"]), 0)
+        title_entry = next(child for child in section.winfo_children() if isinstance(child, ttk.Entry))
+        self.assertEqual(title_entry.get(), "Titulo anterior")
+        title_entry.delete(0, "end")
+        title_entry.insert(0, "  Proyecto editado  ")
+        next(
+            child for child in reports_tab.winfo_children()
+            if isinstance(child, ttk.Button) and child.cget("text") == "Guardar informes"
+        ).invoke()
+        self.assertFalse(window.winfo_exists())
+        self.assertEqual(self.app.project_title, "Proyecto editado")
+        self.assertEqual(self.app.project_panel_title.get(), "Proyecto: Proyecto editado")
+        self.assertIn("Proyecto editado", self.app._budget_html())
+        project = json.loads(self.app.project_path.read_text(encoding="utf-8"))
+        self.assertEqual(project["title"], "Proyecto editado")
+        defaults = json.loads(self.app.report_settings_path.read_text(encoding="utf-8"))
+        self.assertNotIn("project_title", defaults)
+        self.assertNotIn("title", defaults)
+        self.app.project_title = "Otro titulo"
+        self.assertTrue(self.app._load_project_file(self.app.project_path))
+        self.assertEqual(self.app.project_title, "Proyecto editado")
+
+    def test_settings_project_title_validation_and_undo(self):
+        """Un titulo invalido no cambia datos; una edicion sin JSON es reversible."""
+        self.app.project_title = "Anterior"
+        self.app._reset_history()
+        with patch("bc3_gui.messagebox.showerror") as error:
+            self.assertFalse(self.app._save_report_settings({"project_title": "  "}))
+        error.assert_called_once()
+        self.assertEqual(self.app.project_title, "Anterior")
+        self.assertFalse(self.app.is_dirty)
+        self.assertFalse(self.app.report_settings_path.exists())
+        self.assertTrue(self.app._save_report_settings({"project_title": "Nuevo"}))
+        self.assertTrue(self.app.is_dirty)
+        self.app.undo_last_action()
+        self.assertEqual(self.app.project_title, "Anterior")
+        self.assertEqual(self.app.project_panel_title.get(), "Proyecto: Anterior")
+        self.assertFalse(self.app.is_dirty)
+
+    def test_settings_close_without_saving_keeps_project_title(self):
+        """Cerrar el formulario no aplica el texto editado ni marca cambios."""
+        self.app.project_title = "Sin cambios"
+        self.app._reset_history()
+        self.app.open_report_settings()
+        window = next(child for child in self.root.winfo_children() if isinstance(child, tk.Toplevel))
+        notebook = next(child for child in window.winfo_children() if isinstance(child, ttk.Notebook))
+        reports_tab = window.nametowidget(notebook.tabs()[0])
+        section = next(child for child in reports_tab.winfo_children() if isinstance(child, ttk.LabelFrame))
+        entry = next(child for child in section.winfo_children() if isinstance(child, ttk.Entry))
+        entry.delete(0, "end")
+        entry.insert(0, "No guardar")
+        window.destroy()
+        self.assertEqual(self.app.project_title, "Sin cambios")
+        self.assertFalse(self.app.is_dirty)
+
     def test_language_preference_is_saved_and_applied_immediately(self):
         """Save the application language globally and update the visible interface."""
         self.assertTrue(self.app._save_language_preference("en"))
@@ -2696,8 +2761,8 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
             with self.subTest(name=name):
                 target = self.directory / f"{name}.pdf"
                 with (
-                    patch("certifications.filedialog.asksaveasfilename", return_value=str(target)),
-                    patch("certifications.os.startfile") as open_pdf,
+                    patch("tools.certifications.filedialog.asksaveasfilename", return_value=str(target)),
+                    patch("tools.certifications.os.startfile") as open_pdf,
                 ):
                     window.generate_template_report(name)
                     open_pdf.assert_called_once_with(str(target))
@@ -2731,8 +2796,8 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         window.selected_certification_month = 0
         target = self.directory / "certification.odt"
         with (
-            patch("certifications.filedialog.asksaveasfilename", return_value=str(target)) as dialog,
-            patch("certifications.os.startfile") as open_odt,
+            patch("tools.certifications.filedialog.asksaveasfilename", return_value=str(target)) as dialog,
+            patch("tools.certifications.os.startfile") as open_odt,
         ):
             window.generate_template_report(CERTIFICATION_REPORT_NAMES[1])
             self.assertEqual(dialog.call_args.kwargs["defaultextension"], ".odt")
@@ -2766,8 +2831,8 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
             self.app.report_settings.output_format = extension
             target = self.directory / f"deviations.{extension}"
             with (
-                patch("certifications.filedialog.asksaveasfilename", return_value=str(target)) as dialog,
-                patch("certifications.os.startfile") as open_report,
+                patch("tools.certifications.filedialog.asksaveasfilename", return_value=str(target)) as dialog,
+                patch("tools.certifications.os.startfile") as open_report,
             ):
                 button.invoke()
             self.assertEqual(dialog.call_args.kwargs["defaultextension"], "." + extension)
@@ -2784,8 +2849,8 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         """Allow uncertified months, respect cancellation and preserve existing files on error."""
         window = self.certification_window()
         with (
-            patch("certifications.messagebox.showwarning") as warning,
-            patch("certifications.filedialog.asksaveasfilename", return_value="") as dialog,
+            patch("tools.certifications.messagebox.showwarning") as warning,
+            patch("tools.certifications.filedialog.asksaveasfilename", return_value="") as dialog,
         ):
             window.generate_certification_report()
             warning.assert_called_once()
@@ -2795,17 +2860,17 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
             dialog.assert_called_once()
         target = self.directory / "pending.pdf"
         with (
-            patch("certifications.filedialog.asksaveasfilename", return_value=str(target)),
-            patch("certifications.os.startfile"),
+            patch("tools.certifications.filedialog.asksaveasfilename", return_value=str(target)),
+            patch("tools.certifications.os.startfile"),
         ):
             window.generate_certification_report()
         self.assertTrue(target.is_file())
         original = target.read_bytes()
         window.plan[0][0] = float("nan")
         with (
-            patch("certifications.filedialog.asksaveasfilename", return_value=str(target)),
-            patch("certifications.messagebox.showerror") as error,
-            patch("certifications.os.startfile") as open_report,
+            patch("tools.certifications.filedialog.asksaveasfilename", return_value=str(target)),
+            patch("tools.certifications.messagebox.showerror") as error,
+            patch("tools.certifications.os.startfile") as open_report,
         ):
             window.generate_certification_report()
         error.assert_called_once()
@@ -2818,9 +2883,9 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         window = self.certification_window()
         target = self.directory / "certification.pdf"
         with (
-            patch("certifications.messagebox.showwarning") as warning,
-            patch("certifications.messagebox.showinfo") as info,
-            patch("certifications.filedialog.asksaveasfilename", return_value="") as dialog,
+            patch("tools.certifications.messagebox.showwarning") as warning,
+            patch("tools.certifications.messagebox.showinfo") as info,
+            patch("tools.certifications.filedialog.asksaveasfilename", return_value="") as dialog,
         ):
             window.generate_template_report(CERTIFICATION_REPORT_NAMES[0])
             warning.assert_called_once()
@@ -2834,10 +2899,10 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
             dialog.assert_called_once()
         target.write_bytes(b"existing")
         with (
-            patch("certifications.filedialog.asksaveasfilename", return_value=str(target)),
-            patch("certifications.write_certification_pdf", side_effect=ValueError("error PDF")),
-            patch("certifications.messagebox.showerror") as error,
-            patch("certifications.os.startfile") as open_pdf,
+            patch("tools.certifications.filedialog.asksaveasfilename", return_value=str(target)),
+            patch("tools.certifications.write_certification_pdf", side_effect=ValueError("error PDF")),
+            patch("tools.certifications.messagebox.showerror") as error,
+            patch("tools.certifications.os.startfile") as open_pdf,
         ):
             window.generate_template_report(CERTIFICATION_REPORT_NAMES[0])
             error.assert_called_once()
@@ -2864,15 +2929,15 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         window = self.certification_window()
         item = self.app.budget_items[0]
         for value in ("nan", "inf", "-inf", "-1", "texto"):
-            with self.subTest(value=value), patch("certifications.messagebox.showerror") as error:
+            with self.subTest(value=value), patch("tools.certifications.messagebox.showerror") as error:
                 window._commit_certification(0, 0, value)
                 error.assert_called_once()
                 self.assertEqual(item.certifications, {})
         window.selected_certification_month = 0
         item.certifications[window.months[0].key] = float("nan")
         with (
-            patch("certifications.messagebox.showerror") as error,
-            patch("certifications.filedialog.asksaveasfilename") as dialog,
+            patch("tools.certifications.messagebox.showerror") as error,
+            patch("tools.certifications.filedialog.asksaveasfilename") as dialog,
         ):
             window.generate_template_report(CERTIFICATION_REPORT_NAMES[0])
             error.assert_called_once()

@@ -193,23 +193,69 @@ no abre una ventana, revisa la instalación de Python antes de iniciar la app.
 | Archivo o carpeta | Función |
 |---|---|
 | [bc3_gui.py](bc3_gui.py) | Entrada de la aplicación, presupuesto y mediciones |
-| [rcd.py](rcd.py) | Estimación, revisión y presupuesto de gestión de RCDs |
-| [planning.py](planning.py) | Planificación y secuencia de actividades |
-| [certifications.py](certifications.py) | Previsiones y certificaciones mensuales |
-| [invoicing.py](invoicing.py) | Facturas PDF y matriz editable de costes por recurso |
+| [tool_loader.py](tool_loader.py) | Descubrimiento y validación de herramientas opcionales |
+| [tools/](tools/) | Módulos opcionales del menú Herramientas y sus auxiliares |
+| [tools/rcd.py](tools/rcd.py) | Estimación, revisión y presupuesto de gestión de RCDs |
+| [tools/safety_health.py](tools/safety_health.py) | Propuesta revisable de Seguridad y Salud |
+| [tools/planning.py](tools/planning.py) | Entrada de planificación y secuencia de actividades |
+| [tools/certifications.py](tools/certifications.py) | Previsiones y certificaciones mensuales |
+| [tools/invoicing.py](tools/invoicing.py) | Facturas PDF y matriz editable de costes por recurso |
 | [budget_reports.py](budget_reports.py) | Configuración, cálculos e informes |
 | [report_layout.py](report_layout.py) | Estilos y maquetación PDF compartida |
 | [odt_reports.py](odt_reports.py) | Exportación editable de informes ODT |
 | [ods_export.py](ods_export.py) | Exportación editable de hojas de cálculo ODS |
 | [ui_theme.py](ui_theme.py) | Tema de la interfaz |
-| [figura_gantt.py](figura_gantt.py) | Dibujo del Gantt; utilizado por planificación |
-| [bc3_to_xlsx_plan.py](bc3_to_xlsx_plan.py) | Conversor independiente de planificación a XLSX |
+| [tools/_figura_gantt.py](tools/_figura_gantt.py) | Dibujo del Gantt; utilizado por planificación |
+| [tools/_bc3_to_xlsx_plan.py](tools/_bc3_to_xlsx_plan.py) | Conversor independiente de planificación a XLSX |
 | [iconos/](iconos/) | Icono de la aplicación y logo institucional de los informes |
 | [plantillas/plantilla.odt](plantillas/plantilla.odt) | Cabecera y pie personal de los informes de certificación |
 | [docs/](docs/) | Manual de usuario |
 
 Los conversores antiguos de imágenes y las imágenes que no utiliza la aplicación
 se han trasladado a una carpeta externa; no son necesarios para ejecutarla.
+
+### Herramientas opcionales
+
+Al arrancar, el programa lee la carpeta `tools` situada junto a la aplicación,
+independientemente del directorio de trabajo. Solo los módulos encontrados y
+válidos se añaden a **Herramientas**. Si la carpeta falta o está vacía, la
+aplicación sigue funcionando sin herramientas. Los errores de carga se muestran
+con un aviso, sin ocultar las herramientas válidas.
+
+Para añadir una herramienta desde código fuente, coloca un módulo `.py` o un
+paquete con `__init__.py` en `tools` y reinicia. El contrato mínimo es:
+
+```python
+TOOL_LABEL = "Mi herramienta"
+TOOL_ORDER = 100  # Opcional; orden ascendente en el menú.
+
+
+def open_tool(app):
+    """Abre la herramienta usando la instancia de BudgetApp."""
+    # Construir aquí la ventana o ejecutar la acción.
+```
+
+Los nombres que empiezan por `_` se reservan para auxiliares y no aparecen en el
+menú. También se admiten `is_available(app) -> bool`, para desactivar la opción,
+`restore_project_state(data) -> dict`, para validar el estado de las herramientas
+integradas, y `before_project_save(app)`, para su sincronización antes de guardar.
+El núcleo conserva los estados JSON existentes aunque falte su herramienta y
+avisa al abrir un proyecto con datos de módulos no disponibles; no los recalcula.
+Los cálculos compartidos de planificación están en `tools/_planning.py`, por lo
+que retirar la entrada `planning` no impide utilizar Certificaciones.
+
+En la distribución instalada, el script de compilación genera extensiones `.pyd`
+separadas y las coloca en `tools`, sin distribuir su código fuente. Para retirar
+una herramienta, mueve su `.pyd` fuera de esa carpeta y reinicia; conserva los
+auxiliares `_*.pyd` que utilicen las restantes. Los complementos nuevos deben ser
+compatibles con la versión y arquitectura de Python usadas para compilar la app;
+si requieren dependencias nuevas, estas también deben incluirse en la distribución.
+Los módulos se ejecutan como parte del programa: instala solo herramientas de
+confianza.
+
+Con Python 3.11 o 3.12, la compilación utiliza MinGW64. Con Python 3.13 o
+posterior, instala Visual Studio Build Tools con la carga de trabajo de C++:
+el script exige MSVC para compilar tanto el ejecutable como sus extensiones.
 
 ### Datos no distribuidos
 
@@ -278,8 +324,8 @@ distribuir binarios siempre que se conserve el aviso y el texto de licencia.
 Los scripts auxiliares también admiten uso independiente:
 
 ```powershell
-python bc3_to_xlsx_plan.py "C:\datos\obra.bc3" "C:\datos\planificacion.xlsx"
-python figura_gantt.py "C:\datos\planificacion.xlsx" "C:\datos\plan_de_trabajo"
+python -m tools._bc3_to_xlsx_plan "C:\datos\obra.bc3" "C:\datos\planificacion.xlsx"
+python -m tools._figura_gantt "C:\datos\planificacion.xlsx" "C:\datos\plan_de_trabajo"
 ```
 
 El segundo comando necesita fechas calculadas en el Excel. Puede utilizar

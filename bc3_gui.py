@@ -7,6 +7,7 @@ import html
 import json
 import os
 import re
+import sys
 import tempfile
 import tkinter as tk
 import unicodedata
@@ -27,6 +28,7 @@ from localization import (
 from ui_theme import COLORS, apply_theme
 from budget_reports import REPORT_NAMES, ReportSettings, write_pdf
 from odt_reports import write_report_odt
+from tool_loader import discover_tools
 
 
 APPLICATION_NAME = "Gestor de Proyectos"
@@ -715,7 +717,15 @@ class BudgetApp:
         self.default_report_settings = self._read_report_settings()
         self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
 
+        self.loaded_tools, tool_errors = discover_tools(application_directory(__file__) / "tools")
+        self.tools_by_name = {tool.name: tool for tool in self.loaded_tools}
         self._build_ui()
+        if tool_errors:
+            messagebox.showwarning(
+                "Herramientas",
+                "No se pudieron cargar algunas herramientas:\n" + "\n".join(tool_errors),
+                parent=self.root,
+            )
         self._reset_history()
         self.root.bind("<Control-s>", self._save_shortcut)
         self.root.bind("<Control-z>", self.undo_last_action)
@@ -781,11 +791,10 @@ class BudgetApp:
             tools_menubutton, tearoff=False, postcommand=self._refresh_tool_menu
         )
         self.tools_menu = tools_menu
-        tools_menu.add_command(label="RCDs", command=self.open_rcds)
-        tools_menu.add_command(label="Seguridad y salud", command=self.open_safety_health)
-        tools_menu.add_command(label="Planificación", command=self.open_planning)
-        tools_menu.add_command(label="Certificaciones", command=self.open_certifications)
-        tools_menu.add_command(label="Facturación", command=self.open_invoicing)
+        for tool in self.loaded_tools:
+            tools_menu.add_command(label=tool.label, command=partial(self._open_tool, tool.name))
+        if not self.loaded_tools:
+            tools_menu.add_command(label="No hay herramientas disponibles", state="disabled")
         tools_menubutton["menu"] = tools_menu
         tools_menubutton.pack(side="left", padx=(0, 8))
         info_menubutton = ttk.Menubutton(toolbar, text="Información", style="Toolbar.TMenubutton")
@@ -3374,7 +3383,15 @@ class BudgetApp:
     def _save_report_settings(self, data: dict) -> bool:
         """Valida y persiste la configuración y actualiza la del proyecto activo."""
         try:
-            settings = ReportSettings.from_dict(data)
+            project_title = self.project_title
+            if "project_title" in data:
+                title = data["project_title"]
+                if not isinstance(title, str) or not title.strip():
+                    raise ValueError(translate("El título del proyecto no puede estar vacío."))
+                project_title = title.strip()
+            settings = ReportSettings.from_dict({
+                key: value for key, value in data.items() if key != "project_title"
+            })
             self.report_settings_path.write_text(
                 json.dumps(settings.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
             )
@@ -3383,6 +3400,8 @@ class BudgetApp:
             return False
         self.default_report_settings = settings
         self.report_settings = ReportSettings.from_dict(settings.to_dict())
+        self.project_title = project_title
+        self.project_panel_title.set(f"Proyecto: {self._project_title()}")
         for item in self.budget_items:
             item.set_indirect_costs(settings.indirect_costs)
         self.refresh_budget_tree()
@@ -3395,7 +3414,7 @@ class BudgetApp:
         return True
 
     def open_report_settings(self) -> None:
-        """Abre las pestañas de configuración de informes e idioma."""
+        """Abre la configuración del título del proyecto, informes e idioma."""
         window = tk.Toplevel(self.root)
         self._project_windows.append(window)
         window.title("Configuración de informes")
@@ -3407,6 +3426,16 @@ class BudgetApp:
         language_tab = ttk.Frame(notebook, padding=8)
         notebook.add(reports_tab, text="Informes")
         notebook.add(language_tab, text="Idioma")
+        project_section = ttk.LabelFrame(reports_tab, text="Proyecto", padding=8)
+        project_section.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 8))
+        project_section.columnconfigure(1, weight=1)
+        ttk.Label(project_section, text="Título del proyecto").grid(
+            row=0, column=0, sticky="w", padx=(0, 12),
+        )
+        project_title_var = tk.StringVar(value=self._project_title())
+        ttk.Entry(project_section, textvariable=project_title_var, width=55).grid(
+            row=0, column=1, sticky="ew",
+        )
         fields = (
             ("Autoría / nombre", "author"), ("Cargo / titulación", "role"),
             ("Entidad / servicio", "organization"), ("Localidad", "location"),
@@ -3421,11 +3450,11 @@ class BudgetApp:
         )
         variables = {}
         values = self.report_settings.to_dict()
-        for row, (label, key) in enumerate(fields):
+        for row, (label, key) in enumerate(fields, start=1):
             ttk.Label(reports_tab, text=label).grid(row=row, column=0, sticky="w", pady=5, padx=(0, 12))
             variables[key] = tk.StringVar(value=str(values[key]))
             ttk.Entry(reports_tab, textvariable=variables[key], width=55).grid(row=row, column=1, sticky="ew")
-        format_row = len(fields)
+        format_row = len(fields) + 1
         ttk.Label(reports_tab, text="Formato de informes").grid(
             row=format_row, column=0, sticky="w", pady=5, padx=(0, 12)
         )
@@ -3530,6 +3559,7 @@ class BudgetApp:
         def save_reports():
             """Guarda los valores del formulario y cierra el diálogo si son válidos."""
             data = {key: variable.get() for key, variable in variables.items()}
+            data["project_title"] = project_title_var.get()
             data["output_format"] = str(data["output_format"]).lower()
             data["currency"] = currency_options[currency_selector.get()]
             if self._save_report_settings(data):
@@ -3705,11 +3735,9 @@ class BudgetApp:
         """Guarda el JSON mediante sustitución atómica para no truncar el anterior."""
         temporary: Path | None = None
         try:
-            from rcd import RCD_BUDGET_SOURCE, RcdState, synchronize_budget
-
-            if (self.rcd_state and not self._has_external_tool_chapter("rcd")
-                    and any(item.source.startswith(RCD_BUDGET_SOURCE) for item in self.budget_items)):
-                synchronize_budget(self, RcdState.from_dict(self.rcd_state))
+            for tool in self.loaded_tools:
+                if tool.before_save is not None:
+                    tool.before_save(self)
             self._mark_dirty()
             content = json.dumps(self._project_payload(), ensure_ascii=False, indent=2)
             with tempfile.NamedTemporaryFile(
@@ -3718,7 +3746,7 @@ class BudgetApp:
                 temporary = Path(output.name)
                 output.write(content)
             os.replace(temporary, path)
-        except (OSError, ValueError) as exc:
+        except (ImportError, OSError, ValueError, TypeError, AttributeError, RuntimeError) as exc:
             message = str(exc)
             if temporary is not None:
                 try:
@@ -3904,22 +3932,10 @@ class BudgetApp:
             report_settings = ReportSettings.from_dict(
                 payload.get("report_settings", self.default_report_settings.to_dict())
             )
-            from invoicing import InvoiceState
-
-            invoicing_state = InvoiceState.from_dict(payload.get("invoicing", {})).to_dict()
-            from rcd import RcdState
-
-            raw_rcds = payload.get("rcds", {})
-            rcd_state = RcdState.from_dict(raw_rcds).to_dict() if raw_rcds else {}
-            if not isinstance(raw_rcds, dict):
-                raise ValueError("Los datos RCDs deben ser un objeto JSON.")
-            from safety_health import restore_state, serialize_state
-
-            raw_safety = payload.get("safety_health", {})
-            if not isinstance(raw_safety, dict):
-                raise ValueError("Los datos de Seguridad y Salud deben ser un objeto JSON.")
-            safety_health_state = (
-                serialize_state(*restore_state(raw_safety)) if raw_safety else {}
+            invoicing_state = self._restore_tool_state("invoicing", payload.get("invoicing", {}))
+            rcd_state = self._restore_tool_state("rcd", payload.get("rcds", {}))
+            safety_health_state = self._restore_tool_state(
+                "safety_health", payload.get("safety_health", {}),
             )
             if source_budget_path is not None:
                 declared_source = payload.get("source_budget_bc3")
@@ -3968,7 +3984,7 @@ class BudgetApp:
             planning_state = planning if isinstance(planning, dict) else {}
             title = payload.get("title")
             project_title = str(title) if title else None
-        except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        except (ImportError, OSError, json.JSONDecodeError, KeyError, TypeError, ValueError, AttributeError, RuntimeError) as exc:
             messagebox.showerror("No se pudo abrir el proyecto", f"El archivo no es válido:\n{exc}")
             return False
 
@@ -3984,6 +4000,20 @@ class BudgetApp:
         self.project_title = project_title
         self.rcd_state = rcd_state
         self.safety_health_state = safety_health_state
+        missing_tools = [
+            name for name, state in (
+                ("invoicing", invoicing_state), ("rcd", rcd_state),
+                ("safety_health", safety_health_state), ("planning", planning_state),
+            ) if state and name not in self.tools_by_name
+        ]
+        if missing_tools:
+            messagebox.showwarning(
+                "Herramientas",
+                "El proyecto contiene datos de herramientas no disponibles: "
+                + ", ".join(missing_tools)
+                + ". Se conservarán al guardar, sin recalcularlos.",
+                parent=self.root,
+            )
         self.budget_dataset = budget_dataset
         self.report_settings = report_settings
         self.project_path = project_path
@@ -4390,23 +4420,7 @@ th {{ background: #1f4e78; color: white; }}
 
     def open_planning(self):
         """Abre la ventana de planificación vinculada al presupuesto y su estado guardado."""
-        if not self.budget_items:
-            messagebox.showinfo("Planificación", "Carga o crea un presupuesto antes de planificar.")
-            return
-        from planning import PlanningWindow
-
-        window = PlanningWindow(
-            self.root,
-            self.budget_items,
-            self._chapter_title,
-            self._project_title(),
-            saved_state=self.planning_state,
-            on_state_change=self._store_planning_state,
-            on_save=self.save_project,
-            on_dirty_change=lambda dirty: self._mark_dirty() if dirty else None,
-            currency_formatter=self._format_currency,
-        )
-        self._project_windows.append(window)
+        self._open_tool("planning")
 
     def _store_planning_state(self, state: dict) -> None:
         """Actualiza el estado de planificación recibido desde su ventana de edición."""
@@ -4414,24 +4428,7 @@ th {{ background: #1f4e78; color: white; }}
 
     def open_certifications(self):
         """Abre la ventana de certificaciones con las partidas y planificación actuales."""
-        if not self.budget_items:
-            messagebox.showinfo(
-                "Certificaciones", "Carga o crea un presupuesto antes de gestionar certificaciones."
-            )
-            return
-        from certifications import CertificationWindow
-
-        window = CertificationWindow(
-            self.root,
-            self.budget_items,
-            self._chapter_title,
-            self._project_title(),
-            planning_state=self.planning_state,
-            report_settings=lambda: self.report_settings,
-            on_save=self.save_project,
-            on_dirty_change=lambda dirty: self._mark_dirty() if dirty else None,
-        )
-        self._project_windows.append(window)
+        self._open_tool("certifications")
 
     def _dismiss_project_windows(self) -> None:
         """Cierra vistas con referencias a partidas que van a ser sustituidas."""
@@ -4475,9 +4472,44 @@ th {{ background: #1f4e78; color: white; }}
 
     def _refresh_tool_menu(self) -> None:
         """Desactiva las herramientas que duplicarían capítulos importados."""
-        for index, tool in enumerate(("rcd", "safety")):
+        for index, tool in enumerate(self.loaded_tools):
+            try:
+                available = tool.available(self) if tool.available is not None else True
+                if not isinstance(available, bool):
+                    raise ValueError("is_available(app) debe devolver un booleano.")
+            except (ImportError, OSError, ValueError, TypeError, AttributeError, RuntimeError) as exc:
+                available = False
+                messagebox.showerror(
+                    tool.label, f"No se pudo comprobar la disponibilidad:\n{exc}", parent=self.root,
+                )
             self.tools_menu.entryconfigure(
-                index, state="disabled" if self._has_external_tool_chapter(tool) else "normal"
+                index, state="normal" if available else "disabled"
+            )
+
+    def _restore_tool_state(self, name: str, data: object) -> dict:
+        """Valida con el modulo instalado o conserva intactos sus datos JSON."""
+        if not isinstance(data, dict):
+            raise ValueError(f"Los datos de {name} deben ser un objeto JSON.")
+        tool = self.tools_by_name.get(name)
+        restored = tool.restore(data) if tool is not None and tool.restore is not None else deepcopy(data)
+        if not isinstance(restored, dict):
+            raise ValueError(f"La herramienta {name} no devolvió un estado JSON válido.")
+        return restored
+
+    def _open_tool(self, name: str) -> None:
+        """Ejecuta una herramienta descubierta o informa de su ausencia."""
+        tool = self.tools_by_name.get(name)
+        if tool is None:
+            messagebox.showwarning(
+                "Herramientas", f"La herramienta {name} no está disponible en tools.",
+                parent=self.root,
+            )
+            return
+        try:
+            tool.open(self)
+        except (ImportError, OSError, ValueError, TypeError, AttributeError, RuntimeError) as exc:
+            messagebox.showerror(
+                tool.label, f"No se pudo abrir la herramienta:\n{exc}", parent=self.root,
             )
 
     def _tool_chapter_available(self, tool: str) -> bool:
@@ -4500,34 +4532,11 @@ th {{ background: #1f4e78; color: white; }}
 
     def open_rcds(self) -> None:
         """Abre la estimación de residuos y sus datos guardados en el proyecto."""
-        if not self._tool_chapter_available("rcd"):
-            return
-        if not self.budget_items:
-            messagebox.showinfo("RCDs", "Carga o crea un presupuesto antes de estimar residuos.")
-            return
-        if self._rcd_window is not None and self._rcd_window.winfo_exists():
-            self._rcd_window.lift()
-            return
-        from rcd import RcdWindow
-
-        self._rcd_window = RcdWindow(self.root, self)
+        self._open_tool("rcd")
 
     def open_safety_health(self) -> None:
         """Propone y revisa las partidas de Seguridad y Salud del presupuesto activo."""
-        if not self._tool_chapter_available("safety"):
-            return
-        if not self.budget_items:
-            messagebox.showinfo(
-                "Seguridad y salud",
-                "Carga o crea un presupuesto antes de analizar Seguridad y Salud.",
-            )
-            return
-        if self._safety_health_window is not None and self._safety_health_window.winfo_exists():
-            self._safety_health_window.lift()
-            return
-        from safety_health import SafetyHealthWindow
-
-        self._safety_health_window = SafetyHealthWindow(self.root, self)
+        self._open_tool("safety_health")
 
     def _dismiss_invoicing(self) -> None:
         """Cierra la ventana y su lectura pendiente antes de cambiar de proyecto."""
@@ -4538,22 +4547,7 @@ th {{ background: #1f4e78; color: white; }}
 
     def open_invoicing(self) -> None:
         """Abre la facturación local vinculada al proyecto actual."""
-        if not self.budget_items:
-            messagebox.showinfo("Facturación", "Carga o crea un presupuesto antes de gestionar facturas.")
-            return
-        if self._invoicing_window is not None and self._invoicing_window.winfo_exists():
-            self._invoicing_window.lift()
-            return
-        from invoicing import InvoiceState, InvoicingWindow
-
-        def store(state: InvoiceState) -> None:
-            """Conserva las ediciones de facturación y marca el proyecto modificado."""
-            self.invoicing_state = state.to_dict()
-            self._mark_dirty()
-
-        self._invoicing_window = InvoicingWindow(
-            self.root, self, InvoiceState.from_dict(self.invoicing_state), store, self.save_project,
-        )
+        self._open_tool("invoicing")
 
     def show_application_info(self):
         """Muestra la versión, el repositorio y las funciones principales del programa."""
@@ -4689,4 +4683,5 @@ def main():
 
 
 if __name__ == "__main__":
+    sys.modules["bc3_gui"] = sys.modules[__name__]
     main()

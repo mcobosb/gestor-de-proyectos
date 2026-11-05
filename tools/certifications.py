@@ -18,16 +18,43 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from tkinter import ttk
+from typing import TYPE_CHECKING
 
 from bc3_gui import (
     APPLICATION_NAME, ToolTip, format_currency, format_chapter_code, parse_float,
 )
 from localization import filedialog, localize_widget_tree, messagebox, translate
-from planning import PlanParams, apply_saved_plan_state, build_activities, schedule
+from ._planning import PlanParams, apply_saved_plan_state, build_activities, schedule
 from budget_reports import (
     CERTIFICATION_REPORT_NAMES, DEVIATION_REPORT_NAME, ReportSettings, write_certification_pdf,
 )
 from odt_reports import write_certification_odt
+
+if TYPE_CHECKING:
+    from bc3_gui import BudgetApp
+
+TOOL_LABEL = "Certificaciones"
+TOOL_ORDER = 40
+
+
+def open_tool(app: BudgetApp) -> None:
+    """Abre las certificaciones con las partidas y planificacion actuales."""
+    if not app.budget_items:
+        messagebox.showinfo(
+            TOOL_LABEL, "Carga o crea un presupuesto antes de gestionar certificaciones.",
+        )
+        return
+    window = CertificationWindow(
+        app.root,
+        app.budget_items,
+        app._chapter_title,
+        app._project_title(),
+        planning_state=app.planning_state,
+        report_settings=lambda: app.report_settings,
+        on_save=app.save_project,
+        on_dirty_change=lambda dirty: app._mark_dirty() if dirty else None,
+    )
+    app._project_windows.append(window)
 
 
 MONTHS_IN_PLAN = 24

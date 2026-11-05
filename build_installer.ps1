@@ -19,6 +19,11 @@ if ($LASTEXITCODE -ne 0) {
 if ($LASTEXITCODE -ne 0) {
     throw "La compilación del instalador requiere Python de 64 bits."
 }
+$compilerOptions = @("--msvc=latest")
+& $python -c "import sys; sys.exit(0 if sys.version_info < (3, 13) else 1)"
+if ($LASTEXITCODE -eq 0) {
+    $compilerOptions = @("--mingw64")
+}
 
 & $python -c "import nuitka"
 if ($LASTEXITCODE -ne 0) {
@@ -57,10 +62,38 @@ if (-not $innoCompilerPath) {
 
 $nuitkaOutput = Join-Path $repositoryRoot "build\nuitka"
 $distributionDirectory = Join-Path $nuitkaOutput "bc3_gui.dist"
+$toolsOutput = Join-Path $nuitkaOutput "tools"
+New-Item -ItemType Directory -Force -Path $toolsOutput | Out-Null
+$compiledTools = @()
+foreach ($tool in Get-ChildItem (Join-Path $repositoryRoot "tools") -Filter "*.py") {
+    if ($tool.Name -eq "__init__.py") {
+        continue
+    }
+    $moduleOutput = Join-Path $toolsOutput $tool.BaseName
+    if (Test-Path $moduleOutput) {
+        Get-ChildItem -LiteralPath $moduleOutput -Filter "$($tool.BaseName)*.pyd" -File |
+            ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
+    }
+    & $python -m nuitka `
+        --module `
+        --nofollow-imports `
+        @compilerOptions `
+        --assume-yes-for-downloads `
+        --output-dir=$moduleOutput `
+        $tool.FullName
+    if ($LASTEXITCODE -ne 0) {
+        throw "La compilación de la herramienta $($tool.Name) ha fallado."
+    }
+    $extension = @(Get-ChildItem $moduleOutput -Filter "$($tool.BaseName)*.pyd")
+    if ($extension.Count -ne 1) {
+        throw "No se generó una única extensión compilada para $($tool.Name)."
+    }
+    $compiledTools += $extension[0].FullName
+}
 
 & $python -m nuitka `
     --standalone `
-    --mingw64 `
+    @compilerOptions `
     --assume-yes-for-downloads `
     --enable-plugin=tk-inter `
     --windows-console-mode=disable `
@@ -79,7 +112,23 @@ $distributionDirectory = Join-Path $nuitkaOutput "bc3_gui.dist"
     --include-package-data=pdfminer `
     --include-package-data=pypdfium2 `
     --include-package-data=pypdfium2_raw `
-    --include-module=figura_gantt `
+    --include-package=matplotlib `
+    --include-package=openpyxl `
+    --include-package=PIL `
+    --include-package=pdfplumber `
+    --include-package=pdfminer `
+    --include-package=pypdfium2 `
+    --include-package=pypdfium2_raw `
+    --include-module=decimal `
+    --include-module=calendar `
+    --include-module=html `
+    --include-module=hashlib `
+    --include-module=queue `
+    --include-module=threading `
+    --include-module=uuid `
+    --include-module=subprocess `
+    --include-module=textwrap `
+    --include-module=shutil `
     --include-module=matplotlib.backends.backend_agg `
     --include-module=matplotlib.backends.backend_pdf `
     --noinclude-unittest-mode=nofollow `
@@ -92,6 +141,17 @@ if (-not (Test-Path (Join-Path $distributionDirectory "GestorDeProyectos.exe")))
 }
 if (Test-Path (Join-Path $distributionDirectory "bc3_gui.py")) {
     throw "La carpeta de distribución contiene código fuente sin compilar."
+}
+$installedTools = Join-Path $distributionDirectory "tools"
+New-Item -ItemType Directory -Force -Path $installedTools | Out-Null
+Get-ChildItem -LiteralPath $installedTools -Filter "*.pyd" -File |
+    ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
+foreach ($extension in $compiledTools) {
+    Copy-Item -LiteralPath $extension -Destination $installedTools -Force
+}
+& $python -c "from pathlib import Path; import sys; from tool_loader import discover_tools; loaded, errors = discover_tools(Path(sys.argv[1])); print('\n'.join(errors)); sys.exit(1 if errors else 0)" $installedTools
+if ($LASTEXITCODE -ne 0) {
+    throw "No se pueden cargar las herramientas compiladas de la distribución."
 }
 
 & $innoCompilerPath installer\GestorDeProyectos.iss

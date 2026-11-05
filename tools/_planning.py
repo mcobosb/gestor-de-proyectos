@@ -20,7 +20,7 @@ from localization import filedialog, localize_widget_tree, messagebox, translate
 from ui_theme import COLORS
 
 try:
-    from bc3_to_xlsx_plan import CONTINUOUS_CHAPTER_RE, DEFAULT_HOLIDAYS, DEFAULT_START, HOURS_PER_DAY
+    from ._bc3_to_xlsx_plan import CONTINUOUS_CHAPTER_RE, DEFAULT_HOLIDAYS, DEFAULT_START, HOURS_PER_DAY
 except ImportError:  # pragma: no cover - el módulo de referencia siempre acompaña a la app
     import re
 
@@ -648,7 +648,7 @@ class PlanningWindow(tk.Toplevel):
             messagebox.showinfo("Plan de trabajo", "No hay actividades que dibujar.", parent=self)
             return
         try:
-            import figura_gantt
+            from . import _figura_gantt as figura_gantt
         except ImportError as exc:
             messagebox.showerror("Plan de trabajo", f"No se pudo cargar figura_gantt: {exc}", parent=self)
             return
