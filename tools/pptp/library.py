@@ -42,6 +42,7 @@ class ZipLibrary:
         self.archive = archive
         self.docs = docs
         self.entries: dict[str, CatalogEntry] = {}
+        self.chapter_titles: dict[str, str] = {}
         self._signature = self._file_signature()
         try:
             with ZipFile(archive) as source:
@@ -97,6 +98,16 @@ class ZipLibrary:
                             or any(not re.fullmatch(r"\d{2}[A-Z]*", level) for level in levels)
                             or any(not child.startswith(parent) for parent, child in zip(levels, levels[1:]))):
                         raise ValueError(f"Clasificación de ficha no válida: {relative}")
+                    chapter = row.get("capitulo")
+                    if chapter is not None:
+                        if (not isinstance(chapter, dict) or chapter.get("codigo") != code[:2]
+                                or not isinstance(chapter.get("titulo"), str)
+                                or not chapter["titulo"].strip()):
+                            raise ValueError(f"Capítulo de ficha no válido: {relative}")
+                        chapter_title = chapter["titulo"].strip()
+                        previous = self.chapter_titles.setdefault(code[:2], chapter_title)
+                        if previous != chapter_title:
+                            raise ValueError(f"Títulos de capítulo contradictorios: {code[:2]}")
                     if row["id"] in identifiers or relative in self.entries:
                         raise ValueError(f"Ficha duplicada en el catálogo: {row['id']}")
                     if not re.fullmatch(r"[a-fA-F0-9]{64}", row["sha256"]):

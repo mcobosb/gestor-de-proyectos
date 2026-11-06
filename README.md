@@ -67,8 +67,13 @@ expresamente en la herramienta.
   Las fichas compartidas por varias partidas solo se incorporan una vez.
 - El PPTP comienza con un índice de contenidos. Los títulos y subtítulos se
   numeran jerárquicamente y se muestran en mayúsculas, también en el índice.
-  Las fichas del capítulo 4 se ordenan por código UNI (por ejemplo, `01A` antes
-  de `15P`), sin modificar la biblioteca ni la selección guardada.
+  En el primer paso, **Niveles del índice (1–6)** limita la profundidad del índice
+  PDF y ODT (2 por defecto), sin quitar subtítulos del cuerpo. Se guarda con el proyecto.
+  El capítulo 4 se agrupa por capítulo de dos dígitos de la base de precios
+  (`01`, `02`, …), con su código y título. Dentro de cada grupo, las fichas
+  completas se ordenan por código UNI, conservando definición, ejecución,
+  medición y abono, sin modificar la biblioteca ni la selección guardada.
+  Con dos niveles, el índice muestra los grupos; con tres, también las fichas.
 - El PPTP no repite los títulos del documento y del proyecto en la cabecera.
   En el pie de la plantilla, `{{capítulo}}` (o `{{capitulo}}`) se sustituye por
   «PLIEGO DE PRESCRIPCIONES TÉCNICAS PARTICULARES» y `{{no_pagina}}`

@@ -79,6 +79,7 @@ class PptpLayoutTests(unittest.TestCase):
             target = Path(directory) / "index.odt"
             write_document(
                 source, target, {"titulo_proyecto": "Proyecto"}, ReportSettings(output_format="odt"),
+                toc_depth=6,
             )
             with ZipFile(target) as archive:
                 xml = ET.fromstring(archive.read("content.xml"))
@@ -97,6 +98,71 @@ class PptpLayoutTests(unittest.TestCase):
                     self.assertEqual(reference.get(f"{{{TEXT}}}ref-name"), bookmark.get(f"{{{TEXT}}}name"))
                     self.assertEqual(reference.get(f"{{{TEXT}}}reference-format"), "page")
                 self.assertEqual(len(toc.findall(f".//{{{TEXT}}}index-entry-page-number")), 6)
+
+    def test_contents_depth_filters_only_index_and_keeps_bookmark_targets(self):
+        """Respeta el limite elegido en ambos formatos sin quitar titulos del cuerpo."""
+        source = (
+            "# Principal\n## Ficha\n### Detalle\n#### Procedimiento\n"
+            "## Otra ficha\n### Otro detalle\n\nTexto del cuerpo."
+        )
+        labels = [
+            "1 PRINCIPAL", "1.1 FICHA", "1.1.1 DETALLE", "1.1.1.1 PROCEDIMIENTO",
+            "1.2 OTRA FICHA", "1.2.1 OTRO DETALLE",
+        ]
+        levels = [1, 2, 3, 4, 2, 3]
+        with tempfile.TemporaryDirectory() as directory:
+            for output_format in ("pdf", "odt"):
+                for depth in (None, 1, 2, 3, 6):
+                    with self.subTest(format=output_format, depth=depth):
+                        target = Path(directory) / ("depth." + output_format)
+                        options = {} if depth is None else {"toc_depth": depth}
+                        write_document(
+                            source, target, {"titulo_proyecto": "Proyecto"},
+                            ReportSettings(output_format=output_format), **options,
+                        )
+                        expected = [
+                            label for label, level in zip(labels, levels)
+                            if level <= (2 if depth is None else depth)
+                        ]
+                        if output_format == "pdf":
+                            pages = PdfReader(target).pages
+                            contents = " ".join(pages[0].extract_text().split())
+                            body = " ".join(pages[1].extract_text().split())
+                            for label in labels:
+                                self.assertIn(label, body)
+                                self.assertEqual(label in contents, label in expected)
+                        else:
+                            with ZipFile(target) as archive:
+                                xml = ET.fromstring(archive.read("content.xml"))
+                            toc = xml.find(f".//{{{TEXT}}}table-of-content")
+                            entries = toc.findall(f".//{{{TEXT}}}index-body//{{{TEXT}}}a")
+                            self.assertEqual([entry.text for entry in entries], expected)
+                            self.assertEqual(
+                                toc.find(f"{{{TEXT}}}table-of-content-source").get(f"{{{TEXT}}}outline-level"),
+                                str(2 if depth is None else depth),
+                            )
+                            headings = xml.findall(f".//{{{TEXT}}}h")
+                            self.assertEqual([heading.text for heading in headings], labels)
+                            for entry in entries:
+                                reference = entry.find(f"{{{TEXT}}}bookmark-ref")
+                                bookmark = reference.get(f"{{{TEXT}}}ref-name")
+                                heading = next(
+                                    heading for heading in headings
+                                    if heading.find(f"{{{TEXT}}}bookmark").get(f"{{{TEXT}}}name") == bookmark
+                                )
+                                self.assertEqual(entry.text, heading.text)
+
+    def test_invalid_contents_depth_is_rejected_before_writing(self):
+        """No crea documentos si se recibe un limite fuera del rango o de otro tipo."""
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "invalid.pdf"
+            for depth in (0, 7, True, 2.5, "2", None):
+                with self.subTest(depth=depth), self.assertRaisesRegex(ValueError, "índice"):
+                    write_document(
+                        "# Título", target, {"titulo_proyecto": "Proyecto"},
+                        ReportSettings(), toc_depth=depth,
+                    )
+                self.assertFalse(target.exists())
 
     def test_writer_resolves_odt_contents_page_numbers(self):
         """Writer calcula las referencias del indice al paginar, sin mostrar unos fijos."""

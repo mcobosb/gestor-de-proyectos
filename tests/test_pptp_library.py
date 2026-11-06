@@ -91,6 +91,25 @@ class ZipLibraryTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     ZipLibrary(self.archive, self.docs)
 
+    def test_chapter_metadata_supplies_titles_and_rejects_inconsistent_groups(self):
+        """Lee el titulo del catalogo y rechaza codigos o titulos contradictorios."""
+        for row in self.rows:
+            row["capitulo"] = {"codigo": "01", "titulo": "Trabajos previos"}
+        self.write_zip()
+        self.assertEqual(
+            ZipLibrary(self.archive, self.docs).chapter_titles, {"01": "Trabajos previos"},
+        )
+        for chapter in (
+            [], {"codigo": "02", "titulo": "Otro"},
+            {"codigo": "01", "titulo": ""}, {"codigo": "01", "titulo": 1},
+            {"codigo": "01", "titulo": "Nombre contradictorio"},
+        ):
+            catalog = deepcopy(self.catalog)
+            catalog["fichas"][1]["capitulo"] = chapter
+            self.write_zip(catalog)
+            with self.subTest(chapter=chapter), self.assertRaisesRegex(ValueError, "[Cc]apítulo"):
+                ZipLibrary(self.archive, self.docs)
+
     def test_rejects_missing_catalog_index_sheet_and_ambiguous_catalogs(self):
         """Todos los nombres declarados deben existir y no ser ambiguos."""
         for missing in ("archivos/UNI/INDICE_FICHAS.md",
@@ -185,8 +204,16 @@ class ZipLibraryTests(unittest.TestCase):
         self.assertIn("Proyecto sintético", source)
         self.assertIn("Texto técnico", source)
         self.assertIn("Norma sintética", source)
+        self.assertIn("## 4.1 CAPÍTULO 01 — BASE", source)
+        self.assertIn("### 4.1.1 FICHA SINTÉTICA", source)
         self.assertNotIn("Otra ficha", source)
         self.assertNotIn("Indice legible", source)
+        for row in self.rows:
+            row["capitulo"] = {"codigo": "01", "titulo": "Nombre del catálogo"}
+        self.write_zip()
+        source = compose(ZipLibrary(self.archive, self.docs), state, [])
+        self.assertIn("## 4.1 CAPÍTULO 01 — NOMBRE DEL CATÁLOGO", source)
+        self.assertNotIn("CAPÍTULO 01 — BASE", source)
         (self.docs / "03_description.md").unlink()
         with self.assertRaisesRegex(ValueError, "sección 03"):
             compose(library, state, [])

@@ -4,6 +4,7 @@ from dataclasses import asdict
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -20,7 +21,7 @@ from pypdf import PdfReader
 from bc3_gui import BudgetApp, ProjectItem
 from budget_reports import ReportSettings
 from tools.pptp.document import (
-    PENDING_DURATION, Selection, compose, initial_variables, load_catalog,
+    PENDING_DURATION, VARIABLES, Selection, compose, initial_variables, load_catalog,
     load_regulations, planning_duration, propose, restore_state, safe_path,
     substitute, text_blocks, write_document,
 )
@@ -60,6 +61,28 @@ class PptpTests(unittest.TestCase):
         self.assertTrue(bool(self.library.read_sheet(matches[0].path)))
         self.assertIn("Ó", matches[0].path)
         self.assertGreater(len([sheet for sheet in self.catalog if sheet.code == "02RR"]), 1)
+
+    def test_all_document_placeholders_have_supported_project_variables(self):
+        """Comprueba secciones generales y todas las fichas para detectar campos olvidados."""
+        sources = [
+            (path.name, path.read_text(encoding="utf-8-sig"))
+            for path in sorted(DOCS_ROOT.glob("*.md"))
+        ]
+        sources.extend(
+            (sheet.path, self.library.read_sheet(sheet.path)) for sheet in self.catalog
+        )
+        found = set()
+        for name, source in sources:
+            placeholders = {
+                match[1].strip() for match in re.finditer(r"\{\{([^{}]+)\}\}", source)
+            }
+            with self.subTest(source=name):
+                self.assertEqual(placeholders - set(VARIABLES), set())
+                substituted = substitute(source, variables())
+                self.assertNotIn("{{", substituted)
+                self.assertNotIn("}}", substituted)
+            found.update(placeholders)
+        self.assertEqual(found, set(VARIABLES))
 
     def test_matching_reads_each_ancestor_but_not_siblings(self):
         """Busca los ficheros de 01, 01T y 01TR sin arrastrar 01TV."""
@@ -166,6 +189,16 @@ class PptpTests(unittest.TestCase):
         aggregate = load_regulations(self.library, {"15S"})
         self.assertTrue(any("15SH" in ref.codes for ref in aggregate))
 
+    def test_contents_depth_restores_legacy_default_and_validates_saved_values(self):
+        """Los proyectos anteriores usan dos niveles y los nuevos conservan la opcion."""
+        state = state_for([Selection(0, "P1", "01#", "Prueba", self.catalog[0].path)])
+        self.assertEqual(restore_state(state)["toc_depth"], 2)
+        for depth in (1, 2, 6):
+            self.assertEqual(restore_state({**state, "toc_depth": depth})["toc_depth"], depth)
+        for depth in (0, 7, True, 1.5, "2", None):
+            with self.subTest(depth=depth), self.assertRaisesRegex(ValueError, "índice"):
+                restore_state({**state, "toc_depth": depth})
+
     def test_planning_duration_uses_saved_calendar_holidays_and_sequence(self):
         """Usa dias naturales del calendario calculado, no la suma de dias laborables."""
         app = SimpleNamespace(
@@ -217,7 +250,8 @@ class PptpTests(unittest.TestCase):
         self.assertIn("12 meses", source)
         self.assertIn("5 días naturales", source)
         self.assertIn("Reposición de servicios", source)
-        self.assertEqual(source.count("## 4.1 " + sheet.title.upper()), 1)
+        self.assertEqual(source.count("### 4.1.1 " + sheet.title.upper()), 1)
+        self.assertIn("## 4.1 CAPÍTULO 01 — DEMOLICIONES Y TRABAJOS PREVIOS", source)
         self.assertNotIn("## 4.2 ", source)
         self.assertIn(refs[0].text, source)
         self.assertNotIn(refs[1].text, source)
@@ -257,6 +291,18 @@ class PptpTests(unittest.TestCase):
                         self.assertIn(value, text)
                     self.assertNotIn("{{", text)
                     self.assertNotIn("NORMATIVA_UNI", text)
+                    self.assertIn("4.1 CAPÍTULO 01", text)
+                    self.assertIn("4.1.1 " + self.catalog[0].title.upper(), text)
+                    if output_format == "odt":
+                        namespace = "urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+                        index = content.find(f".//{{{namespace}}}index-body")
+                        index_text = "".join(index.itertext())
+                        self.assertIn("4.1 CAPÍTULO 01", index_text)
+                        self.assertNotIn(self.catalog[0].title.upper(), index_text)
+                    else:
+                        index_text = reader.pages[0].extract_text()
+                        self.assertIn("4.1 CAPÍTULO 01", index_text)
+                        self.assertNotIn(self.catalog[0].title.upper(), index_text)
 
     def test_sheets_are_sorted_by_uni_code_without_changing_saved_selection(self):
         """Ordena las fichas del capitulo cuatro por codigo, no por partida ni titulo."""
@@ -272,12 +318,27 @@ class PptpTests(unittest.TestCase):
         source = compose(self.library, state, [])
         ordered = sorted([early, late, *variants], key=lambda sheet: (sheet.code, sheet.path.casefold()))
         positions = [
-            source.index(f"## 4.{index} {sheet.title.upper()}")
-            for index, sheet in enumerate(ordered, 1)
+            source.index(f"### {number} {sheet.title.upper()}")
+            for number, sheet in zip(("4.1.1", "4.2.1", "4.2.2", "4.3.1"), ordered)
         ]
         self.assertEqual(positions, sorted(positions))
-        self.assertNotIn("## 4.5 ", source)
+        group_headings = [line for line in source.splitlines() if line.startswith("## 4.")]
+        self.assertEqual(group_headings, [
+            "## 4.1 CAPÍTULO 01 — DEMOLICIONES Y TRABAJOS PREVIOS",
+            "## 4.2 CAPÍTULO 02 — ACONDICIONAMIENTO DE TERRENOS",
+            "## 4.3 CAPÍTULO 15 — URBANIZACIONES",
+        ])
+        self.assertIn("#### 4.1.1.1 DEFINICIÓN", source)
+        self.assertIn("#### 4.1.1.2 EJECUCIÓN EN OBRA", source)
+        self.assertIn("##### 4.1.1.2.1 PREPARACIÓN Y PROCEDIMIENTO", source)
+        self.assertIn("#### 4.1.1.3 MEDICIÓN Y ABONO", source)
+        self.assertNotIn("### 4.3.2 ", source)
         self.assertEqual(state, original)
+        for sheet in ordered:
+            original_blocks = text_blocks(self.library.read_sheet(sheet.path))
+            for level, text in original_blocks:
+                if level == 0:
+                    self.assertIn(text, "\n".join(text for _, text in text_blocks(source)))
 
     def test_markdown_preserves_structure_and_external_references(self):
         """No imprime comentarios internos ni enlaces locales rotos como URLs."""
@@ -355,6 +416,29 @@ class PptpWindowTests(unittest.TestCase):
         window.accept()
         self.assertEqual(window.step, 2)
 
+    def test_first_step_exposes_every_document_variable(self):
+        """Cada variable sustituible tiene un campo editable en la primera pantalla."""
+        window = self.make_window()
+        self.assertEqual(window.step, 0)
+        self.assertEqual(set(window.variables), set(VARIABLES))
+        entries = [
+            child
+            for frame in window.content.winfo_children()
+            for child in frame.winfo_children()
+            if isinstance(child, ttk.Entry)
+        ]
+        bound_variables = {str(entry.cget("textvariable")) for entry in entries}
+        for name in set(VARIABLES) - {"bullet_capitulos_obra"}:
+            self.assertIn(str(window.variables[name]), bound_variables)
+        self.assertTrue(window.summary.winfo_exists())
+        self.assertEqual(
+            window.summary.get("1.0", "end-1c"), window.variables["bullet_capitulos_obra"].get(),
+        )
+        self.next_steps(window)
+        self.assertEqual(
+            window.variables["bullet_capitulos_obra"].get(), "Resumen ficticio de obras",
+        )
+
     def test_steps_checks_manual_dropdown_and_regulation_refresh(self):
         """Navega, abre desplegable, selecciona ficha y recalcula normas vinculadas."""
         window = self.make_window()
@@ -394,6 +478,8 @@ class PptpWindowTests(unittest.TestCase):
         window.variables["titulo_proyecto"].set("Título revisado")
         window.variables["entidad"].set("Entidad revisada")
         window.variables["plazo_garantia"].set("24 meses")
+        self.assertEqual(window.toc_depth.get(), "2")
+        window.toc_depth.set("3")
         self.next_steps(window)
         window.unmatched[0].selected = False
         self.app.report_settings.output_format = "odt"
@@ -408,6 +494,12 @@ class PptpWindowTests(unittest.TestCase):
         self.assertEqual(saved["title"], "Título revisado")
         self.assertEqual(saved["report_settings"]["organization"], "Entidad revisada")
         self.assertEqual(saved["report_settings"]["guarantee_period"], "24 meses")
+        self.assertEqual(saved["pptp"]["toc_depth"], 3)
+        with ZipFile(target) as archive:
+            content = ET.fromstring(archive.read("content.xml"))
+        text_namespace = "urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+        toc_source = content.find(f".//{{{text_namespace}}}table-of-content-source")
+        self.assertEqual(toc_source.get(f"{{{text_namespace}}}outline-level"), "3")
         self.assertFalse(saved["pptp"]["selections"][-1]["selected"])
         self.assertFalse(self.app.is_dirty)
         state = deepcopy(self.app.pptp_state)
@@ -417,11 +509,27 @@ class PptpWindowTests(unittest.TestCase):
         restored = self.make_window()
         self.assertFalse(restored.unmatched[0].selected)
         self.assertEqual(restored.variables["plazo_ejecucion"].get(), "2 meses")
+        self.assertEqual(restored.toc_depth.get(), "3")
         self.app.pptp_state["variables"]["entidad"] = "Otra entidad"
         self.app._mark_dirty()
         self.app.undo_last_action()
         self.assertFalse(restored.winfo_exists())
         self.assertEqual(self.app.pptp_state, state)
+
+    def test_invalid_contents_depth_prevents_advancing_and_navigation_keeps_value(self):
+        """El primer paso avisa ante valores incorrectos y conserva los validos al volver."""
+        window = self.make_window()
+        window.toc_depth.set("7")
+        with patch("tools.pptp.messagebox.showerror") as error:
+            window.accept()
+        self.assertEqual(window.step, 0)
+        self.assertIn("índice", error.call_args.args[1])
+        window.toc_depth.set("4")
+        self.next_steps(window)
+        window.back()
+        window.back()
+        self.assertEqual(window.toc_depth.get(), "4")
+        self.assertEqual(self.app.pptp_state, {})
 
     def test_cancel_does_not_change_project_and_new_project_clears_state(self):
         """Cancelar y cambiar de proyecto no deja datos ni ventanas de otro proyecto."""

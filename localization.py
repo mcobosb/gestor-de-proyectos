@@ -69,6 +69,11 @@ _TEXT = {
     "Plazo de garantía (con unidad)": ("Warranty period (with unit)", "Délai de garantie (avec unité)"),
     "Plazo de ejecución (con unidad)": ("Execution period (with unit)", "Délai d'exécution (avec unité)"),
     "Entidad": ("Organization", "Organisme"),
+    "Niveles del índice (1–6)": ("Contents levels (1–6)", "Niveaux du sommaire (1–6)"),
+    "Los niveles del índice deben ser un entero entre 1 y 6.": (
+        "Contents levels must be an integer between 1 and 6.",
+        "Le nombre de niveaux du sommaire doit être un entier entre 1 et 6.",
+    ),
     "Aceptar y generar": ("Accept and generate", "Accepter et générer"),
     "Atrás": ("Back", "Précédent"),
     "Partidas sin coincidencia": ("Unmatched items", "Postes sans correspondance"),

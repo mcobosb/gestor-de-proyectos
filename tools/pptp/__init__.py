@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from localization import filedialog, localize_widget_tree, messagebox
 from .library import ZipLibrary
 from .document import (
-    PENDING_DURATION, Selection, compose, directory_codes, initial_variables,
+    DEFAULT_TOC_DEPTH, PENDING_DURATION, Selection, compose, directory_codes, initial_variables,
     load_catalog, load_regulations, normalized_code, propose, restore_state, write_document,
 )
 
@@ -64,6 +64,7 @@ class PptpWindow(tk.Toplevel):
         self.geometry("1120x720")
         self.minsize(860, 560)
         self.variables = {key: tk.StringVar(self, value=value) for key, value in values.items()}
+        self.toc_depth = tk.StringVar(self, value=str(saved.get("toc_depth", DEFAULT_TOC_DEPTH)))
         self.regulations = []
         self.regulation_choices = dict(saved.get("regulations", {}))
         self.step = 0
@@ -189,6 +190,13 @@ class PptpWindow(tk.Toplevel):
         )):
             ttk.Label(form, text=label).grid(row=index, column=0, sticky="w", pady=6, padx=(0, 12))
             ttk.Entry(form, textvariable=self.variables[key]).grid(row=index, column=1, sticky="ew")
+        ttk.Label(form, text="Niveles del índice (1–6)").grid(
+            row=4, column=0, sticky="w", pady=6, padx=(0, 12),
+        )
+        ttk.Combobox(
+            form, textvariable=self.toc_depth, values=tuple(str(level) for level in range(1, 7)),
+            state="readonly", width=5,
+        ).grid(row=4, column=1, sticky="w")
         ttk.Label(
             self.content, wraplength=1000,
             text=("No se ha realizado la planificación. Realiza Herramientas → Planificación "
@@ -327,6 +335,7 @@ class PptpWindow(tk.Toplevel):
         """Valida cada paso y persiste la revision antes de emitir el documento."""
         try:
             if self.step == 0:
+                self.selected_toc_depth()
                 self.variables["bullet_capitulos_obra"].set(self.summary.get("1.0", "end-1c").strip())
                 for key, variable in self.variables.items():
                     if not variable.get().strip() or variable.get().strip() == PENDING_DURATION:
@@ -338,6 +347,13 @@ class PptpWindow(tk.Toplevel):
             self.generate()
         except (OSError, UnicodeError, ValueError, ImportError) as exc:
             messagebox.showerror(TOOL_LABEL, str(exc), parent=self)
+
+    def selected_toc_depth(self) -> int:
+        """Lee y valida los niveles del indice seleccionados en el primer paso."""
+        value = self.toc_depth.get()
+        if value not in tuple(str(level) for level in range(1, 7)):
+            raise ValueError("Los niveles del índice deben ser un entero entre 1 y 6.")
+        return int(value)
 
     def generate(self) -> None:
         """Guarda el JSON y escribe el documento atomicamente sin destruir uno previo."""
@@ -353,6 +369,7 @@ class PptpWindow(tk.Toplevel):
             "variables": {key: variable.get().strip() for key, variable in self.variables.items()},
             "selections": [asdict(row) for row in [*self.automatic, *self.unmatched]],
             "regulations": self.regulation_choices,
+            "toc_depth": self.selected_toc_depth(),
         })
         source = compose(self.library, state, self.regulations)
         extension = "." + self.app.report_settings.output_format
@@ -375,7 +392,10 @@ class PptpWindow(tk.Toplevel):
         try:
             with tempfile.NamedTemporaryFile(dir=path.parent, suffix=extension, delete=False) as handle:
                 temporary = Path(handle.name)
-            write_document(source, temporary, state["variables"], self.app.report_settings)
+            write_document(
+                source, temporary, state["variables"], self.app.report_settings,
+                toc_depth=state["toc_depth"],
+            )
             temporary.replace(path)
         finally:
             if temporary is not None and temporary.exists():

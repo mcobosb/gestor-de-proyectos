@@ -18,6 +18,14 @@ if TYPE_CHECKING:
 VARIABLES = ("titulo_proyecto", "entidad", "plazo_garantia", "plazo_ejecucion",
              "bullet_capitulos_obra")
 PENDING_DURATION = "Pendiente de planificación"
+DEFAULT_TOC_DEPTH = 2
+
+
+def validate_toc_depth(value: object) -> int:
+    """Exige un numero entero de niveles dentro de la jerarquia Markdown."""
+    if type(value) is not int or not 1 <= value <= 6:
+        raise ValueError("Los niveles del índice deben ser un entero entre 1 y 6.")
+    return value
 
 
 @dataclass(frozen=True)
@@ -249,6 +257,7 @@ def restore_state(data: object) -> dict:
         raise ValueError("El estado PPTP debe ser un objeto JSON.")
     if not data:
         return {}
+    toc_depth = validate_toc_depth(data.get("toc_depth", DEFAULT_TOC_DEPTH))
     variables = data.get("variables")
     rows = data.get("selections")
     regulations = data.get("regulations")
@@ -272,7 +281,7 @@ def restore_state(data: object) -> dict:
             raise ValueError("Una partida seleccionada no tiene ficha PPTP.")
         selections.append(asdict(Selection(**{key: row[key] for key in Selection.__dataclass_fields__})))
     return {"variables": {key: variables[key] for key in VARIABLES},
-            "selections": selections, "regulations": dict(regulations)}
+            "selections": selections, "regulations": dict(regulations), "toc_depth": toc_depth}
 
 
 def substitute(source: str, variables: dict[str, str]) -> str:
@@ -326,14 +335,22 @@ def compose(root: Path | ZipLibrary, state: dict, regulations: list[Regulation])
             sections.append("\n\n".join(introductions + selected))
         else:
             sections.extend(path.read_text(encoding="utf-8-sig") for path in files)
-    for number, relative in enumerate(chosen, 1):
+    previous_chapter = None
+    for relative in chosen:
+        chapter = sheet_order(relative)[0][:2]
+        if chapter != previous_chapter:
+            chapter_title = root.chapter_titles.get(chapter, "") if isinstance(root, ZipLibrary) else ""
+            if not chapter_title:
+                folder = PurePosixPath(relative).parts[1]
+                chapter_title = folder.split("_", 1)[-1].replace("_", " ")
+            sections.append(f"## CAPÍTULO {chapter} — {chapter_title}")
+            previous_chapter = chapter
         source = (
             root.read_sheet(relative) if isinstance(root, ZipLibrary)
             else safe_path(root, relative).read_text(encoding="utf-8-sig")
         )
         source = re.sub(r"^(#{1,6}) (.*)$",
-                        lambda match: ("## " + f"4.{number} " + match[2] if len(match[1]) == 1
-                                       else "#" * min(len(match[1]) + 1, 6) + " " + match[2]),
+                        lambda match: "#" * min(len(match[1]) + 2, 6) + " " + match[2],
                         source, flags=re.MULTILINE)
         sections.append(source)
     return number_headings(substitute("\n\n".join(sections), state["variables"]))
@@ -384,8 +401,12 @@ def text_blocks(source: str) -> list[tuple[int, str]]:
     return blocks
 
 
-def write_document(source: str, target: Path, variables: dict[str, str], settings: ReportSettings) -> None:
+def write_document(
+    source: str, target: Path, variables: dict[str, str], settings: ReportSettings, *,
+    toc_depth: int = DEFAULT_TOC_DEPTH,
+) -> None:
     """Emite PDF u ODT con la misma plantilla de cabecera y pie del proyecto."""
+    toc_depth = validate_toc_depth(toc_depth)
     blocks = text_blocks(number_headings(source))
     title = "PLIEGO DE PRESCRIPCIONES TÉCNICAS PARTICULARES"
     project = variables["titulo_proyecto"]
@@ -393,7 +414,9 @@ def write_document(source: str, target: Path, variables: dict[str, str], setting
         from odt_reports import _new_report
 
         document = _new_report(title, project, settings, repeat_titles=False, footer_title=title)
-        document.table_of_contents([(level, text) for level, text in blocks if level])
+        document.table_of_contents(
+            [(level, text) for level, text in blocks if level], max_level=toc_depth,
+        )
         heading_index = 0
         for level, text in blocks:
             if level:
@@ -423,7 +446,7 @@ def write_document(source: str, target: Path, variables: dict[str, str], setting
                 leading=13, leftIndent=12 * level, firstLineIndent=0,
                 rightIndent=24, spaceBefore=4 if level == 0 else 0,
                 alignment=TA_LEFT,
-            ) for level in range(6)
+            ) for level in range(toc_depth)
         ]
         story = [
             layout.text("ÍNDICE", layout.title_style), toc, PageBreak(),
@@ -452,7 +475,8 @@ def write_document(source: str, target: Path, variables: dict[str, str], setting
                 if heading is not None:
                     level, text, key = heading
                     self.canv.bookmarkPage(key)
-                    self.notify("TOCEntry", (level, escape(text), self.page, key))
+                    if level < toc_depth:
+                        self.notify("TOCEntry", (level, escape(text), self.page, key))
 
         document = PptpDocTemplate(
             str(target), pagesize=A4, leftMargin=LEFT_MARGIN, rightMargin=RIGHT_MARGIN,

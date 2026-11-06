@@ -549,11 +549,21 @@ para los informes. Se ensamblan las secciones `01` a `04`, sustituyendo las
 variables; en la cuarta se incluyen las definiciones, ejecución y medición
 y abono de las fichas elegidas. Una ficha común a varias partidas aparece una vez.
 
-El documento comienza con un índice de contenidos. Todos los títulos y
-subtítulos aparecen en mayúsculas, con numeración jerárquica también para los
-niveles `###` y `####` de las fichas. En el capítulo 4, las fichas se ordenan por
-código UNI (por ejemplo, `01A` antes que `15P`), sin cambiar la selección guardada
-ni los documentos originales. En PDF, el índice enlaza a las páginas calculadas
+El documento comienza con un índice de contenidos. Su profundidad se
+limita con **Niveles del índice (1–6)** en el primer
+paso del asistente: por defecto se muestran dos niveles. La opción se guarda
+con el proyecto, se aplica a PDF y ODT y no elimina subtítulos del cuerpo.
+Todos los títulos y subtítulos aparecen en mayúsculas, con numeración jerárquica también para los
+niveles `###` y `####` de las fichas. El capítulo 4 se divide primero por los
+capítulos de dos dígitos de la base de precios de la Junta (`01`, `02`, …),
+mostrando su código y título. Solo aparecen grupos con fichas seleccionadas.
+Dentro de cada grupo se incorporan las fichas completas ordenadas por código UNI,
+con sus apartados de definición o descripción, ejecución, medición y abono.
+No se añaden agrupaciones intermedias por letras ni se cambian la selección
+guardada o los documentos originales. Por ejemplo: `4.1 CAPÍTULO 01 …`,
+`4.1.1 ARCOS Y BÓVEDAS …`, `4.1.1.1 DEFINICIÓN`. Con dos niveles de índice
+se ven los grupos; con tres también las fichas, y con cuatro sus apartados.
+En PDF, el índice enlaza a las páginas calculadas
 al generar. En ODT es un índice nativo: actualízalo desde Writer si cambia la
 paginación (botón derecho sobre el índice → **Actualizar índice**).
 

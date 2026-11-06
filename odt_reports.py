@@ -107,21 +107,21 @@ class _OdtReport:
         if bookmark is not None:
             ET.SubElement(element, _tag("text:bookmark"), {_tag("text:name"): bookmark})
 
-    def table_of_contents(self, headings: list[tuple[int, str]]) -> None:
+    def table_of_contents(self, headings: list[tuple[int, str]], *, max_level: int = 6) -> None:
         """Inserta un indice ODF actualizable con enlaces a los epigrafes del cuerpo."""
         toc = ET.SubElement(self.body, _tag("text:table-of-content"), {
             _tag("text:name"): "PPTPContents",
             _tag("text:protected"): "false",
         })
         source = ET.SubElement(toc, _tag("text:table-of-content-source"), {
-            _tag("text:outline-level"): "6",
+            _tag("text:outline-level"): str(max_level),
             _tag("text:use-outline-level"): "true",
         })
         title = ET.SubElement(source, _tag("text:index-title-template"), {
             _tag("text:style-name"): "ReportTitle",
         })
         title.text = "ÍNDICE"
-        for level in range(1, 7):
+        for level in range(1, max_level + 1):
             entry = ET.SubElement(source, _tag("text:table-of-content-entry-template"), {
                 _tag("text:outline-level"): str(level),
                 _tag("text:style-name"): f"PPTPContents{level}",
@@ -141,6 +141,8 @@ class _OdtReport:
             _tag("text:style-name"): "ReportTitle",
         }).text = "ÍNDICE"
         for index, (level, text) in enumerate(headings):
+            if level > max_level:
+                continue
             style_name = f"PPTPContents{level}"
             if not any(style.get(_tag("style:name")) == style_name for style in self.automatic_styles):
                 style = ET.SubElement(self.automatic_styles, _tag("style:style"), {
