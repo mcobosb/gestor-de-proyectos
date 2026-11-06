@@ -1,8 +1,8 @@
 """Genera una figura de diagrama de Gantt (PNG + PDF) a partir del Excel de
-planificación creado por tools._bc3_to_xlsx_plan.
+planificación creado por tools.planning.bc3_to_xlsx_plan.
 
 Uso:
-    python -m tools._figura_gantt [planificacion.xlsx] [salida_sin_extension]
+    python -m tools.planning.figura_gantt [planificacion.xlsx] [salida_sin_extension]
 
 Sin archivo de entrada, busca un único .xlsx en la carpeta principal.
 Si no hay ninguno o hay varios, muestra un error y no genera las figuras.
@@ -39,7 +39,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch, Patch, Polygon, Rectangle
 from openpyxl import load_workbook
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parents[2]
 GG_RATE = 0.13
 BI_RATE = 0.06
 IVA_RATE = 0.21  # Tipo general; ajustar si al contrato le corresponde otro tipo.

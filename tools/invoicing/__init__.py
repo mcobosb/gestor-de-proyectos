@@ -17,7 +17,7 @@ import unicodedata
 from uuid import uuid4
 
 from localization import filedialog, localize_widget_tree, messagebox, translate
-from ._budget_sources import RCD_BUDGET_SOURCE, TRANSPORT_PREFIX
+from .._shared.budget_sources import RCD_BUDGET_SOURCE, TRANSPORT_PREFIX
 
 TOOL_LABEL = "Facturación"
 TOOL_ORDER = 50

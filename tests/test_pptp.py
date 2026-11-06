@@ -19,7 +19,7 @@ from pypdf import PdfReader
 
 from bc3_gui import BudgetApp, ProjectItem
 from budget_reports import ReportSettings
-from tools._pptp import (
+from tools.pptp.document import (
     PENDING_DURATION, Selection, compose, initial_variables, load_catalog,
     load_regulations, planning_duration, propose, restore_state, safe_path,
     substitute, text_blocks, write_document,

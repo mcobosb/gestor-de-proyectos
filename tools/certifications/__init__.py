@@ -24,7 +24,7 @@ from bc3_gui import (
     APPLICATION_NAME, ToolTip, format_currency, format_chapter_code, parse_float,
 )
 from localization import filedialog, localize_widget_tree, messagebox, translate
-from ._planning import PlanParams, apply_saved_plan_state, build_activities, schedule
+from .._shared.scheduling import PlanParams, apply_saved_plan_state, build_activities, schedule
 from budget_reports import (
     CERTIFICATION_REPORT_NAMES, DEVIATION_REPORT_NAME, ReportSettings, write_certification_pdf,
 )

@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from localization import messagebox
-from ._planning import PlanningWindow
+from .window import PlanningWindow
 
 if TYPE_CHECKING:
     from bc3_gui import BudgetApp

@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import importlib
 from importlib.machinery import ModuleSpec
+from importlib.util import find_spec
 from pathlib import Path
 import pkgutil
 import stat
@@ -70,7 +71,14 @@ def discover_tools(directory: Path) -> tuple[list[Tool], list[str]]:
             if previous is not None:
                 origin = getattr(previous, "__file__", None)
                 if origin is None or not Path(origin).resolve().is_relative_to(directory.resolve()):
-                    del sys.modules[module_name]
+                    for cached_name in list(sys.modules):
+                        if cached_name == module_name or cached_name.startswith(module_name + "."):
+                            del sys.modules[cached_name]
+            spec = find_spec(module_name)
+            if spec is None or spec.origin is None:
+                raise ImportError(f"No se encuentra la entrada de {candidate.name}.")
+            if not Path(spec.origin).resolve().is_relative_to(directory.resolve()):
+                raise ImportError(f"La entrada de {candidate.name} no pertenece a tools.")
             module = importlib.import_module(module_name)
             label = getattr(module, "TOOL_LABEL", None)
             order = getattr(module, "TOOL_ORDER", 100)

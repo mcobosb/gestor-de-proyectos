@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 import unicodedata
 
 from localization import filedialog, localize_widget_tree, messagebox
-from ._budget_sources import RCD_BUDGET_SOURCE, TRANSPORT_PREFIX
+from .._shared.budget_sources import RCD_BUDGET_SOURCE, TRANSPORT_PREFIX
 
 if TYPE_CHECKING:
     from bc3_gui import BudgetApp, ProjectItem

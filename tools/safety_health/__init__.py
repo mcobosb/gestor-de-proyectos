@@ -9,7 +9,6 @@ import tkinter as tk
 from tkinter import ttk
 from typing import TYPE_CHECKING
 
-from app_paths import application_directory
 from localization import filedialog, messagebox
 
 if TYPE_CHECKING:
@@ -46,7 +45,7 @@ def restore_project_state(data: dict) -> dict:
 
 
 SAFETY_BUDGET_SOURCE = "SS:"
-RELATIONSHIP_PATH = application_directory(str(Path(__file__).parent.parent / "bc3_gui.py")) / "datos" / "seguridad_salud_relaciones_bcca2023.csv"
+RELATIONSHIP_PATH = Path(__file__).resolve().parent / "datos" / "seguridad_salud_relaciones_bcca2023.csv"
 
 
 @dataclass

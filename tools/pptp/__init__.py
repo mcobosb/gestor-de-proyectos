@@ -9,9 +9,8 @@ import tkinter as tk
 from tkinter import ttk
 from typing import TYPE_CHECKING
 
-from app_paths import application_directory
 from localization import filedialog, localize_widget_tree, messagebox
-from ._pptp import (
+from .document import (
     PENDING_DURATION, Selection, compose, directory_codes, initial_variables,
     load_catalog, load_regulations, normalized_code, propose, restore_state, write_document,
 )
@@ -21,7 +20,7 @@ if TYPE_CHECKING:
 
 TOOL_LABEL = "PPTP"
 TOOL_ORDER = 35
-RESOURCE_ROOT = application_directory(str(Path(__file__).parent.parent / "bc3_gui.py")) / "archivos"
+RESOURCE_ROOT = Path(__file__).resolve().parent / "archivos"
 
 
 def restore_project_state(data: dict) -> dict:

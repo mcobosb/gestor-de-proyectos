@@ -36,7 +36,7 @@ plantillas/*
 *.xls
 *.csv
 /plantilla.odt
-!datos/seguridad_salud_relaciones_bcca2023.csv
+!tools/safety_health/datos/seguridad_salud_relaciones_bcca2023.csv
 
 # Resultados de pruebas y archivos temporales.
 .pytest_cache/

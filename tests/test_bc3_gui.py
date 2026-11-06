@@ -10,7 +10,8 @@ from unittest.mock import patch
 from xml.etree import ElementTree
 from zipfile import ZipFile
 
-from tools import _planning as planning
+from tools._shared import scheduling as planning
+from tools.planning.window import PlanningWindow
 
 from bc3_gui import (
     APPLICATION_NAME,
@@ -1857,7 +1858,7 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         """Verify child windows share theme and keep dirty save indicator."""
         self.set_report_items()
         with patch.object(tk.Toplevel, "state"):
-            plan = planning.PlanningWindow(
+            plan = PlanningWindow(
                 self.root, self.app.budget_items, self.app._chapter_title, "Prueba"
             )
             self.addCleanup(plan.destroy)

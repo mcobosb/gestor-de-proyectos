@@ -2,7 +2,7 @@
 a partir de un presupuesto en formato FIEBDC-3 (.bc3).
 
 Uso:
-    python -m tools._bc3_to_xlsx_plan [archivo.bc3] [salida.xlsx]
+    python -m tools.planning.bc3_to_xlsx_plan [archivo.bc3] [salida.xlsx]
 
 Sin archivo de entrada, busca un único .bc3 en la carpeta del script.
 Si no hay ninguno o hay varios, muestra un error y no genera el Excel.
@@ -55,7 +55,7 @@ except ImportError as exc:  # pragma: no cover
 # --------------------------------------------------------------------------
 # Configuración
 # --------------------------------------------------------------------------
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parents[2]
 
 
 def find_unique_input(directory: Path, suffix: str) -> Path:
@@ -85,30 +85,13 @@ BCCA_SEARCH_DIRS = [
 WORKITEMS_XLSX_NAME = "01_partidas_por_capitulo_BCCA2023_completo.xlsx"
 BASICPRICES_XLSX_NAME = "02_bas_por_capitulo_BCCA2023.xlsx"
 
-DEFAULT_START = date(2026, 11, 9)
-HOURS_PER_DAY = 8
-EXTRA_ROWS = 30          # filas vacías preparadas para añadir actividades
-GANTT_COLUMNS = 200      # columnas de la escala temporal
-ECON_MONTHS = 24         # meses del plan económico
+from .._shared.scheduling import (
+    CONTINUOUS_CHAPTER_RE, DEFAULT_HOLIDAYS, DEFAULT_START, HOURS_PER_DAY,
+)
 
-# Festivos nacionales y de Andalucía (revisar y añadir los locales de Lucena)
-DEFAULT_HOLIDAYS = [
-    (date(2026, 12, 8), "Inmaculada Concepción"),
-    (date(2026, 12, 25), "Navidad"),
-    (date(2027, 1, 1), "Año Nuevo"),
-    (date(2027, 1, 6), "Epifanía"),
-    (date(2027, 3, 1), "Día de Andalucía (traslado, revisar)"),
-    (date(2027, 3, 25), "Jueves Santo"),
-    (date(2027, 3, 26), "Viernes Santo"),
-    (date(2027, 10, 12), "Fiesta Nacional"),
-    (date(2027, 11, 1), "Todos los Santos"),
-    (date(2027, 12, 6), "Constitución"),
-    (date(2027, 12, 8), "Inmaculada Concepción"),
-    (date(2027, 12, 25), "Navidad"),
-]
-
-# Capítulos cuyas actividades se extienden por defecto a toda la obra
-CONTINUOUS_CHAPTER_RE = re.compile(r"SEGURIDAD|RESIDUO", re.I)
+EXTRA_ROWS = 30
+GANTT_COLUMNS = 200
+ECON_MONTHS = 24
 
 TYPE_NAMES = {"1": "MO", "2": "MAQ", "3": "MAT"}
 

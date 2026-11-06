@@ -19,13 +19,15 @@ python -m venv .venv
 ```
 
 En las siguientes ocasiones basta con ejecutar el último comando. Mantén juntos
-los módulos principales y las carpetas `iconos`, `datos`, `tools` y `archivos`.
+los módulos principales y las carpetas `iconos` y `tools`.
 
 Al arrancar, el programa examina `tools` junto a la aplicación y añade al menú
 **Herramientas** los módulos disponibles. Para añadir o retirar una herramienta,
-coloca o mueve su módulo y reinicia. En código fuente son archivos `.py`; en la
-versión instalada son extensiones `.pyd`. Conserva los auxiliares cuyo nombre
-empieza por `_`, ya que pueden ser compartidos por otras herramientas.
+coloca o mueve su carpeta completa y reinicia: `tools/pptp`, `tools/planning`,
+`tools/rcd`, `tools/safety_health`, `tools/certifications` o `tools/invoicing`.
+Cada carpeta contiene la entrada de la herramienta y sus scripts y recursos.
+En código fuente son archivos `.py`; en la versión instalada son extensiones
+`.pyd`. Conserva `tools/_shared`, que contiene cálculos y constantes comunes.
 Si `tools` falta o está vacía, puedes seguir editando presupuestos. Los datos
 guardados de las herramientas ausentes se conservan en el JSON sin recalcularse;
 se muestra un aviso al abrir esos proyectos. Instala solo módulos de confianza.
@@ -504,7 +506,7 @@ original por su distinto redondeo de B2.
 ## 8 bis. Preparar el PPTP
 
 Abre **Herramientas → PPTP**, justo debajo de **Planificación**.
-Necesita un presupuesto y las secciones y fichas Markdown de `archivos`.
+Necesita un presupuesto y las secciones y fichas Markdown de `tools/pptp/archivos`.
 No incorpora partidas de RCDs ni de Seguridad y Salud.
 
 1. **Datos del proyecto.** Revisa el título, la entidad y el plazo de garantía

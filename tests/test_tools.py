@@ -3,6 +3,7 @@ from copy import deepcopy
 import importlib
 import json
 from pathlib import Path
+import shutil
 import sys
 import tempfile
 import tkinter as tk
@@ -135,7 +136,108 @@ class ToolDiscoveryTests(ToolTestCase):
         )
         for tool in loaded:
             self.assertFalse((ROOT / f"{tool.name}.py").exists())
-            self.assertTrue((ROOT / "tools" / f"{tool.name}.py").is_file())
+            self.assertFalse((ROOT / "tools" / f"{tool.name}.py").exists())
+            self.assertTrue((ROOT / "tools" / tool.name / "__init__.py").is_file())
+
+    def test_package_loads_internal_scripts_and_resources(self):
+        """Solo la entrada del paquete aparece en el menu, no sus auxiliares."""
+        package = self.directory / "packaged"
+        package.mkdir()
+        (package / "__init__.py").write_text(
+            PLUGIN + "\nfrom .helper import read_resource\n", encoding="utf-8",
+        )
+        (package / "helper.py").write_text(
+            'from pathlib import Path\n'
+            'def read_resource():\n'
+            '    """Lee un recurso vecino al script."""\n'
+            '    return Path(__file__).with_name("value.txt").read_text(encoding="ascii")\n',
+            encoding="utf-8",
+        )
+        (package / "value.txt").write_text("contenido", encoding="ascii")
+        loaded, errors = discover_tools(self.directory)
+        self.assertEqual(errors, [])
+        self.assertEqual([tool.name for tool in loaded], ["packaged"])
+        self.assertEqual(sys.modules["tools.packaged"].read_resource(), "contenido")
+
+    def test_package_cache_does_not_reuse_helpers_from_another_directory(self):
+        """Cambiar la carpeta de tools sustituye tambien sus submodulos."""
+        for folder, label in ((self.directory / "first", "Uno"), (self.directory / "second", "Dos")):
+            package = folder / "extra"
+            package.mkdir(parents=True)
+            (package / "__init__.py").write_text(
+                'from .helper import TOOL_LABEL\n'
+                'def open_tool(app):\n    """Entrada del paquete."""\n    pass\n',
+                encoding="utf-8",
+            )
+            (package / "helper.py").write_text(f'TOOL_LABEL = "{label}"', encoding="utf-8")
+            loaded, errors = discover_tools(folder)
+            self.assertEqual(errors, [])
+            self.assertEqual(loaded[0].label, label)
+
+    def test_shared_scheduling_does_not_require_planning_tool(self):
+        """Certificaciones y PPTP conservan sus calculos al retirar Planificacion."""
+        folder = self.directory / "tools"
+        folder.mkdir()
+        for name in ("_shared", "certifications", "pptp"):
+            shutil.copytree(
+                ROOT / "tools" / name, folder / name,
+                ignore=shutil.ignore_patterns("__pycache__"),
+            )
+        for name in list(sys.modules):
+            if name == "tools" or name.startswith("tools."):
+                del sys.modules[name]
+        loaded, errors = discover_tools(folder)
+        self.assertEqual(errors, [])
+        self.assertEqual([tool.name for tool in loaded], ["pptp", "certifications"])
+        self.assertNotIn("tools.planning", sys.modules)
+        self.assertIn("tools._shared.scheduling", sys.modules)
+
+    def test_tool_resources_resolve_inside_their_own_folder(self):
+        """Los datos exclusivos no se buscan ya en la carpeta principal."""
+        discover_tools(ROOT / "tools")
+        from tools.safety_health import RELATIONSHIP_PATH
+        from tools.pptp import RESOURCE_ROOT
+
+        self.assertEqual(RELATIONSHIP_PATH.parent, ROOT / "tools" / "safety_health" / "datos")
+        self.assertTrue(RELATIONSHIP_PATH.is_file())
+        self.assertEqual(RESOURCE_ROOT, ROOT / "tools" / "pptp" / "archivos")
+
+    def test_removing_package_hides_it_even_when_imported(self):
+        """Retirar una carpeta completa elimina su entrada en el siguiente arranque."""
+        package = self.directory / "extra"
+        package.mkdir()
+        (package / "__init__.py").write_text(PLUGIN, encoding="utf-8")
+        loaded, errors = discover_tools(self.directory)
+        self.assertEqual(errors, [])
+        self.assertEqual([tool.name for tool in loaded], ["extra"])
+        package.rename(self.directory / "_removed")
+        self.assertEqual(discover_tools(self.directory), ([], []))
+
+    def test_pptp_uses_catalog_from_relocated_package(self):
+        """Lee fichas sinteticas desde archivos de su propia carpeta."""
+        for name in ("_shared", "pptp"):
+            shutil.copytree(
+                ROOT / "tools" / name, self.directory / name,
+                ignore=shutil.ignore_patterns("__pycache__"),
+            )
+        resources = self.directory / "pptp" / "archivos" / "UNI"
+        resources.mkdir(parents=True, exist_ok=True)
+        (resources / "INDICE_FICHAS.md").write_text(
+            "| 01TR | [Redes](01TR_REDES/REDES.md) | Revisar |",
+            encoding="utf-8",
+        )
+        (resources / "01TR_REDES").mkdir()
+        (resources / "01TR_REDES" / "REDES.md").write_text("# Redes sinteticas", encoding="utf-8")
+        for name in list(sys.modules):
+            if name == "tools" or name.startswith("tools."):
+                del sys.modules[name]
+        loaded, errors = discover_tools(self.directory)
+        self.assertEqual(errors, [])
+        self.assertEqual([tool.name for tool in loaded], ["pptp"])
+        package = sys.modules["tools.pptp"]
+        catalog = package.load_catalog(package.RESOURCE_ROOT)
+        self.assertEqual(len(catalog), 1)
+        self.assertEqual(catalog[0].code, "01TR")
 
 
 class ToolMenuTests(ToolTestCase):

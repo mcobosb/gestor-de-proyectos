@@ -177,7 +177,7 @@ def planning_duration(app: BudgetApp) -> str:
     """Reutiliza el calendario guardado para expresar el plazo en dias naturales."""
     if not app.planning_state:
         return ""
-    from ._planning import PlanParams, apply_saved_plan_state, build_activities, schedule
+    from .._shared.scheduling import PlanParams, apply_saved_plan_state, build_activities, schedule
 
     params = PlanParams()
     activities = build_activities(app.budget_items, app._chapter_title)

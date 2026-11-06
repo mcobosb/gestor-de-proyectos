@@ -65,13 +65,32 @@ $distributionDirectory = Join-Path $nuitkaOutput "bc3_gui.dist"
 $toolsOutput = Join-Path $nuitkaOutput "tools"
 New-Item -ItemType Directory -Force -Path $toolsOutput | Out-Null
 $compiledTools = @()
-foreach ($tool in Get-ChildItem (Join-Path $repositoryRoot "tools") -Filter "*.py") {
-    if ($tool.Name -eq "__init__.py") {
+$toolsSource = Join-Path $repositoryRoot "tools"
+foreach ($requiredResource in @(
+    "safety_health\datos\seguridad_salud_relaciones_bcca2023.csv",
+    "pptp\archivos\UNI\INDICE_FICHAS.md"
+)) {
+    $resourcePath = Join-Path $toolsSource $requiredResource
+    if (-not (Test-Path -LiteralPath $resourcePath -PathType Leaf)) {
+        throw "Falta un recurso de las herramientas: $resourcePath"
+    }
+}
+foreach ($tool in Get-ChildItem $toolsSource -Filter "*.py" -Recurse -File) {
+    $relativePath = $tool.FullName.Substring($toolsSource.Length + 1)
+    $relativeDirectory = Split-Path $relativePath -Parent
+    $isPackage = $tool.Name -eq "__init__.py"
+    if ($isPackage -and -not $relativeDirectory) {
         continue
     }
-    $moduleOutput = Join-Path $toolsOutput $tool.BaseName
+    $moduleName = $tool.BaseName
+    $compileTarget = $tool.FullName
+    if ($isPackage) {
+        $moduleName = Split-Path $tool.DirectoryName -Leaf
+        $compileTarget = $tool.DirectoryName
+    }
+    $moduleOutput = Join-Path $toolsOutput $relativePath.Replace(".py", "")
     if (Test-Path $moduleOutput) {
-        Get-ChildItem -LiteralPath $moduleOutput -Filter "$($tool.BaseName)*.pyd" -File |
+        Get-ChildItem -LiteralPath $moduleOutput -Filter "$moduleName*.pyd" -File |
             ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
     }
     & $python -m nuitka `
@@ -80,15 +99,26 @@ foreach ($tool in Get-ChildItem (Join-Path $repositoryRoot "tools") -Filter "*.p
         @compilerOptions `
         --assume-yes-for-downloads `
         --output-dir=$moduleOutput `
-        $tool.FullName
+        $compileTarget
     if ($LASTEXITCODE -ne 0) {
         throw "La compilación de la herramienta $($tool.Name) ha fallado."
     }
-    $extension = @(Get-ChildItem $moduleOutput -Filter "$($tool.BaseName)*.pyd")
+    $extension = @(Get-ChildItem $moduleOutput -Filter "$moduleName*.pyd")
     if ($extension.Count -ne 1) {
         throw "No se generó una única extensión compilada para $($tool.Name)."
     }
-    $compiledTools += $extension[0].FullName
+    $extensionName = $extension[0].Name
+    if ($isPackage) {
+        $extensionName = "__init__" + $extensionName.Substring($moduleName.Length)
+    }
+    $relativeDestination = $extensionName
+    if ($relativeDirectory) {
+        $relativeDestination = Join-Path $relativeDirectory $extensionName
+    }
+    $compiledTools += [pscustomobject]@{
+        Source = $extension[0].FullName
+        Destination = $relativeDestination
+    }
 }
 
 & $python -m nuitka `
@@ -107,8 +137,6 @@ foreach ($tool in Get-ChildItem (Join-Path $repositoryRoot "tools") -Filter "*.p
     --output-filename=GestorDeProyectos.exe `
     --include-data-dir=iconos=iconos `
     --include-data-dir=plantillas=plantillas `
-    --include-data-dir=datos=datos `
-    --include-data-dir=archivos=archivos `
     --include-package-data=matplotlib `
     --include-package-data=pdfminer `
     --include-package-data=pypdfium2 `
@@ -146,12 +174,25 @@ if (Test-Path (Join-Path $distributionDirectory "bc3_gui.py")) {
 }
 $installedTools = Join-Path $distributionDirectory "tools"
 New-Item -ItemType Directory -Force -Path $installedTools | Out-Null
-Get-ChildItem -LiteralPath $installedTools -Filter "*.pyd" -File |
+Get-ChildItem -LiteralPath $installedTools -Filter "*.pyd" -Recurse -File |
     ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
 foreach ($extension in $compiledTools) {
-    Copy-Item -LiteralPath $extension -Destination $installedTools -Force
+    $destination = Join-Path $installedTools $extension.Destination
+    New-Item -ItemType Directory -Force -Path (Split-Path $destination -Parent) | Out-Null
+    Copy-Item -LiteralPath $extension.Source -Destination $destination -Force
 }
-& $python -c "from pathlib import Path; import sys; from tool_loader import discover_tools; loaded, errors = discover_tools(Path(sys.argv[1])); print('\n'.join(errors)); sys.exit(1 if errors else 0)" $installedTools
+foreach ($resource in Get-ChildItem $toolsSource -Recurse -File) {
+    if ($resource.Name -eq ".gitkeep" -or
+        $resource.Extension -in @(".py", ".pyc", ".pyo", ".pyd") -or
+        $resource.FullName -match '[\\/]__pycache__[\\/]') {
+        continue
+    }
+    $relativePath = $resource.FullName.Substring($toolsSource.Length + 1)
+    $destination = Join-Path $installedTools $relativePath
+    New-Item -ItemType Directory -Force -Path (Split-Path $destination -Parent) | Out-Null
+    Copy-Item -LiteralPath $resource.FullName -Destination $destination -Force
+}
+& $python -c "from pathlib import Path; import sys; from tool_loader import discover_tools; loaded, errors = discover_tools(Path(sys.argv[1])); expected = {p.name for p in Path(sys.argv[2]).iterdir() if p.is_dir() and not p.name.startswith('_') and (p / '__init__.py').is_file()}; actual = {tool.name for tool in loaded}; print('\n'.join(errors)); print('Esperadas:', sorted(expected), 'Encontradas:', sorted(actual)); sys.exit(1 if errors or actual != expected else 0)" $installedTools $toolsSource
 if ($LASTEXITCODE -ne 0) {
     throw "No se pueden cargar las herramientas compiladas de la distribución."
 }
