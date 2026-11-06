@@ -326,6 +326,10 @@ guardada se conservan, pero no se abre ningún proyecto automáticamente.
 
 ## Pruebas y documentación del código
 
+Las pruebas se ejecutan localmente. El flujo **Pruebas** de GitHub Actions no
+se lanza al subir cambios ni al abrir pull requests; queda disponible solo
+para ejecución manual desde **Actions → Pruebas → Run workflow**.
+
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-test.txt
 .\.venv\Scripts\python.exe -m unittest discover -v
