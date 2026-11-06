@@ -19,7 +19,7 @@ python -m venv .venv
 ```
 
 En las siguientes ocasiones basta con ejecutar el último comando. Mantén juntos
-los módulos principales y las carpetas `iconos`, `datos` y `tools`.
+los módulos principales y las carpetas `iconos`, `datos`, `tools` y `archivos`.
 
 Al arrancar, el programa examina `tools` junto a la aplicación y añade al menú
 **Herramientas** los módulos disponibles. Para añadir o retirar una herramienta,
@@ -500,6 +500,54 @@ Volúmenes y precios se redondean a dos decimales antes de calcular los costes;
 B2 se calcula sobre importes redondeados y el total suma las filas visibles.
 Con los datos de ejemplo esto da 13.044,62 €, un céntimo menos que el ODS
 original por su distinto redondeo de B2.
+
+## 8 bis. Preparar el PPTP
+
+Abre **Herramientas → PPTP**, justo debajo de **Planificación**.
+Necesita un presupuesto y las secciones y fichas Markdown de `archivos`.
+No incorpora partidas de RCDs ni de Seguridad y Salud.
+
+1. **Datos del proyecto.** Revisa el título, la entidad y el plazo de garantía
+   (incluye la unidad, por ejemplo, «12 meses»). Se toman del proyecto y de
+   **Archivo → Configuración**. Puedes corregirlos sin salir del asistente.
+   Escribe el resumen de las obras que sustituirá `{{bullet_capitulos_obra}}`.
+   El plazo de ejecución se obtiene de la planificación guardada: se expresa
+   en días naturales entre el inicio y el fin, considerando su calendario.
+   Si no has realizado la planificación, aparece «Pendiente de planificación»
+   y un aviso para realizarla. Debes sustituir ese marcador por un plazo manual
+   antes de continuar; no se inventa una duración.
+2. **Correspondencias automáticas.** Para una partida `01TR…`, se buscan
+   los archivos de los niveles `01`, `01T` y `01TR`, sin añadir los de sus
+   ramas hermanas. Cada fila muestra la partida, el código y título de la ficha
+   y su check, inicialmente marcado. Puedes desmarcarlo con el ratón o con Espacio.
+   Al seleccionar una fila puedes leer su ruta y advertencias.
+   Si la partida no identifica una ficha pero su subcapítulo tiene un código
+   UNI explícito, por ejemplo `01T#`, se proponen las fichas de esa clasificación
+   y sus descendientes para revisión. No se interpreta un capítulo ordinal
+   como `01#` como clasificación de todas sus partidas.
+3. **Partidas sin coincidencia y normativa.** Haz doble clic en la segunda
+   columna (o pulsa Intro) para elegir una ficha del índice. Puedes añadir
+   más fichas a la misma partida o desmarcar las que no deban incorporarse.
+   No se puede generar con una partida marcada pero sin ficha.
+   En la pestaña **Disposiciones técnicas legales**, revisa las referencias
+   correspondientes a los códigos elegidos y sus condiciones. Las candidatas
+   se proponen marcadas; las referencias con estado `revision`, desmarcadas.
+   No aceptes una referencia sin comprobar ámbito, vigencia y régimen aplicable.
+
+**Aceptar y generar** solicita el destino del documento y guarda primero
+la revisión en el JSON del proyecto (pide su ubicación si aún no existe).
+El formato PDF u ODT y la plantilla de cabecera y pie son los configurados
+para los informes. Se ensamblan las secciones `01` a `04`, sustituyendo las
+variables; en la cuarta se incluyen las definiciones, ejecución y medición
+y abono de las fichas elegidas. Una ficha común a varias partidas aparece una vez.
+
+Al reabrir el proyecto se conservan las asignaciones, los checks y el resumen;
+el plazo se actualiza desde la planificación si está disponible. Cancelar
+antes de generar no aplica la revisión. Si el presupuesto cambia mientras
+el asistente está abierto, ciérralo y vuelve a abrirlo para revisar las partidas.
+El pliego generado requiere revisión por el técnico responsable; la selección
+por códigos no acredita cumplimiento normativo ni corrige las advertencias
+de los textos de origen.
 
 ## 9. Planificar la obra
 

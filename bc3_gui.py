@@ -678,6 +678,7 @@ class BudgetApp:
         self._invoicing_window: tk.Toplevel | None = None
         self.rcd_state: dict = {}
         self.safety_health_state: dict = {}
+        self.pptp_state: dict = {}
         self._rcd_window: tk.Toplevel | None = None
         self._safety_health_window: tk.Toplevel | None = None
         self._project_windows: list[tk.Toplevel] = []
@@ -1586,6 +1587,7 @@ class BudgetApp:
             self.invoicing_state = {}
             self.rcd_state = {}
             self.safety_health_state = {}
+            self.pptp_state = {}
             self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
             for item in self.budget_items:
                 item.set_indirect_costs(self.report_settings.indirect_costs)
@@ -1627,6 +1629,7 @@ class BudgetApp:
         self.invoicing_state = {}
         self.rcd_state = {}
         self.safety_health_state = {}
+        self.pptp_state = {}
         self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
         self.project_title = project_title.strip() or "Nuevo proyecto"
         self.project_path = None
@@ -3248,6 +3251,7 @@ class BudgetApp:
             "invoicing": self.invoicing_state,
             "rcds": self.rcd_state,
             "safety_health": self.safety_health_state,
+            "pptp": self.pptp_state,
             "settings": self.report_settings,
             "title": self.project_title,
         })
@@ -3288,6 +3292,7 @@ class BudgetApp:
         self.invoicing_state = restored["invoicing"]
         self.rcd_state = restored["rcds"]
         self.safety_health_state = restored["safety_health"]
+        self.pptp_state = restored["pptp"]
         self.report_settings = restored["settings"]
         self.project_title = restored["title"]
         self.selected_budget_index = None
@@ -3439,6 +3444,7 @@ class BudgetApp:
         fields = (
             ("Autoría / nombre", "author"), ("Cargo / titulación", "role"),
             ("Entidad / servicio", "organization"), ("Localidad", "location"),
+            ("Plazo de garantía (con unidad)", "guarantee_period"),
             ("Texto de firma / fecha", "signature"),
             ("Empresa constructora", "contractor"),
             ("Responsable de la empresa constructora", "contractor_representative"),
@@ -3868,6 +3874,7 @@ class BudgetApp:
             "invoicing": self.invoicing_state,
             "rcds": self.rcd_state,
             "safety_health": self.safety_health_state,
+            "pptp": self.pptp_state,
             "report_settings": self.report_settings.to_dict(),
             "items": [
                 {
@@ -3937,6 +3944,7 @@ class BudgetApp:
             safety_health_state = self._restore_tool_state(
                 "safety_health", payload.get("safety_health", {}),
             )
+            pptp_state = self._restore_tool_state("pptp", payload.get("pptp", {}))
             if source_budget_path is not None:
                 declared_source = payload.get("source_budget_bc3")
                 if declared_source is not None and Path(declared_source).name != source_budget_path.name:
@@ -4000,10 +4008,12 @@ class BudgetApp:
         self.project_title = project_title
         self.rcd_state = rcd_state
         self.safety_health_state = safety_health_state
+        self.pptp_state = pptp_state
         missing_tools = [
             name for name, state in (
                 ("invoicing", invoicing_state), ("rcd", rcd_state),
                 ("safety_health", safety_health_state), ("planning", planning_state),
+                ("pptp", pptp_state),
             ) if state and name not in self.tools_by_name
         ]
         if missing_tools:

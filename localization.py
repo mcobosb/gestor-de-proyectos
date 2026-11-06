@@ -66,6 +66,60 @@ _TEXT = {
     "Exportar recursos a ODS…": ("Export resources to ODS…", "Exporter les ressources au format ODS…"),
     "Exportar descompuestos a ODS…": ("Export breakdowns to ODS…", "Exporter les décompositions au format ODS…"),
     "Herramientas": ("Tools", "Outils"),
+    "Plazo de garantía (con unidad)": ("Warranty period (with unit)", "Délai de garantie (avec unité)"),
+    "Plazo de ejecución (con unidad)": ("Execution period (with unit)", "Délai d'exécution (avec unité)"),
+    "Entidad": ("Organization", "Organisme"),
+    "Aceptar y generar": ("Accept and generate", "Accepter et générer"),
+    "Atrás": ("Back", "Précédent"),
+    "Partidas sin coincidencia": ("Unmatched items", "Postes sans correspondance"),
+    "Disposiciones técnicas legales": ("Technical legal provisions", "Dispositions techniques légales"),
+    "Partida del presupuesto": ("Budget item", "Poste du budget"),
+    "Código y nombre de ficha": ("Sheet code and name", "Code et nom de la fiche"),
+    "Referencia / estado": ("Reference / status", "Référence / état"),
+    "Condición de aplicación": ("Application condition", "Condition d'application"),
+    "Añadir otra ficha a la partida": ("Add another sheet to this item", "Ajouter une autre fiche au poste"),
+    "Revisa los datos del proyecto antes de continuar.": (
+        "Review the project data before continuing.", "Vérifiez les données du projet avant de continuer.",
+    ),
+    "Resumen de las obras ({{bullet_capitulos_obra}})": (
+        "Works summary ({{bullet_capitulos_obra}})", "Résumé des travaux ({{bullet_capitulos_obra}})",
+    ),
+    "Fichas encontradas por código. Desmarca las que no procedan.": (
+        "Sheets found by code. Uncheck those that do not apply.",
+        "Fiches trouvées par code. Décochez celles qui ne conviennent pas.",
+    ),
+    "Doble clic en la segunda columna para elegir una ficha del índice.": (
+        "Double-click the second column to choose a sheet from the index.",
+        "Double-cliquez sur la deuxième colonne pour choisir une fiche de l'index.",
+    ),
+    "No hay coincidencias automáticas; asígnalas en el siguiente paso.": (
+        "No automatic matches; assign sheets in the next step.",
+        "Aucune correspondance automatique ; affectez les fiches à l'étape suivante.",
+    ),
+    "Los cambios aceptados de título, entidad y garantía se conservan en el proyecto.": (
+        "Accepted changes to the title, organization and warranty are saved in the project.",
+        "Les modifications acceptées du titre, de l'organisme et de la garantie sont conservées dans le projet.",
+    ),
+    "Plazo de ejecución obtenido de la planificación del proyecto, en días naturales.": (
+        "Execution period from project planning, in calendar days.",
+        "Délai d'exécution issu du planning du projet, en jours calendaires.",
+    ),
+    "No se ha realizado la planificación. Realiza Herramientas → Planificación "
+    "para obtener el plazo de ejecución. Mientras tanto, debes rellenarlo manualmente; "
+    "no se asigna un plazo ficticio.": (
+        "No planning has been performed. Use Tools → Planning to obtain the execution period. "
+        "In the meantime, enter it manually; no duration is invented.",
+        "Aucun planning n'a été réalisé. Utilisez Outils → Planification pour obtenir le délai "
+        "d'exécution. En attendant, renseignez-le manuellement ; aucune durée n'est inventée.",
+    ),
+    "Confirma ámbito, vigencia y condiciones de cada referencia. "
+    "Las referencias «revision» no se marcan automáticamente. "
+    "Las candidatas se proponen marcadas; desmarca las que no procedan.": (
+        "Check each reference's scope, validity and conditions. References marked 'revision' "
+        "are not checked automatically. Candidates are checked; uncheck those that do not apply.",
+        "Vérifiez le champ, la validité et les conditions de chaque référence. Les références "
+        "« revision » ne sont pas cochées automatiquement. Décochez les candidates non applicables.",
+    ),
     "RCDs": ("Construction waste", "Déchets de chantier"),
     "Datos de cálculo": ("Calculation inputs", "Données de calcul"),
     "Llevar mediciones de demolición a transporte a vertedero": (

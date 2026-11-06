@@ -49,6 +49,26 @@ herramienta desde su proyecto JSON se cargan los datos guardados sin recalcular
 ni modificar las partidas. Los cambios se aplican al aceptarlos o guardarlos
 expresamente en la herramienta.
 
+### PPTP
+
+- **Herramientas → PPTP**, debajo de Planificación, prepara el pliego en tres
+  pasos: datos del proyecto, fichas detectadas y asignaciones manuales.
+- Revisa título, entidad y plazo de garantía de la configuración, y escribe
+  el resumen de las obras. El plazo de ejecución se calcula desde la planificación
+  guardada, incluidos fines de semana y festivos; sin planificación se solicita
+  un valor manual y se avisa de que debe realizarse.
+- Busca fichas Markdown por prefijos UNI en los niveles correspondientes
+  (por ejemplo, `01`, `01T`, `01TR`), excluyendo RCDs y Seguridad y Salud.
+  Las partidas sin correspondencia pueden vincularse a una o varias fichas del índice.
+- Revisa también las condiciones de aplicación de la normativa propuesta.
+  Las referencias pendientes de revisión no se marcan automáticamente.
+- Al generar se guarda la selección en el JSON del proyecto y se emite PDF u ODT
+  según la configuración, con su plantilla de cabecera y pie y las variables sustituidas.
+  Las fichas compartidas por varias partidas solo se incorporan una vez.
+
+Los textos de `archivos` son material de trabajo: requieren revisión técnica y
+contractual antes de utilizar el pliego. El asistente no certifica vigencia normativa.
+
 ## 🚀 Release v1.1.0 — ¡Primeros pasos!
 
 ¡Hola a todos! 👋

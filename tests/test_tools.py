@@ -126,12 +126,12 @@ class ToolDiscoveryTests(ToolTestCase):
         self.assertEqual([tool.name for tool in loaded], ["z_first", "package_tool", "a_last"])
 
     def test_builtin_modules_are_moved_and_keep_their_order(self):
-        """Las cinco opciones originales viven en tools y mantienen sus etiquetas."""
+        """Las herramientas viven en tools y PPTP se situa tras Planificacion."""
         loaded, errors = discover_tools(ROOT / "tools")
         self.assertEqual(errors, [])
         self.assertEqual(
             [tool.name for tool in loaded],
-            ["rcd", "safety_health", "planning", "certifications", "invoicing"],
+            ["rcd", "safety_health", "planning", "pptp", "certifications", "invoicing"],
         )
         for tool in loaded:
             self.assertFalse((ROOT / f"{tool.name}.py").exists())
@@ -253,6 +253,7 @@ class ToolMenuTests(ToolTestCase):
             "invoicing": {"folder": "facturas", "custom": {"preserved": True}},
             "safety_health": {"percentage": "2.5", "lines": []},
             "planning": {"custom": "saved"},
+            "pptp": {"custom": {"selections": [True, False]}},
         }
         payload = {
             "items": [{"code": "R1", "chapter": "RCD", "unit": "ud", "summary": "Residuo",

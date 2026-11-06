@@ -58,6 +58,7 @@ class ReportSettings:
     tender_discount: float = 0.0
     indirect_costs: float = 0.0
     safety_health_percentage: float = 2.0
+    guarantee_period: str = ""
 
     @classmethod
     def from_dict(cls, data: object) -> ReportSettings:

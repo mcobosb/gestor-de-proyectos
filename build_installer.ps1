@@ -107,6 +107,7 @@ foreach ($tool in Get-ChildItem (Join-Path $repositoryRoot "tools") -Filter "*.p
     --include-data-dir=iconos=iconos `
     --include-data-dir=plantillas=plantillas `
     --include-data-dir=datos=datos `
+    --include-data-dir=archivos=archivos `
     --include-package-data=matplotlib `
     --include-package-data=pdfminer `
     --include-package-data=pypdfium2 `
@@ -127,6 +128,7 @@ foreach ($tool in Get-ChildItem (Join-Path $repositoryRoot "tools") -Filter "*.p
     --include-module=uuid `
     --include-module=subprocess `
     --include-module=textwrap `
+    --include-module=urllib.parse `
     --include-module=shutil `
     --include-module=matplotlib.backends.backend_agg `
     --include-module=matplotlib.backends.backend_pdf `

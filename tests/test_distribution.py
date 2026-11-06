@@ -265,6 +265,7 @@ class DistributionTests(unittest.TestCase):
         for module in (
             "matplotlib.backends.backend_agg",
             "matplotlib.backends.backend_pdf",
+            "urllib.parse",
         ):
             with self.subTest(module=module):
                 self.assertIn(f"--include-module={module}", build_script)
@@ -273,6 +274,8 @@ class DistributionTests(unittest.TestCase):
         self.assertIn('"tools"', build_script)
         self.assertIn('copy-item', build_script)
         self.assertIn("discover_tools", build_script)
+        self.assertIn("--include-data-dir=archivos=archivos", build_script)
+        self.assertTrue((ROOT / "archivos" / "UNI" / "INDICE_FICHAS.md").is_file())
         self.assertIn("--msvc=latest", build_script)
         for package in ("matplotlib", "openpyxl", "pdfplumber", "pypdfium2"):
             self.assertIn(f"--include-package={package}", build_script)
