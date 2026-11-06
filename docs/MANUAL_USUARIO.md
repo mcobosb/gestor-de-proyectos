@@ -159,6 +159,10 @@ Abre **Archivo → Configuración…** y completa:
   y los informes y se conserva en el JSON del proyecto. No puede estar vacío y
   no se utiliza como título predeterminado para nuevos proyectos.
 - Autoría, cargo o titulación, entidad o servicio.
+- Expediente de la plantilla. Puedes situar `{{expediente}}` y `{{título}}`
+  (también se admite `{{titulo}}`) en la cabecera o el pie de la plantilla ODT;
+  se sustituyen respectivamente por este valor y el título del proyecto en los
+  informes PDF y ODT.
 - Localidad y texto de firma o fecha.
 - Empresa constructora y responsable de la empresa constructora. En ambos
   informes de certificación aparecen el responsable, la empresa y el texto de

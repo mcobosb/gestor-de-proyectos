@@ -12,7 +12,7 @@ from zipfile import ZipFile
 from pypdf import PdfReader
 
 from budget_reports import ReportSettings
-from report_layout import DEFAULT_TEMPLATE_PATH, replace_footer_fields
+from report_layout import DEFAULT_TEMPLATE_PATH, replace_footer_fields, replace_template_fields
 from tools.pptp.document import number_headings, write_document
 
 
@@ -305,6 +305,23 @@ class PptpLayoutTests(unittest.TestCase):
         result = replace_footer_fields(footer, TITLE)
         self.assertEqual("".join(result.itertext()), f"{TITLE} / 1")
         self.assertIsNotNone(result.find(f".//{{{TEXT}}}page-number"))
+
+    def test_configured_template_fields_replace_fragmented_markers(self):
+        """Los marcadores configurables se sustituyen sin perder sus estilos."""
+        section = ET.fromstring(
+            f'<s:header xmlns:s="{STYLE}" xmlns:t="{TEXT}"><t:p>'
+            '<t:span>Expediente: {{expe</t:span>diente}} · '
+            '<t:span>{{tít</t:span>ulo}}</t:p></s:header>'
+        )
+        result = replace_template_fields(section, {
+            "{{expediente}}": "EXP-2026-001",
+            "{{título}}": "Reforma del mercado",
+            "{{titulo}}": "Reforma del mercado",
+        })
+        self.assertEqual(
+            "".join(result.itertext()),
+            "Expediente: EXP-2026-001 · Reforma del mercado",
+        )
 
     def test_missing_markers_do_not_add_footer_title_or_page_number(self):
         """La ausencia de un campo no se suple con texto o numeros adicionales."""

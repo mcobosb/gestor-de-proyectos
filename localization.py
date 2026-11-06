@@ -413,6 +413,7 @@ _TEXT = {
     "Aplicación": ("Application", "Application"),
     "Configuración de informes": ("Report settings", "Paramètres des rapports"),
     "Título del proyecto": ("Project title", "Titre du projet"),
+    "Expediente": ("Reference", "Référence"),
     "El título del proyecto no puede estar vacío.": (
         "The project title cannot be empty.",
         "Le titre du projet ne peut pas être vide.",
