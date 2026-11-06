@@ -553,6 +553,9 @@ El documento comienza con un índice de contenidos. Su profundidad se
 limita con **Niveles del índice (1–6)** en el primer
 paso del asistente: por defecto se muestran dos niveles. La opción se guarda
 con el proyecto, se aplica a PDF y ODT y no elimina subtítulos del cuerpo.
+Los párrafos se muestran justificados. Las secciones continúan sin saltos de
+página forzados: se permite dividir los párrafos entre páginas, manteniendo
+los títulos junto al inicio del texto. El índice inicial sí se separa del cuerpo.
 Todos los títulos y subtítulos aparecen en mayúsculas, con numeración jerárquica también para los
 niveles `###` y `####` de las fichas. El capítulo 4 se divide primero por los
 capítulos de dos dígitos de la base de precios de la Junta (`01`, `02`, …),

@@ -67,6 +67,8 @@ expresamente en la herramienta.
   Las fichas compartidas por varias partidas solo se incorporan una vez.
 - El PPTP comienza con un índice de contenidos. Los títulos y subtítulos se
   numeran jerárquicamente y se muestran en mayúsculas, también en el índice.
+  Los párrafos se justifican y las secciones fluyen sin saltos de página
+  forzados; solo se separa el índice inicial del cuerpo.
   En el primer paso, **Niveles del índice (1–6)** limita la profundidad del índice
   PDF y ODT (2 por defecto), sin quitar subtítulos del cuerpo. Se guarda con el proyecto.
   El capítulo 4 se agrupa por capítulo de dos dígitos de la base de precios

@@ -411,25 +411,44 @@ def write_document(
     title = "PLIEGO DE PRESCRIPCIONES TÉCNICAS PARTICULARES"
     project = variables["titulo_proyecto"]
     if settings.output_format == "odt":
-        from odt_reports import _new_report
+        from xml.etree import ElementTree as ET
+        from odt_reports import _new_report, _tag
 
         document = _new_report(title, project, settings, repeat_titles=False, footer_title=title)
+        for name, parent, heading in [
+            ("PPTPBody", "ReportBody", False),
+            *[(f"PPTPHeading{level}", f"Heading{level}", True) for level in range(1, 7)],
+        ]:
+            style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+                _tag("style:name"): name, _tag("style:family"): "paragraph",
+                _tag("style:parent-style-name"): parent,
+            })
+            ET.SubElement(style, _tag("style:paragraph-properties"), {
+                _tag("fo:text-align"): "start" if heading else "justify",
+                _tag("fo:break-before"): "auto", _tag("fo:break-after"): "auto",
+                _tag("fo:keep-with-next"): "always" if heading else "auto",
+                _tag("fo:keep-together"): "auto",
+                _tag("fo:orphans"): "2", _tag("fo:widows"): "2",
+            })
         document.table_of_contents(
             [(level, text) for level, text in blocks if level], max_level=toc_depth,
         )
         heading_index = 0
         for level, text in blocks:
             if level:
-                document.heading(text, level, bookmark=f"PPTPHeading{heading_index}")
+                document.heading(
+                    text, level, style=f"PPTPHeading{level}",
+                    bookmark=f"PPTPHeading{heading_index}",
+                )
                 heading_index += 1
             else:
-                document.paragraph(text)
+                document.paragraph(text, "PPTPBody")
         document.write(target)
     else:
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import ParagraphStyle
-        from reportlab.lib.enums import TA_LEFT
-        from reportlab.platypus import PageBreak, SimpleDocTemplate
+        from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
+        from reportlab.platypus import KeepTogether, PageBreak, SimpleDocTemplate
         from reportlab.platypus.doctemplate import LayoutError
         from reportlab.platypus.tableofcontents import TableOfContents
         from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
@@ -438,7 +457,7 @@ def write_document(
             template_path=settings.template_path, repeat_titles=False, footer_title=title,
         )
         body = ParagraphStyle("PPTPBody", parent=layout.normal, fontSize=10,
-                              leading=13, spaceAfter=6)
+                              leading=13, spaceAfter=6, alignment=TA_JUSTIFY)
         toc = TableOfContents()
         toc.levelStyles = [
             ParagraphStyle(
@@ -458,13 +477,32 @@ def write_document(
                 style = ParagraphStyle(
                     f"PPTPHeading{level}", parent=body, fontName=layout.bold_font,
                     fontSize=max(10, 15 - level), leading=max(13, 18 - level),
-                    spaceBefore=10, keepWithNext=True,
+                    spaceBefore=10, keepWithNext=True, alignment=TA_LEFT,
                 )
             paragraph = layout.text(text, style)
             if level:
                 paragraph._pptp_heading = (level - 1, text, f"PPTPHeading{heading_index}")
                 heading_index += 1
             story.append(paragraph)
+
+        class PptpKeepTogether(KeepTogether):
+            """Conserva los titulos con dos lineas, no con todo el parrafo siguiente."""
+
+            def wrap(self, available_width, available_height):
+                """Limita la reserva para permitir partir parrafos largos tras un titulo."""
+                size = super().wrap(available_width, available_height)
+                headings = self._content[:-1]
+                following = self._content[-1]
+                self._H0 = sum(
+                    heading.wrap(available_width, available_height)[1]
+                    + heading.getSpaceBefore() + heading.getSpaceAfter()
+                    for heading in headings
+                ) + min(
+                    following.wrap(available_width, available_height)[1],
+                    following.style.leading * 2,
+                )
+                self._maxHeight = self._H
+                return size
 
         class PptpDocTemplate(SimpleDocTemplate):
             """Recoge paginas reales de los epigrafes durante la maquetacion."""
@@ -482,6 +520,7 @@ def write_document(
             str(target), pagesize=A4, leftMargin=LEFT_MARGIN, rightMargin=RIGHT_MARGIN,
             topMargin=layout.top_margin(title, project), bottomMargin=layout.bottom_margin(),
             title=title, author=settings.author,
+            keepTogetherClass=PptpKeepTogether,
         )
 
         def header(canvas, doc) -> None:

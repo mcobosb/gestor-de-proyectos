@@ -25,6 +25,75 @@ TITLE = "PLIEGO DE PRESCRIPCIONES TÉCNICAS PARTICULARES"
 class PptpLayoutTests(unittest.TestCase):
     """Valida documentos reales y campos fragmentados entre estilos."""
 
+    def test_pdf_sections_continue_on_same_page_and_body_is_justified(self):
+        """No desplaza una seccion completa si caben el titulo y el inicio del parrafo."""
+        source = "# Inicio\n\n" + "\n\n".join(
+            f"Párrafo previo {index} con una línea de contenido." for index in range(14)
+        )
+        source += "\n\n# Continuación\n## Grupo\n### Ficha\n#### Definición\n\n"
+        source += "Contenido técnico para justificar y dividir entre páginas. " * 85
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "continuous.pdf"
+            write_document(source, target, {"titulo_proyecto": "Proyecto"}, ReportSettings())
+            pages = PdfReader(target).pages
+            body = pages[1].extract_text()
+            self.assertIn("Párrafo previo 13", body)
+            self.assertIn("2 CONTINUACIÓN", body)
+            self.assertIn("2.1.1.1 DEFINICIÓN", body)
+            self.assertIn("Contenido técnico", body)
+            commands = pages[1].get_contents().get_data()
+            self.assertRegex(commands, rb"[1-9]\d*(?:\.\d+)? Tw")
+
+    def test_odt_body_is_justified_and_sections_have_no_forced_page_breaks(self):
+        """El ODT mantiene flujo continuo y solo separa el indice del cuerpo."""
+        source = "# Inicio\n\n" + "\n\n".join(
+            f"Párrafo previo {index} con una línea de contenido." for index in range(14)
+        )
+        source += "\n\n# Continuación\n## Grupo\n### Ficha\n#### Definición\n\n"
+        source += "Contenido técnico para justificar y dividir entre páginas. " * 85
+        fo = "urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "continuous.odt"
+            write_document(
+                source, target, {"titulo_proyecto": "Proyecto"}, ReportSettings(output_format="odt"),
+            )
+            with ZipFile(target) as archive:
+                xml = ET.fromstring(archive.read("content.xml"))
+            styles = {
+                element.get(f"{{{STYLE}}}name"): element
+                for element in xml.findall(f".//{{{STYLE}}}style")
+            }
+            for name in ("PPTPBody", *(f"PPTPHeading{level}" for level in range(1, 7))):
+                properties = styles[name].find(f"{{{STYLE}}}paragraph-properties")
+                self.assertEqual(properties.get(f"{{{fo}}}text-align"), "justify" if name == "PPTPBody" else "start")
+                self.assertEqual(properties.get(f"{{{fo}}}break-before"), "auto")
+                self.assertEqual(properties.get(f"{{{fo}}}break-after"), "auto")
+                self.assertEqual(properties.get(f"{{{fo}}}keep-together"), "auto")
+            forced = [
+                properties for properties in xml.findall(f".//{{{STYLE}}}paragraph-properties")
+                if properties.get(f"{{{fo}}}break-before") == "page"
+                or properties.get(f"{{{fo}}}break-after") == "page"
+            ]
+            self.assertEqual(len(forced), 1)
+            soffice = shutil.which("soffice") or str(
+                Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
+                / "LibreOffice" / "program" / "soffice.exe"
+            )
+            if not Path(soffice).is_file():
+                self.skipTest("LibreOffice no disponible para validar el flujo ODT renderizado.")
+            subprocess.run(
+                [soffice, f"-env:UserInstallation={(root / 'profile').as_uri()}",
+                 "--headless", "--convert-to", "pdf", "--outdir", str(root), str(target)],
+                check=True, capture_output=True, timeout=90,
+            )
+            pages = PdfReader(root / "continuous.pdf").pages
+            body = " ".join(pages[1].extract_text().split())
+            self.assertIn("Párrafo previo 13", body)
+            self.assertIn("2 CONTINUACIÓN", body)
+            self.assertIn("2.1.1.1 DEFINICIÓN", body)
+            self.assertIn("Contenido técnico", body)
+
     def test_heading_numbering_uppercases_titles_and_is_idempotent(self):
         """Numera hasta el cuarto nivel sin cambiar los parrafos ni duplicar prefijos."""
         source = (
@@ -92,7 +161,7 @@ class PptpLayoutTests(unittest.TestCase):
                     self.assertEqual(entry.text, heading.text)
                     self.assertEqual(heading.text, heading.text.upper())
                     self.assertEqual(heading.get(f"{{{TEXT}}}outline-level"), str(level))
-                    self.assertEqual(heading.get(f"{{{TEXT}}}style-name"), f"Heading{level}")
+                    self.assertEqual(heading.get(f"{{{TEXT}}}style-name"), f"PPTPHeading{level}")
                     bookmark = heading.find(f"{{{TEXT}}}bookmark")
                     reference = entry.find(f"{{{TEXT}}}bookmark-ref")
                     self.assertEqual(reference.get(f"{{{TEXT}}}ref-name"), bookmark.get(f"{{{TEXT}}}name"))
