@@ -32,7 +32,7 @@ from tool_loader import discover_tools
 
 
 APPLICATION_NAME = "Gestor de Proyectos"
-APPLICATION_VERSION = "1.5.2"
+APPLICATION_VERSION = "1.5.3"
 APPLICATION_RELEASE_DATE = date(2026, 11, 2)
 REPOSITORY_URL = "https://github.com/mcobosb/gestor-de-proyectos"
 BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/mcobosb"

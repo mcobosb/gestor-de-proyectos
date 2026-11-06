@@ -269,6 +269,7 @@ class DistributionTests(unittest.TestCase):
         ):
             with self.subTest(module=module):
                 self.assertIn(f"--include-module={module}", build_script)
+        self.assertIn('$env:mplbackend = "agg"', build_script)
         self.assertIn("--module", build_script)
         self.assertIn("--nofollow-imports", build_script)
         self.assertIn('"tools"', build_script)

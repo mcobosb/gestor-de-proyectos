@@ -2,6 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $repositoryRoot = $PSScriptRoot
 Set-Location $repositoryRoot
+$env:MPLBACKEND = "Agg"
 
 $virtualEnvironmentPython = Join-Path $repositoryRoot ".venv\Scripts\python.exe"
 if (Test-Path $virtualEnvironmentPython) {
@@ -99,8 +100,8 @@ foreach ($tool in Get-ChildItem (Join-Path $repositoryRoot "tools") -Filter "*.p
     --windows-icon-from-ico=iconos\logo.ico `
     --company-name="Manuel Cobos Budia" `
     --product-name="Gestor de Proyectos" `
-    --file-version=1.5.2 `
-    --product-version=1.5.2 `
+    --file-version=1.5.3 `
+    --product-version=1.5.3 `
     --file-description="Gestión de presupuestos, planificación y certificaciones" `
     --output-dir=$nuitkaOutput `
     --output-filename=GestorDeProyectos.exe `
@@ -160,4 +161,4 @@ if ($LASTEXITCODE -ne 0) {
     throw "La creación del instalador con Inno Setup ha fallado."
 }
 
-Write-Host "Instalador creado en dist\GestorDeProyectos-Setup-1.5.2.exe"
+Write-Host "Instalador creado en dist\GestorDeProyectos-Setup-1.5.3.exe"

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.3
+
+### Corregido
+- El instalador fija el backend no interactivo Agg de Matplotlib para que la
+  generación de la figura de planificación funcione de forma estable desde la
+  aplicación distribuida.
+
 ## 1.5.2
 
 ### Corregido
