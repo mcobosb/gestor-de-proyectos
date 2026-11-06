@@ -204,7 +204,7 @@ class ZipLibraryTests(unittest.TestCase):
         self.assertIn("Proyecto sintético", source)
         self.assertIn("Texto técnico", source)
         self.assertIn("Norma sintética", source)
-        self.assertIn("## 4.1 CAPÍTULO 01 — BASE", source)
+        self.assertIn("## 4.1 BASE", source)
         self.assertIn("### 4.1.1 FICHA SINTÉTICA", source)
         self.assertNotIn("Otra ficha", source)
         self.assertNotIn("Indice legible", source)
@@ -212,8 +212,8 @@ class ZipLibraryTests(unittest.TestCase):
             row["capitulo"] = {"codigo": "01", "titulo": "Nombre del catálogo"}
         self.write_zip()
         source = compose(ZipLibrary(self.archive, self.docs), state, [])
-        self.assertIn("## 4.1 CAPÍTULO 01 — NOMBRE DEL CATÁLOGO", source)
-        self.assertNotIn("CAPÍTULO 01 — BASE", source)
+        self.assertIn("## 4.1 NOMBRE DEL CATÁLOGO", source)
+        self.assertNotIn("## 4.1 BASE", source)
         (self.docs / "03_description.md").unlink()
         with self.assertRaisesRegex(ValueError, "sección 03"):
             compose(library, state, [])

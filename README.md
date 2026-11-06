@@ -70,7 +70,8 @@ expresamente en la herramienta.
   En el primer paso, **Niveles del índice (1–6)** limita la profundidad del índice
   PDF y ODT (2 por defecto), sin quitar subtítulos del cuerpo. Se guarda con el proyecto.
   El capítulo 4 se agrupa por capítulo de dos dígitos de la base de precios
-  (`01`, `02`, …), con su código y título. Dentro de cada grupo, las fichas
+  (`01`, `02`, …), mostrando solo su nombre junto a la numeración del documento
+  (por ejemplo, `4.1 DEMOLICIONES Y TRABAJOS PREVIOS`). Dentro de cada grupo, las fichas
   completas se ordenan por código UNI, conservando definición, ejecución,
   medición y abono, sin modificar la biblioteca ni la selección guardada.
   Con dos niveles, el índice muestra los grupos; con tres, también las fichas.

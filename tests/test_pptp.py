@@ -251,7 +251,7 @@ class PptpTests(unittest.TestCase):
         self.assertIn("5 días naturales", source)
         self.assertIn("Reposición de servicios", source)
         self.assertEqual(source.count("### 4.1.1 " + sheet.title.upper()), 1)
-        self.assertIn("## 4.1 CAPÍTULO 01 — DEMOLICIONES Y TRABAJOS PREVIOS", source)
+        self.assertIn("## 4.1 DEMOLICIONES Y TRABAJOS PREVIOS", source)
         self.assertNotIn("## 4.2 ", source)
         self.assertIn(refs[0].text, source)
         self.assertNotIn(refs[1].text, source)
@@ -291,17 +291,18 @@ class PptpTests(unittest.TestCase):
                         self.assertIn(value, text)
                     self.assertNotIn("{{", text)
                     self.assertNotIn("NORMATIVA_UNI", text)
-                    self.assertIn("4.1 CAPÍTULO 01", text)
+                    self.assertIn("4.1 DEMOLICIONES Y TRABAJOS PREVIOS", text)
+                    self.assertNotIn("CAPÍTULO 01", text)
                     self.assertIn("4.1.1 " + self.catalog[0].title.upper(), text)
                     if output_format == "odt":
                         namespace = "urn:oasis:names:tc:opendocument:xmlns:text:1.0"
                         index = content.find(f".//{{{namespace}}}index-body")
                         index_text = "".join(index.itertext())
-                        self.assertIn("4.1 CAPÍTULO 01", index_text)
+                        self.assertIn("4.1 DEMOLICIONES Y TRABAJOS PREVIOS", index_text)
                         self.assertNotIn(self.catalog[0].title.upper(), index_text)
                     else:
                         index_text = reader.pages[0].extract_text()
-                        self.assertIn("4.1 CAPÍTULO 01", index_text)
+                        self.assertIn("4.1 DEMOLICIONES Y TRABAJOS PREVIOS", index_text)
                         self.assertNotIn(self.catalog[0].title.upper(), index_text)
 
     def test_sheets_are_sorted_by_uni_code_without_changing_saved_selection(self):
@@ -324,9 +325,9 @@ class PptpTests(unittest.TestCase):
         self.assertEqual(positions, sorted(positions))
         group_headings = [line for line in source.splitlines() if line.startswith("## 4.")]
         self.assertEqual(group_headings, [
-            "## 4.1 CAPÍTULO 01 — DEMOLICIONES Y TRABAJOS PREVIOS",
-            "## 4.2 CAPÍTULO 02 — ACONDICIONAMIENTO DE TERRENOS",
-            "## 4.3 CAPÍTULO 15 — URBANIZACIONES",
+            "## 4.1 DEMOLICIONES Y TRABAJOS PREVIOS",
+            "## 4.2 ACONDICIONAMIENTO DE TERRENOS",
+            "## 4.3 URBANIZACIONES",
         ])
         self.assertIn("#### 4.1.1.1 DEFINICIÓN", source)
         self.assertIn("#### 4.1.1.2 EJECUCIÓN EN OBRA", source)

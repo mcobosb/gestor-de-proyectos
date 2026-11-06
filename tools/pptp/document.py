@@ -343,7 +343,7 @@ def compose(root: Path | ZipLibrary, state: dict, regulations: list[Regulation])
             if not chapter_title:
                 folder = PurePosixPath(relative).parts[1]
                 chapter_title = folder.split("_", 1)[-1].replace("_", " ")
-            sections.append(f"## CAPÍTULO {chapter} — {chapter_title}")
+            sections.append(f"## {chapter_title}")
             previous_chapter = chapter
         source = (
             root.read_sheet(relative) if isinstance(root, ZipLibrary)

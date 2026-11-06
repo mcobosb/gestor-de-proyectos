@@ -556,11 +556,12 @@ con el proyecto, se aplica a PDF y ODT y no elimina subtítulos del cuerpo.
 Todos los títulos y subtítulos aparecen en mayúsculas, con numeración jerárquica también para los
 niveles `###` y `####` de las fichas. El capítulo 4 se divide primero por los
 capítulos de dos dígitos de la base de precios de la Junta (`01`, `02`, …),
-mostrando su código y título. Solo aparecen grupos con fichas seleccionadas.
+mostrando solo su nombre, sin el prefijo «CAPÍTULO 01», «CAPÍTULO 02», etc.
+Se conserva la numeración jerárquica del documento. Solo aparecen grupos con fichas seleccionadas.
 Dentro de cada grupo se incorporan las fichas completas ordenadas por código UNI,
 con sus apartados de definición o descripción, ejecución, medición y abono.
 No se añaden agrupaciones intermedias por letras ni se cambian la selección
-guardada o los documentos originales. Por ejemplo: `4.1 CAPÍTULO 01 …`,
+guardada o los documentos originales. Por ejemplo: `4.1 DEMOLICIONES Y TRABAJOS PREVIOS`,
 `4.1.1 ARCOS Y BÓVEDAS …`, `4.1.1.1 DEFINICIÓN`. Con dos niveles de índice
 se ven los grupos; con tres también las fichas, y con cuatro sus apartados.
 En PDF, el índice enlaza a las páginas calculadas
