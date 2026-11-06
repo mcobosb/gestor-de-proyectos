@@ -549,6 +549,23 @@ para los informes. Se ensamblan las secciones `01` a `04`, sustituyendo las
 variables; en la cuarta se incluyen las definiciones, ejecución y medición
 y abono de las fichas elegidas. Una ficha común a varias partidas aparece una vez.
 
+El documento comienza con un índice de contenidos. Todos los títulos y
+subtítulos aparecen en mayúsculas, con numeración jerárquica también para los
+niveles `###` y `####` de las fichas. En el capítulo 4, las fichas se ordenan por
+código UNI (por ejemplo, `01A` antes que `15P`), sin cambiar la selección guardada
+ni los documentos originales. En PDF, el índice enlaza a las páginas calculadas
+al generar. En ODT es un índice nativo: actualízalo desde Writer si cambia la
+paginación (botón derecho sobre el índice → **Actualizar índice**).
+
+La cabecera conserva los elementos de la plantilla, sin añadir los títulos del
+proyecto ni del pliego en cada página. En el pie, coloca `{{capítulo}}` o `{{capitulo}}` donde
+deba aparecer «PLIEGO DE PRESCRIPCIONES TÉCNICAS PARTICULARES» y `{no_pagina}`
+donde deba aparecer el número de página. También se admite `{{no_pagina}}`.
+En ODT, el número es un campo automático que se actualiza al paginar el documento.
+Los marcadores pueden estar en párrafos o en celdas de una tabla del pie.
+Solo se rellenan los marcadores que existan en la plantilla: si falta el del
+título o el de la página, no se añade ese elemento por separado.
+
 Al reabrir el proyecto se conservan las asignaciones, los checks y el resumen;
 el plazo se actualiza desde la planificación si está disponible. Cancelar
 antes de generar no aplica la revisión. Si el presupuesto cambia mientras

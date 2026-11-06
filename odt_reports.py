@@ -94,13 +94,87 @@ class _OdtReport:
             bold_rows=(0,), bold_text_style="ChapterTitle", chapter=True,
         )
 
-    def heading(self, text: str, level: int = 2, style: str | None = None) -> None:
+    def heading(
+        self, text: str, level: int = 2, style: str | None = None, *,
+        bookmark: str | None = None,
+    ) -> None:
         """Añade un encabezado con nivel jerárquico y estilo semántico."""
         element = ET.SubElement(self.body, _tag("text:h"), {
-            _tag("text:style-name"): style or f"Heading{min(level, 3)}",
+            _tag("text:style-name"): style or f"Heading{min(level, 6)}",
             _tag("text:outline-level"): str(level),
         })
         element.text = str(text)
+        if bookmark is not None:
+            ET.SubElement(element, _tag("text:bookmark"), {_tag("text:name"): bookmark})
+
+    def table_of_contents(self, headings: list[tuple[int, str]]) -> None:
+        """Inserta un indice ODF actualizable con enlaces a los epigrafes del cuerpo."""
+        toc = ET.SubElement(self.body, _tag("text:table-of-content"), {
+            _tag("text:name"): "PPTPContents",
+            _tag("text:protected"): "false",
+        })
+        source = ET.SubElement(toc, _tag("text:table-of-content-source"), {
+            _tag("text:outline-level"): "6",
+            _tag("text:use-outline-level"): "true",
+        })
+        title = ET.SubElement(source, _tag("text:index-title-template"), {
+            _tag("text:style-name"): "ReportTitle",
+        })
+        title.text = "ÍNDICE"
+        for level in range(1, 7):
+            entry = ET.SubElement(source, _tag("text:table-of-content-entry-template"), {
+                _tag("text:outline-level"): str(level),
+                _tag("text:style-name"): f"PPTPContents{level}",
+            })
+            ET.SubElement(entry, _tag("text:index-entry-link-start"))
+            ET.SubElement(entry, _tag("text:index-entry-text"))
+            ET.SubElement(entry, _tag("text:index-entry-tab-stop"), {
+                _tag("style:type"): "right", _tag("style:leader-char"): ".",
+            })
+            ET.SubElement(entry, _tag("text:index-entry-page-number"))
+            ET.SubElement(entry, _tag("text:index-entry-link-end"))
+        body = ET.SubElement(toc, _tag("text:index-body"))
+        title = ET.SubElement(body, _tag("text:index-title"), {
+            _tag("text:name"): "PPTPContentsTitle",
+        })
+        ET.SubElement(title, _tag("text:p"), {
+            _tag("text:style-name"): "ReportTitle",
+        }).text = "ÍNDICE"
+        for index, (level, text) in enumerate(headings):
+            style_name = f"PPTPContents{level}"
+            if not any(style.get(_tag("style:name")) == style_name for style in self.automatic_styles):
+                style = ET.SubElement(self.automatic_styles, _tag("style:style"), {
+                    _tag("style:name"): style_name, _tag("style:family"): "paragraph",
+                    _tag("style:parent-style-name"): "ReportBody",
+                })
+                properties = ET.SubElement(style, _tag("style:paragraph-properties"), {
+                    _tag("fo:margin-left"): f"{(level - 1) * 12}pt",
+                })
+                tabs = ET.SubElement(properties, _tag("style:tab-stops"))
+                ET.SubElement(tabs, _tag("style:tab-stop"), {
+                    _tag("style:position"): f"{CONTENT_WIDTH - (level - 1) * 12}pt",
+                    _tag("style:type"): "right", _tag("style:leader-char"): ".",
+                })
+            paragraph = ET.SubElement(body, _tag("text:p"), {
+                _tag("text:style-name"): style_name,
+            })
+            link = ET.SubElement(paragraph, _tag("text:a"), {
+                _tag("xlink:href"): f"#PPTPHeading{index}", _tag("xlink:type"): "simple",
+            })
+            link.text = text
+            ET.SubElement(link, _tag("text:tab"))
+            ET.SubElement(link, _tag("text:bookmark-ref"), {
+                _tag("text:ref-name"): f"PPTPHeading{index}",
+                _tag("text:reference-format"): "page",
+            }).text = "1"
+        style = ET.SubElement(self.automatic_styles, _tag("style:style"), {
+            _tag("style:name"): "PPTPContentsBreak", _tag("style:family"): "paragraph",
+            _tag("style:parent-style-name"): "ReportBody",
+        })
+        ET.SubElement(style, _tag("style:paragraph-properties"), {
+            _tag("fo:break-after"): "page",
+        })
+        self.paragraph("", "PPTPContentsBreak")
 
     def paragraph(self, text: str, style: str = "ReportBody") -> None:
         """Añade un párrafo con estilo reutilizable y conserva sus saltos de línea."""
@@ -283,7 +357,8 @@ class _OdtReport:
         self._paragraph_style(styles, "TableItemTitle")
         self._paragraph_style(styles, "Justification", size="9pt", after="0.04in")
         self._paragraph_style(styles, "ReportHeader")
-        for level, size in ((1, "16pt"), (2, "12pt"), (3, "10pt")):
+        for level, size in ((1, "16pt"), (2, "12pt"), (3, "10pt"),
+                            (4, "10pt"), (5, "10pt"), (6, "10pt")):
             self._paragraph_style(styles, f"Heading{level}", size=size, bold=True, before="0.12in")
         self._paragraph_style(styles, "TableHeader", size="8pt", bold=True)
         if self.layout:
@@ -485,20 +560,28 @@ class _OdtReport:
             })
         else:
             header = ET.SubElement(master_page, _tag("style:header"))
-        paragraph = ET.SubElement(header, _tag("text:p"), {
-            _tag("text:style-name"): "ReportTitle",
-        })
-        for index, line in enumerate(title.split("\n")):
-            if index:
-                ET.SubElement(paragraph, _tag("text:line-break"))
-            ET.SubElement(paragraph, _tag("text:span")).text = line
-        ET.SubElement(header, _tag("text:p"), {
-            _tag("text:style-name"): "ProjectTitle",
-        }).text = self.project_title
+        if self.layout is None or self.layout.repeat_titles:
+            paragraph = ET.SubElement(header, _tag("text:p"), {
+                _tag("text:style-name"): "ReportTitle",
+            })
+            for index, line in enumerate(title.split("\n")):
+                if index:
+                    ET.SubElement(paragraph, _tag("text:line-break"))
+                ET.SubElement(paragraph, _tag("text:span")).text = line
+            ET.SubElement(header, _tag("text:p"), {
+                _tag("text:style-name"): "ProjectTitle",
+            }).text = self.project_title
         if self.header_columns:
             self._header_table(header, styles)
         if self.template_footer is not None:
-            master_page.append(deepcopy(self.template_footer))
+            if self.layout is not None and self.layout.footer_title:
+                from report_layout import replace_footer_fields
+
+                master_page.append(replace_footer_fields(
+                    self.template_footer, self.layout.footer_title,
+                ))
+            else:
+                master_page.append(deepcopy(self.template_footer))
         elif self.footer:
             footer = ET.SubElement(master_page, _tag("style:footer"))
             paragraph = ET.SubElement(footer, _tag("text:p"), {
@@ -586,7 +669,10 @@ class _OdtReport:
         return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
-def _new_report(title: str, project_title: str, settings: ReportSettings, *, certification=False):
+def _new_report(
+    title: str, project_title: str, settings: ReportSettings, *, certification=False,
+    repeat_titles: bool = True, footer_title: str = "",
+):
     """Crea un documento y prepara la identidad visual correspondiente al informe."""
     from report_layout import (
         _read_report_template, _read_report_template_borders, _read_report_template_header,
@@ -603,7 +689,10 @@ def _new_report(title: str, project_title: str, settings: ReportSettings, *, cer
         template_header=template,
         template_footer=template["footer"],
         template_resources=template["resources"],
-        layout=ReportLayout(certification=certification, template_path=settings.template_path),
+        layout=ReportLayout(
+            certification=certification, template_path=settings.template_path,
+            repeat_titles=repeat_titles, footer_title=footer_title,
+        ),
     )
     document.template_borders = _read_report_template_borders(settings.template_path)
     return document

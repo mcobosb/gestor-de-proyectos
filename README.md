@@ -65,6 +65,16 @@ expresamente en la herramienta.
 - Al generar se guarda la selección en el JSON del proyecto y se emite PDF u ODT
   según la configuración, con su plantilla de cabecera y pie y las variables sustituidas.
   Las fichas compartidas por varias partidas solo se incorporan una vez.
+- El PPTP comienza con un índice de contenidos. Los títulos y subtítulos se
+  numeran jerárquicamente y se muestran en mayúsculas, también en el índice.
+  Las fichas del capítulo 4 se ordenan por código UNI (por ejemplo, `01A` antes
+  de `15P`), sin modificar la biblioteca ni la selección guardada.
+- El PPTP no repite los títulos del documento y del proyecto en la cabecera.
+  En el pie de la plantilla, `{{capítulo}}` (o `{{capitulo}}`) se sustituye por
+  «PLIEGO DE PRESCRIPCIONES TÉCNICAS PARTICULARES» y `{{no_pagina}}`
+  (o `{no_pagina}`) por el número de página (campo automático en ODT).
+  Solo se rellenan los marcadores presentes: no se añade título ni número si
+  falta su marcador. El índice ODT es editable y actualizable desde Writer.
 
 Los textos de `tools/pptp/BIBLIOTECA.zip` y `tools/pptp/docs` son material de trabajo: requieren revisión técnica y
 contractual antes de utilizar el pliego. El asistente no certifica vigencia normativa.

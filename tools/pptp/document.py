@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from html import escape
 import json
 from pathlib import Path, PurePosixPath
 import re
@@ -296,6 +297,20 @@ def compose(root: Path | ZipLibrary, state: dict, regulations: list[Regulation])
     chosen = list(dict.fromkeys(row["path"] for row in state["selections"] if row["selected"]))
     if not chosen:
         raise ValueError("Selecciona al menos una ficha para generar el PPTP.")
+    if isinstance(root, ZipLibrary):
+        unknown = [path for path in chosen if path not in root.entries]
+        if unknown:
+            raise ValueError(f"La ficha no figura en catalogo.json: {unknown[0]}")
+
+    def sheet_order(relative: str) -> tuple[str, str]:
+        """Ordena por clasificacion UNI y desempata variantes por su ruta estable."""
+        code = (
+            root.entries[relative].code if isinstance(root, ZipLibrary)
+            else directory_codes(Sheet("", "", relative))[-1]
+        )
+        return code, relative.casefold()
+
+    chosen.sort(key=sheet_order)
     sections = []
     docs = root.docs if isinstance(root, ZipLibrary) else root
     for prefix in ("01", "02", "03", "04"):
@@ -321,7 +336,26 @@ def compose(root: Path | ZipLibrary, state: dict, regulations: list[Regulation])
                                        else "#" * min(len(match[1]) + 1, 6) + " " + match[2]),
                         source, flags=re.MULTILINE)
         sections.append(source)
-    return substitute("\n\n".join(sections), state["variables"])
+    return number_headings(substitute("\n\n".join(sections), state["variables"]))
+
+
+def number_headings(source: str) -> str:
+    """Numera la jerarquia Markdown sin duplicar la numeracion del texto original."""
+    counters = [0] * 6
+    result = []
+    for line in source.splitlines():
+        match = re.match(r"^(#{1,6})\s+(.+)$", line)
+        if match:
+            level = len(match[1])
+            counters[level - 1] += 1
+            counters[level:] = [0] * (6 - level)
+            for parent in range(level - 1):
+                counters[parent] = max(1, counters[parent])
+            title = re.sub(r"^\d+(?:\.\d+)*\.?\s+", "", match[2]).strip().upper()
+            number = ".".join(str(value) for value in counters[:level])
+            line = f"{match[1]} {number} {title}"
+        result.append(line)
+    return "\n".join(result)
 
 
 def text_blocks(source: str) -> list[tuple[int, str]]:
@@ -352,30 +386,49 @@ def text_blocks(source: str) -> list[tuple[int, str]]:
 
 def write_document(source: str, target: Path, variables: dict[str, str], settings: ReportSettings) -> None:
     """Emite PDF u ODT con la misma plantilla de cabecera y pie del proyecto."""
-    blocks = text_blocks(source)
+    blocks = text_blocks(number_headings(source))
     title = "PLIEGO DE PRESCRIPCIONES TÉCNICAS PARTICULARES"
     project = variables["titulo_proyecto"]
     if settings.output_format == "odt":
         from odt_reports import _new_report
 
-        document = _new_report(title, project, settings)
+        document = _new_report(title, project, settings, repeat_titles=False, footer_title=title)
+        document.table_of_contents([(level, text) for level, text in blocks if level])
+        heading_index = 0
         for level, text in blocks:
             if level:
-                document.heading(text, level)
+                document.heading(text, level, bookmark=f"PPTPHeading{heading_index}")
+                heading_index += 1
             else:
                 document.paragraph(text)
         document.write(target)
     else:
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import ParagraphStyle
-        from reportlab.platypus import SimpleDocTemplate
+        from reportlab.lib.enums import TA_LEFT
+        from reportlab.platypus import PageBreak, SimpleDocTemplate
         from reportlab.platypus.doctemplate import LayoutError
+        from reportlab.platypus.tableofcontents import TableOfContents
         from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
 
-        layout = ReportLayout(template_path=settings.template_path)
+        layout = ReportLayout(
+            template_path=settings.template_path, repeat_titles=False, footer_title=title,
+        )
         body = ParagraphStyle("PPTPBody", parent=layout.normal, fontSize=10,
                               leading=13, spaceAfter=6)
-        story = []
+        toc = TableOfContents()
+        toc.levelStyles = [
+            ParagraphStyle(
+                f"PPTPContents{level}", parent=body, fontSize=10,
+                leading=13, leftIndent=12 * level, firstLineIndent=0,
+                rightIndent=24, spaceBefore=4 if level == 0 else 0,
+                alignment=TA_LEFT,
+            ) for level in range(6)
+        ]
+        story = [
+            layout.text("ÍNDICE", layout.title_style), toc, PageBreak(),
+        ]
+        heading_index = 0
         for level, text in blocks:
             style = body
             if level:
@@ -384,8 +437,24 @@ def write_document(source: str, target: Path, variables: dict[str, str], setting
                     fontSize=max(10, 15 - level), leading=max(13, 18 - level),
                     spaceBefore=10, keepWithNext=True,
                 )
-            story.append(layout.text(text, style))
-        document = SimpleDocTemplate(
+            paragraph = layout.text(text, style)
+            if level:
+                paragraph._pptp_heading = (level - 1, text, f"PPTPHeading{heading_index}")
+                heading_index += 1
+            story.append(paragraph)
+
+        class PptpDocTemplate(SimpleDocTemplate):
+            """Recoge paginas reales de los epigrafes durante la maquetacion."""
+
+            def afterFlowable(self, flowable) -> None:
+                """Publica destinos e indice para converger en varias pasadas."""
+                heading = getattr(flowable, "_pptp_heading", None)
+                if heading is not None:
+                    level, text, key = heading
+                    self.canv.bookmarkPage(key)
+                    self.notify("TOCEntry", (level, escape(text), self.page, key))
+
+        document = PptpDocTemplate(
             str(target), pagesize=A4, leftMargin=LEFT_MARGIN, rightMargin=RIGHT_MARGIN,
             topMargin=layout.top_margin(title, project), bottomMargin=layout.bottom_margin(),
             title=title, author=settings.author,
@@ -396,6 +465,6 @@ def write_document(source: str, target: Path, variables: dict[str, str], setting
             layout.header(canvas, doc, title, project)
 
         try:
-            document.build(story, onFirstPage=header, onLaterPages=header)
+            document.multiBuild(story, onFirstPage=header, onLaterPages=header)
         except LayoutError as exc:
             raise ValueError(f"No se pudo maquetar el PPTP: {exc}") from exc

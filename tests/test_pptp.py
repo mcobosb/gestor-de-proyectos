@@ -217,7 +217,7 @@ class PptpTests(unittest.TestCase):
         self.assertIn("12 meses", source)
         self.assertIn("5 días naturales", source)
         self.assertIn("Reposición de servicios", source)
-        self.assertEqual(source.count("## 4.1 " + sheet.title), 1)
+        self.assertEqual(source.count("## 4.1 " + sheet.title.upper()), 1)
         self.assertNotIn("## 4.2 ", source)
         self.assertIn(refs[0].text, source)
         self.assertNotIn(refs[1].text, source)
@@ -253,10 +253,31 @@ class PptpTests(unittest.TestCase):
                             self.assertTrue(any(name.startswith("Pictures/") for name in archive.namelist()))
                     for value in ("INTRODUCCIÓN", "DISPOSICIONES", "DESCRIPCIÓN DE LAS OBRAS",
                                   "MATERIALES", "Entidad de prueba", "12 meses", "5 días naturales",
-                                  "Ejecución en obra", "Medición y abono"):
+                                  "EJECUCIÓN EN OBRA", "MEDICIÓN Y ABONO"):
                         self.assertIn(value, text)
                     self.assertNotIn("{{", text)
                     self.assertNotIn("NORMATIVA_UNI", text)
+
+    def test_sheets_are_sorted_by_uni_code_without_changing_saved_selection(self):
+        """Ordena las fichas del capitulo cuatro por codigo, no por partida ni titulo."""
+        early = next(sheet for sheet in self.catalog if sheet.code.startswith("01A"))
+        late = next(sheet for sheet in self.catalog if sheet.code.startswith("15P"))
+        variants = [sheet for sheet in self.catalog if sheet.code == "02RR"][:2]
+        sheets = [late, variants[1], early, variants[0], late]
+        state = state_for([
+            Selection(index, "P" + str(index), "01#", "Prueba", sheet.path)
+            for index, sheet in enumerate(sheets)
+        ])
+        original = deepcopy(state)
+        source = compose(self.library, state, [])
+        ordered = sorted([early, late, *variants], key=lambda sheet: (sheet.code, sheet.path.casefold()))
+        positions = [
+            source.index(f"## 4.{index} {sheet.title.upper()}")
+            for index, sheet in enumerate(ordered, 1)
+        ]
+        self.assertEqual(positions, sorted(positions))
+        self.assertNotIn("## 4.5 ", source)
+        self.assertEqual(state, original)
 
     def test_markdown_preserves_structure_and_external_references(self):
         """No imprime comentarios internos ni enlaces locales rotos como URLs."""
@@ -293,7 +314,7 @@ class PptpTests(unittest.TestCase):
             reader = PdfReader(rendered)
             text = "\n".join(page.extract_text() or "" for page in reader.pages)
             for value in ("INTRODUCCIÓN", "DESCRIPCIÓN DE LAS OBRAS", "Entidad de prueba",
-                          "12 meses", "5 días naturales", "Medición y abono"):
+                          "12 meses", "5 días naturales", "MEDICIÓN Y ABONO"):
                 self.assertIn(value, text)
             self.assertGreater(len(reader.pages), 3)
 

@@ -429,8 +429,68 @@ def _read_report_template_borders(template_path: str = "") -> dict[str, dict[str
         raise ValueError(f"No se pudieron leer las líneas de la plantilla {path}: {exc}") from exc
 
 
+def replace_footer_fields(section, title: str):
+    """Sustituye campos del pie incluso fragmentados entre spans de la plantilla."""
+    from copy import deepcopy
+    import re
+    from xml.etree import ElementTree as ET
+
+    section = deepcopy(section)
+    text_ns = "urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+    for paragraph in section.iter(f"{{{text_ns}}}p"):
+        slots = []
+
+        def collect(element):
+            """Recoge texto y colas en su orden real de lectura XML."""
+            if element.text:
+                slots.append((element, "text", element.text))
+            for child in element:
+                collect(child)
+                if child.tail:
+                    slots.append((child, "tail", child.tail))
+
+        collect(paragraph)
+        source = "".join(value for _, _, value in slots)
+        matches = list(re.finditer(r"\{\{cap[ií]tulo\}\}|\{\{no_pagina\}\}|\{no_pagina\}", source))
+        for match in reversed(matches):
+            offset = 0
+            start_slot = None
+            for element, attribute, value in slots:
+                end = offset + len(value)
+                if offset <= match.start() < end:
+                    start_slot = (element, attribute, match.start() - offset)
+                overlap_start = max(0, match.start() - offset)
+                overlap_end = min(len(value), match.end() - offset)
+                if overlap_start < overlap_end:
+                    current = getattr(element, attribute) or ""
+                    setattr(element, attribute, current[:overlap_start] + current[overlap_end:])
+                offset = end
+            if start_slot is None:
+                continue
+            element, attribute, index = start_slot
+            current = getattr(element, attribute) or ""
+            if match.group() in {"{{capitulo}}", "{{capítulo}}"}:
+                setattr(element, attribute, current[:index] + title + current[index:])
+            else:
+                number = ET.Element(f"{{{text_ns}}}page-number", {
+                    f"{{{text_ns}}}select-page": "current",
+                })
+                number.text = "1"
+                number.tail = current[index:]
+                setattr(element, attribute, current[:index])
+                if attribute == "text":
+                    element.insert(0, number)
+                else:
+                    parent = next(parent for parent in paragraph.iter() if element in list(parent))
+                    parent.insert(list(parent).index(element) + 1, number)
+    return section
+
+
 class ReportLayout:
-    def __init__(self, *, certification: bool = False, template_path: str = ""):
+    def __init__(
+        self, *, certification: bool = False, template_path: str = "",
+        repeat_titles: bool = True, footer_title: str = "",
+    ):
         """Carga el logo y configura fuentes, sangrías y estilos del modelo elegido."""
         from reportlab.lib.enums import TA_CENTER, TA_RIGHT
         from reportlab.lib.styles import ParagraphStyle
@@ -482,6 +542,9 @@ class ReportLayout:
             "report-project", parent=self.bold, fontSize=8, leading=9,
         )
         self.certification = certification
+        self.repeat_titles = repeat_titles
+        self.footer_title = footer_title
+        self.footer_page = None
         (
             image_data, self.template_image_path, self.logo_width, self.logo_height,
             self.template_footer,
@@ -532,7 +595,8 @@ class ReportLayout:
                     leading=cell["font_size"] + 1,
                     alignment=alignment,
                 )
-                data_row.append(self.text(cell["text"], cell_style) if cell["text"] else "")
+                value = self._footer_value(cell["text"]) if self.footer_page is not None else cell["text"]
+                data_row.append(self.text(value, cell_style) if value else "")
                 style_row.append(cell)
             data.append(data_row)
             cell_styles.append(style_row)
@@ -703,6 +767,8 @@ class ReportLayout:
         """Reserva altura suficiente para títulos largos y cabeceras sin invadir el cuerpo."""
         from reportlab.lib.pagesizes import A4
 
+        if not self.repeat_titles:
+            return PAGE_MARGIN + self.header_logo_height + 12
         heading = self.text(title, self.title_style)
         _, height = heading.wrap(CONTENT_WIDTH, 1000)
         project = self.text(project_title, self.project_style)
@@ -735,7 +801,7 @@ class ReportLayout:
 
     def bottom_margin(self) -> float:
         """Reserva el pie dentro del margen exterior de 2,5 cm y separa el cuerpo."""
-        _, height = self.text(self.template_footer, self.normal).wrap(CONTENT_WIDTH - 20, 1000)
+        _, height = self.text(self._footer_value(self.template_footer), self.normal).wrap(CONTENT_WIDTH - 20, 1000)
         table_height = max((
             sum(template_table["row_heights"])
             for template_table in self.template_tables["footer"]
@@ -776,18 +842,20 @@ class ReportLayout:
                 width=graphic["width"], height=graphic["height"],
                 preserveAspectRatio=False, mask="auto",
             )
-        heading = self.text(title, self.title_style)
-        _, height = heading.wrap(CONTENT_WIDTH, 100)
-        heading.drawOn(canvas, LEFT_MARGIN, heading_y - height)
-        project = self.text(project_title, self.project_style)
-        _, project_height = project.wrap(CONTENT_WIDTH, 100)
-        project_y = heading_y - height - project_height - 2
-        project.drawOn(canvas, LEFT_MARGIN, project_y)
+        project_y = heading_y
+        if self.repeat_titles:
+            heading = self.text(title, self.title_style)
+            _, height = heading.wrap(CONTENT_WIDTH, 100)
+            heading.drawOn(canvas, LEFT_MARGIN, heading_y - height)
+            project = self.text(project_title, self.project_style)
+            _, project_height = project.wrap(CONTENT_WIDTH, 100)
+            project_y = heading_y - height - project_height - 2
+            project.drawOn(canvas, LEFT_MARGIN, project_y)
         if column_headers:
             block = self.table(column_headers, [], ratios)
             _, h = block.wrap(CONTENT_WIDTH, 100)
             block.drawOn(canvas, LEFT_MARGIN, project_y - h - 4)
-        else:
+        elif self.repeat_titles:
             canvas.setLineWidth(0.5)
             canvas.line(LEFT_MARGIN, project_y - 4, PAGE_WIDTH - RIGHT_MARGIN, project_y - 4)
         from reportlab.lib.styles import ParagraphStyle
@@ -795,7 +863,8 @@ class ReportLayout:
         footer_style = ParagraphStyle(
             "report-footer", parent=self.normal, fontSize=6, leading=7, alignment=1,
         )
-        footer_block = self.text(self.template_footer, footer_style)
+        self.footer_page = document.page if self.footer_title else None
+        footer_block = self.text(self._footer_value(self.template_footer), footer_style)
         _, footer_height = footer_block.wrap(CONTENT_WIDTH - 20, 1000)
         footer_block.drawOn(canvas, LEFT_MARGIN, PAGE_MARGIN)
         footer_tables = self._draw_template_tables(
@@ -817,8 +886,10 @@ class ReportLayout:
                 width=graphic["width"], height=graphic["height"],
                 preserveAspectRatio=False, mask="auto",
             )
-        canvas.setFont(self.regular_font, 6)
-        canvas.drawRightString(PAGE_WIDTH - RIGHT_MARGIN, PAGE_MARGIN + 1, str(document.page))
+        if not self.footer_title:
+            canvas.setFont(self.regular_font, 6)
+            canvas.drawRightString(PAGE_WIDTH - RIGHT_MARGIN, PAGE_MARGIN + 1, str(document.page))
+        self.footer_page = None
         for section, borders in self.template_borders.items():
             for edge, border in borders.items():
                 parts = border.split()
@@ -849,3 +920,13 @@ class ReportLayout:
                 else:
                     canvas.line(LEFT_MARGIN, y, PAGE_WIDTH - RIGHT_MARGIN, y)
         canvas.restoreState()
+
+    def _footer_value(self, value: str) -> str:
+        """Resuelve los campos del pie solo en documentos que lo solicitan."""
+        if not self.footer_title:
+            return value
+        return value.replace("{{capitulo}}", self.footer_title).replace(
+            "{{capítulo}}", self.footer_title,
+        ).replace(
+            "{{no_pagina}}", str(self.footer_page or 1),
+        ).replace("{no_pagina}", str(self.footer_page or 1))
