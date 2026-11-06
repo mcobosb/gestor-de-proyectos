@@ -10,6 +10,7 @@ from tkinter import ttk
 from typing import TYPE_CHECKING
 
 from localization import filedialog, localize_widget_tree, messagebox
+from .library import ZipLibrary
 from .document import (
     PENDING_DURATION, Selection, compose, directory_codes, initial_variables,
     load_catalog, load_regulations, normalized_code, propose, restore_state, write_document,
@@ -20,7 +21,8 @@ if TYPE_CHECKING:
 
 TOOL_LABEL = "PPTP"
 TOOL_ORDER = 35
-RESOURCE_ROOT = Path(__file__).resolve().parent / "archivos"
+LIBRARY_PATH = Path(__file__).resolve().parent / "BIBLIOTECA.zip"
+DOCS_ROOT = Path(__file__).resolve().parent / "docs"
 
 
 def restore_project_state(data: dict) -> dict:
@@ -47,7 +49,8 @@ class PptpWindow(tk.Toplevel):
 
     def __init__(self, master: tk.Misc, app: BudgetApp):
         """Lee catalogo y decisiones guardadas antes de construir el asistente."""
-        self.catalog = load_catalog(RESOURCE_ROOT)
+        self.library = ZipLibrary(LIBRARY_PATH, DOCS_ROOT)
+        self.catalog = load_catalog(self.library)
         self.sheets = {sheet.path: sheet for sheet in self.catalog}
         saved = restore_state(app.pptp_state)
         self.automatic, self.unmatched = propose(
@@ -150,7 +153,7 @@ class PptpWindow(tk.Toplevel):
                 levels = directory_codes(sheet)
                 code = normalized_code(row.code)
                 codes.add(code if row.automatic and code.startswith(levels[0]) else levels[-1])
-        self.regulations = load_regulations(RESOURCE_ROOT, codes)
+        self.regulations = load_regulations(self.library, codes)
         for ref in self.regulations:
             self.regulation_choices.setdefault(ref.id, ref.selected)
 
@@ -351,7 +354,7 @@ class PptpWindow(tk.Toplevel):
             "selections": [asdict(row) for row in [*self.automatic, *self.unmatched]],
             "regulations": self.regulation_choices,
         })
-        source = compose(RESOURCE_ROOT, state, self.regulations)
+        source = compose(self.library, state, self.regulations)
         extension = "." + self.app.report_settings.output_format
         target = filedialog.asksaveasfilename(
             parent=self, title="Generar PPTP", initialfile="PPTP" + extension,

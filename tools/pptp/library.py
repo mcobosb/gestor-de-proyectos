@@ -1,0 +1,164 @@
+"""Lectura directa de fichas catalogadas en ZIP, sin extraer archivos."""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from hashlib import sha256
+import json
+from pathlib import Path, PurePosixPath
+import re
+from zipfile import BadZipFile, ZipFile, ZipInfo
+
+
+MAX_RESOURCE_BYTES = 16 * 1024 * 1024
+
+
+def validate_relative(relative: str) -> PurePosixPath:
+    """Rechaza rutas externas o ambiguas incluso sin extraer el contenido."""
+    parts = PurePosixPath(relative)
+    if (not relative or "\\" in relative or parts.is_absolute()
+            or ".." in parts.parts or ":" in relative or "\x00" in relative
+            or parts.as_posix() != relative):
+        raise ValueError(f"Ruta de biblioteca no válida: {relative}")
+    return parts
+
+
+@dataclass(frozen=True)
+class CatalogEntry:
+    """Metadatos suficientes para buscar sin leer el contenido de cada ficha."""
+
+    identifier: str
+    code: str
+    title: str
+    path: str
+    digest: str
+    warning: str
+
+
+class ZipLibrary:
+    """Biblioteca de fichas comprimidas y plantillas generales externas."""
+
+    def __init__(self, archive: Path, docs: Path):
+        """Valida el catalogo y sus rutas sin descomprimir ni leer las fichas."""
+        self.archive = archive
+        self.docs = docs
+        self.entries: dict[str, CatalogEntry] = {}
+        self._signature = self._file_signature()
+        try:
+            with ZipFile(archive) as source:
+                self._members = {}
+                for member in source.infolist():
+                    name = member.filename.rstrip("/") if member.is_dir() else member.filename
+                    validate_relative(name)
+                    if name in self._members:
+                        raise ValueError(f"Entrada duplicada en la biblioteca: {name}")
+                    self._members[name] = member
+                catalogs = [
+                    name for name in self._members
+                    if PurePosixPath(name).name == "catalogo.json"
+                ]
+                if len(catalogs) != 1:
+                    raise ValueError("El ZIP debe contener un único catalogo.json.")
+                catalog_path = PurePosixPath(catalogs[0])
+                self._catalog_directory = catalog_path.parent
+                catalog = json.loads(self._read_member(source, self._members[catalogs[0]]))
+                if (not isinstance(catalog, dict)
+                        or catalog.get("formato") != "biblioteca-fichas-uni"
+                        or type(catalog.get("version_esquema")) is not int
+                        or catalog["version_esquema"] != 1
+                        or not isinstance(catalog.get("fichas"), list)):
+                    raise ValueError("El formato o la versión de catalogo.json no es compatible.")
+                rows = catalog["fichas"]
+                if (not rows or type(catalog.get("total_fichas")) is not int
+                        or catalog["total_fichas"] != len(rows)):
+                    raise ValueError("El total de fichas del catálogo no coincide con su contenido.")
+                index = catalog.get("indice")
+                if not isinstance(index, str):
+                    raise ValueError("El catálogo no declara su índice de lectura.")
+                self._catalog_member(index)
+                identifiers = set()
+                for row in rows:
+                    if not isinstance(row, dict) or any(
+                        not isinstance(row.get(key), str) or not row[key].strip()
+                        for key in ("id", "codigo_uni", "titulo", "archivo", "sha256")
+                    ):
+                        raise ValueError("El catálogo contiene una ficha incompleta.")
+                    code = row["codigo_uni"]
+                    if not re.fullmatch(r"\d{2}[A-Z]*", code):
+                        raise ValueError(f"Código UNI no válido: {code}")
+                    member = self._catalog_member(row["archivo"])
+                    if PurePosixPath(member).suffix.lower() != ".md":
+                        raise ValueError(f"La ficha no es Markdown: {member}")
+                    relative = "UNI/" + row["archivo"]
+                    levels = [
+                        part.split("_", 1)[0].upper()
+                        for part in PurePosixPath(relative).parts[1:-1]
+                    ]
+                    if (not levels or levels[-1] != code
+                            or any(not re.fullmatch(r"\d{2}[A-Z]*", level) for level in levels)
+                            or any(not child.startswith(parent) for parent, child in zip(levels, levels[1:]))):
+                        raise ValueError(f"Clasificación de ficha no válida: {relative}")
+                    if row["id"] in identifiers or relative in self.entries:
+                        raise ValueError(f"Ficha duplicada en el catálogo: {row['id']}")
+                    if not re.fullmatch(r"[a-fA-F0-9]{64}", row["sha256"]):
+                        raise ValueError(f"SHA256 no válido: {relative}")
+                    selection = row.get("seleccion", {})
+                    if not isinstance(selection, dict):
+                        raise ValueError(f"Datos de selección no válidos: {relative}")
+                    warning = (
+                        "Revisar operación, material y uso antes de incorporar la ficha."
+                        if selection.get("requiere_confirmacion") else ""
+                    )
+                    self.entries[relative] = CatalogEntry(
+                        row["id"], code, row["titulo"], relative, row["sha256"].lower(), warning,
+                    )
+                    identifiers.add(row["id"])
+        except (BadZipFile, RuntimeError, NotImplementedError, UnicodeError) as exc:
+            raise ValueError(f"No se pudo leer la biblioteca ZIP: {exc}") from exc
+
+    def _file_signature(self) -> tuple[int, int]:
+        """Detecta sustituciones de biblioteca mientras hay un asistente abierto."""
+        info = self.archive.stat()
+        return info.st_size, info.st_mtime_ns
+
+    def _catalog_member(self, relative: str) -> str:
+        """Comprueba que una ruta del catalogo apunta a un archivo del ZIP."""
+        validate_relative(relative)
+        name = (self._catalog_directory / relative).as_posix()
+        member = self._members.get(name)
+        if member is None or member.is_dir():
+            raise ValueError(f"No se encuentra el archivo del catálogo: {relative}")
+        if member.file_size > MAX_RESOURCE_BYTES or member.flag_bits & 1:
+            raise ValueError(f"Recurso demasiado grande o cifrado: {relative}")
+        return name
+
+    @staticmethod
+    def _read_member(source: ZipFile, member: ZipInfo) -> str:
+        """Limita la lectura y comprueba CRC y codificacion UTF-8 del recurso."""
+        if member.file_size > MAX_RESOURCE_BYTES or member.flag_bits & 1:
+            raise ValueError(f"Recurso demasiado grande o cifrado: {member.filename}")
+        with source.open(member) as handle:
+            content = handle.read(MAX_RESOURCE_BYTES + 1)
+        if len(content) > MAX_RESOURCE_BYTES:
+            raise ValueError(f"Recurso demasiado grande: {member.filename}")
+        return content.decode("utf-8-sig")
+
+    def read_sheet(self, relative: str) -> str:
+        """Lee solo una ficha seleccionada y verifica el hash declarado."""
+        entry = self.entries.get(relative)
+        if entry is None:
+            raise ValueError(f"La ficha no figura en catalogo.json: {relative}")
+        if self._file_signature() != self._signature:
+            raise ValueError("La biblioteca ha cambiado. Cierra y vuelve a abrir PPTP.")
+        name = self._catalog_member(relative.removeprefix("UNI/"))
+        try:
+            with ZipFile(self.archive) as source:
+                member = source.getinfo(name)
+                with source.open(member) as handle:
+                    content = handle.read(MAX_RESOURCE_BYTES + 1)
+                if len(content) > MAX_RESOURCE_BYTES:
+                    raise ValueError(f"Ficha demasiado grande: {relative}")
+        except (BadZipFile, RuntimeError, NotImplementedError) as exc:
+            raise ValueError(f"No se pudo leer la ficha {relative}: {exc}") from exc
+        if sha256(content).hexdigest() != entry.digest:
+            raise ValueError(f"La ficha no coincide con su SHA256: {relative}")
+        return content.decode("utf-8-sig")

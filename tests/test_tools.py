@@ -196,11 +196,12 @@ class ToolDiscoveryTests(ToolTestCase):
         """Los datos exclusivos no se buscan ya en la carpeta principal."""
         discover_tools(ROOT / "tools")
         from tools.safety_health import RELATIONSHIP_PATH
-        from tools.pptp import RESOURCE_ROOT
+        from tools.pptp import DOCS_ROOT, LIBRARY_PATH
 
         self.assertEqual(RELATIONSHIP_PATH.parent, ROOT / "tools" / "safety_health" / "datos")
         self.assertTrue(RELATIONSHIP_PATH.is_file())
-        self.assertEqual(RESOURCE_ROOT, ROOT / "tools" / "pptp" / "archivos")
+        self.assertEqual(LIBRARY_PATH, ROOT / "tools" / "pptp" / "BIBLIOTECA.zip")
+        self.assertEqual(DOCS_ROOT, ROOT / "tools" / "pptp" / "docs")
 
     def test_removing_package_hides_it_even_when_imported(self):
         """Retirar una carpeta completa elimina su entrada en el siguiente arranque."""
@@ -235,7 +236,7 @@ class ToolDiscoveryTests(ToolTestCase):
         self.assertEqual(errors, [])
         self.assertEqual([tool.name for tool in loaded], ["pptp"])
         package = sys.modules["tools.pptp"]
-        catalog = package.load_catalog(package.RESOURCE_ROOT)
+        catalog = package.load_catalog(self.directory / "pptp" / "archivos")
         self.assertEqual(len(catalog), 1)
         self.assertEqual(catalog[0].code, "01TR")
 

@@ -66,7 +66,7 @@ expresamente en la herramienta.
   según la configuración, con su plantilla de cabecera y pie y las variables sustituidas.
   Las fichas compartidas por varias partidas solo se incorporan una vez.
 
-Los textos de `tools/pptp/archivos` son material de trabajo: requieren revisión técnica y
+Los textos de `tools/pptp/BIBLIOTECA.zip` y `tools/pptp/docs` son material de trabajo: requieren revisión técnica y
 contractual antes de utilizar el pliego. El asistente no certifica vigencia normativa.
 
 ## 🚀 Release v1.1.0 — ¡Primeros pasos!
@@ -218,7 +218,7 @@ no abre una ventana, revisa la instalación de Python antes de iniciar la app.
 | [tools/rcd/](tools/rcd/) | Estimación, revisión y presupuesto de gestión de RCDs |
 | [tools/safety_health/](tools/safety_health/) | Seguridad y Salud y su matriz CSV en `datos/` |
 | [tools/planning/](tools/planning/) | Planificación, ventana, conversor XLSX y dibujo del Gantt |
-| [tools/pptp/](tools/pptp/) | Asistente PPTP, composición documental y catálogo en `archivos/` |
+| [tools/pptp/](tools/pptp/) | Asistente PPTP, biblioteca `BIBLIOTECA.zip` y secciones generales en `docs/` |
 | [tools/certifications/](tools/certifications/) | Previsiones y certificaciones mensuales |
 | [tools/invoicing/](tools/invoicing/) | Facturas PDF y matriz editable de costes por recurso |
 | [tools/_shared/](tools/_shared/) | Cálculo de plazos y marcas persistentes compartidos |
@@ -272,11 +272,25 @@ Los cálculos compartidos están en `tools/_shared/scheduling.py`, por lo que
 retirar la carpeta `planning` no impide utilizar Certificaciones ni PPTP.
 Conserva `tools/_shared` mientras quede alguna herramienta que la utilice.
 Los recursos exclusivos se resuelven desde la carpeta de su herramienta:
-`tools/safety_health/datos` y `tools/pptp/archivos`, respectivamente.
-Si conservas el catálogo PPTP de una instalación anterior, mueve el contenido
-de su carpeta `archivos` a `tools/pptp/archivos`, manteniendo sus subcarpetas.
-El catálogo debe incluir `UNI/INDICE_FICHAS.md`; si falta, PPTP avisa al abrirse
-y el instalador no se genera con recursos incompletos.
+`tools/safety_health/datos`, `tools/pptp/BIBLIOTECA.zip` y `tools/pptp/docs`.
+
+PPTP detecta `BIBLIOTECA.zip` al abrir su asistente, sin extraerlo ni necesitar
+una carpeta `archivos` en disco. El ZIP contiene un único `catalogo.json` con
+formato `biblioteca-fichas-uni`, `version_esquema: 1`, `total_fichas`, `indice`
+y la lista `fichas`. Cada ficha declara `id`, `codigo_uni`, `titulo`, `archivo`
+y `sha256`; las rutas son relativas a la carpeta interna del catálogo y usan
+`/`. Se conserva el árbol de carpetas UNI; los identificadores y las rutas de
+las fichas deben ser únicos, aunque varias compartan código UNI.
+
+La búsqueda usa el JSON, no recorre los textos Markdown ni interpreta el índice.
+`INDICE_FICHAS.md` permanece dentro del ZIP como índice de lectura para las
+personas. Solo al generar se leen las fichas seleccionadas, comprobando su
+SHA256. No se incorporan al pliego los documentos de origen del ZIP ni el índice.
+Si reemplazas el ZIP con PPTP abierto, cierra y vuelve a abrir el asistente.
+Los archivos de las secciones 01, 02, 03 y 04 se leen de `tools/pptp/docs`;
+la normativa propuesta procede de la sección 02 de esa carpeta.
+El programa informa de bibliotecas inválidas, fichas ausentes o modificadas y
+secciones que falten, sin generar documentos incompletos.
 
 En la distribución instalada, el script de compilación genera extensiones `.pyd`
 separadas, conserva la estructura de carpetas y copia los recursos de cada

@@ -281,7 +281,13 @@ class DistributionTests(unittest.TestCase):
         self.assertIn("destination = join-path $installedtools $relativepath", build_script)
         self.assertTrue((ROOT / "tools" / "safety_health" / "datos" /
                          "seguridad_salud_relaciones_bcca2023.csv").is_file())
-        self.assertTrue((ROOT / "tools" / "pptp" / "archivos" / "UNI" / "INDICE_FICHAS.md").is_file())
+        self.assertTrue((ROOT / "tools" / "pptp" / "BIBLIOTECA.zip").is_file())
+        from tools.pptp import DOCS_ROOT, LIBRARY_PATH
+        from tools.pptp.library import ZipLibrary
+
+        self.assertTrue(ZipLibrary(LIBRARY_PATH, DOCS_ROOT).entries)
+        for prefix in ("01", "02", "03", "04"):
+            self.assertTrue(list(DOCS_ROOT.glob(f"{prefix}*.md")))
         self.assertIn("--msvc=latest", build_script)
         for package in ("matplotlib", "openpyxl", "pdfplumber", "pypdfium2"):
             self.assertIn(f"--include-package={package}", build_script)

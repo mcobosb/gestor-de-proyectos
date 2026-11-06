@@ -8,6 +8,7 @@ import re
 from typing import TYPE_CHECKING
 import unicodedata
 from urllib.parse import unquote
+from .library import ZipLibrary
 
 if TYPE_CHECKING:
     from bc3_gui import BudgetApp, ProjectItem
@@ -64,8 +65,13 @@ def safe_path(root: Path, relative: str) -> Path:
     return path
 
 
-def load_catalog(root: Path) -> list[Sheet]:
+def load_catalog(root: Path | ZipLibrary) -> list[Sheet]:
     """Lee todas las opciones del indice y valida sus archivos asociados."""
+    if isinstance(root, ZipLibrary):
+        return [
+            Sheet(entry.code, entry.title, entry.path, entry.warning)
+            for entry in root.entries.values()
+        ]
     source = (root / "UNI" / "INDICE_FICHAS.md").read_text(encoding="utf-8-sig")
     result: dict[str, Sheet] = {}
     for line in source.splitlines():
@@ -202,9 +208,10 @@ def initial_variables(app: BudgetApp) -> tuple[dict[str, str], bool]:
     }, not bool(duration)
 
 
-def load_regulations(root: Path, codes: set[str]) -> list[Regulation]:
+def load_regulations(root: Path | ZipLibrary, codes: set[str]) -> list[Regulation]:
     """Filtra las referencias clasificadas por prefijos y conserva sus avisos."""
-    files = sorted(root.glob("02*.md"))
+    docs = root.docs if isinstance(root, ZipLibrary) else root
+    files = sorted(docs.glob("02*.md"))
     if not files:
         raise ValueError("Falta la sección 02 de disposiciones técnicas legales.")
     result: dict[str, Regulation] = {}
@@ -283,15 +290,16 @@ def substitute(source: str, variables: dict[str, str]) -> str:
     return result
 
 
-def compose(root: Path, state: dict, regulations: list[Regulation]) -> str:
+def compose(root: Path | ZipLibrary, state: dict, regulations: list[Regulation]) -> str:
     """Ensambla secciones y fichas unicas, con normativa revisada por el tecnico."""
     state = restore_state(state)
     chosen = list(dict.fromkeys(row["path"] for row in state["selections"] if row["selected"]))
     if not chosen:
         raise ValueError("Selecciona al menos una ficha para generar el PPTP.")
     sections = []
+    docs = root.docs if isinstance(root, ZipLibrary) else root
     for prefix in ("01", "02", "03", "04"):
-        files = sorted(root.glob(f"{prefix}*.md"))
+        files = sorted(docs.glob(f"{prefix}*.md"))
         if not files:
             raise ValueError(f"Falta la sección {prefix} del PPTP.")
         if prefix == "02":
@@ -304,7 +312,10 @@ def compose(root: Path, state: dict, regulations: list[Regulation]) -> str:
         else:
             sections.extend(path.read_text(encoding="utf-8-sig") for path in files)
     for number, relative in enumerate(chosen, 1):
-        source = safe_path(root, relative).read_text(encoding="utf-8-sig")
+        source = (
+            root.read_sheet(relative) if isinstance(root, ZipLibrary)
+            else safe_path(root, relative).read_text(encoding="utf-8-sig")
+        )
         source = re.sub(r"^(#{1,6}) (.*)$",
                         lambda match: ("## " + f"4.{number} " + match[2] if len(match[1]) == 1
                                        else "#" * min(len(match[1]) + 1, 6) + " " + match[2]),

@@ -68,12 +68,20 @@ $compiledTools = @()
 $toolsSource = Join-Path $repositoryRoot "tools"
 foreach ($requiredResource in @(
     "safety_health\datos\seguridad_salud_relaciones_bcca2023.csv",
-    "pptp\archivos\UNI\INDICE_FICHAS.md"
+    "pptp\BIBLIOTECA.zip",
+    "pptp\docs\01_Introduccion.md",
+    "pptp\docs\02_DisposicionesTecnicasLegalesAplicables.md",
+    "pptp\docs\03_DescripcionObras.md",
+    "pptp\docs\04_Materiales_Ejecucion_Medicion_Abono.md"
 )) {
     $resourcePath = Join-Path $toolsSource $requiredResource
     if (-not (Test-Path -LiteralPath $resourcePath -PathType Leaf)) {
         throw "Falta un recurso de las herramientas: $resourcePath"
     }
+}
+& $python -c "from pathlib import Path; import sys; from tools.pptp.library import ZipLibrary; root = Path(sys.argv[1]) / 'pptp'; library = ZipLibrary(root / 'BIBLIOTECA.zip', root / 'docs'); print('Fichas PPTP:', len(library.entries))" $toolsSource
+if ($LASTEXITCODE -ne 0) {
+    throw "La biblioteca comprimida PPTP no es válida."
 }
 foreach ($tool in Get-ChildItem $toolsSource -Filter "*.py" -Recurse -File) {
     $relativePath = $tool.FullName.Substring($toolsSource.Length + 1)

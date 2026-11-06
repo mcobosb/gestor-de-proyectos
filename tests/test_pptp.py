@@ -24,7 +24,8 @@ from tools.pptp.document import (
     load_regulations, planning_duration, propose, restore_state, safe_path,
     substitute, text_blocks, write_document,
 )
-from tools.pptp import PptpWindow, RESOURCE_ROOT, open_tool
+from tools.pptp import DOCS_ROOT, LIBRARY_PATH, PptpWindow, open_tool
+from tools.pptp.library import ZipLibrary
 
 
 def variables():
@@ -48,14 +49,15 @@ class PptpTests(unittest.TestCase):
 
     def setUp(self):
         """Lee las fichas distribuidas para cada prueba."""
-        self.catalog = load_catalog(RESOURCE_ROOT)
+        self.library = ZipLibrary(LIBRARY_PATH, DOCS_ROOT)
+        self.catalog = load_catalog(self.library)
 
     def test_index_decodes_unicode_paths_and_keeps_distinct_variants(self):
         """Las fichas del mismo codigo no se confunden por clasificacion."""
-        self.assertEqual(len(self.catalog), 104)
+        self.assertEqual(len(self.catalog), 684)
         matches = [sheet for sheet in self.catalog if sheet.code == "01TR"]
         self.assertEqual(len(matches), 1)
-        self.assertTrue(safe_path(RESOURCE_ROOT, matches[0].path).is_file())
+        self.assertTrue(bool(self.library.read_sheet(matches[0].path)))
         self.assertIn("Ó", matches[0].path)
         self.assertGreater(len([sheet for sheet in self.catalog if sheet.code == "02RR"]), 1)
 
@@ -126,7 +128,8 @@ class PptpTests(unittest.TestCase):
         automatic, manual = propose(items, {}, self.catalog, {})
         self.assertEqual({row.code for row in automatic}, {"P1"})
         self.assertEqual({next(sheet.code for sheet in self.catalog if sheet.path == row.path)
-                          for row in automatic}, {"01TR", "01TV"})
+                          for row in automatic},
+                         {sheet.code for sheet in self.catalog if sheet.code.startswith("01T")})
         self.assertEqual([row.code for row in manual], ["P2"])
 
     def test_invalid_state_and_paths_are_rejected(self):
@@ -144,13 +147,13 @@ class PptpTests(unittest.TestCase):
         for relative in ("../fuera.md", "UNI/../../fuera.md", "C:/fuera.md", r"C:\fuera.md",
                          "/fuera.md", "UNI/ficha.txt"):
             with self.subTest(relative=relative), self.assertRaises(ValueError):
-                safe_path(RESOURCE_ROOT, relative)
+                safe_path(Path.cwd(), relative)
         with tempfile.TemporaryDirectory() as folder, self.assertRaises((OSError, ValueError)):
             load_catalog(Path(folder))
 
     def test_regulations_are_filtered_deduplicated_and_review_is_unchecked(self):
         """Incluye prefijos y normas comunes sin dar por validas referencias dudosas."""
-        refs = load_regulations(RESOURCE_ROOT, {"01TR001"})
+        refs = load_regulations(self.library, {"01TR001"})
         self.assertEqual(len({ref.id for ref in refs}), len(refs))
         self.assertTrue(any("01" in ref.codes for ref in refs))
         self.assertTrue(any("*" in ref.codes for ref in refs))
@@ -160,7 +163,7 @@ class PptpTests(unittest.TestCase):
         self.assertTrue(all("*" in ref.codes or any("01TR001".startswith(code)
                                                   or code.startswith("01TR001") for code in ref.codes)
                             for ref in refs))
-        aggregate = load_regulations(RESOURCE_ROOT, {"15S"})
+        aggregate = load_regulations(self.library, {"15S"})
         self.assertTrue(any("15SH" in ref.codes for ref in aggregate))
 
     def test_planning_duration_uses_saved_calendar_holidays_and_sequence(self):
@@ -205,9 +208,9 @@ class PptpTests(unittest.TestCase):
         rows = [Selection(0, "01TR001", "01#", "Uno", sheet.path),
                 Selection(1, "01TR002", "01#", "Dos", sheet.path)]
         state = state_for(rows)
-        refs = load_regulations(RESOURCE_ROOT, {"01TR001"})
+        refs = load_regulations(self.library, {"01TR001"})
         state["regulations"] = {ref.id: index == 0 for index, ref in enumerate(refs)}
-        source = compose(RESOURCE_ROOT, state, refs)
+        source = compose(self.library, state, refs)
         self.assertNotIn("{{", source)
         self.assertIn(variables()["titulo_proyecto"], source)
         self.assertIn(variables()["entidad"], source)
@@ -218,19 +221,19 @@ class PptpTests(unittest.TestCase):
         self.assertNotIn("## 4.2 ", source)
         self.assertIn(refs[0].text, source)
         self.assertNotIn(refs[1].text, source)
-        self.assertIn("## Ejecución", safe_path(RESOURCE_ROOT, sheet.path).read_text(encoding="utf-8"))
+        self.assertIn("## Ejecución", self.library.read_sheet(sheet.path))
         with self.assertRaises(ValueError):
             substitute("{{variable_desconocida}}", variables())
         with self.assertRaises(ValueError):
             substitute("{{plazo_ejecucion}}", {**variables(), "plazo_ejecucion": PENDING_DURATION})
         rows[0].selected = rows[1].selected = False
         with self.assertRaises(ValueError):
-            compose(RESOURCE_ROOT, state_for(rows), refs)
+            compose(self.library, state_for(rows), refs)
 
     def test_pdf_and_editable_odt_contain_sections_variables_and_template(self):
         """Verifica contenido real de ambos formatos, no solo su existencia."""
         row = Selection(0, "01TR001", "01#", "Servicios", self.catalog[0].path)
-        source = compose(RESOURCE_ROOT, state_for([row]), load_regulations(RESOURCE_ROOT, {"01TR001"}))
+        source = compose(self.library, state_for([row]), load_regulations(self.library, {"01TR001"}))
         with tempfile.TemporaryDirectory() as folder:
             for output_format in ("pdf", "odt"):
                 with self.subTest(output_format=output_format):
@@ -275,7 +278,7 @@ class PptpTests(unittest.TestCase):
         if not Path(soffice).is_file():
             self.skipTest("LibreOffice no disponible para validar el ODT renderizado.")
         row = Selection(0, "01TR001", "01#", "Servicios", self.catalog[0].path)
-        source = compose(RESOURCE_ROOT, state_for([row]), load_regulations(RESOURCE_ROOT, {"01TR001"}))
+        source = compose(self.library, state_for([row]), load_regulations(self.library, {"01TR001"}))
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             editable = root / "PPTP.odt"
@@ -347,7 +350,7 @@ class PptpWindowTests(unittest.TestCase):
         self.root.update_idletasks()
         self.assertIsNotNone(window.editor)
         choices = window.editor.cget("values")
-        self.assertEqual(len(choices), 104)
+        self.assertEqual(len(choices), 684)
         target_index = next(index for index, sheet in enumerate(window.catalog) if sheet.code == "15SH")
         window.editor.current(target_index)
         window.editor.event_generate("<<ComboboxSelected>>")
