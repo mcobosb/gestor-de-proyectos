@@ -2,46 +2,53 @@
 
 ## 1.1   OBJETO DE ESTE PLIEGO
 
-El presente Pliego de Prescripciones Técnicas Particulares tiene por objeto definir las obras, fijar las condiciones técnicas y económicas de los materiales y su ejecución, así como las condiciones generales que han de regir en la ejecución de las obras de Urbanización del {{titulo_proyecto}}.
-El presente Pliego de Prescripciones Técnicas Particulares regirá en unión con las disposiciones que, con carácter general y particular, se indican en el artículo 1.4. de este Capítulo. Dada la singularidad de la obra que nos ocupa, el presente pliego regirá en las condiciones generales de urbanización.
+El presente Pliego de Prescripciones Técnicas Particulares (PPTP) tiene por objeto definir las obras, fijar las condiciones técnicas y económicas de los materiales y su ejecución, así como el control, medición, valoración, recepción y conservación de las obras comprendidas en el proyecto titulado: {{titulo_proyecto}}.
+El presente Pliego regirá en unión con las disposiciones contenidas en la legislación sobre contratación del sector público (Ley 9/2017, de Contratos del Sector Público) y demás normativa técnica, estatal, autonómica o local aplicable.
 
 ## 1.2   DOCUMENTOS QUE DEFINEN LAS OBRAS Y EL PROYECTO
 
-Los documentos, tanto de la obra, como otros complementarios, que se entreguen al Contratista pueden tener un valor contractual o meramente informativo.
+Los documentos que integran el proyecto técnico se clasifican según su carácter contractual e informativo a los efectos de su exigibilidad durante la ejecución de las obras.
 
 ### 1.2.1 DOCUMENTOS CONTRACTUALES
 
-Los documentos que quedan incorporados al Contrato como documentos contractuales, son los siguientes:
+Tienen carácter contractual y vinculan formalmente a las partes desde la firma del contrato los siguientes documentos:
 
-* Documento I. Memoria y Anejos.
-* Documento II. Planos.
-* Documento III. Pliego de Condiciones.
-* Documento IV. Presupuesto.
+    * Documento I. Memoria y Anejos (en lo referente a la descripción técnica y justificativa de las soluciones).
+    * Documento II. Planos.
+    * Documento III. Pliego de Prescipciones Técnicas Particulares.
+    * Documento IV. Presupuesto (cuadro de precios unitarios, cuadro de precios n.º 2 y presupuesto de ejecución material).
 
-La inclusión en el contrato de las cubicaciones y mediciones no implica necesariamente su exactitud respecto a la realidad.
-Aparte de la definición en los documentos expresados, el Director de las obras podrá modificar discrecionalmente, en general, todos los elementos que intervienen en la obra.
-Las obras descritas, corresponden a los datos taquimétricos del terreno, utilizados para la redacción del proyecto, pero si el Director de las obras, vista la confrontación del replanteo lo estima preciso, podrá modificar dichas obras en sus longitudes.
-Salvo las variaciones por escrito que disponga el director de las obras, las dimensiones habrán de ajustarse en todo a las marcadas en los planos, pudiéndose admitir en casos justificados alguna diferencia DOCUMENTOS QUE DEFINEN LAS OBRAS.
+En caso de contradicción o discrepancia entre los documentos contractuales, el orden de prevalencia técnica será el siguiente (salvo que en el Pliego de Cláusulas Administrativas Particulares se disponga expresamente otro distinto): Planos, Pliego de Prescripciones Técnicas Particulares, Cuadro de Precios y Memoria.
+
+Las dimensiones, cotas y trazados habrán de ajustarse estrictamente a lo determinado en los planos del proyecto. Cualquier ajuste técnico puntual requerido durante la comprobación del replanteo o el desarrollo de la obra deberá ser aprobado por la Dirección de Obra conforme a las facultades que le otorga la normativa vigente y, en su caso, tramitado de acuerdo con el régimen de modificaciones contractuales previsto en los artículos 203 y siguientes de la Ley 9/2017 (LCSP).
 
 ### 1.2.2 DOCUMENTOS INFORMATIVOS
 
-Los datos sobre procedencia de materiales, ensayos, condiciones locales, de maquinaria, de programación, de condiciones climáticas, de justificación de precios y, en general, todos los que hayan podido incluirse en la Memoria del presente Pliego, son documentos informativos para {{entidad}}. Por lo tanto, el Contratista podrá tener conocimiento de ellos, si así lo estima adecuado la citada Empresa, pero en ningún modo podrá basarse en cualquier error u omisión en los mismos, como argumento para la obtención de modificaciones o reformados de precios o de obra.
-Se destaca especialmente el estudio de la justificación de precios de las distintas unidades de obra, que ha sido realizado para unos costos y rendimientos considerados como normales, dada la gran variedad y disparidad de medios de maquinaria y personal de que puede disponer cada Contratista y, consecuentemente, no es vinculante. Se entiende por lo tanto que éste, por el simple hecho de presentar la oferta, ha estudiado globalmente los resultados de esta justificación, o bien ha realizado la suya propia, que se reflejará únicamente en la baja o alza global de su oferta, sobre el presupuesto.
+Tendrán carácter meramente informativo para {{entidad}} y para los licitadores los siguientes apartados:
 
-## 1.3 REPRESENTANTES DEL AYTO. DE LUCENA Y DEL CONTRATISTA
+    * Los estudios complementarios sobre procedencia de materiales, ensayos previos de campo o laboratorio.
+    * Los datos sobre condiciones locales, servicios afectados conocidos, maquinaria, climatología y programación estimativa.
+    * La justificación de precios y descomposición de precios unitarios del proyecto.
 
-{{entidad}} nombrará en su representación a un Técnico, que estará encargado directamente de la dirección, control y vigilancia de las obras de este Contrato, cuyo objeto se detalla en el artículo 3 de este Pliego.
-El Contratista de las mismas está obligado a prestar su máxima Colaboración al Dirección Técnica, para el normal cumplimiento de las funciones a éste encomendadas.
-Una vez adjudicadas definitivamente las obras, el Contratista designará a un Técnico que asuma la dirección de los trabajos que se ejecuten y que actúe como representante suyo ante {{entidad}}, a todos los efectos que se requieran durante la ejecución de las mismas.
+En consecuencia, los licitadores no podrán alegar error u omisión en dichos documentos informativos como justificación para solicitar modificaciones del contrato, precios contradictorios o revisiones de la oferta económica presentada.
 
-## 1.4 CONTRADICCIONES, OMISIONES Y ERRORES
+Se destaca expresamente que la justificación de precios del proyecto ha sido elaborada tomando como referencia rendimientos y costes medios del sector. Se entiende que el contratista, al presentar su proposición, ha estudiado de forma global y bajo su responsabilidad las condiciones de la obra, reflejando sus propios rendimientos, medios y costes exclusivamente a través de la baja o alza global de su oferta sobre el Presupuesto de Licitación.
 
-### 1.4.1 CONFRONTACIÓN DE PLANOS Y MEDIDAS
+## 1.3 ALCANCE TÉCNICO Y ECONÓMICO DEL PLIEGO
 
-El Contratista deberá confrontar inmediatamente después de recibidos todos los planos que le hayan sido facilitados y deberá informar prontamente al Dirección Técnica sobre cualquier contradicción en los mismos.
-Las cotas de los planos deberán en general, preferirse a las medidas de escala. Los planos a mayor escala serán preferidos a los de menor escala.
-Una vez efectuado el replanteo por parte del Contratista, este deberá de ser comprobado por la Dirección Técnica, dando éste su autorización para el comienzo de las mismas.
-En aquellas de escasa entidad, el Contratista deberá confrontar los planos y comprobar las cotas antes de comenzar la obra y será responsable por cualquier error que hubiera podido evitar de haberlo hecho.
+Las especificaciones relativas a la calidad de los materiales, la forma de ejecutar las distintas unidades de obra y, en general, todas las disposiciones del presente Pliego y de los Planos se considerarán implícitamente incluidas en los precios unitarios del Cuadro de Precios n.º 1 del contrato, formando parte integrante de dichos precios aun cuando no figuren detalladas de forma explícita en los epígrafes o descripciones resumidas de los mismos.
+
+En consecuencia, el Contratista no podrá alegar la falta de mención expresa de un requisito técnico en el título o descripción abreviada de una unidad de obra como justificación para solicitar un abono adicional, considerándose que la propuesta económica presentada cubre la totalidad de los costes necesarios para la perfecta ejecución y entrega de las obras.
+
+## 1.4 CONTRADICCIONES, OMISIONES Y MODIFICACIONES
+
+### 1.4.1 PREVALENCIA ENTRE DOCUMENTOS
+
+Los documentos que componen el Proyecto se complementan entre sí para definir la totalidad de los trabajos. En caso de surgir discrepancias no previstas entre ellos, el orden de preferencia técnica establece que los Planos prevalecerán sobre el resto en todo lo relativo a cotas, geometría y dimensionamiento, teniendo las cotas expresadas preferencia sobre la medición a escala y los planos de detalle sobre los generales. Por su parte, el Pliego de Prescripciones Técnicas Particulares regulará con carácter prioritario la calidad de los materiales, los procedimientos de ejecución, el control técnico y los criterios de medición, mientras que el Cuadro de Precios n.º 1 ostentará la máxima jerarquía para fijar la denominación formal y el valor económico de cada unidad de obra.
+
+### 1.4.2 VERIFICACIÓN DE LOS PLANOS, REPLANTEO Y DETALLES
+
+El Contratista tiene la obligación de examinar toda la documentación técnica inmediatamente después de su recepción y notificar sin demora a la Dirección de Obra cualquier error o divergencia detectada. El inicio efectivo de los trabajos quedará supeditado a la comprobación del replanteo sobre el terreno y a la posterior firma del Acta correspondiente autorizada por la Dirección de Obra. Asimismo, cualquier plano complementario o de detalle que sea necesario elaborar durante el transcurso de las obras requerirá la aprobación previa y por escrito de la Dirección Técnica para poder ejecutarse.
 
 ### 1.4.2 CONTRADICCIONES, OMISIONES O ERRORES EN LOS DOCUMENTOS
 
@@ -49,528 +56,409 @@ Lo mencionado en este Pliego de Prescripciones Técnicas y omitido en los Planos
 Los documentos del Contrato definidos como "Informativos" no podrán dar lugar a contradicciones u omisiones.
 En general corresponde a la Dirección Técnica de Obra resolver las contradicciones y omisiones del Contrato, resoluciones que deberán ser acatadas por el Contratista.
 
-### 1.4.3 CAMBIOS AL CONTRATO
+### 1.4.3 OMISIONS TÉCNICAS Y MODIFICACIONES CONTRACTUALES
 
-El emplazamiento, forma y dimensiones de las obras del Contrato, podrán modificarse durante la construcción de las mismas, principalmente para adaptarlas a las características del terreno que aparezca al efectuar las excavaciones y a los resultados del replanteo definitivo.
-Estas modificaciones se harán tan sólo mediante orden por escrito de la Dirección Técnica y serán de obligado cumplimiento por parte del Contratista, dentro de lo que, a este respecto, dispone el P.C.A.G.
+Lo reflejado en este Pliego y omitido en los Planos, o viceversa, se ejecutará como si constase expresamente en ambos documentos. La omisión de pequeños detalles constructivos indispensables según la buena práctica del oficio no eximirá al Contratista de su correcta ejecución conforme a las instrucciones de la Dirección de Obra. Finalmente, cualquier variación en las dimensiones, trazado o características de las obras derivada del estado real del terreno requerirá orden escrita de la Dirección de Obra y su tramitación administrativa se ajustará estrictamente al régimen de modificaciones previsto en los artículos 203 a 207 de la Ley de Contratos del Sector Público.
 
-### 1.4.4 PLANOS DE DETALLE
+## 1.5 RELACIONES OPERATIVAS Y RESPONSABILIDADES
 
-Todos los planos de detalles preparados durante la ejecución de las obras, deberán ser aprobados por la Dirección Técnica, sin cuyo requisito no podrán ejecutarse los trabajos correspondientes.
+### 1.5.1 REPRESENTANTES DE LAS PARTES
 
-### 1.4.5 COMPATIBILIDAD Y RELACIÓN ENTRE DOCUMENTOS
+{{entidad}} designará formalmente a un Técnico Municipal como Director de las Obras, quien asumirá las funciones de dirección, control, supervisión y vigilancia técnica de los trabajos comprendidos en el presente Contrato.
+Por su parte, una vez adjudicado el contrato, el Contratista designará formalmente a un Jefe de Obra (titulado competente) que ostentará la representación técnica de la empresa adjudicataria ante la Administración y la Dirección de Obra a todos los efectos durante toda la fase de ejecución.
 
-En caso de contradicciones e incompatibilidades entre los documentos del presente Proyecto se debe tener en cuenta lo siguiente:
-El Documento nº 2, PLANOS, tiene prelación sobre los demás documentos del Proyecto en lo que a dimensionamiento se refiere, en caso de incompatibilidad de los mismos.
-El Documento nº 3, PLIEGO DE CONDICIONES, tiene prelación sobre los demás en lo que se refiere a los materiales a emplear, ejecución, medición y valoración de la obra.
-El CUADRO DE PRECIOS nº 1, tiene prelación sobre cualquier otro documento en lo que se refiere al precio de cada unidad de obra.
-En cualquier caso, los documentos del Proyecto tienen preferencia respecto a las disposiciones de carácter general.
+### 1.5.2 EJERCICIO DE LA DIRECCIÓN TÉCNICA DE OBRA Y DEBER DE COLABORACIÓN
 
-Las omisiones en los Planos del Proyecto y en el Pliego de Condiciones o las descripciones erróneas de los detalles de la obra, que sean manifiestamente indispensables para llevar a cabo el espíritu o intención expuesto en los documentos del presente Proyecto o que, por su uso y costumbre, deban ser realizados, no sólo no eximen al Contratista de la obligación de ejecutar estos detalles de obra omitidos o erróneamente descritos, sino que, por el contrario, serán ejecutados como si hubieran sido completa y correctamente especificados en los Planos del Proyecto y Pliego de Condiciones.
-Cualquier corrección o modificación en los Planos del Proyecto o en las especificaciones del Pliego de Condiciones, sólo podrá ser realizada por la Dirección de Obra, siempre y cuando así lo juzgue conveniente para su interpretación o el fiel cumplimiento de su contenido.
+La Dirección de Obra ejercerá las facultades de inspección, control técnico y visto bueno de las unidades ejecutadas en la glorieta conforme a lo establecido en el apartado 1.3.
 
-## 1.5 RELACIONES LEGALES Y RESPONSABILIDADES
+El Contratista, a través de su Jefe de Obra, estará obligado a prestar la máxima colaboración a la Dirección de Obra, acatando sus instrucciones técnicas y facilitando en todo momento el acceso a los tajos de la Ronda del Valle para la correcta verificación del proyecto.
 
-### 1.5.1 DIRECTOR DE LA OBRA Y CONTRATISTA
+### 1.5.3 FUNCIONES DE LA DIRECCIÓN DE OBRA
 
-#### 1.5.1.1 DIRECTOR DE LA OBRA
+Corresponde a la Dirección de Obra exigir al Contratista el cumplimiento riguroso de las condiciones contractuales, ejerciendo el control integral de la ejecución. Velará por que los trabajos se realicen con estricta sujeción al Proyecto aprobado o a las modificaciones debidamente autorizadas, así como por el cumplimiento del Programa de Trabajos. Asimismo, definirá las condiciones técnicas que el Pliego deje a su criterio, resolverá las dudas sobre interpretación de planos, materiales y ejecución de unidades de obra sin alterar las condiciones del contrato, y tramitará las propuestas de modificación que resulten necesarias ante el Órgano de Contratación. En situaciones de urgencia o gravedad, la Dirección de Obra podrá asumir la dirección inmediata de determinadas operaciones, poniendo el Contratista a su disposición los medios necesarios. Finalmente, acreditará las obras ejecutadas mediante las certificaciones correspondientes y participará en la recepción y liquidación del contrato conforme a la normativa vigente.
 
-Una vez definido el Director de la obra, o bien mediante concurso (si es subcontratado) o bien designado directamente por el Excelentísimo {{entidad}}. (en adelante Administración), de entre su equipo técnico. Éste, será responsable de la inspección y vigilancia de la ejecución del contrato y asumirá la representación de la Administración frente al Contratista, quien, a su vez, propondrá a éste para su aceptación el equipo técnico.
-En lo sucesivo, cada vez que se mencione al Director de la Obra se entenderá, por extensión y en ausencia del mismo, extendido al equipo técnico.
+### 1.5.4 INSPECCIÓN DE LAS OBRAS Y ACCESO A LAS INSTALACIONES
 
-#### 1.5.1.2 REPRESENTANTE DEL CONTRATISTA
+El Contratista prestará la máxima colaboración a la Dirección de Obra para el correcto ejercicio de sus funciones inspectoras. Facilitará los medios técnicos y las condiciones necesarias para llevar a cabo comprobaciones de replanteo, reconocimientos de terreno y pruebas de control de calidad de los materiales. A tal efecto, garantizará el libre acceso del personal inspector a la zona de obras, así como a las plantas de fabricación de donde procedan los materiales o elementos prefabricados, debiendo incorporar esta obligación en sus contratos con suministradores y subcontratistas.
 
-Una vez adjudicadas definitivamente las obras, el Contratista designará una persona que asuma la dirección de los trabajos que se ejecuten y que actúe como representante suyo ante la Administración a todos los efectos que se requieran durante la ejecución de las obras y con autoridad suficiente para ejecutar las órdenes del Director relativas al cumplimiento del contrato.
-En todo caso, previamente al nombramiento de su representante, el Contratista deberá someterlo a la aprobación de la Propiedad.
+### 1.5.5 LIBRO DE ORDENES E INSTRUCCIONES DE SERVICIO
 
-### 1.5.2 FUNCIONES DE LA DIRECCIÓN
+El Libro de Órdenes se diligenciará en la fecha de comprobación del replanteo y permanecerá en la obra a disposición de la Dirección de Obra hasta la recepción definitiva. En él se registrarán las órdenes, instrucciones y comunicaciones reglamentarias, acusando el Contratista recibo mediante la firma del entero. El Contratista ejecutará los trabajos con estricta sujeción a los planos, perfiles, pliegos y órdenes de servicio. Si estimase que alguna orden excede las obligaciones del contrato, podrá formular observación motivada en el plazo de ocho (8) días, sin que dicha reclamación suspenda la ejecución del mandato salvo resolución expresa en contrario.
 
-Las funciones del Director en orden a la dirección, control y vigilancia de las obras que principalmente afectan a sus relaciones con el Contratista, son las siguientes:
-    • Exigir al Contratista, directamente o a través del personal a sus órdenes, el cumplimiento de las condiciones contractuales, con la facultad de controlar totalmente la ejecución de la obra.
-    • Cuidar que la ejecución de las obras se realice con estricta sujeción al Proyecto aprobado, o modificaciones debidamente autorizadas, así como del cumplimiento del programa de Trabajos.
-    • Definir aquellas condiciones técnicas que los Pliegos de Condiciones o Prescripciones correspondientes dejan a su decisión.
-    • Resolver todas las cuestiones técnicas que surjan en cuanto a interpretación de planos, condiciones de materiales y de ejecución de unidades de obra, siempre que no se modifiquen las condiciones del contrato.
-    • Estudiar las incidencias o problemas planteados en las obras que impidan el normal cumplimiento del contrato o aconsejen su modificación, tramitando en su caso las propuestas correspondientes.
-    • Asumir personalmente y bajo su responsabilidad, en casos de urgencia o gravedad, la dirección inmediata de determinadas operaciones o trabajos en curso; para lo cual el contratista deberá poner a su disposición el personal y medios de la obra.
-    • Acreditar al Contratista las obras realizadas, conforme a lo dispuesto en los documentos el contrato.
-    • Participar en las Recepciones Provisional y Definitiva y redactar la liquidación de las obras, conforme a las normas legales establecidas.
+El Contratista carece de facultades para introducir modificaciones por iniciativa propia en el Proyecto. Si ejecutase trabajos no autorizados o en desacuerdo con los planos, estará obligado a su demolición y reconstrucción a su costa. En el caso de que la Dirección de Obra dictaminase la necesidad de ajustar la geometría, el firme o los servicios afectados por la realidad del terreno, se emitirá la correspondiente orden por escrito y se tramitará formalmente el expediente de modificación contractual previsto en los artículos 203 a 207 de la LCSP.
 
-### 1.5.3 INSPECCIÓN DE LAS OBRAS
+### 1.5.6 LIBRO DE INCIDENCIAS
 
-El Contratista estará obligado a prestar su colaboración al Director para le normal cumplimiento de las funciones a éste encomendadas.
-El Contratista proporcionará a la Dirección toda clase de facilidades para practicar replanteos, reconocimientos y pruebas de los materiales y de su preparación, y para llevar a cabo la inspección y vigilancia de la obra y de todos los trabajos, con objeto de comprobar el cumplimiento de las condiciones establecidas en el presente Pliego, facilitando en todo momento el libre acceso a todas las partes de la obra, incluso a las fábricas y talleres donde se produzcan los materiales o se realicen trabajos para las obras, para lo cual deberá hacer constar este requisito en los contratos y pedidos que realice con sus suministradores.
+En materia de seguridad y salud en el trabajo, en el acto de comprobación del replanteo se habilitará el correspondiente Libro de Incidencias, ajustándose a la legislación vigente sobre prevención de riesgos en obras de construcción y a lo establecido en el Pliego de Cláusulas Administrativas Particulares del {{entidad}}.
 
-### 1.5.4 LIBRO DE ORDENES
+### 1.5.7 OBLIGACIONES GENERALES DE ORGANIZACIÓN, LIMPIEZA Y ORDENACIÓN DEL TRÁFICO
 
-El libro de Órdenes será diligenciado y se abrirá en la fecha de Comprobación del Replanteo y se cerrará en la de la Recepción Definitiva de las obras.
-Durante dicho lapso de tiempo estará a disposición de la Dirección, que, cuando proceda, anotará en él las órdenes, instrucciones y comunicaciones que estime oportunas, autorizándolas con su firma.
-Se hará constar en el Libro de Ordenes al iniciarse las obras o, en caso de modificaciones, durante el curso de las mismas, con el carácter de orden al Contratista, la relación de las personas que, por el cargo que ostentan o la delegación que ejercen, tienen facultades para acceder a dicho libro y transcribir en él las que se consideren necesario comunicar al Contratista.
-El Contratista se atendrá en el curso de la ejecución de las obras a las órdenes e instrucciones que le sean dadas por la Dirección, que se le comunicará por escrito y duplicado, debiendo, el Contratista, devolver una copia con la firma del "Enterado".
-Cuando el Contratista estime que las prescripciones de una orden sobrepasan las obligaciones del contrato, deberá presentar la observación estricta y justificada en el plazo de ocho (8) días, pasado el cual no será atendible. La reclamación no suspende la ejecución de la orden de servicio, a menos que sea decidido lo contrario por el Director.
-Sin perjuicio de las disposiciones, el Contratista ejecutará las obras ateniéndose estrictamente a los planos, perfiles, dibujos, órdenes de servicio, y, en su caso, a los modelos que sean suministrados en el curso del contrato.
-El Contratista está obligado a aceptar las prescripciones escritas que señale la Dirección, aunque suponga modificación o anulación de órdenes precedentes, o alteración de planos previamente autorizados o de su documentación aneja.
-El Contratista carece de facultades para introducir modificaciones en el Proyecto de las obras contratadas, en los planos de detalle autorizados por la Dirección, o en las órdenes que le hayan sido comunicadas. A requerimiento del Director, el Contratista estará obligado, a su cargo, a sustituir los materiales indebidamente empleados, y a la demolición y reconstrucción de las obras ejecutadas en desacuerdo con las órdenes o los planos autorizados.
-Si la Dirección estimase que ciertas modificaciones hechas bajo la iniciativa del Contratista son aceptables, las nuevas disposiciones podrán ser mantenidas, pero entonces el Contratista no tendrá derecho a ningún aumento de precio, tanto por dimensiones mayores como por un mayor valor de los materiales empleados. En este caso, las mediciones se basarán en las dimensiones fijadas en los planos y órdenes. Si, por el contrario, las dimensiones son menores o el valor de los materiales es inferior, los precios se reducirán proporcionalmente.
+El Contratista responderá del orden, la limpieza, el control ambiental y las condiciones sanitarias en todo el ámbito de la obra y sus zonas de afección. Mantendrá las zonas de trabajo, accesos, calzadas colindantes e itinerarios peatonales provisionales limpios de escombros, lodos, polvo, basuras y materiales sobrantes. Igualmente, instalará, mantendrá y retirar las instalaciones auxiliares de obra y garantizará el correcto drenaje y evacuación de aguas pluviales y residuales. En época de precipitaciones u otras inclemencias meteorológicas, adoptará de inmediato las medidas correctoras necesarias para garantizar la viabilidad del tránsito y la seguridad en calzadas y pasos de peatones.
 
-### 1.5.5 LIBRO DE INCIDENCIAS
+Finalizadas las obras, y como condición previa e indispensable para la realización del acto formal de Recepción de la Obra, todas las instalaciones auxiliares, depósitos, casetas, acopios y construcciones temporales deberán ser íntegramente retirados y desmantelados por el Contratista. Las zonas afectadas deberán quedar completamente limpias, restauradas a su estado original o proyectado y en perfectas condiciones estéticas y funcionales. Si el Contratista no procediera a dicha limpieza y retirada en el plazo que a tal efecto determine la Dirección de Obra (el cual no excederá de la fecha fijada para la recepción), la Dirección de Obra podrá ordenar su ejecución a un tercero por cuenta del Contratista, deduciendo los gastos de las certificaciones pendientes o de la garantía definitiva.
 
-Será de aplicación lo dispuesto en la Cláusula 9 del PPTG.
+Dado el carácter urbano de la obra y su afección directa al tráfico de la zona, el Contratista redactará, instalará y mantendrá a su costa el Plan de Señalización Provisional, Desvíos y Balizamiento, cumpliendo estrictamente con la Norma 8.3-IC de Señalización de Obras de la Instrucción de Carreteras, el Reglamento General de Circulación (RD 1428/2003) y los requerimientos e instrucciones emitidos por la Policía Local del Ayuntamiento de Lucena. El balizamiento nocturno, los desvíos peatonales accesibles y la adaptación continua de la señalización según el avance de las fases de obra serán de obligado cumplimiento. En caso de afección a servicios o instalaciones de otros organismos públicos o empresas suministradoras, el Contratista gestionará las autorizaciones correspondientes y asumirá los condicionantes aplicables.
 
-### 1.5.6 OBLIGACIONES GENERALES DEL CONTRATISTA
+La Dirección de Obra establecerá las disposiciones de orden interno (restricciones de acceso, acopios de material, zonas de carga/descarga y precauciones de seguridad), las cuales serán de estricto cumplimiento por el Contratista y su personal. En caso de conflictos o alteraciones de orden público que puedan incidir en el desarrollo de los trabajos, el Contratista contactará inmediatamente con las Fuerzas y Cuerpos de Seguridad y la Policía Local, acordando las medidas pertinentes y manteniendo puntualmente informada a la Dirección de Obra.
 
-El Contratista es responsable del orden, limpieza y condiciones sanitarias de las obras objeto del contrato, por lo que deberá adoptar, a su cargo y bajo su responsabilidad, las medidas que le sean señaladas por las Autoridades, competentes, por los Reglamentos vigentes y por el Director.
-A este aspecto, es obligación del contratista:
-    • Limpiar todos los espacios interiores y exteriores de la obra de escombros, materiales sobrantes, restos de materiales, desperdicios, basuras, chatarra, andamios y de todo aquello que impida el perfecto estado de la obra y sus inmediaciones.
-    • Proyectar, construir, equipar, mantener, desmontar y retirar de la zona de la obra las instalaciones necesarias para la recogida, tratamiento y evacuación de las aguas residuales, de sus oficinas e instalaciones, así como para el drenaje de las áreas donde estén ubicadas y de las vías de acceso.
-    • En caso de heladas o de nevadas, adoptar las medidas necesarias para asegurar el tránsito de vehículos y peatones en las carreteras, caminos, sendas, plataformas, andamios y demás accesos y lugares de trabajo, que no hayan sido cerrados eventualmente en dichos casos.
-    • Retirar de la obra las instalaciones provisionales, equipos y medios auxiliares en el momento que no sean necesarios.
-    • Adoptar las medidas y ejecutar todos los trabajos necesarios para que la obra, durante su ejecución y, sobre todo, una vez terminada, ofrezca un buen aspecto, a juicio de la Dirección.
-    • Establecer y mantener las medidas necesarias, por medio de agentes y señales, para indicar el acceso a la obra y ordenar el tráfico en la zona de obras, especialmente en los puntos de posible peligro, tanto en dicha zona como en sus lindes e inmediaciones.
-    • Llevar a cabo la señalización en estricto cumplimiento de las disposiciones vigentes en la materia, bajo su propia responsabilidad, y sin perjuicio de lo que sobre el particular ordene el Director.
-    • Cuando dicha señalización se aplique sobre instalaciones independientes de otros organismos públicos, el Contratista estará además obligado a lo que sobre el particular establezcan las normas del organismo público al que se encuentre afectada la instalación, siendo de cuenta del contratista, además de los gastos de señalización, los del organismo citado en ejercicio de las facultades inspectoras que sean de su competencia.
-Serán reglamentadas y controladas por la Dirección y de obligado cumplimiento por el Contratista y su personal, las disposiciones de orden interno, tales como el establecimiento, de áreas de restricción, condiciones de entrada al recinto, precauciones de seguridad y cualquier otra de interés.
-En casos de conflictos de cualquier clase, que pudieran implicar alteraciones de orden público, corresponderá al Contratista la obligación de ponerse en contacto con las Autoridades competentes y convenir con ellas la disposición de las medidas adecuadas para evitar dicha alteración, manteniendo al Director debidamente informado.
-Todos los gastos que origine el cumplimiento de lo establecido en el presente Artículo serán de cuenta del Contratista por lo que no serán de abono directo, esto es, se considerarán incluidos en los precios del Contrato.
+Salvo que en el Cuadro de Precios del Proyecto exista una unidad de obra o partida alzada específica para la gestión del tráfico y desvíos provisionales, todos los gastos originados por el cumplimiento de las obligaciones recogidas en este artículo se considerarán incluidos en los Costes Directos / Indirectos del Contrato, sin que den lugar a abono directo independiente.
 
-### 1.5.7. RESPONSABILIDADES DEL CONTRATISTA DURANTE LA EJECUCION DE LAS OBRAS
+### 1.5.8 RESPONSABILIDADES DEL CONTRATISTA DURANTE LA EJECUCIÓN DE LAS OBRAS
 
-El Contratista será responsable durante la ejecución de las obras de todos los daños o perjuicios, directos o indirectos, que se puedan ocasionar a cualquier persona, propiedad o servicio, público o privado, como consecuencia de los actos, omisiones o negligencias del personal a su cargo o de una deficiente organización de las obras.
-Los servicios públicos o privados que resulten dañados deberán ser reparados, a su costa, de manera inmediata, estén o no, indicados en los planos del Contrato.
-Las personas que resulten perjudicadas deberán ser compensadas, a su costa, adecuadamente.
-Las propiedades públicas o privadas que resulten dañadas deberán ser reparadas, a su costa, restableciendo sus condiciones primitivas o compensando los daños o perjuicios causados en cualquier otra forma aceptable.
-Asimismo, el Contratista será responsable de todos los objetos que se encuentren o descubran durante la ejecución de las obras, debiendo dar inmediata cuenta de los hallazgos a la Dirección de Obra y colocarlos bajo su custodia.
-Adoptará las medidas necesarias para evitar la contaminación de ríos, lagos y depósitos de agua, por efecto de los combustibles, aceites, ligantes o cualquier otro material que pueda ser perjudicial.
+De conformidad con lo dispuesto en el artículo 196 de la Ley 9/2017, de 8 de noviembre, de Contratos del Sector Público (LCSP), el Contratista será responsable directo de todos los daños y perjuicios, directos o indirectos, que la ejecución de las obras ocasione a terceros, propiedades privadas o infraestructuras públicas, salvo que los mismos sean consecuencia directa e inmediata de una orden de la Administración o de vicios del Proyecto.
 
-## 1.6 ALCANCE DEL PLIEGO DE CONDICIONES
+En caso de afección a las redes subterráneas o aéreas de servicios existentes (abastecimiento, saneamiento, distribución de energía eléctrica, alumbrado público, gas o telecomunicaciones), el Contratista reparará los daños a su costa de forma inmediata, procediendo a la reposición técnica del servicio en las condiciones requeridas por las compañías suministradoras y por el Ayuntamiento de Lucena. Asimismo, el Contratista adoptará todas las medidas preventivas y de contingencia para evitar la contaminación del suelo o del entorno urbano por vertidos de combustibles, aceites, ligantes asfálticos o lechadas de hormigón, impidiendo cualquier afección a la red de drenaje pluvial municipal o a los cauces públicos cercanos.
 
-Las especificaciones relativas a los materiales, la forma de ejecutar las distintas unidades de obra, y en general todas las disposiciones del presente Pliego, así como las que figuren en los planos se considerarán incluidas en los precios unitarios, formando parte implícita de los epígrafes de dichos precios aún cuando no figuren explícitamente en estos epígrafes.
+Si durante los movimientos de tierras, vaciados o catas se produjera el hallazgo fortuito de restos arqueológicos, paleontológicos o de valor patrimonial, el Contratista paralizará de inmediato los trabajos en la zona afectada, garantizará la protección y custodia cautelar de los Restos y notificará el hecho de forma urgente (en un plazo no superior a 24 horas) a la Dirección de Obra y a {{entidad}}. Se dará cumplimiento estricto a lo establecido en la Ley 14/2007, de 26 de noviembre, del Patrimonio Histórico de Andalucía, comunicando la suspensión y el hallazgo a la Delegación Territorial de la Consejería competente en materia de Cultura.
 
-## 1.7 CONDICIONES TÉCNICAS GENERALES
+#### 1.5.8.1 OBRAS QUE DEBEN QUEDAR OCULTAS
 
-### 1.7.1 PERSONAL DE OBRA
+Sin la autorización previa y expresa por escrito (o registro en el Libro de Órdenes) del Director de la Obra o del personal técnico en quien delegue, el Contratista no podrá proceder al relleno de zanjas para cimentaciones, canalizaciones de servicios o drenajes, ni a la ejecución de capas de firme sobre explanadas no recibidas, ni a la ocultación de cualquier otra unidad de obra que no sea inspeccionable a posteriori.
 
-La Dirección Técnica de la obra por parte del Contratista deberá estar a cargo de un Técnico. Su nombramiento será sometido a la aprobación de {{entidad}}. Este técnico será responsable ante {{entidad}} de la ejecución de la obra de acuerdo con el
-Contrato.
-Estará auxiliado por el personal técnico, administrativo y social que se considere necesario para la buena organización de la obra.
-Para la aceptación provisional del equipo de trabajo, la dirección podrá exigir pruebas de que todos ellos, han intervenido en la ejecución de obras similares a las comprendidas en el proyecto que nos ocupa.
-El Técnico Encargado se relacionará directamente para todos los efectos de la obra con la Dirección Técnica nombrado por {{entidad}}.
+Antes de la ocultación, la Dirección de Obra procederá a la comprobación topográfica de las alineaciones, cotas y rasantes, así como a la recepción de las pruebas de carga, estanqueidad o compactación que correspondan. Si el Contratista ejecutase el relleno u ocultación sin dicha autorización formal, el Director de la Obra ordenará el descubrimiento o demolición de lo ejecutado a costa del Contratista y sin derecho a indemnización ni abono alguno, siendo el Contratista responsable de las rectificaciones que fuese necesario realizar.
 
-### 1.7.2 INSTALACIONES AUXILIARES
+#### 1.5.8.2 EJECUCIÓN DE OBRAS NO ESPECIFICADAS EN EL PRESENTE CAPÍTULO
 
-El Contratista queda obligado a construir por su cuenta, a conservar y retirar al final de las obras, todas las edificaciones auxiliares para oficinas, almacenes, cobertizos, viviendas e instalaciones sanitarias que sean necesarias.
-Todas estas obras estarán supeditadas a la aprobación de la Dirección Técnica, en lo que se refiere a su ubicación, cotas, etc., y, en su caso, en cuanto al aspecto de los mismos, cuando la obra principal así lo exija.
-Sí, al terminar las obras y previo aviso, y en un plazo de treinta (30) días a partir de éste, la Contrata no hubiera procedido a la retirada de todas sus instalaciones, herramientas, materiales, etc. tras la terminación de la obra, {{entidad}} puede mandarlas retirar por cuenta del Contratista.
+En la ejecución de aquellas unidades de obra, fábricas o trabajos auxiliares que resulten indispensables para la correcta finalización del proyecto y sobre los cuales no existan prescripciones explícitas consignadas en el presente Pliego, se atenderá a las reglas de la buena práctica constructiva, a las directrices que imparta la Dirección de Obra y a lo dispuesto en la normativa técnica sectorial aplicable (Pliego PG-3 de Carreteras, instrucciones EAE/Eurocódigos, Reglamento Técnico de Líneas de Alta/Baja Tensión, etc.).
 
-### 1.7.3 MEDIDAS DE SEGURIDAD
+Salvo que proceda la tramitación de una modificación contractual o fijación de precios contradictorios de acuerdo con los artículos 203 a 207 y 242 de la LCSP, estas unidades se medirán y abonarán aplicando los criterios de descomposición deducibles de la definición de los precios unitarios contenidos en los Cuadros de Precios del Proyecto.
 
-El Contratista estará obligado al cumplimiento de lo dispuesto en el Real Decreto 1627/1997 de 24 de octubre sobre las disposiciones mínimas de seguridad y salud en las obras de construcción, y de cuantas disposiciones legales de carácter laboral, social, de protección a la Industria Nacional, etc. rijan en la fecha en que se ejecuten las obras, especialmente la Ley de Salud Laboral.
+## 1.6 CONDICIONES TÉCNICAS GENERALES
 
-### 1.7.4 CASOS DE RESCISION
+### 1.6.1 PERSONAL DE OBRA
 
-En caso de rescisión, cualquiera que fuera la causa, regirá lo que se establezca en el contrato y en su defecto el Reglamento General de Contratación del Estado - Decreto 3354/1.967 de 28 de Diciembre.
-En caso de que la obra haya precisado instalaciones auxiliares especiales se regulará mediante las prescripciones adecuadas la forma en que {{entidad}} podrá disponer de dichas instalaciones.
+La Dirección Técnica de la obra por parte del Contratista deberá estar a cargo de un Técnico facultativo competente, cuyo nombramiento será sometido a la aprobación previa de {{entidad}}. Este técnico será el responsable directo ante la Administración de la ejecución de la obra de acuerdo con el Contrato. Estará auxiliado por el personal técnico, administrativo y auxiliar necesario para la correcta organización de los trabajos. Para la aceptación del equipo de trabajo, la Dirección de Obra podrá exigir acreditación de que el personal ha intervenido en obras similares. El Técnico encargado se relacionará directamente a todos los efectos con la Dirección Técnica nombrada por {{entidad}}.
 
-### 1.7.5 RESPONSABILIDADES DEL CONTRATISTA
+### 1.6.2 INSTALACIONES AUXILIARES Y ACCESOS A LA OBRA
 
-El Contratista será el único responsable de las consecuencias de las transgresiones de las disposiciones enumeradas, sin perjuicio de las facultades de la Dirección de Obra para presentar las objeciones que considerase procedentes al respecto.
+El Contratista construirá, mantendrá y retirará a su costa las edificaciones auxiliares necesarias (oficinas, almacenes y casetas sanitarias), previa aprobación de su ubicación por la Dirección Técnica. Asimismo, construirá y conservará a su cuenta los caminos, rampas e itinerarios de acceso provisionales a los tajos, así como la reparación de desperfectos en los viales urbanos existentes ocasionados por el paso de su maquinaria. Finalizadas las obras, dispondrá de un plazo máximo de treinta (30) días naturales para la retirada total de medios e instalaciones; de no hacerlo, {{entidad}} podrá ejecutar la retirada de forma subsidiaria a costa del Contratista.
 
-### 1.7.6 MEDICIONES Y VALORACION
+### 1.6.3 MEDIDAS DE SEGURIDAD Y SALUD
 
-Se harán mediciones y valoraciones con arreglo a las bases fijadas por las condiciones del capítulo V o, en su defecto, por los documentos antes citados, tanto para las parciales durante la ejecución como para la medición definitiva y liquidación final de la Contrata.
+El Contratista estará obligado a cumplir estrictamente lo dispuesto en el Real Decreto 1627/1997, de 24 de octubre, por el que se establecen las disposiciones mínimas de seguridad y de salud en las obras de construcción, así como lo establecido en la Ley 31/1995, de 8 de noviembre, de Prevención de Riesgos Laborales. Asimismo, acatará la totalidad de las disposiciones legales de carácter laboral, de la Seguridad Social y de prevención de riesgos que se encuentren vigentes durante la ejecución de los trabajos.
 
-#### 1.7.6.1 MEDICIÓN GENERAL DE LAS OBRAS
+### 1.6.4 SEGURIDAD PÚBLICA Y PROTECCION DEL TRAFICO
 
-El Director citará al Contratista, o su Delegado, fijando la fecha en que, en función del plazo establecido para la liquidación provisional de la obra ejecutada, ha de procederse a su medición general.
-El Contratista, o su Delegado, tiene la obligación de asistir a la toma de datos y realización de la medición general que efectuará la Dirección. Si, por causas que le sean imputables, no cumple tal obligación no podrá realizar reclamación alguna en orden al resultado de aquella medición.
-Para realizar la medición general se utilizarán como datos complementarios la Comprobación del Replanteo, los replanteos parciales y las mediciones efectuadas durante la ejecución de la obra, el Libro de Incidencias, si lo hubiera, el de Ordenes y cuantos otros estimen necesarios el Director y el Contratista.
-Las reclamaciones que estime necesario hacer el Contratista contra el resultado de la medición general las dirigirá por escrito a la Administración por conducto del Director, quien las elevará a aquel con su informe sobre las mismas.
+El Contratista adoptará cuantas medidas de precaución y protección sean necesarias durante la ejecución de los trabajos para garantizar la seguridad del público y mantener la fluidez del tráfico peatonal y rodado en el entorno de las obras.
 
-### 1.7.7 RELACIONES VALORADAS Y CERTIFICACIONES PARCIALES DE OBRA EJECUTADA
-
-Las relaciones valoradas y certificaciones parciales se efectuarán por meses, en la forma prevista en el contrato y en su defecto por la cláusula 47 del Pliego de Cláusulas Administrativas Generales, con la sola variación de las cantidades que en el mismo se citan, según cual sea la forma en que se acuerde la ejecución de las obras.
-
-### 1.7.8. SEGURIDAD PUBLICA Y PROTECCION DEL TRAFICO
-
-El Contratista tomará cuantas medidas de precaución sean precisas durante la ejecución de las obras, para proteger al público y facilitar el tráfico.
-
-El Contratista queda obligado, de acuerdo con la legislación vigente, a elaborar un Plan de Seguridad y Salud en el que se analicen, estudien, desarrollen y complementen, en función de su propio sistema de ejecución de la obra, las previsiones contenidas en el desarrollado en este proyecto y que figura como anejo a la Memoria. En dicho plan se incluirá, en su caso, las propuestas de medidas alternativas de prevención que la empresa adjudicataria proponga con la correspondiente valoración económica de los mismos, que no podrá, en ningún caso, superar el importe de la unidad para seguridad y salud que figura en el Presupuesto de este proyecto.
-Mientras dure la ejecución de las obras se dispondrán en todos los puntos donde sea necesario, y a fin de mantener la debida seguridad del tráfico ajeno a aquellas, las señales de balizamiento preceptivas de acuerdo con la O.M. de 14 de Marzo de 1.960 y las aclaraciones complementarias que se recogen en la O.C. 67/60 de la D.G.C. La permanencia de estas señales deberá estar garantizada por los vigilantes que fueran necesarios.
-Tanto las señales como los jornales de estos últimos, serán por cuenta del Contratista, encontrándose convenientemente valorados en el precio del Estudio de Seguridad y Salud.
-Las obras se ejecutarán de forma que el tráfico ajeno a la obra, en las zonas que afecte a calles y servicios existentes, encuentre en todo momento un paso en buenas condiciones de viabilidad, ejecutando itinerarios alternativos para desviarlo en los casos previstos en el Anejo de Seguridad y Salud.
-No podrá nunca ser cerrada al tráfico un camino existente sin la previa autorización por escrito de la Dirección de Obra, debiendo tomar el Contratista las medidas para, si fuera necesario, abrir el camino al tráfico de forma inmediata, siendo de su cuenta las responsabilidades que por tales motivos se deriven.
-
-### 1.7.9. SUBCONTRATOS
+De conformidad con la legislación vigente en materia de prevención de riesgos laborales en la construcción (Real Decreto 1627/1997), el Contratista elaborará y someterá a aprobación el Plan de Seguridad y Salud en el Trabajo, en el que analizará, desarrollará y complementará, según sus propios sistemas de ejecución, las previsiones contenidas en el Estudio de Seguridad y Salud del Proyecto. Las propuestas de medidas alternativas de prevención que formule el Contratista incluirán su valoración económica, la cual no podrá superar en ningún caso el importe fijado para la partida de Seguridad y Salud en el Presupuesto del Proyecto.
 
-Los subcontratos se regularán en la forma prevista en el contrato, no obstante, ninguna parte de las obras podrá ser subcontratada sin consentimiento previo de la Dirección de Obra.
-Las solicitudes para ceder cualquier parte del contrato deberán formularse por escrito, con suficiente antelación, aportando los datos necesarios sobre este subcontrato así como sobre la organización que
-ha de realizarse. La aceptación de subcontrato no relevará al ontratista de su responsabilidad contractual.
+Durante todo el periodo de ejecución, se dispondrá en los puntos necesarios la señalización temporal, balizamiento y elementos de contención preceptivos conforme a la normativa técnica de señalización de obras vigente (Instrucción 8.3-IC de Carreteras) y las directrices de la Dirección de Obra y la Policía Local. La permanencia, visibilidad y correcto estado de dicha señalización estará garantizada de forma continua por el personal de vigilancia y mantenimiento que sea necesario. Todos los costes de suministro, instalación, mantenimiento y personal de balizamiento y señalización serán por cuenta del Contratista, entendiéndose valorados en la partida de Seguridad y Salud o incluidos en los costes indirectos.
 
-### 1.7.10 ACTA DE COMPROBACIÓN DEL REPLANTEO
+Las obras se organizarán de modo que las vías afectadas mantengan en todo momento condiciones idóneas de transitabilidad y viabilidad. Cuando resulte imprescindible, se habilitarán los desvíos provisionales e itinerarios alternativos previstos en el Proyecto. Ningún vial o camino existente podrá ser cerrado al tráfico sin la previa autorización explícita y por escrito de la Dirección de Obra, debiendo el Contratista estar preparado para restablecer la circulación de manera inmediata si la Dirección de Obra o las autoridades competentes así lo requiriesen, asumiendo el Contratista las responsabilidades derivadas de cualquier interrupción no autorizada.
 
-La ejecución del contrato de obras comenzará con el acto de Comprobación del Replanteo, que se ajustará a las reglas determinadas en el Reglamento General de Contratación del Estado y a lo dispuesto en la Instrucción (Municipal) de Servicio Reguladora de la Contratación de Obras y Revisión de Precios.
-El Acta de Comprobación del Replanteo reflejará los siguientes extremos:
-    1. La conformidad o disconformidad del replanteo respecto de los documentos contractuales del Proyecto.
-    2. Especial y expresa referencia a las características geométricas de la obra.
-    3. Especial y expresa referencia a la autorización para la ocupación de los terrenos necesarios.
-    4. Las contradicciones, errores u omisiones que se hubieran observado en los documentos contractuales del Proyecto.
-    5. Cualquier otro punto que pueda afectar al cumplimiento del contrato. Serán de cuenta del Contratista todos los gastos derivados de la Comprobación del Replanteo.
-El Contratista transcribirá, y el Director autorizará con su firma, el texto del Acta en el Libro de Órdenes.
-La Comprobación del Replanteo deberá incluir, como mínimo, el eje principal de los diversos tramos o partes de la obra y los ejes principales de las obras de fábrica, así como los puntos fijos o auxiliares necesarios para los sucesivos replanteos de detalle.
-Los vértices de triangulación y los puntos básicos de replanteo se materializarán en el terreno mediante hitos o pilares de carácter permanente. Asimismo, las señales niveladas de referencia principal serán materializadas en el terreno mediante dispositivos fijos adecuados.
-Los datos, cotas y puntos fijados se anotarán en un anejo al Acta de Comprobación de Replanteo que se unirá al expediente de la obra, entregándose una copia al Contratista.
+### 1.6.5 MEDICIONES Y VALORACIÓN
 
-### 1.7.11. PLAN DE OBRAS
+Las mediciones y valoraciones de las unidades de obra se realizarán con arreglo a los criterios y bases fijados en el Capítulo IV de este Pliego y en los documentos contractuales del Proyecto, aplicándose tanto para las certificaciones parciales durante el curso de la ejecución como para la medición general y liquidación final del Contrato.
 
-El Contratista está obligado a presentar a la Dirección de Obra un Plan de Ejecución, en el plazo de una (1) semana a partir de comprobación del replanteo.
-Dicho Plan de Ejecución incluirá un Programa de Trabajos, con  Especificación de los plazos parciales y fechas de terminación de las distintas unidades de obra, compatibles con el plazo total de ejecución.
-Este programa de trabajos se llevará a cabo de acuerdo con las  Especificaciones señaladas en este Pliego y en las disposiciones vigentes relativas a esta materia y deberá ser aprobado por EL
-AYUNTAMIENTO DE LUCENA.
-Las obras se iniciarán dentro deL mes siguiente al de la fecha de la firma del contrato. El plazo máximo de ejecución de las obras será el que indique el Plan de Trabajos, que figurará como anejo o en el apartado de la Memoria de este Proyecto.
-Siendo este plazo de ejecución, según el Plan de Obra realizado de {{plazo_ejecucion}}. El Contratista está obligado a presentar un Programa de Trabajo en un plazo máximo de cinco (5) días naturales desde el día siguiente a aquel en que tuviere lugar la firma del Acta de Comprobación del Replanteo.
-Dicho programa contendrá, como mínimo, la siguiente información:
-• Calendario, con estimación de los tiempos de ejecución de las distintas actividades, incluidas las operaciones y obras preparatorias, instalaciones y obras auxiliares y las de ejecución de las distintas partes de la obra definitiva.
-• Valoración mensual de la obra programada.
-El Programa de Trabajo será revisado cada bimestre por el Contratista y cuantas veces sea requerido para ello por la Dirección debido a causas que ésta estime suficientes.
+Para la realización de la medición general de las obras, la Dirección de Obra citará formalmente al Contratista o a su Jefe de Obra, fijando la fecha de inicio de las operaciones en función del plazo establecido para la liquidación. El Contratista tiene la obligación de asistir a la toma de datos y a la ejecución de las mediciones sobre el terreno. Si por causas que le sean imputables no cumpliese dicha obligación, el Contratista aceptará el resultado alcanzado por la Dirección de Obra, decayendo su derecho a formular reclamación alguna sobre dicho cómputo.
 
-El incumplimiento de los plazos parciales del Programa de Trabajos por causas imputables al Contratista, será objeto de la imposición de las penalidades que se fijan en el Reglamento de Contratación del Estado (Decreto de la Jefatura del Estado 3410/75 de 25 de Noviembre). En el Plan deben figurar: los servicios, equipos y maquinaria a utilizar en la ejecución, la protección y regulación del tráfico y las molestias que se derivan para éste; las instalaciones, previsión de préstamos y caballeros, la designación de las fuentes de suministro de materiales y las características y modo de explotación de estas fuentes, los certificados de garantía o ensayos de los materiales, los rendimientos de cada tipo de obra, etc.
-Por otra parte, y a lo largo de la realización de las obras, el Constructor presentará obligatoriamente a {{entidad}} cinco días antes de finalizar cada mes el programa de los trabajos a realizar durante el mes siguiente, clasificado al menos en plazos semanales. Junto a ese programa se detallaran las zonas que se prevea ocupar de calzada para la ejecución de la obra y los vecinos afectados por esta (entradas a garajes, viviendas, comercios, etc.).
-El Contratista proporcionará las muestras de materiales necesarios para ejecutar a su costa los ensayos que prescriba la Dirección de Obra, no pudiendo comenzar la explotación de fuentes de suministro ni la utilización de materiales, sin que la documentación y propuestas descritas hayan sido aprobadas por dicha Dirección.
-El Contratista designará en el Plan propuesto la persona o personas que le representen a pié de obra, con los títulos, nombres y atribuciones respectivos, y siempre de acuerdo con lo dispuesto en el presente Pliego.
+Para la fijación de la medición general se utilizarán como datos y documentos complementarios el Acta de Comprobación del Replanteo, los replanteos parciales, las mediciones de ejecución mensual a origen, el Libro de Órdenes, el Libro de Incidencias y cuantos otros antecedentes técnicos estimen convenientes la Dirección de Obra y el Contratista.
 
-## 1.7.12 LIQUIDACIÓN DE LAS OBRAS
+En caso de disconformidad, las reclamaciones que el Contratista considere oportuno formular contra el resultado de la medición general se dirigirán por escrito al Órgano de Contratación por conducto de la Dirección de Obra, la cual las tramitará e informará motivadamente.
 
-El Director formulará la liquidación de las obras aplicando al resultado de la medición general los precios y condiciones económicas del contrato.
-Los reparos que estime oportuno hacer el Contratista, a la vista de la liquidación, los dirigirá, por escrito, a la Administración, en la forma establecida en el último párrafo del apartado anterior.
-Si alguna obra no se hallase ejecutada con arreglo a las condiciones del contrato y fuese, sin embargo, admisible a juicio del Director de la obra, podrá ser recibida, provisional o definitivamente en su caso, pero el Contratista quedará obligado a conformarse, sin derecho a reclamación alguna, con la rebaja que el Director de la obra acuerde, salvo el caso en que el Contratista prefiera demolerla a su costa y rehacerla con arreglo a las condiciones del contrato.
-Las obras concluidas con sujeción a las condiciones del contrato, se abonarán con arreglo a los precios del Cuadro de Precios nº 1 del Presupuesto.
-Cuando por consecuencia de rescisión, o por otra causa, fuere preciso valorar las obras incompletas, se aplicarán los precios del Cuadro de Precios nº 2, sin que pueda pretenderse la valoración de cada unidad de obra fraccionada en otra forma que la establecida en dicho Cuadro.
-En ningún caso tendrá el Contratista derecho a reclamación alguna fundada en la insuficiencia de los precios de los Cuadros o en omisión del coste de cualquiera de los elementos que constituyen los referidos precios.
+### 1.6.6 RELACIONES VALORADAS Y CERTIFICACIONES PARCIALES DE OBRA EJECUTADA
 
-### 1.7.13  REVISIÓN DE PRECIOS
+Las relaciones valoradas y certificaciones parciales de la obra ejecutada se expedirán mensualmente a origen por la Dirección de Obra, tomando como base las mediciones reales efectuadas en el periodo y los precios aplicables del Cuadro de Precios n.º 1 del contrato.
 
-Dadas las características del contrato de ejecución presente, no ha lugar a la aplicación de revisión de precios.
-Las obras del presente proyecto no tienen revisión de precios por ser su plazo de ejecución inferior a doce meses, de acuerdo con el Artículo 103 del texto refundido de la Ley de Contratos de las Administraciones Públicas (Real Decreto Legislativo 2/2000, de 16 de junio).
+Dichas certificaciones se tramitarán conforme a lo dispuesto en la Ley 9/2017, de Contratos del Sector Público (LCSP) y en el Pliego de Cláusulas Administrativas Particulares del contrato. Tienen el carácter de abonos a cuenta sujetos a las correcciones y variaciones que se deriven de la medición general y liquidación final de las obras, sin que supongan la aprobación o recepción de las unidades en ellas comprendidas.
 
-### 1.7.14 GASTOS DE CARACTER GENERAL A CARGO DEL CONTRATISTA
+### 1.6.7. SUBCONTRATACIÓN
 
-Serán por cuenta del Contratista además de los que se indican en otros artículos de este Pliego o en el contrato, los gastos de carácter general siguientes:
-*los de medios auxiliares y de construcción, desmontaje y retirada de toda clase de construcciones auxiliares.
-*los de protección de materiales y la propia obra contra todo deterioro, daño o incendio, cumpliendo los Reglamentos vigentes para el almacenamiento de explosivos y de carburantes.
-*los de retirada de instalaciones, herramientas, materiales, etc. al finalizar las obras, y limpieza general de la misma.
-*los de montaje, conservación y retirada de instalaciones para el suministro de agua y energía eléctrica necesaria para las obras, así como la adquisición de dichas aguas y energía.
-*los de retirada de los materiales rechazados y de corrección de las deficiencias observadas, puestas de manifiesto por los correspondientes ensayos y pruebas que procedan de deficiencias de materiales o de una mala construcción.
-*los gastos de vigilancia a pie de obra.
-*Los gastos de publicidad exigidos por la dirección de obra hasta el límite marcado en el contrato y resto de documentación contractual y en su defecto un cartel de obras y los anuncios de publicidad en boletines y prensa para licitación.
-*Los gastos y costes de cualquier adquisición de terrenos para depósitos de maquinaria y materiales o para la explotación de canteras, teniendo siempre en cuenta que la cantera o canteras no forman parte de obra.
-*Los gastos y costes de limpieza y evacuación de desperdicios y basuras. Así como los de establecimiento de vertederos, su acondicionamiento, conservación, mantenimiento, vigilancia y terminación final. - Los gastos y costes de suministro, colocación, funcionamiento y conservación de señales y luces de tráfico y demás recursos necesarios para proporcionar seguridad dentro de las obras.
-*Los gastos y costes de instrumentación, recogida de datos e informe del comportamiento de las estructuras y de cualquier tipo de pruebas o ensayos.
-*Los gastos y costes de reposición de las estructuras, instalaciones, pavimentos, etc. dañados o alterados por necesidades de las obras o sus instalaciones, o por el uso excesivo de aquellas derivadas de la obra.
-*Las tasas que por todos los conceptos tenga establecida {{entidad}} en relación a las obras.
-*Los gastos y costes que se deriven u originen por el Contrato, tanto previos como posteriores al mismo.
-*Los gastos y costes en que haya de incurrirse para la obtención de licencias y permisos, etc., necesarios para la ejecución de todos los trabajos.
-*Todos los trabajos preparatorios que sean necesarios, tales como caminos de acceso, nivelaciones, cerramientos.
-En los casos de rescisión de contrato, cualquiera que sea la causa que lo motive, serán asimismo por cuenta del Contratista los gastos originados por la liquidación, así como los de retirada de los medios auxiliares utilizados o no en la ejecución de las obras.
+El régimen de subcontratación de las obras se ajustará a lo establecido en el artículo 215 de la Ley 9/2017, de Contratos del Sector Público (LCSP), en el Pliego de Cláusulas Administrativas Particulares y en el propio Contrato. Ninguna unidad de obra o parte de los trabajos podrá ser subcontratada sin la previa comunicación escrita o autorización expresamente concedida por la Administración o por la Dirección de Obra según proceda.
 
-#### 1.7.14.1 GASTOS DE REPLANTEO Y LIQUIDACION DE LAS OBRAS
+Las solicitudes para subcontratar cualquier parte del contrato deberán formularse por escrito con suficiente antelación, aportando la documentación acreditativa sobre la capacidad y solvencia de la empresa subcontratista, así como el detalle de los medios y la organización con los que ejecutará los trabajos. La aprobación de la subcontratación no alterará la responsabilidad contractual directa del Contratista principal, quien responderá plenamente ante el Órgano de Contratación del cumplimiento de las obligaciones del contrato y de la actuación de sus subcontratistas.
 
-Serán a cargo del Contratista el abono de los gastos de replanteo general y parciales, y de liquidación de las obras. Por parte de {{entidad}} se formularán los correspondientes presupuestos cuyos importes no excederán del uno y medio por ciento (1,5%), el de replanteo y del uno por ciento (1%) el de liquidación, todo ello referido al importe de la adjudicación con arreglo a las disposiciones vigentes.
+### 1.6.8 ACTA DE COMPROBACIÓN DEL REPLANTEO
 
-#### 1.7.14.2 GASTOS DE ENSAYOS
+La ejecución del contrato de obras comenzará formalmente con el acto de Comprobación del Replanteo, el cual se tramitará con sujeción a las reglas establecidas en el artículo 237 de la LCSP y el Reglamento General de la Ley de Contratos de las Administraciones Públicas.
 
-Previamente a la ejecución de cada obra deberá desarrollarse un Programa del Control de Calidad de la misma, de acuerdo con sus características particulares.
-La calidad de los materiales que hayan sido almacenados o acopiados deberá ser comprobada en el momento de su utilización para la ejecución de las obras, mediante las pruebas y ensayos correspondientes, siendo rechazados los que en ese momento no cumplan las prescripciones establecidas.
-De cada uno de los materiales a ensayar, analizar o probar, el Contratista suministrará a sus expensas las muestras que en cantidad, forma, dimensiones y características establezca el Programa de Control.
-Asimismo, el Contratista está obligado a suministrar a su costa los medios auxiliares necesarios para la obtención de las muestras, su manipulación y transporte.
-Tanto los materiales, como la ejecución de los trabajos y las unidades de obra terminadas, deberán ser de la calidad exigida en el contrato, cumplirán las instrucciones del Director, y estarán sometidos, en cualquier momento, a los ensayos y pruebas que éste disponga.
-La inspección de la calidad de los materiales, de la ejecución de las unidades de obra y de las obras terminadas corresponde a la Dirección.
-El Contratista deberá dar las facilidades necesarias para la toma de muestras y la realización de ensayos y pruebas "in situ", e interrumpir cualquier actividad que pudiera impedir la correcta realización de estas operaciones.
-El Director de la obra podrá someter, tanto a los materiales empleados como a las unidades de obra ejecutadas, a todas las pruebas y ensayos que juzgue necesarios para asegurar su calidad y adecuación a lo prescrito en este Pliego, siendo todos los gastos que ello ocasione por cuenta del Contratista.
-La Dirección puede ordenar que se verifiquen los ensayos y análisis de materiales y unidades de obra que en cada caso resulten pertinentes y los gastos que se originen serán por cuenta del contratista hasta un importe máximo del uno por ciento (1%) del Presupuesto de la Obra, que se deben entender incluidos en los precios de las unidades, es decir, sin abono independiente.
-La misma Dirección fijará el número, forma y dimensiones y demás características que deben reunir las muestras y probetas para ensayo y análisis.
-El límite no será de aplicación a los ensayos que den resultado negativo o a aquellos necesarios para comprobar la presunta existencia de vicios o defectos de construcción ocultos cuyos gastos se imputaran al Contratista de confirmarse su existencia.
-Ninguna parte de la obra deberá cubrirse u ocultarse sin la aprobación del Director. El Contratista deberá dar todo tipo de facilidades al Director para examinar, controlar y medir toda la obra que haya de quedar oculta, así como para examinar el terreno de cimentación antes de cubrirlo con la obra permanente.
-Si el Contratista ocultara cualquier parte de la obra sin previa autorización escrita del Director, deberá descubrirla a su costa, si así lo ordenara éste.
+En el Acta de Comprobación del Replanteo se reflejará expresamente la conformidad o disconformidad de la realidad física del terreno respecto de los documentos contractuales del Proyecto, haciendo especial referencia a sus características geométricas, a la efectividad de la ocupación de los terrenos necesarios, a las contradicciones, errores u omisiones observadas en la documentación y a cualquier otro extremo que pueda condicionar el normal desarrollo del contrato. Todos los gastos que se originen derivados de las operaciones materiales de comprobación del replanteo serán por cuenta del Contratista.
 
-#### 1.7.14.3 OTROS GASTOS E INDEMNIZACIONES
+El Contratista transcribirá el texto completo del Acta en el Libro de Órdenes, autorizándolo el Director de Obra con su firma. La comprobación abarcará, como mínimo, la verificación de los ejes principales de los viales y obras de fábrica, así como la fijación de los puntos fijos y auxiliares requeridos para los posteriores replanteos de detalle. Los vértices de triangulación, los puntos básicos y las señales de nivelación de referencia principal se materializarán sobre el terreno mediante hitos, pilares o dispositivos fijos permanentes. Todos los datos, cotas y referencias fijadas se incorporarán en un Anejo al Acta de Comprobación del Replanteo que se unirá al expediente formal de la obra, entregándose copia autenticada al Contratista.
 
-Los gastos o cánones por uso de vertederos o escombreras, son a cargo del Contratista, entendiéndose que están ya incluidos en los precios de las correspondientes unidades de obra del Contrato.
-Serán también por cuenta del Contratista las indemnizaciones por ocupación de terrenos fuera de los estrictamente necesarios para la ejecución de las obras a juicio de la Dirección de éstas.
-No procederán en ningún caso indemnizaciones por daños, cualquiera que sea la causa.
+### 1.6.9 PLAN DE OBRAS
 
-El Contratista deberá adoptar, en cada momento, todas las medidas que se estimen necesarias para la debida seguridad de las obras.
-En consecuencia, cuando por motivo de la ejecución de los trabajos, o durante el plazo de garantía, y a pesar de las precauciones adoptadas en la construcción, se originasen averías o perjuicios en instalaciones y edificios públicos o privados, servicios, monumentos, jardines, bienes, etc., el Contratista abonará el importe de reparación de los mismos.
+El Contratista está obligado a presentar a la Dirección de Obra el Plan de Ejecución y Programa de Trabajos definitivo en el plazo máximo de cinco (5) días naturales contados desde el siguiente a aquel en que tuviere lugar la firma del Acta de Comprobación del Replanteo. Dicho programa fijará los plazos parciales y fechas de terminación de las distintas unidades de obra, garantizando su estricta compatibilidad con el plazo total de ejecución adjudicado de {{plazo_ejecucion}}. El inicio de los trabajos se producirá dentro del mes siguiente a la firma del contrato y el programa requerirá la aprobación previa y expresa de {{entidad}}.
 
-### 1.7.15 LIMPIEZA FINAL DE LAS OBRAS
+El Programa de Trabajos contendrá el calendario detallado con la estimación de tiempos para las operaciones preparatorias, obras auxiliares, desvíos provisionales y la ejecución de las distintas partes de la obra definitiva, así como la valoración económica mensual prevista. Asimismo, detallará los equipos y maquinaria a emplear, las fuentes de suministro de materiales con sus certificados de garantía o ensayos previos, la previsión de préstamos y vertederos, y los rendimientos esperados. El programa será revisado cada bimestre por el Contratista y cuantas veces sea requerido por la Dirección de Obra por causas justificadas.
 
-Una vez que se hayan terminado las obras, todas las instalaciones, depósitos y edificios, construidos con carácter temporal para el servicio de la obra, deberán ser retirados antes de la recepción provisional de las obras.
-Todo ello se ejecutará de forma que las zonas afectadas queden completamente limpias y en condiciones estéticas. Estos trabajos se consideran incluidos en el contrato y, por tanto, no serán objeto de abonos directos por su realización.
-Si, previo aviso y en un plazo de treinta (30) días a partir de éste, la Contrata no hubiese procedido a la retirada de todas sus instalaciones, herramientas, materiales, etc., después de la terminación de la obra, la Dirección de Obra, puede mandarlos retirar por cuenta del Contratista.
+El incumplimiento de los plazos parciales o del plazo total por causas imputables al Contratista dará lugar a la imposición de las penalidades o a la resolución del contrato conforme a lo establecido en los artículos 192 a 195 de la Ley 9/2017, de Contratos del Sector Público (LCSP) y en el Pliego de Cláusulas Administrativas Particulares.
 
-### 1.7.16 OBRAS QUE DEBEN QUEDAR OCULTAS
+Con carácter obligatorio, el Contratista presentará a {{entidad}}, cinco (5) días antes de finalizar cada mes, la planificación detallada por semanas de los trabajos a ejecutar durante el mes siguiente, explicitando las zonas de calzada cuya ocupación se prevea y la afección concreta a los vecinos (accesos a garajes, viviendas y comercios). Finalmente, el Contratista no iniciará el uso de materiales ni la explotación de canteras sin la previa aprobación de las muestras y documentación por la Dirección de Obra, debiendo designar en el Plan a su representación técnica a pie de obra con indicación de sus titulaciones y atribuciones.
 
-Sin autorización del Director de la obra, o subalterno en quien delegue, no podrá el Contratista proceder al relleno de las zanjas abiertas para cimentaciones o alojamiento de tuberías, ni en general, a ocultar cualquier unidad de obra, debiéndose comprobar que las alineaciones y rasantes ejecutadas en cada caso por el Contratista de hallan de acuerdo con las establecidas en Planos.
-Cuando el Contratista hubiese procedido al relleno o ocultación sin la debida autorización, el Director de la obra podrá ordenarle descubrir lo ejecutado sin derecho a indemnización y, en todo caso, el Contratista será responsable de las equivocaciones que pudiese haber cometido o se derivasen de su actuación.
-
-### 1.7.17 EJECUCIÓN DE OBRAS NO ESPECIFICADAS EN EL PRESENTE CAPÍTULO
-
-En la ejecución de aquellas fábricas y trabajos que sean necesarios y para los que no existan prescripciones consignadas expresamente en el presente Pliego, se atenderá a las buenas prácticas de la construcción y a las normas que dé el Director de la obra, así como a lo ordenado en los Pliegos Generales vigentes que fuesen de aplicación.
-Se medirán y abonarán de acuerdo con los criterios deducibles de la propia definición de los precios que figuran en los Cuadros de Precios.
-
-### 1.7.18 MODIFICACIONES DE OBRA
+### 1.6.10 MODIFICACIONES DE OBRA
 
 Será de aplicación lo establecido en el TRLCSP, el contrato y resto de documentación contractual.
 
-### 1.7.19 POSIBLES INTERFERENCIAS CON LOS TRABAJOS DE OTROS CONTRATISTAS
+### 1.6.11 POSIBLES INTERFERENCIAS CON LOS TRABAJOS DE OTROS CONTRATISTAS
 
 En el caso particular de tener que simultanear la obra entre varios Contratistas, se seguirán las instrucciones del Director de la obra, quien será el único árbitro de posibles conflictos entre aquellos.
 
-### 1.7.20 RECEPCION UNICA Y DEFINITIVA
+### 1.6.12 CASOS DE RESOLUCIÓN
 
-La recepción definitiva de las obras se efectuará en la forma y condiciones señaladas en el la Ley de Contratos del Sector Público y el PCAP, si existiera.
+En caso de resolución del contrato, cualquiera que sea su causa, se estará a lo dispuesto en el contrato de obras, en los artículos 211 a 213 y 242 a 246 de la Ley 9/2017, de 8 de noviembre, de Contratos del Sector Público (LCSP), y en su defecto, en los artículos 109 a 113 y 160 a 172 del Reglamento General de la Ley de Contratos de las Administraciones Públicas (RGLCAP), aprobado por el Real Decreto 1098/2001, de 12 de octubre.
 
-### 1.7.21 PLAZO DE GARANTIA
+En el supuesto de que la ejecución de la obra haya requerido la implantación de instalaciones auxiliares especiales, acopios, maquinaria o medios específicos en los terrenos de la obra, {{entidad}} se reserva la facultad de acordar su ocupación, uso, permanencia o retirada en las condiciones fijadas legal y reglamentariamente, mediante la correspondiente acta de comprobación y medición de los trabajos ejecutados a la fecha de la resolución.
 
-El plazo de garantía será el que se fije en el contrato, a partir de la fecha de recepción y durante este plazo será por cuenta del Contratista la conservación y reparación de la obra, cumpliéndose lo dispuesto en el Pliego de Cláusulas. Si en el contrato no se definiera, dicho plazo de garantía será de {{plazo_garantia}}.
+### 1.6.13  REVISIÓN DE PRECIOS
 
-### 1.7.22 PRUEBAS DE RECEPCION
+Dadas las características y naturaleza del contrato de obras objeto del presente proyecto, no procede la aplicación de revisión de precios.
+
+De conformidad con lo dispuesto en el artículo 103 de la Ley 9/2017, de 8 de noviembre, de Contratos del Sector Público (LCSP), y en la Ley 2/2015, de 30 de marzo, de desindexación de la economía española, las obras del presente proyecto no están sujetas a revisión de precios al ser su plazo de ejecución inferior a {{plazo_ejecucion}}, no cumplirse los requisitos de ejecución del 20% del importe del contrato ni el transcurso de los dos años desde su formalización, y no preverse fórmulas de revisión en los pliegos de la licitación.
+
+### 1.6.14 PRUEBAS DE RECEPCIÓN
 
 En el acto de la recepción, deberán presentarse las actas de las pruebas parciales de funcionamiento a lo largo de la obra, que exija la Dirección de aquella, así como los resultados de las pruebas efectuadas para la recepción provisional y las posteriores a ella previstas o que sean preciso realizar.
 
-### 1.7.23 VALIDEZ DE ENSAYOS
+## 1.6.15 LIQUIDACIÓN DE LAS OBRAS
 
-Los ensayos a efectuar, tanto en hormigón como en materiales sueltos, servirán a efecto de aceptación de una tongada y para expedir las certificaciones parciales, pero su admisión antes de la recepción definitiva, en cualquier forma que se realice no atenúa las obligaciones del Contratista de subsanar o reponer cualquier elemento de resultar inaceptable, total o parcialmente, en el acto de reconocimiento final y pruebas de recepción definitiva o anteriormente a la misma.
-En caso de discrepancia entre la Dirección de Obra y el Contratista acerca del significado de los ensayos, se someterá la gestión al arbitraje de un Laboratorio Oficial, corriendo el Contratista con todos los gastos ocasionados por este motivo.
+Finalizado el plazo de ejecución y realizado el acto formal de Recepción de las Obras conforme a lo establecido en el artículo 243 de la Ley 9/2017, de 8 de noviembre, de Contratos del Sector Público (LCSP), la Dirección de Obra procederá, en el plazo máximo de treinta (30) días a contar desde la fecha del acta de recepción, a expedir la Certificación Final de las obras ejecutadas.
 
-### 1.7.24 FACILIDADES PARA LA INSPECCION
+A la vista de la medición general realizada, el Director de la Obra formulará la propuesta de liquidación provisional del contrato, aplicando al resultado de las mediciones realmente ejecutadas los precios unitarios y condiciones económicas fijadas en el contrato. Si el Contratista tuviese que formular alegaciones o reparos al resultado de la medición o de la propuesta de liquidación, los dirigirá por escrito al {{entidad}} en el plazo de quince (15) días hábiles desde su notificación.
 
-El Contratista proporcionará a la Dirección de Obra y a sus delegados o subalternos, toda clase de facilidades para los replanteos, así como para la inspección de la obra en todos los trabajos, con objeto de comprobar el cumplimiento de las condiciones establecidas en este Pliego, permitiendo el acceso a cualquier parte de la obra, incluso a los talleres e instalaciones donde se produzcan los materiales o se realicen trabajos o pruebas para las obras.
+Si durante el acto de comprobación o recepción se detectase que alguna unidad de obra no ha sido ejecutada en estricta conformidad con las condiciones del contrato, pero las deficiencias fuesen de carácter menor, no afectasen a la seguridad estructural, durabilidad ni funcionalidad de la infraestructura y resultasen admisibles a juicio motivado de la Dirección de Obra, esta podrá proponer su aceptación aplicando la correspondiente deducción o demérito económico sobre el precio de contrato. El Contratista podrá acogerse a dicha minoración o, alternativamente, proceder a su demolición y correcta reejecución a su costa en el plazo que a tal efecto le otorgue la Dirección de Obra, sin que ello justifique una ampliación del plazo contractual.
 
-### 1.7.25 LEYES SOCIALES Y PROTECCION DE LA INDUSTRIA NACIONAL
+Las unidades de obra terminadas con sujeción a las condiciones del contrato se abonarán aplicando los precios unitarios fijados en el Cuadro de Precios nº 1 del Presupuesto. En caso de resolución del contrato o paralización definitiva que obligue a valorar obras o unidades incompletas, se aplicarán los criterios y precios descompuestos del Cuadro de Precios nº 2, sin que proceda la fragmentación arbitraria de las unidades de obra.
 
-El Contratista se compromete al cumplimiento de cuanto hasta la fecha se ha legislado respecto a la protección de la industria nacional y leyes de protección social, debiendo seguir las normas en vigor para la admisión de obreros, aplicar los jornales mínimos establecidos y cumplimentar lo legislado sobre accidentes de trabajo, retiro obrero, subsidio familiar, etc., y a cumplir cuanto se legisle en lo sucesivo mientras dure la ejecución de las obras.
+En ningún caso el Contratista tendrá derecho a reclamación ni indemnización fundada en la insuficiencia de los precios fijados en el contrato, ni en la omisión del coste de cualquiera de los elementos simples o auxiliares que integran la descomposición de los referidos precios unitarios.
 
-### 1.7.26 ACCESOS A LAS OBRAS
+### 1.6.16 PLAZO DE GARANTÍA
 
-Los caminos, sendas, obras de fábrica, escaleras y demás accesos a las obras y a los distintos tajos serán construidos por el Contratista por su cuenta y riesgo.
-Los caminos y demás vías de acceso construidos por el Contratista serán  conservados por él durante la ejecución de las obras, así como las calles, carreteras y caminos ya existentes que fueran usados para acceder a las obras o a las canteras de materiales o a los lugares de acopio. La Dirección de Obra se reserva para sí el uso de estas instalaciones de acceso sin colaborar en los gastos de conservación.
+El plazo de garantía será el que se fije en el contrato, a partir de la fecha de recepción y durante este plazo será por cuenta del Contratista la conservación y reparación de la obra, cumpliéndose lo dispuesto en el Pliego de Cláusulas. Si en el contrato no se definiera, dicho plazo de garantía será de {{plazo_garantia}}.
 
-### 1.7.27 HALLAZGOS ARQUEOLOGICOS
+### 1.7 GASTOS DE CARACTER GENERAL A CARGO DEL CONTRATISTA
 
-Si durante la ejecución de las excavaciones o dragados se hallasen piezas de interés arqueológico que por sus circunstancias hicieran prever la existencia de algún valor, se detendrán los trabajos, balizándose la zona en cuestión y se avisará inmediatamente a la Dirección de Obra para que disponga lo procedente, reanudándose el trabajo fuera de la zona balizada, sin que estas paralizaciones y discontinuidades den derecho a indemnización alguna.
-La extracción posterior de estos hallazgos se efectuará por equipos y personal especializados y con el máximo cuidado para preservar de deterioros las piezas obtenidas.
-Estas extracciones serán abonadas separadamente, quedando todas las piezas extraídas de propiedad de la administración.
+Serán por cuenta del Contratista, además de los expresamente indicados en otros artículos de este Pliego, en el Pliego de Cláusulas Administrativas Particulares (PCAP) o en el propio Contrato, los siguientes gastos de carácter general:
 
-### 1.7.28 SEÑALIZACION DE LAS OBRAS
+    * Los de medios auxiliares de construcción, maquinaria, herramientas, andamiajes, así como los de implantación, conservación, mantenimiento, desmantelamiento y retirada final de toda clase de instalaciones provisionales y casetas de obra.
 
-El Contratista suministrará, instalará y mantendrá en perfecto estado toda la señalización necesaria para delimitar la zona de trabajo a satisfacción del Director de la Obra.
-El Contratista quedará asimismo obligado a señalizar a su costa las obras objeto del Contrato con arreglo a las instrucciones y uso de los aparatos que prescriba la Dirección Técnica y a las indicaciones de otras Autoridades en el ámbito de su competencia y siempre en el cumplimiento de todas las Disposiciones vigentes.
-Serán de cuenta y riesgo del Contratista los suministros, instalación, mantenimiento y conservación de todas las instalaciones necesarias para dar cumplimiento a lo indicado en los párrafos anteriores.
-Comprenden estos trabajos la adquisición, colocación, vigilancia y conservación de señales durante la ejecución de las obras, su guardería, construcción y conservación de desvíos, semáforos y jornales de personal necesario para seguridad y regularidad del tráfico, y serán abonados por el Contratista sin derecho a indemnización alguna.
+    * Los de protección de los materiales, acopios y de la propia obra contra todo deterioro, daño, inclemencia meteorológica o incendio, cumpliendo estrictamente con los reglamentos técnicos vigentes para el almacenamiento y manipulación de combustibles, carburantes o productos inflamables.
+
+    * Los de retirada de instalaciones auxiliares, equipos y materiales sobrantes al finalizar las obras, así como los de limpieza general y remate de las mismas previo al acto formal de recepción.
+
+    *  Los de montaje, acometida, legalización, conservación, consumos (agua, energía eléctrica, telecomunicaciones) y posterior retirada de las instalaciones provisionales necesarias para la ejecución de la obra.
+
+    * Los de retirada, transporte y gestión de los materiales rechazados por la Dirección de Obra, así como los de demolición, corrección y reejecución de las unidades de obra defectuosas o que arrojen resultados desfavorables en los ensayos de control de calidad.
+
+    * Los gastos de vigilancia, custodia y seguridad a pie de obra durante todo el periodo de ejecución hasta la recepción formal.
+
+    * Los gastos de cartel de obra institucional (diseñado y colocado según el manual de identidad corporativa del Ayuntamiento de Lucena), así como los de señalización, avisos a los vecinos o comunicaciones exigidas por la Dirección de Obra o por las condiciones de la licitación.
+
+    * Los gastos y cánones derivados de la adquisición, arrendamiento o acondicionamiento de terrenos para zonas de acopio, parque de maquinaria, casetas de obra o vertederos, teniendo en cuenta que las parcelas privadas no forman parte de la traza del Proyecto.
+
+    * Los gastos y costes de limpieza, recolección, selección, transporte y cánones o tarifas de vertedero o planta de reciclaje autorizada para la correcta gestión de los Residuos de Construcción y Demolición (RCDs), cumpliendo con el Real Decreto 105/2008 y el Decreto 73/2012 de la Junta de Andalucía.
+
+    * Los gastos y costes de redacción, implantación, suministro, colocación, mantenimiento, balizamiento nocturno y posterior retirada de la Señalización Provisional de Tráfico, semáforos y elementos de seguridad vial/peatonal conforme a la Norma 8.3-IC y los requerimientos de la Policía Local de Lucena.
+
+    * Los gastos de instrumentación, ensayos especiales, pruebas de carga de estructuras o pavimentos e informes técnicos exigidos por la Dirección de Obra para la comprobación de la seguridad o estabilidad de los trabajos.
+
+    * Los gastos de reposición, reparación e indemnización por daños causados en redes de servicios existentes (abastecimiento, saneamiento, electricidad, alumbrado público, telecomunicaciones), pavimentos, estructuras o bienes públicos/privados derivados del paso de maquinaria o del desarrollo de las obras.
+
+    *  Las tasas, licencias, cánones y tributos de cualquier naturaleza que por todos los conceptos tenga establecidos el Ayuntamiento de Lucena o cualquier otro Organismo Público con competencia en la ejecución de las obras.
+
+    * Los gastos notariales, de formalización del contrato, licitadores o de constitución de garantías que resulten aplicables conforme a la LCSP.
+
+    * Todos los trabajos preparatorios de los tajos, tales como caminos de acceso provisionales, desbroces, nivelaciones o cerramientos cautelares.
+
+En los casos de resolución del contrato, cualquiera que sea la causa que la motive, serán asimismo por cuenta del Contratista los gastos originados por las mediciones de comprobación para la liquidación de la obra, así como los de desmantelamiento y retirada de los medios auxiliares empleados.
+
+#### 1.7.1 GASTOS DE REPLANTEO Y LIQUIDACIÓN DE LAS OBRAS
+
+Serán a cargo del Contratista los gastos derivados de la aportación de los medios materiales, auxiliares, personal topográfico y equipos necesarios que le sean requeridos por la Dirección de Obra para llevar a cabo las operaciones de Comprobación del Replanteo General, los replanteos parciales de los distintos tajos y las mediciones para la Certificación Final y propuesta de Liquidación de las obras.
+
+De conformidad con el marco normativo de la Ley 9/2017, de 8 de noviembre, de Contratos del Sector Público (LCSP), la realización del Acta de Comprobación del Replanteo y la elaboración de la propuesta de Liquidación son facultades públicas e irrenunciables de la Dirección de Obra y del {{entidad}}, por lo que no se repercutirá al Contratista exacción, tasa ni porcentaje económico alguno por dichos conceptos administrativos, limitándose la obligación del Contratista a la prestación del auxilio material y topográfico necesario.
+
+#### 1.7.2 GASTOS DE ENSAYOS
+
+Previamente al inicio de los trabajos, el Contratista someterá a la aprobación de la Dirección de Obra el Programa de Control de Calidad adaptado a las características particulares de la glorieta y a las determinaciones del Plan de Control de Calidad del Proyecto.
+
+La calidad de los materiales acopiados será comprobada mediante los ensayos, tomas de muestras y análisis correspondientes en el momento de su recepción a pie de obra o puesta en obra, siendo rechazados aquellos que no cumplan las especificaciones del presente Pliego o del Pliego PG-3. El Contratista suministrará a su costa las muestras requeridas por el Programa de Control, así como los medios auxiliares y transportes necesarios para su envío a un Laboratorio de Control de Calidad de la Edificación y Obra Pública debidamente acreditado (conforme al RD 410/2010 y normativa autonómica andaluza). Los ensayos servirán a efecto de aceptación de los trabajos y para expedir las certificaciones parciales, pero su admisión antes de la recepción definitiva, en cualquier forma que se realice no atenúa las obligaciones del Contratista de subsanar o reponer cualquier elemento de resultar inaceptable, total o parcialmente, en el acto de reconocimiento final y pruebas de recepción definitiva o anteriormente a la misma. En caso de discrepancia entre la Dirección de Obra y el Contratista acerca del significado de los ensayos, se someterá la gestión al arbitraje de un Laboratorio Oficial, corriendo el Contratista con todos los gastos ocasionados por este motivo.
+
+Tanto los materiales como las unidades de obra terminadas (explanadas, capas de firme, bordillos, hormigones, tuberías de drenaje) estarán sometidos en todo momento a los ensayos prescriptivos. El Contratista facilitará las labores de toma de muestras e interrumpirá temporalmente las actividades que puedan viciar la ejecución de las pruebas in situ.
+
+Los gastos originados por la ejecución del Plan de Control de Calidad (ensayos obligatorios) serán a cargo del Contratista hasta un importe máximo equivalente al uno por ciento (1%) del Presupuesto de Ejecución Material (PEM) de la obra, entendiéndose este importe prorrateado e incluido en los precios unitarios de la contrata. Dicho límite no será de aplicación a:
+
+    * Los ensayos cuyos resultados resulten desfavorables o no alcanzaren las prescripciones mínimas.
+
+    * Los ensayos complementarios que ordene la Dirección de Obra para verificar la existencia de vicios, defectos ocultos o mala ejecución.
+
+En ambos casos excepcionales, el coste íntegro de los ensayos y de las demoliciones/reejecuciones derivadas será asumido al 100% por el Contratista sin derecho a abono ni indemnización.
+
+#### 1.7.3 OTROS GASTOS E INDEMNIZACIONES
+
+Los gastos, cánones y tarifas de vertido derivados del transporte y depósito de los productos de excavación sobrantes o escombros en vertedero o planta de reciclaje autorizada son a cargo exclusivo del Contratista, entendiéndose comprendidos en los precios unitarios de excavación y vaciado. Serán también por su cuenta las indemnizaciones derivadas de la ocupación no autorizada de terrenos o fincas colindantes fuera de la traza u ocupación oficial de la obra.
+
+El Contratista adoptará en todo momento las medidas preventivas necesarias para garantizar la seguridad de los trabajos y del entorno urbano colindante. Cuando por motivo de la ejecución de las obras o durante el plazo de garantía se originasen daños, asentamientos o averías en redes de servicios públicos, edificaciones, pavimentos o bienes privados, el Contratista procederá a su reparación o indemnización de forma inmediata y a su costa, bajo la supervisión técnica de los servicios municipales del {{entidad}}.
 
 ## 1.8 CONDICIONES TÉCNICAS GENERALES SOBRE LOS MATERIALES
 
-En general son válidas todas las prescripciones que, referentes a las condiciones que deben satisfacer los materiales, aparecen en las Instrucciones, Pliego de Condiciones o Normas Oficiales que reglamentan la recepción transporte, manipulación o empleo de cada uno de los materiales que se utilizan en las obras de este Contrato, siempre que no se opongan a las prescripciones particulares del presente Capítulo.
-Será exigible el MARCADO CE, acompañado de la correspondiente declaración de conformidad y expediente técnico, a todos los productos necesarios para la ejecución de este proyecto cuya exigencia se encuentre en vigor en la fecha de ejecución del mismo conforme al REGLAMENTO (UE) No 305/2011 DEL PARLAMENTO EUROPEO Y DEL CONSEJO y demás normativa aplicable.
-Al realizar el Proyecto de Construcción, el contratista someterá a {{entidad}} para su aprobación un protocolo de pruebas aplicables a la obra civil y a la totalidad de sus equipos y sistemas electromecánicos, instrumentación y control.
-Todos los materiales necesarios para la ejecución de las obras serán suministrados por el Contratista y procederán de los lugares, fábricas o marcas que, elegidos por dicho Contratista, hayan sido previamente aprobados por el Director de la obra. Cuando existan normas oficiales establecidas en relación con su empleo, deberán satisfacer las que estén en vigor en la fecha de licitación.
-La manipulación de los materiales no deberá alterar sus características, tanto al transportarlos como durante su empleo.
-La aceptación por parte del Director de la obra de la procedencia de los materiales, no disminuye en nada la responsabilidad del Contratista en cuanto a la calidad de los mismos, quedando el mismo obligado a eliminar ó sustituir, a su costa, los materiales de calidad inferior a la exigida que pudiesen aparecer durante la ejecución y el plazo de garantía de la obra.
+Con carácter general, serán de aplicación todas las prescripciones técnicas que, sobre condiciones de calidad, recepción, transporte, manipulación, almacenamiento y puesta en obra de materiales, se recogen en las Instrucciones, Reglamentos Técnicos y Pliegos Oficiales vigentes, en particular el Pliego de Prescripciones Técnicas Generales para Obras de Carreteras y Puentes (PG-3) y el Código Estructural (Real Decreto 470/2021), siempre que no se opongan a las especificaciones particulares contenidas en el presente Pliego.
+
+Será estrictamente exigible el Marcado CE, acompañado de su correspondiente Declaración de Prestaciones (DoP) y documentación técnica, a todos los productos y materiales de construcción incorporados a la obra cuya exigencia se encuentre en vigor a la fecha de licitación, de conformidad con el Reglamento (UE) Nº 305/2011 del Parlamento Europeo y del Consejo y sus posteriores modificaciones.
+
+Todos los materiales necesarios para la correcta ejecución de las obras serán suministrados por el Contratista a su costa y procederán de canteras, yacimientos, instalaciones, fábricas o marcas previamente aprobadas de forma explícita por la Dirección de Obra. La manipulación de los materiales no deberá alterar en ningún caso sus propiedades ni características físicas, químicas o mecánicas, tanto en las fases de carga, transporte y acopio como durante su puesta en obra.
+
+La aprobación o aceptación previa por parte de la Dirección de Obra de la procedencia, marca o fabricante de los materiales no atenúa ni disminuye en modo alguno la responsabilidad del Contratista sobre la calidad final de los mismos, quedando obligado a retirar, sustituir y reejecutar a su costa cualquier material o unidad de obra que no alcance las especificaciones exigidas durante la ejecución o durante el {{plazo_garantia}} de la obra.
 
 ### 1.8.1 PROCEDENCIA DE LOS MATERIALES
 
-El Contratista propondrá a la Dirección Técnica las canteras, graveras, fábricas, marcas de prefabricados y en general la procedencia de todos los materiales que se emplean en las obras, para su aprobación si procede, en el entendido de que la aceptación en principio de un material no será obstáculo para poder ser rechazado en el futuro, si variasen sus características primitivas. En ningún caso se procederá al acopio y utilización en obra de materiales de procedencia no aprobada.
-Todos los materiales que se empleen en las obras, figuren o no en este Pliego, reunirán las condiciones de calidad exigibles en la buena práctica de la construcción; y la aceptación por la Dirección de una marca, fábrica o lugar de extracción, no exime al Contratista del cumplimiento de estas Prescripciones.
-No se procederá al empleo de los materiales sin que antes sean examinados en los términos y forma que prescriba la Dirección de Obra, o persona en quien delegue.
+El Contratista propondrá formalmente a la Dirección de Obra la procedencia de las materias primas, canteras, graveras, plantas de asfalto, plantas de hormigón, elementos prefabricados y marcas comerciales de todos los materiales que pretenda incorporar a la obra. La aceptación inicial de una procedencia o marca no será obstáculo para su posterior rechazo si en los ensayos de recepción se observaran variaciones o incumplimientos respecto a las características requeridas. En ningún caso se autorizará el acopio ni el empleo en obra de materiales provenientes de orígenes no aprobados previamente por escrito.
 
-### 1.8.2 ENSAYOS
+Todos los materiales, figuren o no especificados en este Pliego, reunirán las condiciones de calidad acordes con las reglas de la buena práctica constructiva y la normativa sectorial aplicable. Ningún material será puesto en obra sin haber sido previamente examinado y autorizado por la Dirección de Obra o personal técnico en quien delegue.
 
-Salvo que se indique otra caso en el contrato, todos los gastos que se originen con motivo de los ensayos, análisis de materiales, así como las pruebas de calidad de las unidades de obras, en fábrica o "in situ" realizados con la frecuencia prescrita en este Pliego de Condiciones, o fijados por la Dirección Técnica de las Obras en su caso, serán por cuenta del Contratista, hasta el uno por ciento (1%) del importe del presupuesto de ejecución material, siendo por cuenta de {{entidad}} el exceso de dicho importe.
-Las pruebas y ensayos ordenados se llevarán a cabo bajo la supervisión de la Dirección de Obra o Técnico en quien delegue, en los laboratorios propuestos por el Contratista y aceptadas por la Dirección de Obra.
+### 1.8.2 ENSAYOS Y CONTROL DE RECEPCIÓN
 
-### 1.8.3 ALMACENAMIENTO
+De conformidad con lo establecido en el apartado 1.7.2 de este Pliego, todos los gastos originados por la realización de los ensayos, análisis de materiales y pruebas de control de calidad prescriptivas (tanto en planta/fábrica como in situ) ejecutadas con las frecuencias fijadas en el Plan de Control de Calidad o las ordenadas motivadamente por la Dirección de Obra, serán a cargo del Contratista hasta el límite del uno por ciento (1%) del Presupuesto de Ejecución Material (PEM) del Contrato. El exceso sobre dicho importe, si lo hubiere por orden directa de la Dirección de Obra sin causa imputable a defectos de ejecución, será asumido por el {{entidad}}.
 
-Los materiales se almacenarán de modo que se asegure su correcta conservación y de forma que se facilite su inspección en caso necesario.
+Las tomas de muestras, pruebas y ensayos se llevarán a cabo bajo la supervisión directa de la Dirección de Obra en un Laboratorio de Control de Calidad de la Edificación y la Obra Pública debidamente acreditado de conformidad con el Real Decreto 410/2010 y la normativa de la Comunidad Autónoma de Andalucía.
 
-### 1.8.4 MATERIALES QUE NO SEAN DE RECIBO
+### 1.8.3 ALMACENAMIENTO Y ACOPIO
 
-Podrán desecharse todos aquellos materiales que no satisfagan las condiciones impuestas en este Pliego para cada uno de ellos en particular, comprobadas por los ensayos indicados en 3.1.3.
-Los ensayos sobre materiales defectuosos serán por cuenta del Contratista.
-En caso de no conformidad con los resultados de las citadas pruebas, bien por el Contratista o por la Dirección Técnica, se someterá la cuestión a un laboratorio designado de común acuerdo o en su defecto al Laboratorio Central de Ensayos de Materiales de Construcción,  dependiente del Ministerio de Obras Públicas, siendo obligatoria para ambas partes, la aceptación de los resultados que se obtengan y de las conclusiones que formule.
-La Dirección Técnica podrá señalar al Contratista un plazo breve para que retire de los terrenos de la obra los materiales desechados. En caso de incumplimiento de esta orden podrá proceder a retirarlos por cuenta y riesgo del Contratista.
-El Contratista se atendrá, en todo caso a lo que por escrito ordene la Dirección Técnica de las obras para el cumplimiento de las prescripciones del presente Pliego.
+Los materiales y productos de construcción se almacenar y acopiarán en las zonas expresamente autorizadas por la Dirección de Obra, garantizando en todo momento su conservación, protección contra el deterioro, humedad, contaminación o segregación, y ordenados de tal modo que se facilite en cualquier momento su inspección, identificación y toma de muestras.
 
-### 1.8.5 MATERIALES DEFECTUOSOS PERO ACEPTABLES
+### 1.8.4 MATERIALES QUE NO SEAN DE RECIBO Y RESOLUCIÓN DE CONFLICTOS
 
-Si los materiales fueran defectuosos pero aceptables a juicio de la Dirección de Obra podrán emplearse, con el demérito que se fije y siguiendo el procedimiento indicado en el último párrafo del apartado 3.1.5.
-Si el Contratista no estuviese conforme con el precio fijado, estará obligado a sustituir dichos materiales por otros que cumplan todas las condiciones señaladas en este Pliego.
+Se desecharán y rechazarán todos aquellos materiales que no satisfagan las condiciones mínimas impuestas en el presente Pliego o en las normas oficiales de aplicación, comprobadas mediante los ensayos previstos en el apartado 1.8.2. Los gastos de los ensayos sobre materiales rechazados o defectuosos serán íntegramente a cargo del Contratista, sin computarse a efectos del límite del 1% del PEM.
 
-### 1.8.6 PRODUCTOS DE EXCAVACIÓN
+En caso de discrepancia sobre los resultados de los ensayos entre el Contratista y la Dirección de Obra, se someterá la muestra o unidad de obra al dictamen de un laboratorio acreditado designado de común acuerdo. En su defecto, se recurrirá a los centros y laboratorios oficiales de ensayo de la Administración Pública de Andalucía o estatales, siendo el resultado de dicho ensayo dirimente y obligatorio para ambas partes. Si el dictamen confirma el incumplimiento, todos los costes del ensayo dirimente serán a cargo del Contratista.
 
-El Contratista podrá utilizar en las obras objeto del Contrato los materiales que obtenga de la excavación, siempre que éstos cumplan las condiciones previstas en el presente Capítulo. Para utilizar dichos materiales en otras obras será necesaria autorización de la Dirección Técnica.
+La Dirección de Obra señalará un plazo improrrogable al Contratista para la retirada fuera del recinto de la obra de los materiales rechazados. En caso de incumplimiento, el {{entidad}} podrá proceder a su retirada y depósito en vertedero por ejecución subsidiaria a costa y riesgo del Contratista.
+
+### 1.8.5 MATERIALES CON DEFECTOS MENORES O DEMÉRITO
+
+Si los materiales o unidades de obra presentaran imperfecciones menores que no comprometan la seguridad estructural, durabilidad ni funcionalidad de la infraestructura de la glorieta, y fuesen juzgados como admisibles por la Dirección de Obra, esta podrá acordar su aceptación aplicando la correspondiente propuesta de minoración o demérito económico en la liquidación conforme al procedimiento regulado en el apartado 1.6.10 de este Pliego.
+
+Si el Contratista no aceptase el demérito fijado, estará obligado a retirar y sustituir inmediatamente dichos materiales por otros que cumplan al 100% las especificaciones prescritas, sin derecho a indemnización ni prórroga del plazo de ejecución.
+
+### 1.8.6 PRODUCTOS DE EXCAVACIÓN Y APROVECHAMIENTO
+
+El Contratista podrá reutilizar en las obras objeto del presente Contrato (en rellenados, formación de explanadas o capas del firme) los materiales procedentes de las excavaciones y vaciados de la glorieta, siempre y cuando cumplan estrictamente con las especificaciones de selección y calidad fijadas en el Capítulo 2 de este Pliego (PG-3) y cuenten con la autorización expresa de la Dirección de Obra.
+
+Queda expresamente prohibida la extracción, venta o empleo de dichos materiales en obras ajenas al presente proyecto sin la preceptiva autorización del {{entidad}} y el abono de los cánones o autorizaciones patrimoniales que correspondan.
 
 ### 1.8.7 MATERIALES E INSTALACIONES AUXILIARES
 
-Todos los materiales que el Contratista pudiera emplear en instalaciones y obras, que parcialmente fueran susceptibles de quedar formando parte de las obras de modo provisional o definitivo (caminos, obras de tierra, cimentaciones, anclajes, armaduras, empalmes, etc.), cumplirán las especificaciones que, con respecto a ejecución de obras, recoge el presente Pliego.
+Todos los materiales que el Contratista emplee en instalaciones, obras provisionales o auxiliares que parcialmente puedan quedar incorporadas o en contacto con las obras definitivas (caminos de desvío, entibaciones, cimentaciones provisionales, anclajes, drenajes temporales), deberán cumplir íntegramente las especificaciones de seguridad y calidad del presente Pliego.
 
-### 1.8.8 EQUIPOS MECÁNICOS
+### 1.8.8 EQUIPOS Y MAQUINARIA DE OBRA
 
-Siempre que sea posible, se tenderá a la unificación de marcas, tipo y tamaños, de forma que sean intercambiables y la necesidad de piezas de repuestos se reduzca al mínimo posible.
-Estarán instalados de forma que sea fácil su mantenimiento. Las bancadas en lo posible deberán dejar acceso a los equipos de una forma tal que se facilite su mantenimiento. Dichas bancadas serán metálicas montadas sobre dado de hormigón y se les aplicarán los elementos de nivelación y
-antivibración que sean necesarios. Deberá cumplirse la normativa de seguridad y salud en cuanto a niveles máximos admisibles de ruidos y vibraciones.
+La maquinaria, medios mecánicos y equipos empleados en la ejecución de la obra deberán ser de tecnología adecuada, encontrarse en perfecto estado de mantenimiento y disponer de los certificados e ITV en vigor. Se tenderá a la homologación de marcas y modelos para optimizar los repuestos.
+
+La maquinaria respetará estrictamente las directrices en materia de Seguridad y Salud, así como la normativa sobre emisiones contaminantes y límites máximos de ruido y vibraciones admisibles en entorno urbano (Real Decreto 212/2002 sobre emisiones sonoras de la maquinaria de uso al aire libre y ordenanza municipal del {{entidad}}).
 
 ### 1.8.9 RESPONSABILIDAD DEL CONTRATISTA
 
-La recepción de los materiales no excluye la responsabilidad del Contratista por la calidad de ellos, y quedará subsistente hasta que se reciban definitivamente las obras en que dichos materiales se hayan empleado.
+La comprobación y recepción provisional de los materiales en obra no atenúa ni excluye la responsabilidad del Contratista sobre su idoneidad, subsistiendo dicha responsabilidad durante todo el plazo de ejecución de la obra y a lo largo de todo el Plazo de Garantía Contractual fijado en el Pliego de Cláusulas Administrativas Particulares (PCAP), con posterioridad al Acta de Recepción formal de las obras.
 
-### 1.8.10 MATERIALES NO INCLUIDOS EN EL PRESENTE PLIEGO
+### 1.8.10 MATERIALES NO ESPECIFICADOS EN EL PRESENTE PLIEGO
 
-Los materiales que, sin ser especificados en el presente Pliego hayan de ser empleados en la obra, serán de probada calidad, debiendo presentar el Contratista, para recabar la aprobación de la Dirección Técnica, cuantos catálogos, muestras, informes y certificados de los correspondientes fabricantes estimase necesarios. Si la información no se considera suficiente, podrá exigirse los ensayos oportunos de los materiales a utilizar.
-La Dirección Técnica podrá rechazar aquellos materiales que, a su juicio, no reúnan la calidad y condiciones necesarias para el fin al que han de ser destinados, de acuerdo con lo anteriormente estipulado en 3.1.5. y 3.1.6.
+Los materiales o productos de construcción que, sin estar expresamente detallados en las especificaciones del presente Pliego, deban ser incorporados a la obra, serán de primera calidad y marca contrastada en el mercado. Para recabar la aprobación de la Dirección de Obra, el Contratista presentará con la antelación suficiente catálogos, Fichas de Datos de Seguridad, Declaraciones de Prestaciones y certificados de ensayo emitidos por laboratorios acreditados.
+
+La Dirección de Obra denegará el empleo de cualquier material que no garantice el comportamiento técnico exigible para la durabilidad y funcionalidad de la obra.
 
 ## 1.9 CONDICIONES TÉCNICAS GENERALES SOBRE LA EJECUCIÓN
 
-Las obras se ejecutarán de acuerdo con las especificaciones del presente Pliego, los Planos y Presupuesto del Proyecto y las instrucciones del Director de la obra, quien resolverá además, las cuestiones que se plantean referentes a la interpretación de los distintos documentos y a las condiciones de ejecución.
-El Director de la obra suministrará al Contratista, a petición de éste, cuantos datos posea de los que se incluyen habitualmente en la Memoria, que pueden ser de utilidad en la ejecución de las obras y no hayan sido recogidos en los documentos contractuales. Dichos datos no podrán ser considerados nada más que como complemento de la información que el Contratista debe adquirir directamente y con sus propios medios, por lo que éste deberá comprobarlos y la Propiedad no se hará responsable, en ningún caso, de los posibles errores que pudieran contener ni de las consecuencias que de ellos pudieran derivarse.
+Las obras se ejecutarán de acuerdo con las especificaciones del presente Pliego, los Planos y Presupuesto del Proyecto y las instrucciones escritas del Director de la obra, quien resolverá además las cuestiones que se planteen referentes a la interpretación de los distintos documentos contractuales y a las condiciones técnicas de ejecución.
 
-Las dosificaciones que se reseñan en los distintos documentos del Proyecto tienen carácter meramente orientativo. Todas las dosificaciones y sistemas de trabajo a emplear en la obra deberán ser aprobados antes de su utilización por el Director de la obra, quien podrá modificarlas a la vista de los ensayos y pruebas que se realicen y de la experiencia obtenida durante la ejecución de los trabajos, sin que dichas modificaciones afecten a los precios de las unidades de obra correspondientes cuando su objeto sea, únicamente, obtener las condiciones de trabajo previstas en el Proyecto para las mismas.
+El Director de la obra suministrará al Contratista, a petición de éste, cuantos datos posea de los que se incluyen habitualmente en la Memoria que puedan ser de utilidad en la ejecución y no hayan sido recogidos expresamente en los documentos contractuales. Dichos datos tendrán carácter de mera información complementaria que el Contratista deberá verificar directamente in situ, no haciéndose responsable el {{entidad}} de los posibles errores de apreciación ni de las consecuencias que de ellos pudieran derivarse.
 
-Durante las diversas etapas de la construcción de las obras se mantendrán en todo momento en perfectas condiciones de drenaje. Si existe temor de que se produzcan heladas, el Director de la obra podrá ordenar la suspensión de los trabajos en fábricas de hormigón y en los que exijan el empleo de morteros de cualquier clase. En todo caso, el Contratista protegerá todas las zonas que puedan ser perjudicadas por la helada y si existieran parte de obra dañadas, éstas se demolerán y reconstruirán a su costa. Asimismo, el Director de la obra podrá suspender la ejecución de los trabajos en los puntos en que lo estime necesario en la época de grandes calores.
+Las dosificaciones que se reseñan en el Proyecto tienen carácter meramente orientativo. Todas las dosificaciones y fórmulas de trabajo a emplear deberán ser sometidas a la aprobación previa del Director de la obra, quien podrá modificarlas a la vista de los ensayos y de la experiencia obtenida durante la ejecución, sin que dichas modificaciones alteren los precios unitarios de las unidades de obra.
 
-Durante la ejecución de los trabajos se realizarán todos los ensayos de calidad que considere necesarios el Director de la obra, siendo los gastos que por este concepto se originen de cuenta del Contratista quien, además suministrará a su costa las muestras necesarias y dará todas las facilidades precisas.
+Durante las diversas etapas de la construcción, las obras se mantendrán en todo momento en perfectas condiciones de drenaje. Si existe riesgo de heladas, el Director de la obra podrá ordenar la suspensión de los trabajos de hormigonado y vertido de morteros. El Contratista protegerá las zonas sensibles; las partes dañadas por inclemencias meteorológicas por falta de protección serán demolidas y reconstruidas a su costa. Asimismo, se podrá suspender la ejecución en los puntos que se estime necesario durante periodos de calor extremo.
 
-### 1.9.1 OBRAS DEL CONTRATO
+### 1.9.1 OBRAS DEL CONTRATO Y SEGURIDAD Y SALUD
 
-Todas las obras comprendidas en el Contrato se ejecutarán de acuerdo con los planos del mismo y con las prescripciones del presente Pliego. En caso de duda u omisión, será la Dirección Técnica quien resuelva las cuestiones que puedan presentarse.
-Se cumplirá estrictamente todo lo que le sea de aplicación de la vigente Ley 31/95 de Seguridad y Salud Laboral, así como de los Reglamentos que la desarrollan.
+Todas las obras comprendidas en el Contrato se ejecutarán de acuerdo con los planos aprobados y las prescripciones de este Pliego. En el ámbito preventivo, se cumplirá estrictamente la Ley 31/1995, de 8 de noviembre, de Prevención de Riesgos Laborales, el Real Decreto 1627/1997, de 24 de octubre, por el que se establecen disposiciones mínimas de seguridad y salud en las obras de construcción, y el Plan de Seguridad y Salud aprobado.
 
 ### 1.9.2 COMPROBACIÓN DEL REPLANTEO GENERAL
 
-Se considera de plena aplicación lo preceptuado en la sección 2ª, cláusulas 24 y 26 del P.C.A.G., con los complementos siguientes:
-• La comprobación del replanteo general deberá incluir, como mínimo, los puntos que se consideran indispensables del eje principal de los diversos tramos de obra, y los puntos fijos o auxiliares necesarios para los sucesivos replanteos de detalles.
-• Los puntos de referencia para sucesivos replanteos se marcarán mediante bases de hormigón o clavos de acero para bases topográficas.
-• Los datos, cotas y puntos fijados se anotarán en un anejo de Acta de Comprobación del Replanteogeneral, el cual se unirá al expediente de la obra, entregándose una copia al Contratista.
-• El Contratista se responsabilizará de la conservación o reposición en su caso, de los puntos del replanteo que le hayan sido entregados.
-• Serán por cuenta del Contratista todos los gastos que se originen por las operaciones expresadas en este artículo. A estos efectos la tasa no excederá del 1,5 por ciento del importe líquido de las obras que se ejecuten, incluso revisión.
-• En el plazo de un mes (1) a partir de la adjudicación de las obras se comprobará, en presencia del Contratista o representante suyo debidamente autorizado, el replanteo de las obras, siendo todos los gastos, que por este motivo se ocasionen, de cuenta del Contratista.
-Los puntos principales y los que deben servir de referencia para sucesivos replanteos de detalles se marcarán mediante sólidos mojones, quedando responsabilizado el Contratista de la conservación de los mismos durante todo el período de ejecución de las obras.
+De conformidad con lo preceptuado en la Ley 9/2017, de Contratos del Sector Público (LCSP), la Comprobación del Replanteo General se llevará a cabo en el plazo máximo de un (1) mes a partir de la formalización del contrato, en presencia del Contratista o su representante legal:
+
+    * Incluirá la fijación de los puntos indispensables del eje principal de la glorieta y los puntos auxiliares fijos necesarios para los sucesivos replanteos.
+
+    * Los puntos de referencia se marcarán mediante bases de hormigón o clavos de acero para bases topográficas, siendo el Contratista responsable de su conservación o reposición a su costa.
+
+    * Los datos y cotas se recogerán en el Anejo al Acta de Comprobación del Replanteo General que se unirá al expediente.
+
+    * El Contratista aportará a su costa los medios materiales, topográficos y personales necesarios para el desarrollo de las operaciones de comprobación en campo ordenadas por la Dirección de Obra.
 
 ### 1.9.3 PROGRAMA DE TRABAJO
 
-Salvo que la presentación de un Programa de Trabajos se exija a la hora de la licitación, será de aplicación el párrafo que sigue, como complemento de lo estipulado en la cláusula 27, sección 1ª del P.C.A.G.
-El Contratista presentará antes del comienzo de las obras un programa de trabajo en el que se especificarán los plazos parciales de ejecución de las distintas obras, compatibles con el plazo total de ejecución.
-• La aceptación del programa y de la relación de equipo y maquinaria no exime al Contratista de las responsabilidades, en caso de incumplimiento de los plazos parciales o totales convenidos.
-• El programa será puesto al día periódicamente y por lo menos una vez cada mes, para adaptarse a las variaciones de ejecución de las obras. Este programa modificado será sometido a la consideración de la Dirección Técnica.
-• El Contratista deberá aumentar el personal técnico, los medios auxiliares, la maquinaria y la mano de obra a requerimiento de {{entidad}}, si se comprueba que ello es necesario
-para el desarrollo de las obras en los plazos previstos.
+El Contratista presentará antes del comienzo de las obras un Programa de Trabajo detallado ajustado al plazo total de ejecución y con desglose de plazos parciales.
+
+    * La aceptación del programa no eximirá al Contratista de sus responsabilidades por incumplimiento de plazos.
+    * El programa se actualizará mensualmente para reflejar el avance real de los tajos.
+
+    * Si se constatasen retrasos imputables al Contratista, éste deberá incrementar los medios personales, maquinaria y turnos a requerimiento del {{entidad}} para restablecer el calendario previsto.
 
 ### 1.9.4 APORTACIÓN DE EQUIPO Y MAQUINARIA
 
-El Contratista someterá a la aprobación del Director de la obra el equipo de maquinaria y medios auxiliares para la correcta realización de los trabajos. Dicho equipo deberá estar disponible con suficiente antelación al comienzo de la tarea correspondiente para que pueda ser examinado y aprobado por el Director de la obra en todos sus aspectos, incluso el de potencia y capacidad que deberán ser las adecuadas al volumen de obra a ejecutar en el plazo programado.
-El equipo aprobado deberá mantenerse en todo momento en condiciones de trabajo satisfactorias, haciéndose las reparaciones o sustituciones necesarias para ello en un plazo que no altere el programa de trabajo previsto. Si durante la ejecución de las obras el Director estimase que, por cambio en las condiciones de trabajo o cualquier otro motivo, el equipo aprobado no es idóneo al fin propuesto, podrá exigir su refuerzo o sustitución por otro más adecuado.
-Los trabajos nocturnos sólo podrán ser realizados con autorización del Director de la obra y cumpliendo sus instrucciones en cuanto al tipo e intensidad del equipo de iluminación que el Contratista debe instalar en este caso, sin menoscabo del cumplimiento de lo dispuesto en las disposiciones vigentes de cualquier índole que pudiesen ser de aplicación.
+El Contratista someterá a la aprobación de la Dirección de Obra la relación de maquinaria y medios auxiliares. Dicho equipo deberá estar disponible a pie de obra con suficiente antelación, en perfecto estado de mantenimiento y con las ITVs y marcado CE en vigor.
+
+Si durante la ejecución la Dirección de Obra estimase que el equipo no es idóneo o resulta insuficiente, podrá exigir su refuerzo o sustitución. Los trabajos nocturnos requerirán autorización previa y expresa de la Dirección de Obra y la Policía Local, cumpliendo los límites de emisión sonora y dotando a los tajos de la iluminación necesaria.
 
 ### 1.9.5 INICIACIÓN DE LAS OBRAS
 
-Antes de la iniciación de las obras el Contratista deberá presentar el Programa de trabajo de las mismas. El orden de ejecución de los trabajos, compatible con los plazos programados, deberá ser aprobado por el Director de la obra, cuya autorización deberá solicitar el Contratista antes de iniciar cualquier parte de las obras.
-Los materiales a utilizar en las obras cumplirán las prescripciones que para ellos se especifican en este Pliego. El empleo de aditivos o productos auxiliares (activantes y adiciones de caucho para ligantes, desencofrantes, etc) no previstos explícitamente en el Proyecto, deberá ser autorizado expresamente por el Director de la obra, quien fijará en cada caso las especificaciones a tener en cuenta.
-El plazo de ejecución de las obras establecido en el Contrato, empezará a contar al día siguiente de la firma del Acta de Replanteo.
+El plazo contractual de ejecución comenzará a computarse al día siguiente de la firma del Acta de Comprobación del Replanteo. El empleo de aditivos, productos auxiliares o ligantes modificados no previstos explícitamente en el Proyecto requerirá la autorización previa y por escrito del Director de la Obra.
 
-### 1.9.6 REPLANTEO DE DETALLE DE LAS OBRAS
+### 1.9.6 REPLANTEO DE DETALLE Y ERRORES DE EJECUCIÓN
 
-La Dirección Técnica aprobará los replanteos de detalle necesarios para la ejecución de las obras, y suministrará al Contratista toda la información que se precise para que aquellos puedan ser realizados.
-El Contratista deberá proveer, a su costa, todos los materiales, equipos y mano de obra necesarios para efectuar los citados replanteos y determinar los puntos de control o de referencia que se requieran.
-El Contratista proporcionará al Director de la obra y colaboradores a sus órdenes, toda clase de facilidades para practicar los replanteos de las obras, reconocimiento y pruebas de los materiales y de su preparación, y para llevar a cabo la vigilancia e inspección de la mano de obra y de todos los trabajos a fin de comprobar el cumplimiento de las condiciones establecidas en el presente Pliego, permitiendo el acceso a todas las zonas de trabajo, incluso a las fábricas, talleres o canteras en que se produzcan materiales o se trabaje para las obras.
-El Contratista llevará a cabo durante la ejecución de las obras cuantos replanteos parciales sean necesarios, ateniéndose al replanteo general previamente efectuado, siendo de su cuenta todos los gastos que ocasionan tanto su realización como las comprobaciones que el Director de la obra juzgue convenientemente practicar. Cuando al efectuar una comprobación, sea cualquiera la fecha y época en que se realice, se encontrarán errores de traza, de nivelación o de otra clase, el Director de la obra podrá ordenar la demolición de las obras erróneamente ejecutadas: restituir a su estado anterior todo aquello que indebidamente haya sido excavado o demolido y la ejecución de las obras accesorias o de seguridad para la obra definitiva que pudieran ser precisas como consecuencia de las falsas operaciones hechas. Todos los gastos de demoliciones, restitución a su primitivo estado de lo mal ejecutado y obras accesorias o de seguridad son, en este caso, de cuenta del Contratista, sin derecho a ningún abono por parte del EXCMO. Ayto. Istán y sin que nunca pueda servir de excusa que el Director de la obra haya visto o visitado con anterioridad y sin hacer observación alguna de las obras que ordena demoler o rectificar, o, incluso, el que hubieran sido abonadas en relaciones o certificaciones anteriores.
+La Dirección Técnica aprobará los replanteos de detalle facilitando los datos de trazado necesarios. El Contratista ejecutará a su costa todos los replanteos parciales y facilitará el acceso del personal de inspección a las zonas de trabajo, canteras e instalaciones auxiliares.
 
-### 1.9.7 ACOPIOS
+Cuando al efectuar una comprobación se detectaran errores de traza, rasante o nivelación, el Director de la obra ordenará la demolición de lo mal ejecutado, la restitución del terreno a su estado primitivo y la realización de las obras accesorias de seguridad necesarias. Todos los costes derivados de las demoliciones y reconstrucciones serán a cargo exclusivo del Contratista, sin derecho a abono por parte del {{entidad}} y sin que sirva de excusa la visita previa de la Dirección de Obra o la inclusión previa de dichas unidades en certificaciones a cuenta.
 
-Queda terminantemente prohibido efectuar acopios de materiales, cualquiera que sea su naturaleza, en aquellas zonas que interfieran cualquier tipo de servicios públicos o privados, excepto con autorización de la Dirección Técnica en el primer caso o del propietario de los mismos en el segundo.
-No deberán efectuarse los acopios de ningún material antes de la aprobación del mismo por la Dirección Técnica. En caso de incumplimiento de esta prescripción y ser rechazado el material por no cumplir las condiciones requeridas a juicio de la Dirección Técnica, éste podrá ordenar la retirada del mismo y su sustitución por otro adecuado, efectuándose todas estas operaciones a cargo del Contratista.
-Los materiales se almacenarán de forma que se asegure la preservación de su calidad para utilización en las obras, requisito que podrá ser comprobado en el momento de su utilización, mediante los ensayos correspondientes.
-Las superficies empleadas como zonas de acopio deberán acondicionarse, una vez terminada la utilización de los materiales acumulados en ellas, de forma que puedan recuperar su aspecto original.
-Todos los gastos requeridos para ello serán por cuenta del Contratista.
+### 1.9.7 INSTALACIONES AUXILIARES Y MANIPULACIÓN DE AMIANTO
 
-### 1.9.8 SEÑALIZACIÓN
+El Contratista ejecutará a su cargo las obras e instalaciones auxiliares requeridas para el desarrollo del Contrato (casetas, vestuarios y acometidas provisionales).
 
-Durante la ejecución de las obras, éstas deben estar convenientemente señalizadas, y se deben corresponder con lo presentado en el Plan de Seguridad y Salud presentado por el Contratista, debiendo contar con la aprobación de la Dirección Técnica de las obras, el cual no asumirá en ningún momento la responsabilidad que pudiera derivarse de cualquier accidente, toda vez que la presencia suya en la obra no es de forma continuada, y sí el Contratista el cual deberá velar por la permanencia
-del sistema de señalización elegido.
-En la ejecución de las obras se procurará no alterar los servicios de carácter público más que en lo absolutamente necesario, dejando siempre a cubierto las necesidades del tráfico, dentro de los límites compatibles con el buen desarrollo y ejecución de los trabajos. En cualquier caso, el Contratista deberá cumplir las condiciones que impongan los Ayuntamientos y otros Organismos oficiales o Entidades interesadas o afectadas por las obras.
-En las obras urbanas, éstas deberán vallarse en toda su longitud en ambos lados de la misma, con la correspondiente iluminación nocturna, o base de guirnaldas o indicadores intermitentes autónomos.
-Estas vallas deberán disponer de carteles informativos donde se indique el nombre de {{entidad}} y el de la Empresa Constructora contratada.
-El importe de la señalización irá incluido en el presupuesto de Seguridad y Salud.
-
-### 1.9.9 VERTEDEROS Y ESCOMBRERAS
-
-Antes de comenzar las obras de excavación la Dirección Técnica de las Obras a propuesta del Contratista aprobará los lugares de posibles caballeros o depósitos de escombreras.
-Todo escombro vertido fuera de los lugares autorizados por la Dirección  Técnica de las Obras deberá ser recogido, transportado y vertido en los lugares autorizados por cuenta del Contratista. En las obras urbanas las tierras procedentes de la excavación deberán depositarse siempre sobre camiones o cubas, nunca sobre la vía pública, realizándose la retirada a vertedero del material sobrante.
-
-### 1.9.10 ACCESO A LAS OBRAS
-
-Los caminos, pistas, sendas, pasarelas, escaleras, etc., para acceso a las obras y a los distintos tajos serán construidos por el Contratista, pudiendo exigir la Dirección Técnica de las Obras mejorar los accesos a los tajos o crear otros nuevos si fuese preciso para poder realizar debidamente su misión de inspección durante la ejecución de las obras.
-
-### 1.9.11 DESVÍOS DE SERVICIOS
-
-Antes de comenzar las obras, el Contratista, basado en los planos y datos de que disponga, o reconocimientos efectuados, deberá estudiar y replantear sobre el terreno los servicios e instalaciones afectadas, considerando la mejor forma de ejecutar los trabajos para no dañarlos y señalando los que, en último extremo, considera necesario modificar. Si el Director de la obra se muestra conforme, solicitará de las Empresas u Organismos correspondientes la modificación de estas instalaciones, abonándose los trabajos que sean necesarios realizar.
-
-### 1.9.12 MÉTODOS CONSTRUCTIVOS
-
-El Contratista podrá emplear cualquier método constructivo que estime adecuado para ejecutar las obras y que no se oponga a las prescripciones que para cada caso se contemplan en este Pliego, siempre que su Plan de Obra y su Programa de Trabajo lo hubiera propuesto y hubiera sido aceptado por {{entidad}}. También podrá variar los procedimientos constructivos durante la ejecución de las obras, sin más limitaciones que la aprobación previa de la Dirección Técnica, el cual la otorgará en cuanto los nuevos métodos no vulneren el presente Pliego, pero reservándose el derecho de exigir los métodos primeros si comprobará la menor eficacia de los nuevos. En el caso de que el Contratista propusiera en su Plan de Obra y Programa de Trabajos,
-posteriormente, a tenor con el párrafo anterior, métodos constructivos que a su juicio implicarán especificaciones especiales, acompañará su propuesta con un estudio especial de la adecuación de tales métodos y una descripción con gran detalle del equipo que se propone emplear.
-La aprobación por parte de la Dirección Técnica de cualquier método de trabajo o maquinaria para la ejecución de las obras, no responsabiliza a {{entidad}} de los resultados que se obtuvieren, ni exime al Contratista del cumplimiento de los plazos parciales y total señalados, si con tales métodos o maquinaria no se consiguiese el ritmo perseguido.
-
-### 1.9.13 ORDENACIÓN DE LOS TRABAJOS
-
-El Contratista, dentro de las prescripciones de este Pliego, tendrá libertad de dirigir y ordenar la marcha de las obras según estime conveniente, con tal de que con ello no resulte perjuicio para la buena ejecución o futura funcionalidad de las mismas, debiendo resolver la Dirección Técnica sobre este punto en caso de duda.
-
-### 1.9.14 INSTALACIONES, MEDIOS, Y OBRAS AUXILIARES
-
-El Contratista está obligado a realizar a su cargo las obras auxiliares necesarias para la ejecución del Contrato objeto de estas Prescripciones. Asimismo someterá a la aprobación de la Dirección de Obra, las instalaciones, medios y servicios generales adecuados para realizar las obras en las condiciones técnicas requeridas y en los plazos previstos.
-Dichas instalaciones se proyectarán y mantendrán de forma que en todo momento se cumplan las leyes de salud laboral y prevención de riesgos laborales, y el Plan de Seguridad y Salud, que deberá hacer especial hincapié en lo relativo a zanjas, conexión y puesta en marcha con redes existentes, manipulación y corte de tuberías de fibrocemento (amianto) y en lo referente a las instalaciones higiénicas de los operarios a pié de obra.
-Asimismo, el Contratista pondrá a disposición de la Dirección de Obra, cuando ésta lo requiera, todo el material y equipo de trabajo que dicha Dirección precise para la inspección y comprobación de las obras durante su ejecución.
-
-### 1.9.15 EVITACIÓN DE CONTAMINANTES
-
-El Contratista está obligado a cumplir las órdenes de la Dirección cuyo objeto sea evitar la contaminación del aire, cursos de agua, mar y, en general, cualquier clase de bien público o privado que pudieran producir las obras o instalaciones y talleres anejos a las mismas, aunque hayan sido instalados en terreno de propiedad del Contratista, dentro de los límites impuestos en las disposiciones vigentes sobre conservación del medio ambiente.
+Dichas instalaciones cumplirán el Plan de Seguridad y Salud, prestando especial atención a la entibación de zanjas, instalaciones de higiene y al cumplimiento del Real Decreto 396/2006, de 31 de marzo, en caso de detectarse canalizaciones existentes de fibrocemento (amianto) en las redes afectadas. Asimismo, pondrá a disposición de la Dirección de Obra el equipo de medida y control necesario para la inspección de los trabajos.
 
 ## 1.10 CONDICIONES TÉCNICAS GENERALES SOBRE LA MEDICIÓN, VALORACIÓN Y ABONO
 
-Es de plena aplicación lo preceptuado en el Capítulo 3 del P.C.A.G. con los complementos que se indican en los apartados siguientes.
+Es de aplicación lo preceptuado en la legislación vigente sobre contratos del sector público (Ley 9/2017 - LCSP) y las cláusulas del Pliego de Cláusulas Administrativas Particulares (PCAP) del Contrato, complementadas por las prescripciones técnicas que se detallan en los siguientes apartados.
 
-### 1.10.1 GENERALIDADES
+### 1.10.1 GENERALIDADES SOBRE MEDICIÓN Y ABONO
 
-Con carácter general todas las unidades de obra se medirán y abonarán por su volumen, superficie, longitud, peso o por número de unidades de acuerdo a como figuren especificadas en el Cuadro de Precios Nº 1. Para las unidades nuevas que puedan surgir y para las que sea precisa la redacción de un precio contradictorio, se especificará claramente al acordarse éste, el modo de abono; en otro caso, se estará a lo admitido en la práctica habitual o costumbre de la construcción.
-Dichos precios se abonarán por las unidades terminadas y ejecutadas y comprenden el suministro, transporte, manipulación, así como cuantas necesidades circunstanciales se requieran para que la obra realizada sea aprobada por {{entidad}}.
-Se incluyen en los mismos además, los costes indirectos, los gastos generales, de contratación, inspección, replanteo, guardería y reconocimiento de materiales, análisis, pruebas y ensayos.
-Para la medición serán válidos los levantamientos topográficos y los datos que hayan sido conformados por la Dirección Técnica.
-Las unidades que hayan de quedar ocultas o enterradas, deberán ser medidas antes de su ocultación. Si la medición no se efectúa a su debido tiempo, serán por cuenta del Contratista las operaciones necesarias para llevarla a cabo posteriormente.
-Si el Contratista construye mayor volumen de cualquier clase de fábrica que el correspondiente a las formas y medidas que figuran en los Planos, por error, por su conveniencia, por alguna causa imprevista o por cualquier otro motivo, no le será de abono ese exceso de obra. Si, a juicio del Director de la obra, dicho exceso resultase perjudicial, el Contratista tendrá la obligación de demoler la obra a su costa y rehacerla nuevamente con las dimensiones debidas. En caso de que se trate de un aumento excesivo de excavación que no pueda subsanarse con la demolición de la obra ejecutada, el Contratista quedará obligado a corregir el defecto, de acuerdo con las normas que dice el Director de la obra, sin derecho a exigir indemnización alguna por los trabajos que ello conlleve.
-Siempre que no se diga expresamente otra cosa en los Cuadros de Precios o en el presente Pliego, se considerarán incluidos en el importe de los precios del Cuadro de Precios nº 1, los agotamientos, entibaciones, relleno de exceso de excavación, transporte a vertedero, cualquiera que sea la distancia, de los productos sobrantes, limpieza de las obras, medios auxiliares, y, en general, todas las operaciones necesarias para terminar perfectamente la unidad de obra de que se trate.
-Cuando se autorice la conversión de peso a volumen o viceversa, los factores de conversión serán definidos por el Director de la obra.
-Es obligación del Contratista la conservación de todas las obras, y, por consiguiente, la reparación o reconstrucción de aquellas partes que hayan sufrido daños o que se compruebe que no reúnen las condiciones exigidas en este Pliego. Para estas reparaciones se atenderá estrictamente a las instrucciones que reciba del Director de la obra. Esta obligación de conservar las obras se extiende igualmente a los acopios que se hayan certificado. Corresponde, pues, al Contratista el almacenaje y guardería de los acopios y la reposición de aquellos que se hayan perdido, destruido o dañado, cualquier que sea la causa. Esta obligación expira en el período de garantía.
-En ningún caso el Contratista tendrá derecho a reclamación fundándose en insuficiencias de precios o en la falta de expresión explícita, en los precios o en el Pliego, de algún material u operación necesarios para la ejecución de una unidad de obra.
-En caso de duda en la aplicación de los precios se seguirá el mismo criterio aplicado en la medición y valoración del presente Proyecto.
+Con carácter general, todas las unidades de obra se medirán y abonarán por su volumen (m^3), superficie (m^2), longitud (m), peso (kg o t) o por número de unidades (ud), según se especifique expresamente en el Cuadro de Precios Nº 1.Para las unidades de obra no previstas en el Proyecto que puedan surgir durante la ejecución y requieran la tramitación y aprobación de un precio contradictorio, se fijará claramente en la descomposición del mismo la unidad de medida y el criterio de abono. En su defecto, se aplicará el criterio y la práctica técnica habitual de la obra civil.Los precios del contrato se abonarán exclusivamente por unidades de obra terminadas y ejecutadas a satisfacción de la Dirección de Obra y del {{entidad}}. Dichos precios incluyen:
+
+    * El suministro de materiales, transportes, cargas, descargas, acopios y manipulación.
+    * La maquinaria, medios auxiliares, herramientas, andamiajes y mano de obra necesaria.
+    * La parte proporcional de costes indirectos, gastos generales (GG) y beneficio industrial (BI) de la contrata.
+    * Los ensayos de autocontrol, toma de muestras y la aportación de los medios topográficos y auxiliares necesarios a requerimiento de la Dirección de Obra.
+
+Para el levantamiento de las mediciones se tomarán como válidos los perfiles y datos topográficos conformados por la Dirección de Obra. Las unidades de obra que hayan de quedar ocultas o enterradas (cimentaciones, tuberías, capas del firme, drenajes) deberán medirse preceptivamente antes de su tapado. Si el Contratista procediera a su ocultación sin la previa medición y conformidad por escrito de la Dirección de Obra, serán de su exclusiva cuenta y cargo las catas, rozas o demoliciones necesarias para realizar la medición con posterioridad.
+
+Salvo que en los Cuadros de Precios o en el Capítulo 4 de este Pliego se especifique de forma distinta para una unidad en particular, se consideran incluidos en los precios unitarios del Cuadro de Precios Nº 1: los agotamientos de agua, las entibaciones provisionales, el relleno de los excesos de excavación, la carga y transporte de sobrantes a vertedero o planta de reciclaje autorizada (cualquiera que sea su distancia), los riegos contra el polvo, la limpieza continua de la obra y sus accesos, y cuantas operaciones sean precisas para entregar la unidad totalmente terminada.
+
+Es obligación del Contratista la conservación de todas las unidades de obra ejecutadas hasta la Recepción Formal, debiendo reparar o reconstruir a su costa las partes que hayan sufrido deterioros o no alcancen la calidad exigida. Esta obligación de custodia se extiende a los acopios a pie de obra que hayan sido objeto de certificación a cuenta.
+
+El Contratista no podrá alegar en ningún caso insuficiencia de los precios unitarios o falta de expresión explícita en el Pliego de alguna operación o material necesario de carácter auxiliar para la correcta terminación de la unidad de obra. En caso de discrepancia en la interpretación de los precios, se aplicará el mismo criterio técnico utilizado en la medición y valoración del Proyecto original.
 
 ### 1.10.2 EXCESOS DE OBRA
 
-Si el Contratista construye mayor volumen de cualquier clase de obra de fábrica que el correspondiente a los dibujos que figuran en los planos del Contrato o de sus reformas autorizadas, ya sea por verificar mal la excavación, por error, por su conveniencia, por alguna causa imprevista o por cualquier otro motivo, no le será de abono el exceso de obra. Si, a juicio de la Dirección Técnica, ese exceso de obra resultase perjudicial, el Contratista tendrá la obligación de demoler la obra a su costa y rehacerla nuevamente con las dimensiones debidas.
-En el caso de que se trate de un aumento excesivo de excavación que no pueda subsanarse con la demolición de la obra ejecutada, el Contratista quedará obligado a corregir ese defecto de acuerdo con las normas que dicte la Dirección Técnica (relleno con mampostería, hormigón, inyecciones de lechada de cemento, etc.), sin que tenga derecho a exigir indemnización alguna por estos trabajos.
-Sin embargo los excesos de obra que la Dirección Técnica defina por escrito como inevitables, se abonarán a los precios que para las unidades figuren en el Contrato. Cuando ello no sea posible, se establecerán los oportunos precios contradictorios.
+Si el Contratista ejecutara un volumen mayor de cualquier unidad de obra o fábrica que el especificado en los Planos y Presupuesto del Contrato (ya sea por imprecisión en las excavaciones, por error técnico, por su conveniencia operativa o por causa imprevista), dicho exceso no será objeto de abono.
+
+Si a juicio de la Dirección de Obra dicho exceso resultara perjudicial para la seguridad, funcionalidad o estética de la infraestructura de la glorieta, el Contratista estará obligado a su demolición y reejecución a sus expensas con las dimensiones y tolerancias fijadas en Proyecto.
+
+En el caso particular de sobre-excavaciones en vaciados o zanjas que no puedan subsanarse mediante demolición, el Contratista rellenará el exceso de excavación a su costa empleando el material y procedimiento que ordene la Dirección de Obra (hormigón en masa, zahorra compactada o lechadas de sellado), sin derecho a indemnización ni abono alguno.
+
+Únicamente serán abonables a los precios del contrato aquellos excesos de obra o excavaciones que hayan sido expresamente definidos y autorizados previamente por escrito por la Dirección de Obra como inevitables por causas geotécnicas o sobrevenidas de la traza.
 
 ### 1.10.3 INSTALACIONES Y EQUIPOS DE MAQUINARIA
 
-Los gastos correspondientes a instalaciones de obra y equipos de maquinaria se considerarán incluidos en los precios de las unidades correspondientes y, en consecuencia, no serán abonados separadamente.
+Los gastos derivados de la implantación de casetas, instalaciones provisionales de obra, acometidas de obra, parque de maquinaria y equipos mecánicos se consideran prorrateados e incluidos dentro de los costes indirectos del contrato y en los precios unitarios del Cuadro de Precios Nº 1, por lo que no serán objeto de certificación ni abono independiente.
 
-### 1.10.4 PRECIOS
+### 1.10.4 ABONO DE UNIDADES DE OBRA INCOMPLETAS PERO ACEPTABLES
 
-Siempre que no se diga otra cosa en este Pliego de Condiciones, se considerarán incluidos en los precios del Cuadro de Precios Nº 1, los agotamientos, las entibaciones, los transportes sobrantes, la limpieza de las obras, los medios auxiliares y todas las operaciones y materiales necesarios para terminar perfectamente la unidad de obra de que se trate.
+Cuando por causas justificadas fuera necesario valorar unidades de obra incompletas, pero que a juicio de la Dirección de Obra resulten técnicamente admisibles y estables de forma provisional, la valoración se efectuará aplicando estrictamente las proporciones y desglose fijados en el Cuadro de Precios Nº 2 (Precios Descompuestos) del Proyecto.
 
-### 1.10.5 ABONO DE OBRA INCOMPLETA PERO ACEPTABLE
+El Contratista no podrá exigir la valoración de los elementos descompuestos de forma distinta a la establecida en dicho Cuadro Nº 2. En situaciones de carácter excepcional, la Dirección de Obra podrá fijar motivadamente un precio provisional de abono a cuenta previa audiencia del Contratista.
 
-Cuando por cualquier causa fuese menester valorar obra incompleta, pero aceptable a juicio de la Dirección Técnica, se aplicará en general los precios y descomposiciones del Cuadro Nº 2, sin que pueda pretenderse la valoración de cada unidad de obra descompuesta en forma distinta a la
-estipulada en dicho Cuadro, no teniendo derecho el Contratista a reclamación alguna fundada en insuficiencia de los precios, o en la omisión de cualquiera de los elementos que los constituyen.
-Solamente en algún caso muy especial la Dirección Técnica podrá determinar a su juicio un precio o partida de abono, después de oír al Contratista.
-Este deberá conformarse con la resolución del mismo salvo en el caso de que, estando dentro del plazo de ejecución prefiera terminar la obra o rehacerla con arreglo a condiciones, sin exceder de dicho plazo.
+Si el Contratista no estuviera conforme con la valoración de la unidad incompleta, mantendrá la obligación de completarla o reejecutarla con arreglo a las especificaciones del Pliego dentro del plazo de ejecución contractual.
 
-### 1.10.6 RESCISIÓN
+### 1.10.5 MATERIALES ACOPIADOS Y RESOLUCIÓN DEL CONTRATO
 
-En caso de rescisión, no se abonará material alguno que no se haya empleado en obra, excepto que así lo considere adecuado la Dirección Técnica. Este podrá así mismo, conceder al Contratista un plazo prudencial paraque emplee el material acopiado, siempre dentro de las debidas garantías de ejecución.
+En los supuestos de resolución del contrato regulados en la LCSP, únicamente se abonarán los materiales que se encuentren efectivamente colocados e incorporados a la obra que cuenten con la recepción favorable de la Dirección de Obra.
+
+No se abonará material alguno acopiado que no haya sido ejecutado in situ, salvo que la Dirección de Obra, de forma motivada y en atención al interés público de la infraestructura, determine su adquisición por el {{entidad}}, siempre que dichos materiales cumplan el 100% de las especificaciones de calidad del Pliego y su conservación sea satisfactoria.

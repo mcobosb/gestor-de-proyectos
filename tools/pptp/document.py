@@ -376,7 +376,7 @@ def number_headings(source: str) -> str:
 
 
 def text_blocks(source: str) -> list[tuple[int, str]]:
-    """Transforma Markdown a bloques legibles preservando titulos y avisos."""
+    """Transforma Markdown y conserva niveles de lista junto a titulos y avisos."""
     source = re.sub(r"<!--.*?-->", "", source, flags=re.DOTALL)
     source = re.sub(r"\[([^]]+)\]\(([^)]+)\)",
                     lambda match: (f"{match[1]} ({match[2]})" if match[2].startswith(("http:", "https:"))
@@ -385,7 +385,7 @@ def text_blocks(source: str) -> list[tuple[int, str]]:
     blocks, paragraph = [], []
     for line in [*source.splitlines(), ""]:
         heading = re.match(r"^(#{1,6})\s+(.*)", line)
-        bullet = re.match(r"^\s*(?:[-*+] |•\s*)(.*)", line)
+        bullet = re.match(r"^(?P<indent>[ \t]*)(?:[-*+]\s+|•\s*)(?P<text>.*)", line)
         if not line.strip() or heading or bullet or line.startswith(">"):
             if paragraph:
                 blocks.append((0, " ".join(paragraph)))
@@ -393,7 +393,9 @@ def text_blocks(source: str) -> list[tuple[int, str]]:
             if heading:
                 blocks.append((len(heading[1]), heading[2]))
             elif bullet:
-                blocks.append((0, "• " + bullet[1]))
+                spaces = len(bullet["indent"].expandtabs(4))
+                depth = (spaces + 3) // 4
+                blocks.append((-(depth + 1), "• " + bullet["text"].strip()))
             elif line.startswith(">"):
                 blocks.append((0, line.lstrip("> ")))
         else:
@@ -410,6 +412,7 @@ def write_document(
     blocks = text_blocks(number_headings(source))
     title = "PLIEGO DE PRESCRIPCIONES TÉCNICAS PARTICULARES"
     project = variables["titulo_proyecto"]
+    bullet_depths = sorted({-level - 1 for level, _ in blocks if level < 0})
     if settings.output_format == "odt":
         from xml.etree import ElementTree as ET
         from odt_reports import _new_report, _tag
@@ -430,17 +433,28 @@ def write_document(
                 _tag("fo:keep-together"): "auto",
                 _tag("fo:orphans"): "2", _tag("fo:widows"): "2",
             })
+        for depth in bullet_depths:
+            style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+                _tag("style:name"): f"PPTPBullet{depth}", _tag("style:family"): "paragraph",
+                _tag("style:parent-style-name"): "PPTPBody",
+            })
+            ET.SubElement(style, _tag("style:paragraph-properties"), {
+                _tag("fo:margin-left"): f"{12 * (depth + 1)}pt",
+                _tag("fo:text-indent"): "-12pt",
+            })
         document.table_of_contents(
-            [(level, text) for level, text in blocks if level], max_level=toc_depth,
+            [(level, text) for level, text in blocks if level > 0], max_level=toc_depth,
         )
         heading_index = 0
         for level, text in blocks:
-            if level:
+            if level > 0:
                 document.heading(
                     text, level, style=f"PPTPHeading{level}",
                     bookmark=f"PPTPHeading{heading_index}",
                 )
                 heading_index += 1
+            elif level < 0:
+                document.paragraph(text, f"PPTPBullet{-level - 1}")
             else:
                 document.paragraph(text, "PPTPBody")
         document.write(target)
@@ -467,20 +481,29 @@ def write_document(
                 alignment=TA_LEFT,
             ) for level in range(toc_depth)
         ]
+        bullet_styles = {
+            depth: ParagraphStyle(
+                f"PPTPBullet{depth}", parent=body,
+                leftIndent=12 * (depth + 1), firstLineIndent=-12,
+            )
+            for depth in bullet_depths
+        }
         story = [
             layout.text("ÍNDICE", layout.title_style), toc, PageBreak(),
         ]
         heading_index = 0
         for level, text in blocks:
             style = body
-            if level:
+            if level > 0:
                 style = ParagraphStyle(
                     f"PPTPHeading{level}", parent=body, fontName=layout.bold_font,
                     fontSize=max(10, 15 - level), leading=max(13, 18 - level),
                     spaceBefore=10, keepWithNext=True, alignment=TA_LEFT,
                 )
+            elif level < 0:
+                style = bullet_styles[-level - 1]
             paragraph = layout.text(text, style)
-            if level:
+            if level > 0:
                 paragraph._pptp_heading = (level - 1, text, f"PPTPHeading{heading_index}")
                 heading_index += 1
             story.append(paragraph)

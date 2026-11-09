@@ -352,6 +352,66 @@ class PptpTests(unittest.TestCase):
         self.assertNotIn("../", text)
         self.assertNotIn("oculto", text)
 
+    def test_bullet_indentation_is_preserved_in_pdf_and_odt(self):
+        """Conserva los niveles de sangría de las listas al exportar ambos formatos."""
+        source = "# Lista\n\n* Nivel cero\n    * Nivel uno\n        * Nivel dos\n"
+        blocks = text_blocks(source)
+        self.assertEqual(blocks, [
+            (1, "Lista"), (-1, "• Nivel cero"), (-2, "• Nivel uno"),
+            (-3, "• Nivel dos"),
+        ])
+
+        with tempfile.TemporaryDirectory() as folder:
+            for output_format in ("pdf", "odt"):
+                with self.subTest(output_format=output_format):
+                    target = Path(folder) / ("PPTP." + output_format)
+                    write_document(
+                        source, target, variables(), ReportSettings(output_format=output_format),
+                    )
+                    if output_format == "pdf":
+                        positions = {}
+                        for page in PdfReader(target).pages:
+                            page.extract_text(visitor_text=lambda *args: positions.setdefault(
+                                args[0].strip(), args[2][4],
+                            ))
+                        bullet_positions = [
+                            positions[f"• Nivel {level}"] for level in ("cero", "uno", "dos")
+                        ]
+                        self.assertAlmostEqual(bullet_positions[1] - bullet_positions[0], 12)
+                        self.assertAlmostEqual(bullet_positions[2] - bullet_positions[1], 12)
+                    else:
+                        namespaces = {
+                            "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
+                            "style": "urn:oasis:names:tc:opendocument:xmlns:style:1.0",
+                            "fo": "urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0",
+                        }
+                        with ZipFile(target) as archive:
+                            content = ET.fromstring(archive.read("content.xml"))
+                        paragraphs = content.findall(".//text:p", namespaces)
+                        bullet_styles = [
+                            paragraph.get(f"{{{namespaces['text']}}}style-name")
+                            for paragraph in paragraphs
+                            if "Nivel" in "".join(paragraph.itertext())
+                        ]
+                        self.assertEqual(bullet_styles, [
+                            "PPTPBullet0", "PPTPBullet1", "PPTPBullet2",
+                        ])
+                        styles = {
+                            style.get(f"{{{namespaces['style']}}}name"): style
+                            for style in content.findall(".//style:style", namespaces)
+                        }
+                        for depth in range(3):
+                            properties = styles[f"PPTPBullet{depth}"].find(
+                                "style:paragraph-properties", namespaces,
+                            )
+                            self.assertEqual(
+                                properties.get(f"{{{namespaces['fo']}}}margin-left"),
+                                f"{12 * (depth + 1)}pt",
+                            )
+                            self.assertEqual(
+                                properties.get(f"{{{namespaces['fo']}}}text-indent"), "-12pt",
+                            )
+
     def test_editable_odt_renders_in_libreoffice(self):
         """Confirma que Writer abre el ODT y conserva sus secciones al imprimirlo."""
         soffice = shutil.which("soffice") or str(
