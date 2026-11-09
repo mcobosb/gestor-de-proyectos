@@ -514,7 +514,7 @@ Necesita un presupuesto, `tools/pptp/BIBLIOTECA.zip` y las cuatro secciones
 generales en `tools/pptp/docs`. No necesitas descomprimir las fichas ni conservar
 una carpeta `archivos`: el asistente detecta el ZIP automáticamente al abrirse.
 Busca las fichas mediante `catalogo.json` y lee únicamente las seleccionadas
-al generar, comprobando su integridad SHA256. `INDICE_FICHAS.md` está dentro
+al generar. `INDICE_FICHAS.md` está dentro
 del ZIP para consultar el inventario cómodamente y no se incluye en el pliego.
 Si actualizas la biblioteca, cierra y vuelve a abrir PPTP para cargarla de nuevo.
 No incorpora partidas de RCDs ni de Seguridad y Salud.

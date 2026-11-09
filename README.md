@@ -296,14 +296,14 @@ PPTP detecta `BIBLIOTECA.zip` al abrir su asistente, sin extraerlo ni necesitar
 una carpeta `archivos` en disco. El ZIP contiene un único `catalogo.json` con
 formato `biblioteca-fichas-uni`, `version_esquema: 1`, `total_fichas`, `indice`
 y la lista `fichas`. Cada ficha declara `id`, `codigo_uni`, `titulo`, `archivo`
-y `sha256`; las rutas son relativas a la carpeta interna del catálogo y usan
-`/`. Se conserva el árbol de carpetas UNI; los identificadores y las rutas de
+y las rutas son relativas a la carpeta interna del catálogo y usan `/`. Se
+conserva el árbol de carpetas UNI; los identificadores y las rutas de
 las fichas deben ser únicos, aunque varias compartan código UNI.
 
 La búsqueda usa el JSON, no recorre los textos Markdown ni interpreta el índice.
 `INDICE_FICHAS.md` permanece dentro del ZIP como índice de lectura para las
-personas. Solo al generar se leen las fichas seleccionadas, comprobando su
-SHA256. No se incorporan al pliego los documentos de origen del ZIP ni el índice.
+personas. Solo al generar se leen las fichas seleccionadas. No se incorporan al
+pliego los documentos de origen del ZIP ni el índice.
 Si reemplazas el ZIP con PPTP abierto, cierra y vuelve a abrir el asistente.
 Los archivos de las secciones 01, 02, 03 y 04 se leen de `tools/pptp/docs`;
 la normativa propuesta procede de la sección 02 de esa carpeta.

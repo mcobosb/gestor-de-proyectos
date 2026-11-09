@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from hashlib import sha256
 import json
 from pathlib import Path, PurePosixPath
 import re
@@ -30,7 +29,6 @@ class CatalogEntry:
     code: str
     title: str
     path: str
-    digest: str
     warning: str
 
 
@@ -80,7 +78,7 @@ class ZipLibrary:
                 for row in rows:
                     if not isinstance(row, dict) or any(
                         not isinstance(row.get(key), str) or not row[key].strip()
-                        for key in ("id", "codigo_uni", "titulo", "archivo", "sha256")
+                        for key in ("id", "codigo_uni", "titulo", "archivo")
                     ):
                         raise ValueError("El catálogo contiene una ficha incompleta.")
                     code = row["codigo_uni"]
@@ -110,8 +108,6 @@ class ZipLibrary:
                             raise ValueError(f"Títulos de capítulo contradictorios: {code[:2]}")
                     if row["id"] in identifiers or relative in self.entries:
                         raise ValueError(f"Ficha duplicada en el catálogo: {row['id']}")
-                    if not re.fullmatch(r"[a-fA-F0-9]{64}", row["sha256"]):
-                        raise ValueError(f"SHA256 no válido: {relative}")
                     selection = row.get("seleccion", {})
                     if not isinstance(selection, dict):
                         raise ValueError(f"Datos de selección no válidos: {relative}")
@@ -120,7 +116,7 @@ class ZipLibrary:
                         if selection.get("requiere_confirmacion") else ""
                     )
                     self.entries[relative] = CatalogEntry(
-                        row["id"], code, row["titulo"], relative, row["sha256"].lower(), warning,
+                        row["id"], code, row["titulo"], relative, warning,
                     )
                     identifiers.add(row["id"])
         except (BadZipFile, RuntimeError, NotImplementedError, UnicodeError) as exc:
@@ -154,7 +150,7 @@ class ZipLibrary:
         return content.decode("utf-8-sig")
 
     def read_sheet(self, relative: str) -> str:
-        """Lee solo una ficha seleccionada y verifica el hash declarado."""
+        """Lee solo una ficha seleccionada."""
         entry = self.entries.get(relative)
         if entry is None:
             raise ValueError(f"La ficha no figura en catalogo.json: {relative}")
@@ -170,6 +166,4 @@ class ZipLibrary:
                     raise ValueError(f"Ficha demasiado grande: {relative}")
         except (BadZipFile, RuntimeError, NotImplementedError) as exc:
             raise ValueError(f"No se pudo leer la ficha {relative}: {exc}") from exc
-        if sha256(content).hexdigest() != entry.digest:
-            raise ValueError(f"La ficha no coincide con su SHA256: {relative}")
         return content.decode("utf-8-sig")
