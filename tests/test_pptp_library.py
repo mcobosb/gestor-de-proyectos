@@ -172,6 +172,17 @@ class ZipLibraryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "ha cambiado"):
             library.read_sheet("UNI/" + self.rows[0]["archivo"])
 
+    def test_reads_root_base_documents_before_legacy_external_docs(self):
+        """Prefiere documentos base del ZIP y mantiene el respaldo para bibliotecas antiguas."""
+        self.write_zip()
+        with ZipFile(self.archive, "a") as archive:
+            archive.writestr("01_intro.md", "# Base guardada en el ZIP")
+        (self.docs / "01_intro.md").write_text("# Copia externa antigua", encoding="utf-8")
+        library = ZipLibrary(self.archive, self.docs)
+        self.assertEqual(
+            library.read_documents("01"), [("01_intro.md", "# Base guardada en el ZIP")],
+        )
+
     def test_composes_external_templates_and_only_selected_zip_sheet(self):
         """Genera con docs y fichas ZIP sin incorporar documentos fuente del paquete."""
         self.write_zip()
@@ -209,7 +220,8 @@ class ZipLibraryTests(unittest.TestCase):
         for row in self.rows:
             row["capitulo"] = {"codigo": "01", "titulo": "Nombre del catálogo"}
         self.write_zip()
-        source = compose(ZipLibrary(self.archive, self.docs), state, [])
+        library = ZipLibrary(self.archive, self.docs)
+        source = compose(library, state, [])
         self.assertIn("## 4.1 NOMBRE DEL CATÁLOGO", source)
         self.assertNotIn("## 4.1 BASE", source)
         (self.docs / "03_description.md").unlink()

@@ -65,8 +65,9 @@ class PptpTests(unittest.TestCase):
     def test_all_document_placeholders_have_supported_project_variables(self):
         """Comprueba secciones generales y todas las fichas para detectar campos olvidados."""
         sources = [
-            (path.name, path.read_text(encoding="utf-8-sig"))
-            for path in sorted(DOCS_ROOT.glob("*.md"))
+            document
+            for prefix in ("01", "02", "03", "04")
+            for document in self.library.read_documents(prefix)
         ]
         sources.extend(
             (sheet.path, self.library.read_sheet(sheet.path)) for sheet in self.catalog

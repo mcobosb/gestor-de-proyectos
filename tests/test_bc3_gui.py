@@ -1630,8 +1630,8 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
                     self.assertEqual(menu.entrycget(index, "state"),
                                      "disabled" if index < 3 else "normal")
 
-    def test_external_specialty_chapter_names_disable_only_the_corresponding_tool(self):
-        """Recognize common imported chapter names without examining resource descriptions."""
+    def test_external_specialty_chapters_keep_both_tools_available_without_budget_changes(self):
+        """Allow opening either tool without changing an imported specialty chapter."""
         for title, tool in (
             ("GESTIÓN DE RESIDUOS DE CONSTRUCCIÓN Y DEMOLICIÓN", "rcd"),
             ("R.C.D.s", "rcd"), ("Retirada de escombros", "rcd"),
@@ -1645,9 +1645,11 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
                 self.app.chapter_order = ["09#"]
                 self.app.chapter_titles = {"09#": title}
                 self.app.refresh_budget_tree()
+                self.app._rcd_window = None
+                self.app._safety_health_window = None
                 index = 0 if tool == "rcd" else 1
-                self.assertEqual(self.app.tools_menu.entrycget(index, "state"), "disabled")
-                self.assertEqual(self.app.tools_menu.entrycget(1 - index, "state"), "normal")
+                self.assertEqual(self.app.tools_menu.entrycget(0, "state"), "normal")
+                self.assertEqual(self.app.tools_menu.entrycget(1, "state"), "normal")
                 before = self.app._project_payload()
                 with (
                     patch("bc3_gui.messagebox.showwarning") as warning,
@@ -1655,15 +1657,81 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
                     patch("tools.safety_health.SafetyHealthWindow") as safety_window,
                 ):
                     (self.app.open_rcds if tool == "rcd" else self.app.open_safety_health)()
-                warning.assert_called_once()
-                rcd_window.assert_not_called()
-                safety_window.assert_not_called()
+                warning.assert_not_called()
+                if tool == "rcd":
+                    rcd_window.assert_called_once()
+                    safety_window.assert_not_called()
+                else:
+                    safety_window.assert_called_once()
+                    rcd_window.assert_not_called()
                 self.assertEqual(self.app._project_payload(), before)
         self.app.chapter_titles["09#"] = "Albañilería"
         self.app.budget_items[0].summary = "Contenedor de residuos y casco de seguridad"
         self.app.refresh_budget_tree()
         self.assertEqual(self.app.tools_menu.entrycget(0, "state"), "normal")
         self.assertEqual(self.app.tools_menu.entrycget(1, "state"), "normal")
+
+    def test_deleting_last_specialty_item_removes_the_external_chapter_block(self):
+        """Ignore empty chapter metadata while protecting remaining imported items."""
+        for tool, chapter, title in (
+            ("safety", "SS#", "SEGURIDAD Y SALUD"),
+            ("rcd", "RCD#", "GESTIÓN DE RESIDUOS"),
+        ):
+            with self.subTest(tool=tool):
+                self.app.budget_items = [
+                    ProjectItem("BASE", "01#", "ud", "Obra", unit_price=1000),
+                    ProjectItem("IMPORTED", chapter, "ud", "Importada", source="BC3"),
+                ]
+                self.app.chapter_order = ["01#", chapter]
+                self.app.chapter_titles = {chapter: title}
+                self.app.refresh_budget_tree()
+                self.assertTrue(self.app._has_external_tool_chapter(tool))
+                self.app.selected_chapter = None
+                self.app.selected_budget_index = 1
+                with patch("bc3_gui.messagebox.askyesno", return_value=True):
+                    self.app.delete_selected_budget_entry()
+                self.assertIn(chapter, self.app.chapter_order)
+                self.assertEqual(self.app.chapter_titles[chapter], title)
+                self.assertFalse(self.app._has_external_tool_chapter(tool))
+                with patch("bc3_gui.messagebox.showwarning") as warning:
+                    self.assertTrue(self.app._tool_chapter_available(tool))
+                warning.assert_not_called()
+
+    def test_recreating_safety_after_deleting_its_last_item_and_reloading(self):
+        """Recreate a deleted safety budget even when its chapter and review survive."""
+        from decimal import Decimal
+        from tools.safety_health import SafetyLine, serialize_state
+
+        self.app.budget_items = [
+            ProjectItem("BASE", "01#", "ud", "Obra", unit_price=1000),
+            ProjectItem("SS-A", "SS#", "ud", "Protección", source="SS:A"),
+        ]
+        self.app.chapter_order = ["01#", "SS#"]
+        self.app.chapter_titles = {"SS#": "SEGURIDAD Y SALUD"}
+        self.app.safety_health_state = serialize_state(
+            [SafetyLine("A", "ud", "Protección", Decimal("12"), Decimal("3"))],
+            Decimal("2"),
+        )
+        self.app.refresh_budget_tree()
+        self.app.selected_chapter = None
+        self.app.selected_budget_index = 1
+        with patch("bc3_gui.messagebox.askyesno", return_value=True):
+            self.app.delete_selected_budget_entry()
+        path = self.directory / "deleted-safety.json"
+        self.assertTrue(self.app._write_project_file(path))
+        self.assertTrue(self.app._load_project_file(path))
+        before = self.app._project_payload()
+        self.app.open_safety_health()
+        window = self.app._safety_health_window
+        self.assertEqual(self.app._project_payload(), before)
+        window.percentage.set("3")
+        with patch("bc3_gui.messagebox.showwarning") as warning:
+            self.assertTrue(window._create_chapter())
+        warning.assert_not_called()
+        generated = [item for item in self.app.budget_items if item.source.startswith("SS:")]
+        self.assertEqual(len(generated), 1)
+        self.assertAlmostEqual(generated[0].import_total, 30)
+        self.assertEqual(self.app.safety_health_state["percentage"], "3")
 
     def test_imported_specialty_chapters_remain_locked_after_json_save(self):
         """Read chapter titles from BC3 and retain external ownership in its JSON sidecar."""
@@ -1705,7 +1773,10 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
             SafetyLine("A", "ud", "Protección", Decimal("12"), Decimal("3")),
             SafetyLine("B", "ud", "Señal", Decimal("9"), Decimal("1"), False),
         ]
-        synchronize_budget(self.app, lines, Decimal("3.5"))
+        synchronize_budget(
+            self.app, lines, Decimal("3.5"),
+            centros_asistenciales="Hospital General\nCentro de Salud",
+        )
         path = self.directory / "safety.json"
         self.assertTrue(self.app._write_project_file(path))
         before = self.app._project_payload()
@@ -1720,12 +1791,55 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
             self.assertEqual(window.percentage.get(), "3.5")
             self.assertEqual(window.lines, lines)
             self.assertEqual(window.tree.set("B", "selected"), "")
+            self.assertEqual(
+                window.centers_text.get("1.0", "end-1c"),
+                "Hospital General\nCentro de Salud",
+            )
+            with patch.object(self.app, "_open_web_page") as open_web_page:
+                window.open_care_centers_registry()
+            open_web_page.assert_called_once_with(
+                "https://www.juntadeandalucia.es/organismos/presidenciasanidadyemergencias/"
+                "areas/sanidad/sistema-sanitario/centros-servicios/paginas/registro-ces.html",
+                "Centros Asistenciales", "Registro SICESS abierto en el navegador.",
+            )
             self.app.open_safety_health()
             self.assertIs(self.app._safety_health_window, window)
         self.assertEqual(self.app.tools_menu.entrycget(1, "state"), "normal")
         self.assertEqual(self.app._project_payload()["items"], before["items"])
         self.assertEqual(self.app._capture_project_state(), loaded)
         self.assertFalse(self.app.is_dirty)
+
+    def test_sicess_centers_survive_safety_accept_and_project_reload(self):
+        """Save structured centers and reopen the same mode without budget mutations."""
+        from decimal import Decimal
+        from tools.safety_health import SafetyLine, serialize_state
+
+        self.app.budget_items = [ProjectItem("BASE", "01#", "ud", "Obra", unit_price=1000)]
+        self.app.chapter_order = ["01#"]
+        self.app.safety_health_state = serialize_state(
+            [SafetyLine("A", "ud", "Protección", Decimal("12"), Decimal("3"))],
+            Decimal("2"), centros_asistenciales="Texto manual",
+        )
+        self.app.open_safety_health()
+        editor = self.app._safety_health_window.centers_editor
+        editor.tabs.select(editor.form_page)
+        editor.variables["nombre"].set("Centro de Salud")
+        editor.variables["telefono"].set("957514500")
+        editor.add_center()
+        editor.variables["nombre"].set("Hospital General")
+        editor.variables["telefono"].set("123456789")
+        self.assertTrue(self.app._safety_health_window._create_chapter())
+        saved = self.app.safety_health_state
+        self.assertIn("Teléfono: 957514500", saved["centros_asistenciales"])
+        path = self.directory / "sicess.json"
+        self.assertTrue(self.app._write_project_file(path))
+        self.assertTrue(self.app._load_project_file(path))
+        before = self.app._project_payload()
+        self.app.open_safety_health()
+        self.assertEqual(self.app._project_payload(), before)
+        self.assertEqual(self.app._safety_health_window.centers_editor.collect_state(), {
+            key: value for key, value in saved.items() if key.startswith("centros_asistenciales")
+        })
 
     def test_legacy_safety_json_uses_generated_items_without_new_proposal(self):
         """Older project JSON already contains the generated safety chapter and its prices."""

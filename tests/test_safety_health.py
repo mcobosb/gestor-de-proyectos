@@ -16,11 +16,18 @@ class SafetyHealthTests(unittest.TestCase):
     def test_saved_review_validation_and_roundtrip(self):
         """Validate saved selections and reject malformed or nonfinite project data."""
         lines = [SafetyLine("A", "ud", "Casco", Decimal("3.50"), Decimal("2"), False)]
-        state = serialize_state(lines, Decimal("2.5"))
+        state = serialize_state(
+            lines, Decimal("2.5"), centros_asistenciales="Hospital General\nCentro de Salud",
+        )
         self.assertEqual(restore_state(state), (lines, Decimal("2.5")))
+        self.assertEqual(
+            restore_state({key: value for key, value in state.items() if key != "centros_asistenciales"}),
+            (lines, Decimal("2.5")),
+        )
         for invalid in (
             [], {"lines": []}, {**state, "percentage": "NaN"},
             {**state, "percentage": -1},
+            {**state, "centros_asistenciales": ["Hospital General"]},
             {**state, "lines": [state["lines"][0], state["lines"][0]]},
             {**state, "lines": [{**state["lines"][0], "price": "inf"}]},
             {**state, "lines": [{**state["lines"][0], "selected": "yes"}]},

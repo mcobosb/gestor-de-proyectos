@@ -9,6 +9,7 @@ from time import monotonic
 import tkinter as tk
 import unittest
 from unittest.mock import Mock, patch
+from zipfile import ZipFile
 
 from app_paths import user_data_directory
 from bc3_gui import Bc3Dataset, BudgetApp, find_bc3_files, main, show_startup_screen
@@ -281,13 +282,22 @@ class DistributionTests(unittest.TestCase):
         self.assertIn("destination = join-path $installedtools $relativepath", build_script)
         self.assertTrue((ROOT / "tools" / "safety_health" / "datos" /
                          "seguridad_salud_relaciones_bcca2023.csv").is_file())
+        safety_library = ROOT / "tools" / "safety_health" / "BIBLIOTECA.zip"
+        self.assertTrue(safety_library.is_file())
+        with ZipFile(safety_library) as archive:
+            names = archive.namelist()
+        for document in ("00_guia_integracion.md", "01_datos_proyecto.md"):
+            self.assertIn(document, names)
+        for category in ("RECURSOS/MATERIALES/", "RECURSOS/MAQUINARIA/"):
+            self.assertTrue(any(name.startswith(category) for name in names))
         self.assertTrue((ROOT / "tools" / "pptp" / "BIBLIOTECA.zip").is_file())
         from tools.pptp import DOCS_ROOT, LIBRARY_PATH
         from tools.pptp.library import ZipLibrary
 
-        self.assertTrue(ZipLibrary(LIBRARY_PATH, DOCS_ROOT).entries)
+        library = ZipLibrary(LIBRARY_PATH, DOCS_ROOT)
+        self.assertTrue(library.entries)
         for prefix in ("01", "02", "03", "04"):
-            self.assertTrue(list(DOCS_ROOT.glob(f"{prefix}*.md")))
+            self.assertTrue(library.read_documents(prefix))
         self.assertIn("--msvc=latest", build_script)
         for package in ("matplotlib", "openpyxl", "pdfplumber", "pypdfium2"):
             self.assertIn(f"--include-package={package}", build_script)
