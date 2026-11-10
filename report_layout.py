@@ -123,6 +123,98 @@ def _read_report_template(template_path: str = ""):
     return image_data, image_path, image_width, image_height, footer_text
 
 
+def _normalize_template_tables(section_tables, table_sections, styles, automatic, namespaces):
+    """Reancla imágenes flotantes a su celda visual y limita tablas al ancho imprimible."""
+    def tag(name):
+        """Resuelve los nombres ODF usados en la normalización."""
+        prefix, local = name.split(":")
+        return f"{{{namespaces[prefix]}}}{local}"
+
+    def own_style(element, family, properties_name, values):
+        """Crea un estilo específico sin cambiar otros usos del estilo de origen."""
+        attribute = tag("draw:style-name" if family == "graphic" else
+                        "text:style-name" if family == "paragraph" else "table:style-name")
+        original = styles.get(element.get(attribute, ""))
+        name = f"TemplateCellLayout{len(automatic)}"
+        style = deepcopy(original) if original is not None else ElementTree.Element(
+            tag("style:style"), {tag("style:family"): family},
+        )
+        style.set(tag("style:name"), name)
+        properties = style.find(tag(properties_name))
+        if properties is None:
+            properties = ElementTree.SubElement(style, tag(properties_name))
+        for key, value in values.items():
+            properties.set(tag(key), value)
+        automatic.append(style)
+        styles[name] = style
+        element.set(attribute, name)
+
+    for section_name, tables in section_tables.items():
+        for table, model in zip(tables, table_sections[section_name]):
+            widths = model["widths"]
+            for row in table.findall(".//table:table-row", namespaces):
+                cells = row.findall("table:table-cell", namespaces)
+                if len(widths) != len(cells):
+                    continue
+                for column, cell in enumerate(cells):
+                    for frame in list(cell.findall(".//draw:frame", namespaces)):
+                        if frame.get(tag("text:anchor-type")) not in {"char", "paragraph"}:
+                            continue
+                        graphic_style = styles.get(frame.get(tag("draw:style-name"), ""))
+                        properties = graphic_style.find(tag("style:graphic-properties")) if graphic_style is not None else None
+                        if properties is None or properties.get(tag("style:horizontal-rel")) != "paragraph":
+                            continue
+                        x = _template_length_to_points(frame.get(tag("svg:x"), "0pt"))
+                        width = _template_length_to_points(frame.get(tag("svg:width"), "0pt"))
+                        position = sum(widths[:column]) + x
+                        destination = next((
+                            index for index in range(len(widths))
+                            if sum(widths[:index]) <= position
+                            and position + width <= sum(widths[:index + 1])
+                        ), column)
+                        target = cells[destination]
+                        if destination == column or "".join(target.itertext()).strip() or target.find(".//draw:frame", namespaces) is not None:
+                            continue
+                        parent = next(element for element in cell.iter() if frame in list(element))
+                        siblings = list(parent)
+                        index = siblings.index(frame)
+                        if frame.tail:
+                            if index:
+                                siblings[index - 1].tail = (siblings[index - 1].tail or "") + frame.tail
+                            else:
+                                parent.text = (parent.text or "") + frame.tail
+                        parent.remove(frame)
+                        frame.tail = None
+                        paragraph = target.find("text:p", namespaces)
+                        if paragraph is None:
+                            paragraph = ElementTree.SubElement(target, tag("text:p"))
+                        paragraph.append(frame)
+                        frame.set(tag("text:anchor-type"), "as-char")
+                        frame.attrib.pop(tag("svg:x"), None)
+                        frame.attrib.pop(tag("svg:y"), None)
+                        own_style(paragraph, "paragraph", "style:paragraph-properties", {
+                            "fo:text-align": "center",
+                        })
+                        own_style(frame, "graphic", "style:graphic-properties", {
+                            "style:vertical-pos": "middle",
+                            "style:vertical-rel": "line",
+                            "style:wrap": "none",
+                        })
+            if model["width"] > CONTENT_WIDTH and widths and all(width > 0 for width in widths):
+                scale = CONTENT_WIDTH / sum(widths)
+                model["widths"] = [width * scale for width in widths]
+                model["width"] = CONTENT_WIDTH
+                own_style(table, "table", "style:table-properties", {
+                    "style:width": f"{CONTENT_WIDTH:.6f}pt",
+                })
+                column_index = 0
+                for column in table.findall("table:table-column", namespaces):
+                    own_style(column, "table-column", "style:table-column-properties", {
+                        "style:column-width": f"{model['widths'][column_index]:.6f}pt",
+                    })
+                    column_index += int(column.get(tag("table:number-columns-repeated"), "1"))
+
+
 def _read_report_template_header(template_path: str = ""):
     """Carga cabecera y pie ODT completos, sus estilos y recursos gráficos."""
     namespaces = {
@@ -288,6 +380,10 @@ def _read_report_template_header(template_path: str = ""):
                         "row_heights": row_heights,
                     })
 
+            _normalize_template_tables(
+                section_tables, table_sections, style_definitions,
+                source_automatic_styles, namespaces,
+            )
             resources = []
             first_frame = None
             graphics = []

@@ -186,6 +186,12 @@ Las líneas horizontales definidas como bordes de párrafo en la cabecera o el
 pie de la plantilla también se incluyen en los informes PDF y ODT, conservando
 su grosor, color y trazo (continuo, discontinuo, punteado o doble).
 
+En cabeceras con una tabla de título y logo, las tablas más anchas que el
+espacio imprimible se ajustan conservando la proporción entre columnas.
+Si el logo está anclado al título pero desplazado sobre otra celda vacía,
+se coloca dentro de esa celda para evitar que estreche el título o se salga
+de la tabla. La plantilla ODT original no se modifica.
+
 Los informes PDF y ODT se generan en A4 con márgenes exteriores de **2,5 cm
 en los cuatro lados**. La cabecera y el pie quedan dentro de esos límites;
 el cuerpo reserva espacio adicional para no invadirlos. Las columnas se
