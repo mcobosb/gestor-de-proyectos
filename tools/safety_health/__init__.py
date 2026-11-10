@@ -9,25 +9,30 @@ import tkinter as tk
 from tkinter import ttk
 from typing import TYPE_CHECKING
 
-from localization import filedialog, messagebox
+from localization import filedialog, localize_widget_tree, messagebox, translate
+from .care_centers import CareCentersEditor, restore_centers
 
 if TYPE_CHECKING:
     from bc3_gui import BudgetApp, ProjectItem
+    from tools._library_editor import LibraryEditor
 
 
 TOOL_LABEL = "Seguridad y salud"
 TOOL_ORDER = 20
+LIBRARY_PATH = Path(__file__).resolve().parent / "BIBLIOTECA.zip"
+CARE_CENTERS_URL = (
+    "https://www.juntadeandalucia.es/organismos/presidenciasanidadyemergencias/"
+    "areas/sanidad/sistema-sanitario/centros-servicios/paginas/registro-ces.html"
+)
 
 
 def is_available(app: BudgetApp) -> bool:
-    """Evita recalcular capitulos de seguridad y salud importados."""
-    return not app._has_external_tool_chapter("safety")
+    """Mantiene la herramienta accesible aunque el presupuesto ya incluya Seguridad y Salud."""
+    return True
 
 
 def open_tool(app: BudgetApp) -> None:
     """Abre o recupera la revision de seguridad y salud del proyecto."""
-    if not app._tool_chapter_available("safety"):
-        return
     if not app.budget_items:
         messagebox.showinfo(
             TOOL_LABEL, "Carga o crea un presupuesto antes de analizar Seguridad y Salud.",
@@ -41,7 +46,16 @@ def open_tool(app: BudgetApp) -> None:
 
 def restore_project_state(data: dict) -> dict:
     """Valida la revision guardada sin volver a consultar la matriz."""
-    return serialize_state(*restore_state(data)) if data else {}
+    if not data:
+        return {}
+    return serialize_state(
+        *restore_state(data), centros_asistenciales=data.get("centros_asistenciales", ""),
+        centros_asistenciales_modo=data.get("centros_asistenciales_modo", "texto"),
+        centros_asistenciales_texto=data.get(
+            "centros_asistenciales_texto", data.get("centros_asistenciales", ""),
+        ),
+        centros_asistenciales_datos=restore_centers(data),
+    )
 
 
 SAFETY_BUDGET_SOURCE = "SS:"
@@ -63,10 +77,23 @@ def _decimal(value: object) -> Decimal:
     return Decimal(str(value).replace(",", "."))
 
 
-def serialize_state(lines: list[SafetyLine], percentage: Decimal) -> dict:
-    """Conserva la revisión completa, incluidas las partidas desmarcadas."""
+def serialize_state(
+    lines: list[SafetyLine], percentage: Decimal, *, centros_asistenciales: str = "",
+    centros_asistenciales_modo: str = "texto",
+    centros_asistenciales_texto: str | None = None,
+    centros_asistenciales_datos: list[dict[str, str]] | None = None,
+) -> dict:
+    """Conserva la revisión, sus partidas y la información de centros asistenciales."""
     return {
         "percentage": str(percentage),
+        "centros_asistenciales": centros_asistenciales,
+        "centros_asistenciales_modo": centros_asistenciales_modo,
+        "centros_asistenciales_texto": (
+            centros_asistenciales if centros_asistenciales_texto is None else centros_asistenciales_texto
+        ),
+        "centros_asistenciales_datos": [
+            dict(row) for row in centros_asistenciales_datos or []
+        ],
         "lines": [
             {"code": line.code, "unit": line.unit, "summary": line.summary,
              "price": str(line.price), "weight": str(line.weight), "selected": line.selected}
@@ -79,6 +106,10 @@ def restore_state(data: object) -> tuple[list[SafetyLine], Decimal]:
     """Valida la revisión JSON sin consultar la matriz ni recalcular el presupuesto."""
     if not isinstance(data, dict) or not isinstance(data.get("lines"), list):
         raise ValueError("Los datos de Seguridad y Salud no contienen una revisión válida.")
+    if ("centros_asistenciales" in data
+            and not isinstance(data["centros_asistenciales"], str)):
+        raise ValueError("Los centros asistenciales deben ser texto.")
+    restore_centers(data)
     lines = []
     codes = set()
     try:
@@ -127,7 +158,13 @@ def proposed_lines(items: list[ProjectItem]) -> list[SafetyLine]:
     return sorted(grouped.values(), key=lambda line: line.code)
 
 
-def synchronize_budget(app: BudgetApp, lines: list[SafetyLine], percentage: Decimal) -> None:
+def synchronize_budget(
+    app: BudgetApp, lines: list[SafetyLine], percentage: Decimal, *,
+    centros_asistenciales: str = "",
+    centros_asistenciales_modo: str = "texto",
+    centros_asistenciales_texto: str | None = None,
+    centros_asistenciales_datos: list[dict[str, str]] | None = None,
+) -> None:
     """Sustituye exclusivamente las partidas SS generadas por la revisión aceptada."""
     from bc3_gui import MeasurementLine, ProjectItem
 
@@ -172,7 +209,12 @@ def synchronize_budget(app: BudgetApp, lines: list[SafetyLine], percentage: Deci
         app.budget_items.append(item)
     app._ensure_chapter(chapter)
     app.chapter_titles[chapter] = "SEGURIDAD Y SALUD"
-    app.safety_health_state = serialize_state(lines, percentage)
+    app.safety_health_state = serialize_state(
+        lines, percentage, centros_asistenciales=centros_asistenciales,
+        centros_asistenciales_modo=centros_asistenciales_modo,
+        centros_asistenciales_texto=centros_asistenciales_texto,
+        centros_asistenciales_datos=centros_asistenciales_datos,
+    )
     app.refresh_budget_tree()
     app._mark_dirty()
 
@@ -232,8 +274,9 @@ class SafetyHealthWindow(tk.Toplevel):
         super().__init__(master)
         self.app = app
         self.title("Seguridad y salud")
-        self.geometry("1060x620")
-        self.minsize(850, 480)
+        self.geometry("1100x800")
+        self.minsize(950, 700)
+        self.library_editor: LibraryEditor | None = None
         try:
             if app.safety_health_state:
                 self.lines, percentage = restore_state(app.safety_health_state)
@@ -260,9 +303,38 @@ class SafetyHealthWindow(tk.Toplevel):
             self.after_idle(self.destroy)
             return
         self.percentage = tk.StringVar(value=str(percentage))
-        ttk.Label(self, text="Seguridad y salud — propuesta revisable", style="Total.TLabel").pack(
-            anchor="w", padx=12, pady=(12, 4)
+        basics = ttk.LabelFrame(
+            self, text="Información básica del Estudio de Seguridad y Salud", padding=8,
         )
+        basics.pack(fill="x", padx=12, pady=(8, 4))
+        centers_label = tk.Label(
+            basics, text="Centros Asistenciales", foreground="#0563C1",
+            cursor="hand2", font=("TkDefaultFont", 9, "underline"),
+        )
+        centers_label.pack(anchor="w")
+        centers_label.bind("<Button-1>", self.open_care_centers_registry)
+        centers_label.bind("<Return>", self.open_care_centers_registry)
+        centers_label.configure(takefocus=True)
+        from bc3_gui import ToolTip
+
+        ToolTip(
+            centers_label,
+            translate(
+                "Rellena este apartado con la información del registro SICESS de la Junta de Andalucía "
+                "(al menos Hospitales Generales y Centros de Salud)."
+            ),
+        )
+        self.centers_editor = CareCentersEditor(basics, app.safety_health_state)
+        self.centers_editor.pack(fill="x", pady=(4, 0))
+        self.centers_text = self.centers_editor.text
+        header = ttk.Frame(self, padding=(12, 12, 12, 4))
+        header.pack(fill="x")
+        ttk.Label(header, text="Seguridad y salud — propuesta revisable",
+                  style="Total.TLabel").pack(side="left")
+        ttk.Button(
+            header, text="Editar biblioteca de fichas...",
+            command=self.open_library_editor,
+        ).pack(side="right")
         ttk.Label(
             self,
             text=("La propuesta se basa en la matriz BCCA por riesgos. El porcentaje es orientativo; "
@@ -298,6 +370,26 @@ class SafetyHealthWindow(tk.Toplevel):
         ttk.Button(buttons, text="Generar informe del capítulo", command=self.generate_report).pack(
             side="left"
         )
+        localize_widget_tree(self)
+
+    def open_care_centers_registry(self, event=None) -> None:
+        """Abre el registro oficial andaluz de centros asistenciales."""
+        self.app._open_web_page(
+            CARE_CENTERS_URL,
+            translate("Centros Asistenciales"),
+            translate("Registro SICESS abierto en el navegador."),
+        )
+
+    def open_library_editor(self) -> None:
+        """Abre el editor de fichas de Seguridad y Salud."""
+        from tools._library_editor import LibraryEditor
+
+        if self.library_editor is not None and self.library_editor.winfo_exists():
+            self.library_editor.lift()
+            return
+        self.library_editor = LibraryEditor(
+            self, LIBRARY_PATH, "Biblioteca de fichas de Seguridad y Salud",
+        )
 
     def _toggle(self, event=None):
         """Alterna la inclusión de la partida seleccionada y actualiza su marca."""
@@ -320,7 +412,10 @@ class SafetyHealthWindow(tk.Toplevel):
             percentage = _decimal(self.percentage.get())
             if not Decimal() <= percentage <= 100:
                 raise ValueError("El porcentaje debe estar entre 0 y 100.")
-            synchronize_budget(self.app, self.lines, percentage)
+            synchronize_budget(
+                self.app, self.lines, percentage,
+                **self.centers_editor.collect_state(),
+            )
         except ValueError as exc:
             messagebox.showerror("Seguridad y salud", str(exc), parent=self)
             return False
