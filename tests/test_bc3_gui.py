@@ -1430,6 +1430,34 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.assertEqual(tuple(map(str, self.app.bcca_tree.cget("show"))), ("tree", "headings"))
         self.assertFalse(self.app.is_dirty)
 
+    def test_reference_details_preserve_accents_labels_and_multiplication_sign(self):
+        """Display decoded accents and correctly spelled labels in the reference detail pane."""
+        for encoding, declaration in (("cp1252", "ANSI"), ("cp850", "850"), ("cp437", "437")):
+            with self.subTest(encoding=encoding):
+                source = self.directory / f"referencia-{encoding}.bc3"
+                source.write_text(
+                    f"~V|Prueba|FIEBDC-3/2020||{declaration}|\n"
+                    "~C|P1|m²|Demolición de hormigón|10||0|\n"
+                    "~C|MO|h|Peón de albañilería|5||1|\n"
+                    "~T|P1|Descripción: ejecución, medición, valoración y zanquín.|\n"
+                    "~D|P1|MO\\1\\2\\|\n", encoding=encoding,
+                )
+                base = Bc3Dataset(source)
+                self.app._show_bcca_details(base, "P1")
+                text = self.app.bcca_detail_text.get("1.0", "end-1c")
+                for expected in (
+                    "Código: P1", "Unidad: m²", "Descomposición:",
+                    "Descripción: ejecución, medición, valoración y zanquín.",
+                    "Peón de albañilería", "h × ",
+                ):
+                    self.assertIn(expected, text)
+                self.assertNotIn("?", text)
+                self.assertNotIn("\ufffd", text)
+                self.assertEqual(str(self.app.bcca_detail_text.cget("state")), "disabled")
+                self.app._show_bcca_details(base, "MO")
+                self.assertIn("Peón de albañilería", self.app.bcca_detail_text.get("1.0", "end"))
+                self.assertFalse(self.app.is_dirty)
+
     def test_reference_filters_search_context_and_preserve_base_identity(self):
         """Combine resource and ancestor searches across bases and clear stale selection."""
         first = self.set_reference_filter_base("Primera")

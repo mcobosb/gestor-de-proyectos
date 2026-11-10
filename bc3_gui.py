@@ -1458,7 +1458,7 @@ class BudgetApp:
             return
         lines = [
             f"Base: {base.path.stem}",
-            f"C?digo: {concept.code}",
+            f"Código: {concept.code}",
             f"Unidad: {concept.unit or '-'}",
             f"Precio: {self._format_currency(concept.price)}",
             f"Rendimiento: {fmt_number(base.calculate_rendimiento(code), 4)} h",
@@ -1466,12 +1466,12 @@ class BudgetApp:
             concept.text or concept.summary or "Sin texto descriptivo.",
         ]
         if concept.children:
-            lines.extend(("", "Descomposici?n:"))
+            lines.extend(("", "Descomposición:"))
             for child_code, quantity in concept.children:
                 child = base.concepts.get(child_code, Concept(child_code))
                 lines.append(
                     f"  {child_code}: {child.summary or child_code} | "
-                    f"{fmt_number(quantity, 4)} {child.unit} ? {self._format_currency(child.price)}"
+                    f"{fmt_number(quantity, 4)} {child.unit} × {self._format_currency(child.price)}"
                 )
         self.bcca_detail_text.config(state="normal")
         self.bcca_detail_text.delete("1.0", "end")
