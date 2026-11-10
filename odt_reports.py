@@ -533,12 +533,17 @@ class _OdtReport:
 
     def _master_page(self, master_styles, styles, name: str, title: str) -> None:
         """Repite logo, título, proyecto y pie numerado con la geometría del PDF."""
+        from report_layout import replace_template_fields
+
         master_page = ET.SubElement(master_styles, _tag("style:master-page"), {
             _tag("style:name"): name,
             _tag("style:page-layout-name"): "PageLayout",
         })
         if self.template_header is not None:
-            master_page.append(deepcopy(self.template_header["header"]))
+            template_fields = self.layout.template_fields if self.layout is not None else {}
+            master_page.append(replace_template_fields(
+                self.template_header["header"], template_fields,
+            ))
             header = master_page.find(_tag("style:header"))
         elif self.image_data is not None:
             header = ET.SubElement(master_page, _tag("style:header"))
@@ -576,14 +581,16 @@ class _OdtReport:
         if self.header_columns:
             self._header_table(header, styles)
         if self.template_footer is not None:
+            template_fields = self.layout.template_fields if self.layout is not None else {}
+            footer = replace_template_fields(self.template_footer, template_fields)
             if self.layout is not None and self.layout.footer_title:
                 from report_layout import replace_footer_fields
 
                 master_page.append(replace_footer_fields(
-                    self.template_footer, self.layout.footer_title,
+                    footer, self.layout.footer_title,
                 ))
             else:
-                master_page.append(deepcopy(self.template_footer))
+                master_page.append(footer)
         elif self.footer:
             footer = ET.SubElement(master_page, _tag("style:footer"))
             paragraph = ET.SubElement(footer, _tag("text:p"), {
@@ -694,6 +701,7 @@ def _new_report(
         layout=ReportLayout(
             certification=certification, template_path=settings.template_path,
             repeat_titles=repeat_titles, footer_title=footer_title,
+            expediente=settings.expediente, template_title=project_title,
         ),
     )
     document.template_borders = _read_report_template_borders(settings.template_path)

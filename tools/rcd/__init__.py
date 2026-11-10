@@ -732,7 +732,11 @@ def write_report(state: RcdState, title: str, settings, target: Path) -> None:
     from reportlab.platypus import KeepTogether, SimpleDocTemplate, Spacer
     from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout, report_project_label
 
-    layout = ReportLayout(template_path=settings.template_path)
+    layout = ReportLayout(
+        template_path=settings.template_path,
+        expediente=settings.expediente,
+        template_title=title,
+    )
     project_label = report_project_label(title)
     story = [layout.text(NOTE), Spacer(1, 12)]
     if state.demolition:

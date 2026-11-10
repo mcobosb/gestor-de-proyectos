@@ -48,6 +48,7 @@ class ReportSettings:
     signature: str = "(Fecha y firma electrónicas)"
     contractor: str = ""
     contractor_representative: str = ""
+    expediente: str = ""
     template_path: str = ""
     output_format: str = "pdf"
     currency: str = "EUR"
@@ -279,7 +280,11 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
     project_label = report_project_label(
         title, "" if report == "Mediciones" else currency_label(settings.currency, settings.custom_currency),
     )
-    layout = ReportLayout(template_path=settings.template_path)
+    layout = ReportLayout(
+        template_path=settings.template_path,
+        expediente=settings.expediente,
+        template_title=title,
+    )
     text = layout.text
     table = layout.table
     story = []
@@ -620,7 +625,12 @@ def write_certification_pdf(
         "CERTIFICACIÓN Y MEDICIONES" if detail else "RESUMEN DE CERTIFICACIÓN"
     )
     heading = f"{report_heading} · Certificación {certification_number} · {month_label}"
-    layout = ReportLayout(certification=True, template_path=settings.template_path)
+    layout = ReportLayout(
+        certification=True,
+        template_path=settings.template_path,
+        expediente=settings.expediente,
+        template_title=project_title,
+    )
     from bc3_gui import currency_label
 
     project_label = report_project_label(

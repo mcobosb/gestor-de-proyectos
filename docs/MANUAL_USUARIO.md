@@ -159,6 +159,10 @@ Abre **Archivo → Configuración…** y completa:
   y los informes y se conserva en el JSON del proyecto. No puede estar vacío y
   no se utiliza como título predeterminado para nuevos proyectos.
 - Autoría, cargo o titulación, entidad o servicio.
+- Expediente de la plantilla. Puedes situar `{{expediente}}` y `{{título}}`
+  (también se admite `{{titulo}}`) en la cabecera o el pie de la plantilla ODT;
+  se sustituyen respectivamente por este valor y el título del proyecto en los
+  informes PDF y ODT.
 - Localidad y texto de firma o fecha.
 - Empresa constructora y responsable de la empresa constructora. En ambos
   informes de certificación aparecen el responsable, la empresa y el texto de
@@ -510,7 +514,7 @@ Necesita un presupuesto, `tools/pptp/BIBLIOTECA.zip` y las cuatro secciones
 generales en `tools/pptp/docs`. No necesitas descomprimir las fichas ni conservar
 una carpeta `archivos`: el asistente detecta el ZIP automáticamente al abrirse.
 Busca las fichas mediante `catalogo.json` y lee únicamente las seleccionadas
-al generar, comprobando su integridad SHA256. `INDICE_FICHAS.md` está dentro
+al generar. `INDICE_FICHAS.md` está dentro
 del ZIP para consultar el inventario cómodamente y no se incluye en el pliego.
 Si actualizas la biblioteca, cierra y vuelve a abrir PPTP para cargarla de nuevo.
 No incorpora partidas de RCDs ni de Seguridad y Salud.

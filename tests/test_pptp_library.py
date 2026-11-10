@@ -1,6 +1,5 @@
 """Comprobaciones de catalogo JSON y lectura ZIP sin extraccion."""
 from copy import deepcopy
-from hashlib import sha256
 import json
 from pathlib import Path
 import tempfile
@@ -27,12 +26,10 @@ class ZipLibraryTests(unittest.TestCase):
         self.rows = [{
             "id": "UNI-01TR-REDES", "codigo_uni": "01TR", "titulo": "Redes",
             "archivo": "01_BASE/01T_PREVIOS/01TR_REDES/REDES.md",
-            "sha256": sha256(self.content.encode("utf-8")).hexdigest(),
             "seleccion": {"requiere_confirmacion": True},
         }, {
             "id": "UNI-01TR-OTRA", "codigo_uni": "01TR", "titulo": "Otra variante",
             "archivo": "01_BASE/01T_PREVIOS/01TR_REDES/OTRA.md",
-            "sha256": sha256(b"# Otra ficha").hexdigest(),
         }]
         self.catalog = {
             "formato": "biblioteca-fichas-uni", "version_esquema": 1,
@@ -67,7 +64,7 @@ class ZipLibraryTests(unittest.TestCase):
         self.assertEqual(library.read_sheet(catalog[0].path), self.content)
         self.assertFalse((self.root / "archivos").exists())
 
-    def test_rejects_bad_schema_count_duplicate_ids_paths_and_hash_format(self):
+    def test_rejects_bad_schema_count_duplicate_ids_and_paths(self):
         """Rechaza catalogos inconsistentes en lugar de devolver listas parciales."""
         bad_catalogs = [
             [], {**self.catalog, "version_esquema": 2},
@@ -80,7 +77,7 @@ class ZipLibraryTests(unittest.TestCase):
             ("id", self.rows[0]["id"]), ("archivo", self.rows[0]["archivo"]),
             ("codigo_uni", "99XX"), ("archivo", "../fuera.md"),
             ("archivo", "C:/fuera.md"), ("archivo", r"UNI\fuera.md"),
-            ("sha256", "invalido"), ("titulo", 5), ("seleccion", []),
+            ("titulo", 5), ("seleccion", []),
         ):
             catalog = deepcopy(self.catalog)
             catalog["fichas"][1][field] = value
@@ -139,15 +136,16 @@ class ZipLibraryTests(unittest.TestCase):
             validate_relative(r"bad\path.md")
         self.assertFalse((self.root / "outside.md").exists())
 
-    def test_integrity_is_checked_when_selected_sheet_is_read(self):
-        """Un SHA256 incorrecto impide generar con un texto modificado."""
+    def test_reads_modified_selected_sheet_without_digest(self):
+        """La ficha se lee aunque el catálogo no declare una suma de verificación."""
         members = dict(self.members)
         members["archivos/UNI/" + self.rows[0]["archivo"]] = "Texto modificado"
         self.write_zip(members=members)
         library = ZipLibrary(self.archive, self.docs)
         self.assertEqual(len(load_catalog(library)), 2)
-        with self.assertRaisesRegex(ValueError, "SHA256"):
-            library.read_sheet("UNI/" + self.rows[0]["archivo"])
+        self.assertEqual(
+            library.read_sheet("UNI/" + self.rows[0]["archivo"]), "Texto modificado",
+        )
         with self.assertRaises(ValueError):
             library.read_sheet("UNI/no_catalogada.md")
 

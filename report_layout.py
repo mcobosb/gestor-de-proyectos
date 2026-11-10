@@ -311,13 +311,28 @@ def _read_report_template_header(template_path: str = ""):
                     frame for frame in section.findall(".//draw:frame", namespaces)
                     if image in list(frame.iter())
                 )
+                table_section = "header" if section is header else "footer"
+                table_index = next((
+                    index for index, table in enumerate(section_tables[table_section])
+                    if image in list(table.iter())
+                ), None)
+                table_row_index = None
+                table_column_index = None
+                if table_index is not None:
+                    table = section_tables[table_section][table_index]
+                    for row_index, row in enumerate(table.findall(".//table:table-row", namespaces)):
+                        for column_index, cell in enumerate(row.findall("table:table-cell", namespaces)):
+                            if image in list(cell.iter()):
+                                table_row_index = row_index
+                                table_column_index = column_index
+                                break
+                        if table_row_index is not None:
+                            break
                 graphics.append({
-                    "section": "header" if section is header else "footer",
-                    "table_index": next((
-                        index for index, table in enumerate(section_tables[
-                            "header" if section is header else "footer"
-                        ]) if image in list(table.iter())
-                    ), None),
+                    "section": table_section,
+                    "table_index": table_index,
+                    "table_row_index": table_row_index,
+                    "table_column_index": table_column_index,
                     "data": image_data,
                     "x": _template_length_to_points(
                         frame.get(f"{{{namespaces['svg']}}}x", "0pt")
@@ -429,8 +444,54 @@ def _read_report_template_borders(template_path: str = "") -> dict[str, dict[str
         raise ValueError(f"No se pudieron leer las líneas de la plantilla {path}: {exc}") from exc
 
 
+def replace_template_fields(section, fields: dict[str, str]):
+    """Sustituye campos de texto de plantilla incluso fragmentados entre spans."""
+    from copy import deepcopy
+    import re
+
+    section = deepcopy(section)
+    text_ns = "urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+    markers = "|".join(re.escape(marker) for marker in fields)
+    if not markers:
+        return section
+    for paragraph in section.iter(f"{{{text_ns}}}p"):
+        slots = []
+
+        def collect(element):
+            """Recoge texto y colas en su orden real de lectura XML."""
+            if element.text:
+                slots.append((element, "text", element.text))
+            for child in element:
+                collect(child)
+                if child.tail:
+                    slots.append((child, "tail", child.tail))
+
+        collect(paragraph)
+        source = "".join(value for _, _, value in slots)
+        matches = list(re.finditer(markers, source))
+        for match in reversed(matches):
+            offset = 0
+            start_slot = None
+            for element, attribute, value in slots:
+                end = offset + len(value)
+                if offset <= match.start() < end:
+                    start_slot = (element, attribute, match.start() - offset)
+                overlap_start = max(0, match.start() - offset)
+                overlap_end = min(len(value), match.end() - offset)
+                if overlap_start < overlap_end:
+                    current = getattr(element, attribute) or ""
+                    setattr(element, attribute, current[:overlap_start] + current[overlap_end:])
+                offset = end
+            if start_slot is None:
+                continue
+            element, attribute, index = start_slot
+            current = getattr(element, attribute) or ""
+            setattr(element, attribute, current[:index] + fields[match.group()] + current[index:])
+    return section
+
+
 def replace_footer_fields(section, title: str):
-    """Sustituye campos del pie incluso fragmentados entre spans de la plantilla."""
+    """Sustituye campos especiales del pie incluso fragmentados entre spans."""
     from copy import deepcopy
     import re
     from xml.etree import ElementTree as ET
@@ -489,7 +550,8 @@ def replace_footer_fields(section, title: str):
 class ReportLayout:
     def __init__(
         self, *, certification: bool = False, template_path: str = "",
-        repeat_titles: bool = True, footer_title: str = "",
+        repeat_titles: bool = True, footer_title: str = "", expediente: str = "",
+        template_title: str = "",
     ):
         """Carga el logo y configura fuentes, sangrías y estilos del modelo elegido."""
         from reportlab.lib.enums import TA_CENTER, TA_RIGHT
@@ -544,6 +606,11 @@ class ReportLayout:
         self.certification = certification
         self.repeat_titles = repeat_titles
         self.footer_title = footer_title
+        self.template_fields = {
+            "{{expediente}}": expediente,
+            "{{título}}": template_title,
+            "{{titulo}}": template_title,
+        }
         self.footer_page = None
         (
             image_data, self.template_image_path, self.logo_width, self.logo_height,
@@ -571,7 +638,7 @@ class ReportLayout:
         """Crea una descripción con la sangría y tipografía del modelo."""
         return self.text(value, self.description_style)
 
-    def _template_table_flowable(self, template_table):
+    def _template_table_flowable(self, template_table, section: str, table_index: int):
         """Reproduce una tabla de cabecera o pie con sus columnas, bordes y texto."""
         from reportlab.lib import colors
         from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_RIGHT
@@ -594,8 +661,11 @@ class ReportLayout:
                     fontSize=cell["font_size"],
                     leading=cell["font_size"] + 1,
                     alignment=alignment,
+                    leftIndent=self._template_cell_graphic_padding(
+                        template_table, section, table_index, row_index, column_index,
+                    ),
                 )
-                value = self._footer_value(cell["text"]) if self.footer_page is not None else cell["text"]
+                value = self._footer_value(cell["text"])
                 data_row.append(self.text(value, cell_style) if value else "")
                 style_row.append(cell)
             data.append(data_row)
@@ -610,6 +680,8 @@ class ReportLayout:
         ]
         block = Table(data, colWidths=column_widths, rowHeights=row_heights, hAlign="LEFT")
         commands = [("VALIGN", (0, 0), (-1, -1), "TOP")]
+        if section == "header" and table_index == 0:
+            commands.append(("VALIGN", (0, 0), (0, -1), "MIDDLE"))
         for row_index, row in enumerate(cell_styles):
             for column_index, cell in enumerate(row):
                 padding = cell["padding"]
@@ -631,6 +703,25 @@ class ReportLayout:
         block.setStyle(TableStyle(commands))
         return block
 
+    def _template_cell_graphic_padding(
+        self, template_table, section: str, table_index: int, row_index: int, column_index: int,
+    ) -> float:
+        """Evita que el texto de una celda se superponga a una imagen anclada en ella."""
+        column_start = sum(template_table["widths"][:column_index])
+        column_end = column_start + template_table["widths"][column_index]
+        row_start = sum(template_table["row_heights"][:row_index])
+        row_end = row_start + template_table["row_heights"][row_index]
+        padding = 0.0
+        for graphic in self.template_graphics:
+            if graphic["section"] != section or graphic["table_index"] != table_index:
+                continue
+            if (
+                graphic["table_row_index"] == row_index
+                and graphic["table_column_index"] == column_index
+            ):
+                padding = max(padding, graphic["x"] + graphic["width"] + 6)
+        return padding
+
     def _draw_template_tables(self, canvas, section, *, top=None, bottom=None):
         """Draw source template tables and return their PDF origins for anchored frames."""
         from reportlab.lib.pagesizes import A4
@@ -638,7 +729,7 @@ class ReportLayout:
         origins = {}
         cursor = top if top is not None else bottom
         for index, template_table in enumerate(self.template_tables[section]):
-            block = self._template_table_flowable(template_table)
+            block = self._template_table_flowable(template_table, section, index)
             width, height = block.wrap(template_table["width"], 1000)
             if template_table["align"] == "margins":
                 x = LEFT_MARGIN + (CONTENT_WIDTH - width) / 2
@@ -787,7 +878,9 @@ class ReportLayout:
             text_width = max(1, self.template_frame_x - 8) if self.template_frame_x else (
                 CONTENT_WIDTH - self.logo_width - 8
             )
-            _, text_height = self.text(self.template_header_text, self.normal).wrap(text_width, 1000)
+            _, text_height = self.text(self._template_value(self.template_header_text), self.normal).wrap(
+                text_width, 1000,
+            )
         graphic_height = max(
             (graphic["y"] + graphic["height"] for graphic in self.template_graphics
              if graphic["section"] == "header"),
@@ -823,16 +916,27 @@ class ReportLayout:
             text_width = max(1, self.template_frame_x - 8) if self.template_frame_x else (
                 CONTENT_WIDTH - self.logo_width - 8
             )
-            template_text = self.text(self.template_header_text, self.normal)
+            template_text = self.text(self._template_value(self.template_header_text), self.normal)
             _, text_height = template_text.wrap(text_width, 1000)
             template_text.drawOn(canvas, LEFT_MARGIN, top - PAGE_MARGIN - text_height)
         for graphic in self.template_graphics:
             if graphic["section"] != "header":
                 continue
             if graphic["table_index"] is not None and graphic["table_index"] in header_tables:
-                table_x, table_y, _, table_height = header_tables[graphic["table_index"]]
-                graphic_x = table_x + graphic["x"]
-                graphic_y = table_y + table_height - graphic["y"] - graphic["height"]
+                table_index = graphic["table_index"]
+                table_x, table_y, _, table_height = header_tables[table_index]
+                template_table = self.template_tables["header"][table_index]
+                column_index = graphic["table_column_index"]
+                row_index = graphic["table_row_index"]
+                graphic_x = (
+                    table_x + sum(template_table["widths"][:column_index])
+                    + (template_table["widths"][column_index] - graphic["width"]) / 2
+                )
+                graphic_y = (
+                    table_y + table_height
+                    - sum(template_table["row_heights"][:row_index])
+                    - (template_table["row_heights"][row_index] + graphic["height"]) / 2
+                )
             else:
                 graphic_x = LEFT_MARGIN + graphic["x"]
                 graphic_y = top - PAGE_MARGIN - graphic["y"] - graphic["height"]
@@ -874,9 +978,20 @@ class ReportLayout:
             if graphic["section"] != "footer":
                 continue
             if graphic["table_index"] is not None and graphic["table_index"] in footer_tables:
-                table_x, table_y, _, table_height = footer_tables[graphic["table_index"]]
-                graphic_x = table_x + graphic["x"]
-                graphic_y = table_y + table_height - graphic["y"] - graphic["height"]
+                table_index = graphic["table_index"]
+                table_x, table_y, _, table_height = footer_tables[table_index]
+                template_table = self.template_tables["footer"][table_index]
+                column_index = graphic["table_column_index"]
+                row_index = graphic["table_row_index"]
+                graphic_x = (
+                    table_x + sum(template_table["widths"][:column_index])
+                    + (template_table["widths"][column_index] - graphic["width"]) / 2
+                )
+                graphic_y = (
+                    table_y + table_height
+                    - sum(template_table["row_heights"][:row_index])
+                    - (template_table["row_heights"][row_index] + graphic["height"]) / 2
+                )
             else:
                 graphic_x = LEFT_MARGIN + graphic["x"]
                 graphic_y = PAGE_MARGIN + graphic["y"]
@@ -923,6 +1038,7 @@ class ReportLayout:
 
     def _footer_value(self, value: str) -> str:
         """Resuelve los campos del pie solo en documentos que lo solicitan."""
+        value = self._template_value(value)
         if not self.footer_title:
             return value
         return value.replace("{{capitulo}}", self.footer_title).replace(
@@ -930,3 +1046,9 @@ class ReportLayout:
         ).replace(
             "{{no_pagina}}", str(self.footer_page or 1),
         ).replace("{no_pagina}", str(self.footer_page or 1))
+
+    def _template_value(self, value: str) -> str:
+        """Resuelve los campos configurables de cabecera y pie."""
+        for marker, replacement in self.template_fields.items():
+            value = value.replace(marker, replacement)
+        return value

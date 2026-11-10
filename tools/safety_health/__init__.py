@@ -188,7 +188,11 @@ def write_report(app: BudgetApp, target: Path) -> None:
     if not items:
         raise ValueError("Crea primero el capítulo de Seguridad y Salud para generar su informe.")
     chapter = items[0].chapter
-    layout = ReportLayout(template_path=app.report_settings.template_path)
+    layout = ReportLayout(
+        template_path=app.report_settings.template_path,
+        expediente=app.report_settings.expediente,
+        template_title=app._project_title(),
+    )
     title = "PRESUPUESTO DE SEGURIDAD Y SALUD"
     project = report_project_label(
         app._project_title(), currency_label(app.report_settings.currency, app.report_settings.custom_currency)

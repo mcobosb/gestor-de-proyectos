@@ -111,6 +111,12 @@ class ReportCalculationsTests(unittest.TestCase):
         self.assertEqual(
             ReportSettings.from_dict({"output_format": "ODT"}).output_format, "odt"
         )
+        self.assertEqual(
+            ReportSettings.from_dict({
+                "expediente": "EXP-2026-001",
+            }).to_dict()["expediente"],
+            "EXP-2026-001",
+        )
         self.assertEqual(ReportSettings.from_dict({}).indirect_costs, 0)
         self.assertEqual(ReportSettings.from_dict({"indirect_costs": "3,5"}).indirect_costs, 3.5)
 

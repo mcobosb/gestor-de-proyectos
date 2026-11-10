@@ -3442,6 +3442,7 @@ class BudgetApp:
             row=0, column=1, sticky="ew",
         )
         fields = (
+            ("Expediente", "expediente"),
             ("Autoría / nombre", "author"), ("Cargo / titulación", "role"),
             ("Entidad / servicio", "organization"), ("Localidad", "location"),
             ("Plazo de garantía (con unidad)", "guarantee_period"),
