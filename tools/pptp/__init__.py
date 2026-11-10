@@ -18,6 +18,7 @@ from .document import (
 
 if TYPE_CHECKING:
     from bc3_gui import BudgetApp
+    from tools._library_editor import LibraryEditor
 
 TOOL_LABEL = "PPTP"
 TOOL_ORDER = 35
@@ -69,6 +70,7 @@ class PptpWindow(tk.Toplevel):
         self.regulation_choices = dict(saved.get("regulations", {}))
         self.step = 0
         self.editor: ttk.Combobox | None = None
+        self.library_editor: LibraryEditor | None = None
         self.content = ttk.Frame(self, padding=12)
         self.content.pack(fill="both", expand=True)
         self.buttons = ttk.Frame(self, padding=12)
@@ -212,6 +214,27 @@ class PptpWindow(tk.Toplevel):
         ttk.Label(
             self.content, text="Los cambios aceptados de título, entidad y garantía se conservan en el proyecto.",
         ).pack(anchor="w")
+        ttk.Button(
+            self.content, text="Editar biblioteca de fichas...",
+            command=self.open_library_editor,
+        ).pack(anchor="e", pady=(8, 0))
+
+    def open_library_editor(self) -> None:
+        """Abre el editor de fichas PPTP sin cerrar el asistente del proyecto."""
+        from tools._library_editor import LibraryEditor
+
+        if self.library_editor is not None and self.library_editor.winfo_exists():
+            self.library_editor.lift()
+            return
+        self.library_editor = LibraryEditor(
+            self, LIBRARY_PATH, "Biblioteca de fichas PPTP", on_saved=self.reload_library,
+        )
+
+    def reload_library(self) -> None:
+        """Actualiza el catálogo abierto tras modificar una ficha del ZIP."""
+        self.library = ZipLibrary(LIBRARY_PATH, DOCS_ROOT)
+        self.catalog = load_catalog(self.library)
+        self.sheets = {sheet.path: sheet for sheet in self.catalog}
 
     def selection_table(
         self, parent: tk.Misc,

@@ -33,7 +33,7 @@ class CatalogEntry:
 
 
 class ZipLibrary:
-    """Biblioteca de fichas comprimidas y plantillas generales externas."""
+    """Biblioteca ZIP con documentos base y fichas clasificadas."""
 
     def __init__(self, archive: Path, docs: Path):
         """Valida el catalogo y sus rutas sin descomprimir ni leer las fichas."""
@@ -167,3 +167,27 @@ class ZipLibrary:
         except (BadZipFile, RuntimeError, NotImplementedError) as exc:
             raise ValueError(f"No se pudo leer la ficha {relative}: {exc}") from exc
         return content.decode("utf-8-sig")
+
+    def read_documents(self, prefix: str) -> list[tuple[str, str]]:
+        """Lee documentos base del ZIP y conserva el directorio externo como respaldo."""
+        if self._file_signature() != self._signature:
+            raise ValueError("La biblioteca ha cambiado. Cierra y vuelve a abrir PPTP.")
+        members = sorted(
+            name for name, info in self._members.items()
+            if "/" not in name and name.startswith(prefix)
+            and name.lower().endswith(".md") and not info.is_dir()
+        )
+        if members:
+            try:
+                with ZipFile(self.archive) as source:
+                    return [
+                        (name, self._read_member(source, self._members[name]))
+                        for name in members
+                    ]
+            except (BadZipFile, RuntimeError, NotImplementedError, UnicodeError) as exc:
+                raise ValueError(f"No se pudieron leer los documentos base del PPTP: {exc}") from exc
+        files = sorted(self.docs.glob(f"{prefix}*.md"))
+        return [
+            (path.name, path.read_text(encoding="utf-8-sig"))
+            for path in files
+        ]

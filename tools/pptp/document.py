@@ -219,13 +219,16 @@ def initial_variables(app: BudgetApp) -> tuple[dict[str, str], bool]:
 
 def load_regulations(root: Path | ZipLibrary, codes: set[str]) -> list[Regulation]:
     """Filtra las referencias clasificadas por prefijos y conserva sus avisos."""
-    docs = root.docs if isinstance(root, ZipLibrary) else root
-    files = sorted(docs.glob("02*.md"))
-    if not files:
+    sources = (
+        root.read_documents("02") if isinstance(root, ZipLibrary) else [
+            (path.name, path.read_text(encoding="utf-8-sig"))
+            for path in sorted(root.glob("02*.md"))
+        ]
+    )
+    if not sources:
         raise ValueError("Falta la sección 02 de disposiciones técnicas legales.")
     result: dict[str, Regulation] = {}
-    for path in files:
-        source = path.read_text(encoding="utf-8-sig")
+    for name, source in sources:
         for match in re.finditer(r"<!--\s*NORMATIVA_UNI\s+(\{[^\n]*\})\s*-->\s*\n([*+-] [^\n]+)", source):
             try:
                 data = json.loads(match[1])
@@ -245,7 +248,7 @@ def load_regulations(root: Path | ZipLibrary, codes: set[str]) -> list[Regulatio
                         data["seleccion"] == "candidata",
                     ))
             except (KeyError, TypeError, json.JSONDecodeError) as exc:
-                raise ValueError(f"Clasificación normativa no válida en {path.name}: {exc}") from exc
+                raise ValueError(f"Clasificación normativa no válida en {name}: {exc}") from exc
     if not result:
         raise ValueError("No se encontraron disposiciones legales clasificadas.")
     return list(result.values())
@@ -321,20 +324,24 @@ def compose(root: Path | ZipLibrary, state: dict, regulations: list[Regulation])
 
     chosen.sort(key=sheet_order)
     sections = []
-    docs = root.docs if isinstance(root, ZipLibrary) else root
     for prefix in ("01", "02", "03", "04"):
-        files = sorted(docs.glob(f"{prefix}*.md"))
-        if not files:
+        sources = (
+            root.read_documents(prefix) if isinstance(root, ZipLibrary) else [
+                (path.name, path.read_text(encoding="utf-8-sig"))
+                for path in sorted(root.glob(f"{prefix}*.md"))
+            ]
+        )
+        if not sources:
             raise ValueError(f"Falta la sección {prefix} del PPTP.")
         if prefix == "02":
             selected = [ref.text for ref in regulations if state["regulations"].get(ref.id, ref.selected)]
             introductions = []
-            for path in files:
-                source = path.read_text(encoding="utf-8-sig").split("<!-- NORMATIVA_UNI", 1)[0]
+            for _, source in sources:
+                source = source.split("<!-- NORMATIVA_UNI", 1)[0]
                 introductions.append(re.sub(r"<!--.*?-->", "", source, flags=re.DOTALL).strip())
             sections.append("\n\n".join(introductions + selected))
         else:
-            sections.extend(path.read_text(encoding="utf-8-sig") for path in files)
+            sections.extend(source for _, source in sources)
     previous_chapter = None
     for relative in chosen:
         chapter = sheet_order(relative)[0][:2]
