@@ -6,6 +6,7 @@ import tkinter as tk
 import unittest
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile
+from unittest.mock import patch
 
 from pypdf import PdfReader
 
@@ -112,8 +113,8 @@ class InformationalMarkdownTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "sin cerrar"):
                 compose(root, state, [])
 
-    def test_editor_highlights_on_load_edit_undo_and_switch_without_changing_content(self):
-        """Tk tags must track open blocks and never alter the saved Markdown."""
+    def test_editor_separates_reference_and_prescriptions_and_preserves_saved_content(self):
+        """References remain separate when editing and undoing in the white pane."""
         root = tk.Tk()
         root.withdraw()
         self.addCleanup(root.destroy)
@@ -127,27 +128,138 @@ class InformationalMarkdownTests(unittest.TestCase):
             self.addCleanup(editor.destroy)
             editor.tree.selection_set("file:ficha.md")
             editor._select()
-            ranges = editor.text.tag_ranges("informational")
-            self.assertEqual(len(ranges), 2)
-            self.assertEqual(editor.text.get(*ranges), '"""\nInformación.\n"""\n')
-            self.assertEqual(editor.text.tag_cget("informational", "background"), COLORS["warning_soft"])
+            self.assertFalse(editor.text.tag_ranges("informational"))
+            self.assertEqual(editor.text.get("1.0", "end-1c"), "## Ejecución\n\nTexto contractual.\n")
+            self.assertIn("Información.", editor.reference_text.get("1.0", "end-1c"))
+            self.assertEqual(str(editor.reference_text["state"]), "normal")
+            self.assertEqual(editor.reference_text["background"], COLORS["warning_soft"])
+            self.assertEqual(editor.text["background"], COLORS["surface"])
+            self.assertEqual(editor._sheet_source(), source)
             self.assertFalse(editor.dirty)
             editor.text.edit_separator()
             editor.text.insert("end", '\n"""\nNuevo bloque abierto')
             editor._edited()
-            self.assertEqual(len(editor.text.tag_ranges("informational")), 4)
+            self.assertEqual(len(editor.text.tag_ranges("informational")), 2)
             editor.text.edit_undo()
             editor._edited()
-            self.assertEqual(len(editor.text.tag_ranges("informational")), 2)
+            self.assertFalse(editor.text.tag_ranges("informational"))
             self.assertTrue(editor.save())
             with ZipFile(archive) as target:
                 self.assertEqual(target.read("ficha.md").decode(), source)
             editor.tree.selection_set("file:otra.md")
             editor._select()
             self.assertFalse(editor.text.tag_ranges("informational"))
+            self.assertEqual(editor.reference_text.get("1.0", "end-1c"), "")
+            self.assertEqual(editor._sheet_source(), "# Otra ficha\n\nTexto.")
             before = archive.read_bytes()
             with self.assertRaisesRegex(ValueError, "sin cerrar"):
                 write_markdown(archive, "ficha.md", '"""\nSin cierre', _signature(archive))
+            self.assertEqual(archive.read_bytes(), before)
+
+    def test_interleaved_references_survive_edits_at_start_middle_and_end(self):
+        """Preserve each reference at its boundary without losing editable paragraphs."""
+        root = tk.Tk()
+        root.withdraw()
+        self.addCleanup(root.destroy)
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "library.zip"
+            prefix = '"""\nReferencia inicial.\n"""\n'
+            middle = '"""\nFuente de consulta.\n"""\n'
+            source = prefix + "Primero.\n" + middle + "Segundo.\n"
+            with ZipFile(archive, "w") as target:
+                target.writestr("ficha.md", source)
+                target.writestr("vacia.md", prefix)
+            editor = LibraryEditor(root, archive, "Prueba")
+            self.addCleanup(editor.destroy)
+            editor.tree.selection_set("file:ficha.md")
+            editor._select()
+            self.assertEqual(editor.text.get("1.0", "end-1c"), "Primero.\nSegundo.\n")
+            self.assertEqual(editor._sheet_source(), source)
+            editor.text.insert("1.0", "Nuevo.\n")
+            editor.text.insert("end-1c", "Final.\n")
+            editor._edited()
+            self.assertTrue(editor.save())
+            expected = prefix + "Nuevo.\nPrimero.\n" + middle + "Segundo.\nFinal.\n"
+            with ZipFile(archive) as target:
+                self.assertEqual(target.read("ficha.md").decode(), expected)
+            editor.tree.selection_set("file:vacia.md")
+            editor._select()
+            self.assertEqual(editor.text.get("1.0", "end-1c"), "")
+            editor.text.insert("1.0", "Prescripción añadida.\n")
+            editor._edited()
+            self.assertTrue(editor.save())
+            with ZipFile(archive) as target:
+                self.assertEqual(target.read("vacia.md").decode(), prefix + "Prescripción añadida.\n")
+            editor.text.delete("1.0", "end")
+            editor._load_sheet_text('Texto.\n"""\nReferencia final.\n"""')
+            self.assertEqual(editor._sheet_source(), 'Texto.\n"""\nReferencia final.\n"""')
+            editor.text.insert("end-1c", "Añadido.")
+            rebuilt = editor._sheet_source()
+            self.assertEqual(document_markdown(rebuilt), "Texto.\n\n\nAñadido.")
+            self.assertEqual(len(informational_ranges(rebuilt)), 1)
+
+    def test_yellow_reference_edits_save_undo_and_never_become_prescriptions(self):
+        """Track yellow-only edits, preserve interleaved anchors and reject escaped reference text."""
+        root = tk.Tk()
+        root.withdraw()
+        self.addCleanup(root.destroy)
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "library.zip"
+            source = '"""\nReferencia inicial.\n"""\nTexto contractual.\n"""\nReferencia final.\n"""'
+            with ZipFile(archive, "w") as target:
+                target.writestr("ficha.md", source)
+                target.writestr("otra.md", "Otra prescripción.")
+            editor = LibraryEditor(root, archive, "Prueba")
+            self.addCleanup(editor.destroy)
+            editor.tree.selection_set("file:ficha.md")
+            editor._select()
+            root.update()
+            self.assertFalse(editor.dirty)
+            editor.reference_text.insert("2.0", "Nota privada. ")
+            root.update()
+            self.assertTrue(editor.dirty)
+            self.assertEqual(str(editor.save_button["state"]), "normal")
+            expected = source.replace("Referencia inicial.", "Nota privada. Referencia inicial.")
+            self.assertEqual(editor._sheet_source(), expected)
+            self.assertEqual(document_markdown(editor._sheet_source()), "Texto contractual.")
+            self.assertTrue(editor.save())
+            root.update()
+            self.assertFalse(editor.dirty)
+            with ZipFile(archive) as target:
+                self.assertEqual(target.read("ficha.md").decode(), expected)
+            editor.reference_text.edit_separator()
+            editor.reference_text.insert("2.0", "Deshacer. ")
+            root.update()
+            editor.reference_text.edit_undo()
+            root.update()
+            self.assertEqual(editor._sheet_source(), expected)
+            self.assertTrue(editor.save())
+            editor.reference_text.insert("end", "\nTexto fuera de las comillas.")
+            root.update()
+            before = archive.read_bytes()
+            with patch("tools._library_editor.messagebox.showerror") as error:
+                self.assertFalse(editor.save())
+            error.assert_called_once()
+            self.assertTrue(editor.dirty)
+            self.assertEqual(archive.read_bytes(), before)
+            with patch("tools._library_editor.messagebox.askyesnocancel", return_value=None):
+                editor.tree.selection_set("file:otra.md")
+                editor._select()
+            self.assertEqual(editor.selected_member, "ficha.md")
+            with patch("tools._library_editor.messagebox.askyesnocancel", return_value=False):
+                editor.tree.selection_set("file:otra.md")
+                editor._select()
+            root.update()
+            self.assertFalse(editor.dirty)
+            self.assertEqual(editor.reference_text.get("1.0", "end-1c"), "")
+            editor.tree.selection_set("file:ficha.md")
+            editor._select()
+            root.update()
+            self.assertEqual(editor._sheet_source(), expected)
+            editor.reference_text.delete("1.0", "2.0")
+            root.update()
+            with patch("tools._library_editor.messagebox.showerror"):
+                self.assertFalse(editor.save())
             self.assertEqual(archive.read_bytes(), before)
 
     def test_distributed_sheets_hide_catalog_information_and_flag_only_undeveloped_groups(self):
@@ -185,16 +297,17 @@ class InformationalMarkdownTests(unittest.TestCase):
         library = ZipLibrary(LIBRARY_PATH, DOCS_ROOT)
         entry = next(entry for entry in library.entries.values() if entry.code == "01RPN")
         variables = {key: "Valor de prueba" for key in VARIABLES}
+        variables["JUSTIFICACION_NO_APLICACION"] = "no cumplirse los supuestos de prueba"
         state = {
             "variables": variables,
             "selections": [asdict(Selection(0, "01RPN00001", "01#", "Peldaño", entry.path))],
             "regulations": {},
         }
         source = compose(library, state, [])
-        self.assertIn("### 4.1.1 " + entry.title.upper(), source)
+        self.assertIn("### 9.1.1 " + entry.title.upper(), source)
         self.assertIn("**Descripción**", source)
         self.assertIn("**Ejecución**", source)
-        self.assertNotIn("4.1.1.1", source)
+        self.assertNotIn("9.1.1.1", source)
         with tempfile.TemporaryDirectory() as directory:
             for extension in ("pdf", "odt"):
                 with self.subTest(format=extension):

@@ -247,6 +247,10 @@ def _read_report_template_header(template_path: str = ""):
                 deepcopy(element) for element in styles_section
                 if element.tag == f"{{{namespaces['style']}}}style"
             ] if styles_section is not None else []
+            default_styles = [
+                deepcopy(element) for element in styles_section
+                if element.tag == f"{{{namespaces['style']}}}default-style"
+            ] if styles_section is not None else []
             source_automatic_styles = (
                 list(automatic_section) if automatic_section is not None else []
             )
@@ -478,6 +482,7 @@ def _read_report_template_header(template_path: str = ""):
     return {
         "header": header,
         "styles": source_styles,
+        "default_styles": default_styles,
         "automatic_styles": source_automatic_styles,
         "font_faces": font_faces,
         "resources": resources,

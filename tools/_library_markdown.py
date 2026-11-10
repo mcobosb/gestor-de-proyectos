@@ -29,4 +29,5 @@ def document_markdown(source: str) -> str:
         parts.extend((source[previous:start], "\n\n"))
         previous = end
     parts.append(source[previous:])
-    return "".join(parts).strip()
+    result = "".join(parts).strip("\r\n")
+    return result if result.strip() else ""

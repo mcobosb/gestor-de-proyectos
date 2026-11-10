@@ -55,6 +55,121 @@ class LibraryArchiveTests(unittest.TestCase):
         """Read the current archive through the production catalog validator."""
         return ZipLibrary(self.archive, self.folder / "docs")
 
+    def test_repair_restores_missing_originals_and_shortens_names_without_changing_titles(self):
+        """Recover checksum-verified content and preserve aliases, catalog IDs and user edits."""
+        from shutil import copyfile
+        from tools.pptp.maintenance import MAX_SHEET_NAME, MAX_SHEET_PATH, repair_library
+
+        long_name = self.parent + "/01RPN-" + "Piedra natural descriptiva " * 7 + ".md"
+        update_library(
+            self.archive, _signature(self.archive), additions={long_name: "# Piedra\n\nTexto original."},
+        )
+        backup = self.folder / "backup.zip"
+        copyfile(self.archive, backup)
+        with ZipFile(self.archive) as source:
+            original_row = json.loads(source.read("UNI/catalogo.json"))["fichas"][1]
+            remaining = [(info, source.read(info)) for info in source.infolist() if info.filename != long_name]
+        with ZipFile(self.archive, "w") as target:
+            for info, content in remaining:
+                target.writestr(info, content)
+        self.assertEqual(repair_library(self.archive, backup), (1, 1))
+        library = self.library()
+        renamed = library.resolve_sheet(long_name)
+        self.assertNotEqual(renamed, long_name)
+        self.assertLessEqual(len(renamed), MAX_SHEET_PATH)
+        self.assertLessEqual(len(Path(renamed).name), MAX_SHEET_NAME)
+        self.assertEqual(library.entries[renamed].title, original_row["titulo"])
+        self.assertEqual(library.entries[renamed].identifier, original_row["id"])
+        self.assertEqual(library.read_sheet(renamed), "# Piedra\n\nTexto original.")
+        self.assertEqual(library.read_sheet(self.old), "# Peldaños\n\nTexto original.")
+        content = self.archive.read_bytes()
+        self.assertEqual(repair_library(self.archive, backup), (0, 0))
+        self.assertEqual(self.archive.read_bytes(), content)
+
+    def test_repair_rejects_unverified_missing_sheet_without_modifying_archive(self):
+        """Refuse to replace a lost edited sheet with a different backup silently."""
+        from tools.pptp.maintenance import repair_library
+
+        backup = self.folder / "backup.zip"
+        update_library(self.archive, _signature(self.archive), updates={self.old: "Edited original."})
+        with ZipFile(self.archive) as source:
+            remaining = [(info, source.read(info)) for info in source.infolist() if info.filename != self.old]
+        with ZipFile(backup, "w") as target:
+            target.writestr(self.old, "Different text.")
+        with ZipFile(self.archive, "w") as target:
+            for info, content in remaining:
+                target.writestr(info, content)
+        original = self.archive.read_bytes()
+        with self.assertRaisesRegex(ValueError, "no coincide"):
+            repair_library(self.archive, backup)
+        self.assertEqual(self.archive.read_bytes(), original)
+        self.assertFalse(list(self.folder.glob(".pptp-repair-*.zip")))
+
+    def test_concise_titles_keep_materials_operations_and_accents(self):
+        """Remove redundant context but never drop a different material or operation."""
+        from tools.pptp.maintenance import concise_title
+
+        examples = {
+            "Retirada de peldaños - piedras naturales": "Retirada de peldaños - piedras naturales",
+            "Revoco y enlucido con mortero de cemento - Revocos y enlucidos con mortero de cemento":
+                "Revoco y enlucido con mortero de cemento",
+            "PRUEBAS DE ESTANQUEIDAD EN CUBIERTAS Y FACHADAS - Pruebas de estanqueidad en cubiertas y fachadas":
+                "Pruebas de estanqueidad en cubiertas y fachadas",
+            "FONTANERIA Y REDES INTERIORES DE SUMINISTRO DE AGUA - Tubos de Fontanería (Polietileno)":
+                "Tubos de Fontanería (Polietileno)",
+            "FONTANERIA Y REDES INTERIORES DE SUMINISTRO DE AGUA - Tubos de Fontanería (Cobre)":
+                "Tubos de Fontanería (Cobre)",
+            "FONTANERIA Y REDES INTERIORES DE SUMINISTRO DE AGUA - Pruebas de funcionamiento":
+                "Fontanería - Pruebas de funcionamiento",
+            "Laminados en frío - Laminados en frio": "Laminados en frío",
+            "ELECTRICIDAD MEDIA TENSIÓN (MT) - Electricidad media tensión (MT)":
+                "Electricidad media tensión (MT)",
+            "Materiales derivados del yeso con amianto - Materiales de aislamiento con amianto":
+                "Materiales derivados del yeso con amianto - Materiales de aislamiento con amianto",
+            "Retirada de vidrios - vidrios": "Retirada de vidrios",
+            "Peldaños - Común": "Peldaños - Común",
+        }
+        for original, expected in examples.items():
+            with self.subTest(original=original):
+                self.assertEqual(concise_title(original), expected)
+                self.assertEqual(concise_title(expected), expected)
+
+    def test_repair_updates_catalog_heading_and_index_but_keeps_prescriptions(self):
+        """Shorten the generated title without changing tabs, references or saved selections."""
+        from shutil import copyfile
+        from tools.pptp.maintenance import repair_library
+
+        title = "Peldaños - Peldaños"
+        content = '"""\n# ' + title + '\n\nReferencia.\n"""\n\n\t**Descripción**\nTexto editado.\n'
+        update_library(
+            self.archive, _signature(self.archive), updates={self.old: content},
+            titles={self.old: title},
+        )
+        with ZipFile(self.archive) as source:
+            self.assertIn(title, source.read("UNI/INDICE_FICHAS.md").decode())
+        backup = self.folder / "backup.zip"
+        copyfile(self.archive, backup)
+        self.assertEqual(repair_library(self.archive, backup), (0, 1))
+        library = self.library()
+        renamed = library.resolve_sheet(self.old)
+        self.assertEqual(library.entries[renamed].title, "Peldaños")
+        self.assertEqual(library.entries[renamed].identifier, "stable-id")
+        self.assertEqual(library.read_sheet(renamed), content.replace("# " + title, "# Peldaños"))
+        with ZipFile(self.archive) as source:
+            self.assertNotIn(title, source.read("UNI/INDICE_FICHAS.md").decode())
+        source = compose(library, {
+            "variables": {key: "Valor" for key in VARIABLES},
+            "selections": [asdict(Selection(0, "01RP00001", "01#", "Peldaño", self.old))],
+            "regulations": {},
+        }, [])
+        self.assertIn("PELDAÑOS", source)
+        self.assertNotIn(title.upper(), source)
+        self.assertNotIn("Referencia.", source)
+        self.assertIn("Texto editado.", source)
+        original = self.archive.read_bytes()
+        self.assertEqual(repair_library(self.archive, backup), (0, 0))
+        self.assertEqual(self.archive.read_bytes(), original)
+
     def test_rename_keeps_id_content_links_and_saved_decisions(self):
         """Resolve historical paths for both automatic and manual selections."""
         update_library(self.archive, _signature(self.archive), renames={self.old: self.new})

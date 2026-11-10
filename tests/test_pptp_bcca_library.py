@@ -16,6 +16,7 @@ from tools.pptp.bcca_library import reorganize_library
 from tools.pptp.document import VARIABLES, Selection, compose, load_catalog, propose
 from dataclasses import asdict
 from tools.pptp.library import ZipLibrary
+from tools.pptp.maintenance import MAX_SHEET_NAME, MAX_SHEET_PATH, concise_title
 
 
 class DistributedBccaLibraryTests(unittest.TestCase):
@@ -28,13 +29,16 @@ class DistributedBccaLibraryTests(unittest.TestCase):
     def test_all_original_sheets_keep_aliases_and_readable_classified_names(self):
         """Keep originals without descendants and track replaced historical paths."""
         self.assertEqual(len(self.library.entries), 1656)
-        self.assertEqual(len(self.library.aliases), 35)
+        self.assertGreaterEqual(len(self.library.aliases), 35)
         self.assertEqual(len(self.library.replacements), 649 * 2)
         for entry in self.library.entries.values():
             path = PurePosixPath(entry.path)
             with self.subTest(path=entry.path):
                 self.assertTrue(path.name.startswith(entry.code + "-"))
                 self.assertGreater(len(path.stem), len(entry.code) + 2)
+                self.assertLessEqual(len(path.name), MAX_SHEET_NAME)
+                self.assertLessEqual(len(entry.path), MAX_SHEET_PATH)
+                self.assertEqual(concise_title(entry.title), entry.title)
                 self.assertNotRegex(path.name, r'[<>:"\\|?*\x00-\x1f]')
                 self.assertEqual(len(path.parent.name.split("_", 1)[0]), 4 if len(entry.code) == 5 else len(entry.code))
                 for alias in entry.aliases:

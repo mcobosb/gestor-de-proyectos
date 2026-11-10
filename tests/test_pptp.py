@@ -21,7 +21,7 @@ from pypdf import PdfReader
 from bc3_gui import BudgetApp, ProjectItem
 from budget_reports import ReportSettings
 from tools.pptp.document import (
-    PENDING_DURATION, VARIABLES, Selection, compose, initial_variables, load_catalog,
+    PENDING_DURATION, VARIABLES, PRICE_VARIABLES, Selection, compose, initial_variables, load_catalog,
     load_regulations, planning_duration, propose, restore_state, safe_path,
     substitute, text_blocks, write_document,
 )
@@ -36,6 +36,8 @@ def variables():
         "entidad": "Entidad de prueba", "plazo_garantia": "12 meses",
         "plazo_ejecucion": "5 días naturales",
         "bullet_capitulos_obra": "- Reposición de servicios\n- Pavimentación",
+        "JUSTIFICACION_NO_APLICACION": "no cumplirse los supuestos contractuales de prueba",
+        "FORMULA_REVISION_PRECIOS": "",
     }
 
 
@@ -76,14 +78,16 @@ class PptpTests(unittest.TestCase):
         for name, source in sources:
             placeholders = {
                 match[1].strip() for match in re.finditer(r"\{\{([^{}]+)\}\}", source)
+                if match[1].strip() not in {"#if APLICA_REVISION_PRECIOS", "else", "/if"}
             }
             with self.subTest(source=name):
-                self.assertEqual(placeholders - set(VARIABLES), set())
+                self.assertEqual(placeholders - set(VARIABLES) - set(PRICE_VARIABLES), set())
                 substituted = substitute(source, variables())
                 self.assertNotIn("{{", substituted)
                 self.assertNotIn("}}", substituted)
             found.update(placeholders)
-        self.assertEqual(found, set(VARIABLES))
+        self.assertTrue(found <= set(VARIABLES) | set(PRICE_VARIABLES))
+        self.assertTrue(set(PRICE_VARIABLES) <= found)
 
     def test_matching_reads_each_ancestor_but_not_siblings(self):
         """Busca los ficheros de 01, 01T y 01TR sin arrastrar 01TV."""
@@ -237,7 +241,7 @@ class PptpTests(unittest.TestCase):
             ReportSettings.from_dict({"guarantee_period": 12})
 
     def test_composition_substitutes_all_variables_and_deduplicates_sheets(self):
-        """Mantiene las cuatro secciones y solo incorpora fichas y normas elegidas."""
+        """Mantiene las nueve secciones y solo incorpora fichas y normas elegidas."""
         sheet = self.catalog[0]
         rows = [Selection(0, "01TR001", "01#", "Uno", sheet.path),
                 Selection(1, "01TR002", "01#", "Dos", sheet.path)]
@@ -251,9 +255,9 @@ class PptpTests(unittest.TestCase):
         self.assertIn("12 meses", source)
         self.assertIn("5 días naturales", source)
         self.assertIn("Reposición de servicios", source)
-        self.assertEqual(source.count("### 4.1.1 " + sheet.title.upper()), 1)
-        self.assertIn("## 4.1 DEMOLICIONES Y TRABAJOS PREVIOS", source)
-        self.assertNotIn("## 4.2 ", source)
+        self.assertEqual(source.count("### 9.1.1 " + sheet.title.upper()), 1)
+        self.assertIn("## 9.1 DEMOLICIONES Y TRABAJOS PREVIOS", source)
+        self.assertNotIn("## 9.2 ", source)
         self.assertIn(refs[0].text, source)
         self.assertNotIn(refs[1].text, source)
         self.assertIn("## Ejecución", self.library.read_sheet(sheet.path))
@@ -292,22 +296,22 @@ class PptpTests(unittest.TestCase):
                         self.assertIn(value, text)
                     self.assertNotIn("{{", text)
                     self.assertNotIn("NORMATIVA_UNI", text)
-                    self.assertIn("4.1 DEMOLICIONES Y TRABAJOS PREVIOS", text)
+                    self.assertIn("9.1 DEMOLICIONES Y TRABAJOS PREVIOS", text)
                     self.assertNotIn("CAPÍTULO 01", text)
-                    self.assertIn("4.1.1 " + self.catalog[0].title.upper(), text)
+                    self.assertIn("9.1.1 " + self.catalog[0].title.upper(), text)
                     if output_format == "odt":
                         namespace = "urn:oasis:names:tc:opendocument:xmlns:text:1.0"
                         index = content.find(f".//{{{namespace}}}index-body")
                         index_text = "".join(index.itertext())
-                        self.assertIn("4.1 DEMOLICIONES Y TRABAJOS PREVIOS", index_text)
+                        self.assertIn("9.1 DEMOLICIONES Y TRABAJOS PREVIOS", index_text)
                         self.assertNotIn(self.catalog[0].title.upper(), index_text)
                     else:
                         index_text = reader.pages[0].extract_text()
-                        self.assertIn("4.1 DEMOLICIONES Y TRABAJOS PREVIOS", index_text)
+                        self.assertIn("9.1 DEMOLICIONES Y TRABAJOS PREVIOS", index_text)
                         self.assertNotIn(self.catalog[0].title.upper(), index_text)
 
     def test_sheets_are_sorted_by_uni_code_without_changing_saved_selection(self):
-        """Ordena las fichas del capitulo cuatro por codigo, no por partida ni titulo."""
+        """Ordena las fichas del capitulo nueve por codigo, no por partida ni titulo."""
         early = next(sheet for sheet in self.catalog if sheet.code.startswith("01A"))
         late = next(sheet for sheet in self.catalog if sheet.code.startswith("15P"))
         variants = [sheet for sheet in self.catalog if sheet.code.startswith("02RR")][:2]
@@ -321,20 +325,20 @@ class PptpTests(unittest.TestCase):
         ordered = sorted([early, late, *variants], key=lambda sheet: (sheet.code, sheet.path.casefold()))
         positions = [
             source.index(f"### {number} {sheet.title.upper()}")
-            for number, sheet in zip(("4.1.1", "4.2.1", "4.2.2", "4.3.1"), ordered)
+            for number, sheet in zip(("9.1.1", "9.2.1", "9.2.2", "9.3.1"), ordered)
         ]
         self.assertEqual(positions, sorted(positions))
-        group_headings = [line for line in source.splitlines() if line.startswith("## 4.")]
+        group_headings = [line for line in source.splitlines() if line.startswith("## 9.")]
         self.assertEqual(group_headings, [
-            "## 4.1 DEMOLICIONES Y TRABAJOS PREVIOS",
-            "## 4.2 ACONDICIONAMIENTO DE TERRENOS",
-            "## 4.3 URBANIZACIONES",
+            "## 9.1 DEMOLICIONES Y TRABAJOS PREVIOS",
+            "## 9.2 ACONDICIONAMIENTO DE TERRENOS",
+            "## 9.3 URBANIZACIONES",
         ])
-        self.assertIn("#### 4.1.1.1 DEFINICIÓN", source)
-        self.assertIn("#### 4.1.1.2 EJECUCIÓN EN OBRA", source)
-        self.assertIn("##### 4.1.1.2.1 PREPARACIÓN Y PROCEDIMIENTO", source)
-        self.assertIn("#### 4.1.1.3 MEDICIÓN Y ABONO", source)
-        self.assertNotIn("### 4.3.2 ", source)
+        self.assertIn("#### 9.1.1.1 DEFINICIÓN", source)
+        self.assertIn("#### 9.1.1.2 EJECUCIÓN EN OBRA", source)
+        self.assertIn("##### 9.1.1.2.1 PREPARACIÓN Y PROCEDIMIENTO", source)
+        self.assertIn("#### 9.1.1.3 MEDICIÓN Y ABONO", source)
+        self.assertNotIn("### 9.3.2 ", source)
         self.assertEqual(state, original)
         for sheet in ordered:
             original_blocks = text_blocks(self.library.read_sheet(sheet.path))
@@ -471,7 +475,8 @@ class PptpWindowTests(unittest.TestCase):
 
     def next_steps(self, window):
         """Completa variables pendientes y avanza hasta las asignaciones manuales."""
-        window.variables["plazo_ejecucion"].set("2 meses")
+        window.variables["plazo_ejecucion"].set("36 meses" if window.price_revision.get() else "2 meses")
+        window.variables["JUSTIFICACION_NO_APLICACION"].set("no cumplirse los supuestos de prueba")
         window.summary.insert("1.0", "Resumen ficticio de obras")
         window.accept()
         self.assertEqual(window.step, 1)
@@ -482,7 +487,7 @@ class PptpWindowTests(unittest.TestCase):
         """Cada variable sustituible tiene un campo editable en la primera pantalla."""
         window = self.make_window()
         self.assertEqual(window.step, 0)
-        self.assertEqual(set(window.variables), set(VARIABLES))
+        self.assertEqual(set(window.variables), set(VARIABLES) | set(PRICE_VARIABLES))
         entries = [
             child
             for frame in window.content.winfo_children()
@@ -501,8 +506,28 @@ class PptpWindowTests(unittest.TestCase):
             window.variables["bullet_capitulos_obra"].get(), "Resumen ficticio de obras",
         )
 
+    def test_first_step_omits_requested_hints_and_keeps_summary_and_missing_plan_warning(self):
+        """Remove display-only details without changing fields or planning validation."""
+        window = self.make_window()
+        for missing in (True, False):
+            window.missing_plan = missing
+            window.show_step()
+            widgets = list(window.content.winfo_children())
+            labels = []
+            while widgets:
+                widget = widgets.pop()
+                widgets.extend(widget.winfo_children())
+                if isinstance(widget, ttk.Label):
+                    labels.append(widget.cget("text"))
+            self.assertIn("Resumen de las obras", labels)
+            for forbidden in ("La no revisión se propone", "Plazo de ejecución obtenido", "{{bullet_capitulos_obra}}"):
+                self.assertFalse(any(forbidden in text for text in labels))
+            self.assertEqual(any("No se ha realizado la planificación" in text for text in labels), missing)
+
     def test_library_edits_reload_matches_without_losing_review_or_project_text(self):
         """Create and rename real sheets while keeping open wizard decisions intact."""
+        from tools._library_history import read_revisions
+
         archive = self.folder / "library.zip"
         shutil.copyfile(LIBRARY_PATH, archive)
         self.app.budget_items[0].code = "01TRA00001"
@@ -513,11 +538,13 @@ class PptpWindowTests(unittest.TestCase):
             window.unmatched[0].path = common.path
             window.unmatched[0].selected = False
             window.variables["plazo_ejecucion"].set("2 meses")
+            window.variables["JUSTIFICACION_NO_APLICACION"].set("no concurrir los requisitos de prueba")
             window.summary.insert("1.0", "Texto pendiente del proyecto")
             window.open_library_editor()
             editor = window.library_editor
             editor.tree.selection_set("file:" + common.path)
             editor._select()
+            editor.revision_author.set("Autor de prueba")
             with patch(
                 "tools._library_editor.simpledialog.askstring",
                 return_value="01TRA-Condiciones de prueba.md",
@@ -525,20 +552,27 @@ class PptpWindowTests(unittest.TestCase):
                 editor.rename_sheet()
             renamed = window.library.resolve_sheet(common.path)
             self.assertNotEqual(renamed, common.path)
+            history, _ = read_revisions(window.library.read_sheet(renamed))
+            self.assertEqual([row.version for row in history], [2, 1])
+            self.assertEqual(history[0].author, "Autor de prueba")
             self.assertFalse(next(row for row in window.automatic if row.path == renamed).selected)
             self.assertEqual(window.unmatched[0].path, renamed)
             self.assertFalse(window.unmatched[0].selected)
+            editor.revision_author.set("Autor de prueba")
             with patch(
                 "tools._library_editor.simpledialog.askstring",
                 return_value="01TRA-Ficha de prueba.md",
             ):
                 editor.new_sheet()
             new_path = editor.selected_member
+            history, _ = read_revisions(window.library.read_sheet(new_path))
+            self.assertEqual([row.version for row in history], [1])
             self.assertTrue(any(row.path == new_path for row in window.automatic))
             self.assertEqual(window.summary.get("1.0", "end-1c"), "Texto pendiente del proyecto")
             self.assertEqual(editor.tree.item("file:" + new_path, "tags"), ("used",))
             window.accept()
             self.assertEqual(window.step, 1)
+            editor.revision_author.set("Autor de prueba")
             with patch(
                 "tools._library_editor.simpledialog.askstring",
                 return_value="01TRA-Ficha de prueba renombrada.md",
@@ -547,6 +581,8 @@ class PptpWindowTests(unittest.TestCase):
             self.assertTrue(any(
                 row.path == editor.selected_member for row in window.automatic
             ))
+            history, _ = read_revisions(window.library.read_sheet(editor.selected_member))
+            self.assertEqual([row.version for row in history], [2, 1])
             self.assertEqual(len(window.tree.get_children()), len(window.automatic))
             self.assertEqual(self.app.pptp_state, {})
 
@@ -591,7 +627,12 @@ class PptpWindowTests(unittest.TestCase):
         window.variables["plazo_garantia"].set("24 meses")
         self.assertEqual(window.toc_depth.get(), "2")
         window.toc_depth.set("3")
+        window.price_revision.set(True)
+        window.update_price_revision()
+        window.variables["FORMULA_REVISION_PRECIOS"].set("Kt = 0,40 + 0,60 * It / I0")
+        window.variables["JUSTIFICACION_APLICACION"].set("Motivo contractual de prueba")
         self.next_steps(window)
+        window.variables["plazo_ejecucion"].set("24 meses")
         window.unmatched[0].selected = False
         self.app.report_settings.output_format = "odt"
         self.app.project_path = self.folder / "proyecto.json"
@@ -606,6 +647,7 @@ class PptpWindowTests(unittest.TestCase):
         self.assertEqual(saved["report_settings"]["organization"], "Entidad revisada")
         self.assertEqual(saved["report_settings"]["guarantee_period"], "24 meses")
         self.assertEqual(saved["pptp"]["toc_depth"], 3)
+        self.assertTrue(saved["pptp"]["aplica_revision_precios"])
         with ZipFile(target) as archive:
             content = ET.fromstring(archive.read("content.xml"))
         text_namespace = "urn:oasis:names:tc:opendocument:xmlns:text:1.0"
@@ -619,8 +661,12 @@ class PptpWindowTests(unittest.TestCase):
         self.assertEqual(self.app.pptp_state, state)
         restored = self.make_window()
         self.assertFalse(restored.unmatched[0].selected)
-        self.assertEqual(restored.variables["plazo_ejecucion"].get(), "2 meses")
+        self.assertEqual(restored.variables["plazo_ejecucion"].get(), "24 meses")
         self.assertEqual(restored.toc_depth.get(), "3")
+        self.assertTrue(restored.price_revision.get())
+        self.assertEqual(restored.variables["JUSTIFICACION_APLICACION"].get(), "Motivo contractual de prueba")
+        self.assertEqual(restored.variables["FORMULA_REVISION_PRECIOS"].get(),
+                         "Kt = 0,40 + 0,60 * It / I0")
         self.app.pptp_state["variables"]["entidad"] = "Otra entidad"
         self.app._mark_dirty()
         self.app.undo_last_action()
@@ -641,6 +687,95 @@ class PptpWindowTests(unittest.TestCase):
         window.back()
         self.assertEqual(window.toc_depth.get(), "4")
         self.assertEqual(self.app.pptp_state, {})
+
+    def test_price_revision_toggle_validates_only_active_field_and_preserves_values(self):
+        """Require justification or formula, with no silent defaults or inactive-field errors."""
+        window = self.make_window()
+        self.assertFalse(window.price_revision.get())
+        self.assertEqual(str(window.price_entries["FORMULA_REVISION_PRECIOS"]["state"]), "disabled")
+        self.assertEqual(str(window.price_entries["JUSTIFICACION"]["state"]), "normal")
+        window.variables["plazo_ejecucion"].set("36 meses")
+        window.summary.insert("1.0", "Resumen")
+        with patch("tools.pptp.messagebox.showerror") as error:
+            window.accept()
+        self.assertEqual(window.step, 0)
+        self.assertIn("JUSTIFICACION_NO_APLICACION", error.call_args.args[1])
+        window.price_revision.set(True)
+        window.update_price_revision()
+        self.assertEqual(str(window.price_entries["FORMULA_REVISION_PRECIOS"]["state"]), "normal")
+        with patch("tools.pptp.messagebox.showerror") as error:
+            window.accept()
+        self.assertIn("FORMULA_REVISION_PRECIOS", error.call_args.args[1])
+        window.variables["FORMULA_REVISION_PRECIOS"].set("Kt = 1")
+        with patch("tools.pptp.messagebox.showerror") as error:
+            window.accept()
+        self.assertIn("JUSTIFICACION_APLICACION", error.call_args.args[1])
+        window.variables["JUSTIFICACION_APLICACION"].set("Motivo contractual")
+        window.accept()
+        self.assertEqual(window.step, 1)
+        window.back()
+        self.assertTrue(window.price_revision.get())
+        window.price_revision.set(False)
+        window.update_price_revision()
+        window.variables["JUSTIFICACION_NO_APLICACION"].set("no concurrir los requisitos")
+        window.accept()
+        self.assertEqual(window.step, 1)
+        window.back()
+        self.assertEqual(window.variables["FORMULA_REVISION_PRECIOS"].get(), "Kt = 1")
+        self.assertEqual(self.app.pptp_state, {})
+
+    def test_single_justification_precedes_formula_and_keeps_both_alternatives(self):
+        """Show only one justification row, bound to the selected branch without losing edits."""
+        from tools.pptp.document import SHORT_DURATION_REASON
+
+        window = self.make_window()
+        window.variables["plazo_ejecucion"].set("24 meses")
+        justification = window.price_entries["JUSTIFICACION"]
+        formula = window.price_entries["FORMULA_REVISION_PRECIOS"]
+        labels = [child.cget("text") for child in justification.master.winfo_children()
+                  if isinstance(child, ttk.Label)]
+        self.assertEqual(labels.count("Justificación"), 1)
+        self.assertNotIn("Justificación de aplicación de revisión", labels)
+        self.assertNotIn("Justificación de no aplicación de revisión", labels)
+        self.assertLess(int(window.price_check.grid_info()["row"]), int(justification.grid_info()["row"]))
+        self.assertLess(int(justification.grid_info()["row"]), int(formula.grid_info()["row"]))
+        self.assertIn(SHORT_DURATION_REASON, justification.get())
+        justification.delete(0, "end")
+        justification.insert(0, "Motivo de no aplicación")
+        window.price_check.invoke()
+        self.assertEqual(justification.get(), "")
+        justification.insert(0, "Motivo de aplicación")
+        self.assertEqual(window.variables["JUSTIFICACION_APLICACION"].get(), "Motivo de aplicación")
+        window.price_check.invoke()
+        self.assertEqual(justification.get(), "Motivo de no aplicación")
+        window.price_check.invoke()
+        self.assertEqual(justification.get(), "Motivo de aplicación")
+        self.assertEqual(str(formula["state"]), "normal")
+
+    def test_short_duration_proposes_reason_but_preserves_manual_revision(self):
+        """React to edits without blocking or overriding the manually selected alternative."""
+        from tools.pptp.document import SHORT_DURATION_REASON
+
+        window = self.make_window()
+        window.variables["JUSTIFICACION_NO_APLICACION"].set("motivo contractual")
+        window.variables["plazo_ejecucion"].set("24 meses")
+        self.assertFalse(window.price_revision.get())
+        self.assertEqual(str(window.price_check["state"]), "normal")
+        self.assertIn(SHORT_DURATION_REASON, window.variables["JUSTIFICACION_NO_APLICACION"].get())
+        self.assertIn("motivo contractual", window.variables["JUSTIFICACION_NO_APLICACION"].get())
+        window.price_check.invoke()
+        self.assertTrue(window.price_revision.get())
+        window.duration_changed()
+        self.assertTrue(window.price_revision.get())
+        window.variables["plazo_ejecucion"].set("3 años")
+        self.assertTrue(window.price_revision.get())
+        self.assertEqual(str(window.price_check["state"]), "normal")
+        self.assertEqual(window.variables["JUSTIFICACION_NO_APLICACION"].get(), "motivo contractual")
+        window.price_start = "2023-01-01"
+        window.variables["plazo_ejecucion"].set("731 días naturales")
+        self.assertEqual(str(window.price_check["state"]), "normal")
+        window.variables["plazo_ejecucion"].set("732 días naturales")
+        self.assertEqual(str(window.price_check["state"]), "normal")
 
     def test_cancel_does_not_change_project_and_new_project_clears_state(self):
         """Cancelar y cambiar de proyecto no deja datos ni ventanas de otro proyecto."""

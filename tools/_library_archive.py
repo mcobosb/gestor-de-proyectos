@@ -50,6 +50,8 @@ def _catalog_changes(
     source: ZipFile, renames: dict[str, str], additions: dict[str, str],
     edits: dict[str, bytes],
     replacements: dict[str, list[str]] | None = None,
+    preserve_titles: bool = False,
+    titles: dict[str, str] | None = None,
 ) -> dict[str, bytes]:
     """Actualiza catálogo PPTP, alias históricos e índice sin cambiar identificadores."""
     replacements = replacements or {}
@@ -93,7 +95,13 @@ def _catalog_changes(
                 aliases.append(previous)
             aliases[:] = [alias for alias in aliases if alias != "UNI/" + PurePosixPath(new).relative_to(directory).as_posix()]
             row.update(archivo=PurePosixPath(new).relative_to(directory).as_posix(),
-                       codigo_uni=code, titulo=title)
+                       codigo_uni=code)
+            if not preserve_titles:
+                row["titulo"] = title
+        for row in rows:
+            path = (directory / row["archivo"]).as_posix()
+            if titles and path in titles:
+                row["titulo"] = titles[path]
         for name, content in additions.items():
             path = PurePosixPath(name)
             if not path.is_relative_to(directory) or path.parent == directory:
@@ -136,7 +144,7 @@ def _catalog_changes(
                     content = source.read(old_path)
             row["sha256"] = sha256(content).hexdigest()
         changes[member] = (json.dumps(catalog, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
-        if not renames and not additions and not replacements:
+        if not renames and not additions and not replacements and not titles:
             continue
         index_member = (directory / catalog["indice"]).as_posix()
         original = source.read(index_member).decode("utf-8-sig")
@@ -175,6 +183,8 @@ def update_library(
     updates: dict[str, str] | None = None,
     replacements: dict[str, list[str]] | None = None,
     allow_new_folders: bool = False,
+    preserve_titles: bool = False,
+    titles: dict[str, str] | None = None,
 ) -> tuple[int, int]:
     """Crea o renombra fichas y actualiza sus enlaces mediante un único reemplazo ZIP."""
     from ._library_editor import (
@@ -237,7 +247,9 @@ def update_library(
                     updated = _update_links(updates.get(name, original), name, {**redirects, **renames})
                     if updated != original and name not in changes:
                         changes[name] = updated.encode("utf-8")
-            changes.update(_catalog_changes(source, renames, additions, changes, replacements))
+            changes.update(_catalog_changes(
+                source, renames, additions, changes, replacements, preserve_titles, titles,
+            ))
             for name, content in additions.items():
                 changes[name] = content.encode("utf-8")
             if any(len(content) > MAX_MARKDOWN_BYTES for content in changes.values()):

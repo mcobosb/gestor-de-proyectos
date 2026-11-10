@@ -65,15 +65,26 @@ expresamente en la herramienta.
 - Al generar se guarda la selección en el JSON del proyecto y se emite PDF u ODT
   según la configuración, con su plantilla de cabecera y pie y las variables sustituidas.
   Las fichas compartidas por varias partidas solo se incorporan una vez.
+- La primera ventana permite marcar **Aplicar revisión de precios** e introducir
+  la fórmula. Sin marcarla, exige una justificación de no aplicación. Se guarda
+  la elección con el proyecto y se resuelve el bloque
+  `{{#if APLICA_REVISION_PRECIOS}}…{{else}}…{{/if}}` de la biblioteca antes
+  de sustituir las variables de la alternativa elegida. No se decide su
+  procedencia automáticamente por importe. Hasta dos años de plazo, desmarca la
+  revisión de partida y añade el motivo temporal a la justificación sin borrar motivos manuales.
+  La casilla permanece disponible y respeta la decisión manual incluso para plazos
+  cortos; al marcarla exige fórmula y justificación de aplicación, incluidas en el PPTP.
+  En días naturales usa el inicio de la planificación y dos años de calendario;
+  sin fecha o con un plazo no interpretable, la revisión queda pendiente de criterio manual.
 - El PPTP comienza con un índice de contenidos. Los títulos y subtítulos se
   numeran jerárquicamente y se muestran en mayúsculas, también en el índice.
   Los párrafos se justifican y las secciones fluyen sin saltos de página
   forzados; solo se separa el índice inicial del cuerpo.
   En el primer paso, **Niveles del índice (1–6)** limita la profundidad del índice
   PDF y ODT (2 por defecto), sin quitar subtítulos del cuerpo. Se guarda con el proyecto.
-  El capítulo 4 se agrupa por capítulo de dos dígitos de la base de precios
+  El apartado de fichas (capítulo 9 en la biblioteca actual) se agrupa por capítulo de dos dígitos de la base de precios
   (`01`, `02`, …), mostrando solo su nombre junto a la numeración del documento
-  (por ejemplo, `4.1 DEMOLICIONES Y TRABAJOS PREVIOS`). Dentro de cada grupo, las fichas
+  (por ejemplo, `9.1 DEMOLICIONES Y TRABAJOS PREVIOS`). Dentro de cada grupo, las fichas
   completas se ordenan por código UNI, conservando definición, ejecución,
   medición y abono, sin modificar la biblioteca ni la selección guardada.
   Con dos niveles, el índice muestra los grupos; con tres, también las fichas.
@@ -335,9 +346,19 @@ La búsqueda usa el JSON, no recorre los textos Markdown ni interpreta el índic
 personas. Solo al generar se leen las fichas seleccionadas. No se incorporan al
 pliego los documentos de origen del ZIP ni el índice.
 Si reemplazas el ZIP con PPTP abierto, cierra y vuelve a abrir el asistente.
-Los archivos de las secciones 01, 02, 03 y 04 se leen de la raíz del ZIP;
-`tools/pptp/docs` se admite como respaldo para bibliotecas antiguas.
-La normativa propuesta procede de la sección 02.
+Los 1.666 documentos Markdown de la biblioteca PPTP incluyen un historial interno
+inicial de la distribución v1.6.0 (versión 1, fecha 10/11/2026). El editor muestra
+la versión y el último autor; exige autor y fecha válidos para cada guardado con
+cambios y permite describirlo opcionalmente. Las revisiones se incrementan
+automáticamente, conservan las entradas anteriores y nunca se exportan al pliego.
+Se leen todos los Markdown con prefijo numérico de dos dígitos de la raíz del
+ZIP, en orden de nombre (actualmente, secciones 01 a 09). Las fichas se añaden
+al último apartado general. Los archivos sin ese prefijo no se incorporan.
+`tools/pptp/docs` se admite como respaldo para bibliotecas antiguas sin documentos
+generales en el ZIP, sin mezclar ambos orígenes.
+La normativa propuesta se busca por sus marcas `NORMATIVA_UNI` en todas las
+secciones (actualmente, la 07). Las referencias seleccionadas se mantienen en
+su ubicación original junto con el resto del texto general.
 El programa informa de bibliotecas inválidas, fichas ausentes o modificadas y
 secciones que falten, sin generar documentos incompletos.
 

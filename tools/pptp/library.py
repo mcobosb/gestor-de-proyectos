@@ -226,6 +226,7 @@ class ZipLibrary:
         members = sorted(
             name for name, info in self._members.items()
             if "/" not in name and name.startswith(prefix)
+            and re.match(r"^\d{2}(?!\d)", name)
             and name.lower().endswith(".md") and not info.is_dir()
         )
         if members:
@@ -237,7 +238,11 @@ class ZipLibrary:
                     ]
             except (BadZipFile, RuntimeError, NotImplementedError, UnicodeError) as exc:
                 raise ValueError(f"No se pudieron leer los documentos base del PPTP: {exc}") from exc
-        files = sorted(self.docs.glob(f"{prefix}*.md"))
+        files = sorted(
+            path for path in self.docs.glob("*")
+            if path.is_file() and path.name.startswith(prefix)
+            and re.match(r"^\d{2}(?!\d)", path.name) and path.suffix.lower() == ".md"
+        )
         return [
             (path.name, path.read_text(encoding="utf-8-sig"))
             for path in files

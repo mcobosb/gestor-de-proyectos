@@ -376,13 +376,40 @@ Si vuelves a pulsar el botón con el editor abierto, las marcas se actualizan
 sin descartar el texto que estés editando.
 
 Los bloques delimitados por una línea con `"""` al principio y otra igual al
-final se muestran con fondo amarillo. En PPTP contienen información interna:
+final aparecen en un panel amarillo editable de **Referencia (no se exporta)**, separado
+del editor blanco **Prescripciones de la ficha**. Ambos paneles tienen su propia
+barra de desplazamiento y su altura puede ajustarse arrastrando el separador.
+El panel blanco muestra directamente el texto editable, sin mezclarlo con la
+referencia. Puedes modificar también el texto amarillo, deshacer sus cambios y
+guardarlo con el mismo botón **Guardar**. Mantén sus comillas triples y el número
+de bloques; para añadir bloques nuevos utiliza el panel de prescripciones.
+Al guardar se conservan las posiciones de los bloques informativos en el
+Markdown, incluso si estaban intercalados entre prescripciones.
+En PPTP contienen información interna:
 clasificación BCCA, unidades de referencia, alcance, avisos de revisión y
-trazabilidad. Se conservan en la ficha para consulta y edición, pero **no se
+trazabilidad. Se conservan en la ficha para consulta, pero **no se
 incorporan al PDF ni al ODT**. Solo se exportan las prescripciones situadas fuera
 de esos bloques; el título de la ficha se obtiene del catálogo cuando está dentro
 del bloque informativo. Las variantes técnicas con condiciones distintas
 conservan sus encabezados para no confundir sus prescripciones.
+
+En la biblioteca PPTP, todos los Markdown (documentos generales, índice y fichas)
+incluyen un **Registro de cambios** inicial en amarillo, versión 1, con procedencia
+«Biblioteca incluida en el software v1.6.0» y fecha 10/11/2026. Esto identifica
+la incorporación del registro, no la autoría ni la fecha de las ediciones anteriores.
+Encima del panel amarillo se muestran la versión y el último autor. Antes de guardar
+una modificación del texto amarillo o blanco debes introducir **Autor del cambio**
+y una fecha válida **DD/MM/AAAA** (se propone el día actual); la descripción es
+opcional. Cada guardado con cambios reales añade una entrada al principio del
+historial e incrementa automáticamente la versión. No se crea una revisión por
+guardar sin cambios o por deshacer toda la edición.
+Las entradas anteriores del historial deben conservarse; para registrar un cambio
+se utilizan los campos superiores, no se reescriben esas entradas.
+Crear o renombrar una ficha PPTP también requiere autor y fecha y queda registrado.
+Los datos del autor y la descripción se limpian después de guardar para identificar
+la siguiente edición. Si falta algún dato obligatorio o falla el guardado, se mantienen
+las ediciones pendientes sin añadir una revisión. El historial nunca se exporta
+al PDF ni al ODT. Este control de versiones no se activa en Seguridad y Salud.
 
 Puedes añadir varios bloques informativos a una ficha. Las comillas deben estar
 en líneas independientes y quedar emparejadas; un bloque sin cerrar impide
@@ -395,6 +422,18 @@ En el PDF y el ODT, los apartados **Descripción**, **Ejecución**, **Medición*
 sin numeración ni entrada propia en el índice. El título de cada ficha conserva
 su numeración. Las listas `1.`, `2.`, `3.` se exportan con un párrafo por elemento
 y las expresiones entre `**` conservan la negrita, también dentro de las listas.
+
+Los tabuladores de las fichas se conservan en el ODT como tabulaciones editables,
+incluidas las situadas dentro de un texto en negrita. En PDF, los tabuladores
+iniciales mantienen la sangría y las filas separadas por tabuladores se alinean
+en columnas con ajuste de texto. Las líneas tabuladas no se unen en un párrafo.
+
+El ODT del PPTP hereda los estilos de cuerpo y títulos de la plantilla seleccionada
+(por ejemplo, **Cuerpo**, **Text body**, **Título 1** o **Heading 1**), conservando
+su tipografía, espaciado, alineación y posiciones de tabulación. Si falta un nivel,
+se utiliza el estilo general de encabezado de la plantilla o el estilo del
+programa como respaldo. Los separadores y listas siguen siendo editables, sin
+alterar el archivo de plantilla original.
 
 Selecciona una carpeta terminal que ya tenga fichas para activar **Nueva ficha...**.
 Utiliza nombres como `01RPN-Retirada de peldaños de piedra natural.md`: el código
@@ -577,7 +616,7 @@ original por su distinto redondeo de B2.
 ## 8 bis. Preparar el PPTP
 
 Abre **Herramientas → PPTP**, justo debajo de **Planificación**.
-Necesita un presupuesto y `tools/pptp/BIBLIOTECA.zip`, que contiene las cuatro
+Necesita un presupuesto y `tools/pptp/BIBLIOTECA.zip`, que contiene las nueve
 secciones generales en su raíz. No necesitas descomprimir las fichas ni conservar
 una carpeta `archivos`: el asistente detecta el ZIP automáticamente al abrirse.
 Busca las fichas mediante `catalogo.json` y lee únicamente las seleccionadas
@@ -593,6 +632,12 @@ descripciones del BC3 BCCA 2023 V02. Incorporan las prescripciones de las 649
 fichas comunes sustituidas, que ya no aparecen como archivos separados.
 Se conservan únicamente las 35 comunes sin descendientes específicos, para no
 perder sus condiciones: la biblioteca contiene 1.656 fichas.
+Los nombres distribuidos conservan el código BCCA y se limitan a 60 caracteres
+por archivo y 175 por ruta interna del ZIP. Los títulos del pliego eliminan las
+repeticiones entre familia y variante sin truncar las prescripciones. Se conservan
+los identificadores y los alias de las rutas anteriores, por lo que las selecciones
+guardadas siguen funcionando. Para extraer la biblioteca, utiliza una carpeta
+de destino corta: su ruta también cuenta para los límites de Windows.
 Las condiciones heredadas de variantes distintas se identifican como alternativas
 no acumulables y requieren revisión de compatibilidad con la partida concreta.
 Las selecciones de comunes retiradas en proyectos anteriores se trasladan a las
@@ -614,6 +659,36 @@ la revisión técnica de sus condiciones antes de incorporarlas al contrato.
    Si no has realizado la planificación, aparece «Pendiente de planificación»
    y un aviso para realizarla. Debes sustituir ese marcador por un plazo manual
    antes de continuar; no se inventa una duración.
+   La casilla **Aplicar revisión de precios** está desmarcada por defecto.
+   Si la marcas, debes rellenar la **Fórmula de revisión de precios**
+   (`{{FORMULA_REVISION_PRECIOS}}`) y la **Justificación**
+   (`{{JUSTIFICACION_APLICACION}}`); ambas aparecen en el PPTP. Si no la marcas, es obligatoria la
+   **Justificación** de no aplicación (`{{JUSTIFICACION_NO_APLICACION}}`).
+   Bajo la casilla se muestra un único campo **Justificación** y, debajo, la fórmula.
+   El campo muestra el motivo de la alternativa elegida y conserva por separado
+   los textos escritos para aplicación y no aplicación al cambiar la casilla.
+   Solo se habilita y exige el campo de la opción elegida; cambiar de opción
+   no borra lo escrito. La casilla y ambos textos se guardan en el proyecto.
+   Si el plazo no supera dos años (incluidos exactamente 2 años o 24 meses),
+   la propuesta inicial permanece desmarcada y se añade automáticamente la justificación
+   «no superar el plazo de ejecución previsto los dos años», conservando los
+   motivos manuales. La casilla siempre está disponible: puedes marcarla también
+   para plazos cortos con fórmula y justificación. La decisión manual se conserva
+   al cambiar el plazo, navegar, guardar y reabrir el proyecto.
+   Al ampliar el plazo se retira solo ese motivo automático:
+   la revisión no se activa por sí sola.
+   Para días naturales se cuentan dos años de calendario desde el inicio guardado
+   de la planificación (730 o 731 días; un inicio el 29 de febrero tiene aniversario
+   el 28 de febrero). Sin fecha de inicio o con un plazo que no se pueda interpretar,
+   no se presume una equivalencia: debes revisar y completar la justificación manualmente.
+   Los proyectos antiguos se abren sin revisión marcada y requieren completar
+   la justificación antes de generar. La aplicación no determina la procedencia
+   por importe ni escoge una fórmula: corresponde revisarlos conforme
+   al contrato y a la normativa aplicable.
+   En los Markdown, `{{#if APLICA_REVISION_PRECIOS}}`, `{{else}}` y `{{/if}}`
+   seleccionan una sola alternativa antes de sustituir variables. No se evalúa
+   código ni expresiones; los bloques mal cerrados y las condiciones desconocidas
+   producen un error explícito. Los bloques amarillos siguen excluidos.
 2. **Correspondencias automáticas.** Para una partida `01RPN…`, se propone
    la ficha específica `01RPN` con las prescripciones generales ya integradas, no las de
    piedra artificial, cerámica o madera. Se usa el código de cada ficha, no
@@ -638,9 +713,18 @@ la revisión técnica de sus condiciones antes de incorporarlas al contrato.
 **Aceptar y generar** solicita el destino del documento y guarda primero
 la revisión en el JSON del proyecto (pide su ubicación si aún no existe).
 El formato PDF u ODT y la plantilla de cabecera y pie son los configurados
-para los informes. Se ensamblan las secciones `01` a `04`, sustituyendo las
-variables; en la cuarta se incluyen las definiciones, ejecución y medición
-y abono de las fichas elegidas. Una ficha común a varias partidas aparece una vez.
+para los informes. Se ensamblan todos los documentos Markdown numerados de la
+raíz del ZIP en orden de nombre, sustituyendo las variables. La biblioteca actual
+contiene las secciones `01` a `09`; las fichas elegidas se incorporan después del
+último documento general, bajo el apartado 9 de materiales, ejecución, medición
+y abono. Las bibliotecas antiguas con cuatro secciones siguen siendo compatibles.
+Los archivos sin prefijo numérico no se incorporan al pliego.
+La numeración de los documentos generales debe ser consecutiva, sin secciones
+intermedias ausentes; si falta alguna, se avisa antes de generar.
+La normativa se detecta por sus marcas `NORMATIVA_UNI`, no por el número de
+sección: ahora está en la `07`. Solo se incluyen las referencias seleccionadas,
+en su posición original, conservando el resto del texto general de ese apartado.
+Una ficha común a varias partidas aparece una vez.
 
 El documento comienza con un índice de contenidos. Su profundidad se
 limita con **Niveles del índice (1–6)** en el primer
@@ -650,15 +734,15 @@ Los párrafos se muestran justificados. Las secciones continúan sin saltos de
 página forzados: se permite dividir los párrafos entre páginas, manteniendo
 los títulos junto al inicio del texto. El índice inicial sí se separa del cuerpo.
 Todos los títulos y subtítulos aparecen en mayúsculas, con numeración jerárquica también para los
-niveles `###` y `####` de las fichas. El capítulo 4 se divide primero por los
+niveles `###` y `####` de las fichas. El capítulo 9 se divide primero por los
 capítulos de dos dígitos de la base de precios de la Junta (`01`, `02`, …),
 mostrando solo su nombre, sin el prefijo «CAPÍTULO 01», «CAPÍTULO 02», etc.
 Se conserva la numeración jerárquica del documento. Solo aparecen grupos con fichas seleccionadas.
 Dentro de cada grupo se incorporan las fichas completas ordenadas por código UNI,
 con sus apartados de definición o descripción, ejecución, medición y abono.
 No se añaden agrupaciones intermedias por letras ni se cambian la selección
-guardada o los documentos originales. Por ejemplo: `4.1 DEMOLICIONES Y TRABAJOS PREVIOS`,
-`4.1.1 ARCOS Y BÓVEDAS …`, `4.1.1.1 DEFINICIÓN`. Con dos niveles de índice
+guardada o los documentos originales. Por ejemplo: `9.1 DEMOLICIONES Y TRABAJOS PREVIOS`,
+`9.1.1 ARCOS Y BÓVEDAS …`, `9.1.1.1 DEFINICIÓN`. Con dos niveles de índice
 se ven los grupos; con tres también las fichas, y con cuatro sus apartados.
 En PDF, el índice enlaza a las páginas calculadas
 al generar. En ODT es un índice nativo: actualízalo desde Writer si cambia la

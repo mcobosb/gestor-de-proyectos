@@ -69,6 +69,7 @@ class _OdtReport:
         self.image_height = image_height
         self.footer = footer
         self.template_header = template_header
+        self.preserve_template_styles = False
         self.template_footer = template_footer
         self.template_resources = template_resources
         self.template_borders: dict[str, dict[str, str]] = {}
@@ -338,6 +339,9 @@ class _OdtReport:
                 font_decls.append(deepcopy(font_face))
         styles = ET.SubElement(root, _tag("office:styles"))
         if self.template_header is not None:
+            if self.preserve_template_styles:
+                for style in self.template_header.get("default_styles", []):
+                    styles.append(deepcopy(style))
             for style in self.template_header["styles"]:
                 styles.append(deepcopy(style))
         self._paragraph_style(styles, "Normal")

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import date
+from decimal import Decimal
 from html import escape
 import json
 from pathlib import Path, PurePosixPath
@@ -18,8 +20,51 @@ if TYPE_CHECKING:
 
 VARIABLES = ("titulo_proyecto", "entidad", "plazo_garantia", "plazo_ejecucion",
              "bullet_capitulos_obra")
+PRICE_VARIABLES = (
+    "FORMULA_REVISION_PRECIOS", "JUSTIFICACION_NO_APLICACION", "JUSTIFICACION_APLICACION",
+)
+SHORT_DURATION_REASON = "no superar el plazo de ejecución previsto los dos años"
+
+
+def duration_within_two_years(duration: str, start: str = "") -> bool | None:
+    """Compara plazos simples; los días requieren el inicio real para contar años de calendario."""
+    match = re.fullmatch(
+        r"\s*(\d+(?:[.,]\d+)?)\s*(años?|mes(?:es)?|d[ií]as?(?:\s+naturales)?)\s*",
+        duration, flags=re.IGNORECASE,
+    )
+    if not match or Decimal(match[1].replace(",", ".")) <= 0:
+        return None
+    amount = Decimal(match[1].replace(",", "."))
+    unit = match[2].casefold()
+    if unit.startswith("año"):
+        return amount <= 2
+    if unit.startswith("mes"):
+        return amount <= 24
+    if not start:
+        return None
+    beginning = date.fromisoformat(start)
+    anniversary = date(
+        beginning.year + 2, beginning.month,
+        28 if beginning.month == 2 and beginning.day == 29 else beginning.day,
+    )
+    return amount <= (anniversary - beginning).days
+
+
+def duration_price_revision(
+    variables: dict[str, str], applies: bool, start: str = "",
+) -> tuple[bool, str]:
+    """Completa la razón temporal sin borrar justificaciones manuales ni activar revisión."""
+    within = duration_within_two_years(variables.get("plazo_ejecucion", ""), start)
+    reason = variables.get("JUSTIFICACION_NO_APLICACION", "").strip()
+    reason = reason.replace("; además, " + SHORT_DURATION_REASON, "").replace(SHORT_DURATION_REASON, "").strip()
+    if within is True:
+        reason = reason + "; además, " + SHORT_DURATION_REASON if reason else SHORT_DURATION_REASON
+    return applies, reason
 PENDING_DURATION = "Pendiente de planificación"
 DEFAULT_TOC_DEPTH = 2
+REGULATION_PATTERN = re.compile(
+    r"<!--\s*NORMATIVA_UNI\s+(\{[^\n]*\})\s*-->\s*\n([*+-] [^\n]+)",
+)
 
 
 def validate_toc_depth(value: object) -> int:
@@ -247,42 +292,62 @@ def initial_variables(app: BudgetApp) -> tuple[dict[str, str], bool]:
         "plazo_garantia": app.report_settings.guarantee_period,
         "plazo_ejecucion": duration or saved.get("plazo_ejecucion", PENDING_DURATION),
         "bullet_capitulos_obra": saved.get("bullet_capitulos_obra", ""),
+        **{key: saved.get(key, "") for key in PRICE_VARIABLES},
     }, not bool(duration)
 
 
-def load_regulations(root: Path | ZipLibrary, codes: set[str]) -> list[Regulation]:
-    """Filtra las referencias clasificadas por prefijos y conserva sus avisos."""
+def load_documents(root: Path | ZipLibrary) -> list[tuple[str, str]]:
+    """Lee en orden todos los documentos numerados sin mezclar el ZIP con copias antiguas."""
     sources = (
-        root.read_documents("02") if isinstance(root, ZipLibrary) else [
+        root.read_documents("") if isinstance(root, ZipLibrary) else [
             (path.name, path.read_text(encoding="utf-8-sig"))
-            for path in sorted(root.glob("02*.md"))
+            for path in sorted(root.iterdir())
+            if path.is_file() and path.suffix.lower() == ".md"
         ]
     )
-    if not sources:
-        raise ValueError("Falta la sección 02 de disposiciones técnicas legales.")
+    sources = sorted(
+        (name, source) for name, source in sources if re.match(r"^\d{2}(?!\d)", name)
+    )
+    prefixes = {int(name[:2]) for name, _ in sources}
+    for index in range(1, max({4, *prefixes}) + 1):
+        if index not in prefixes:
+            raise ValueError(f"Falta la sección {index:02} del PPTP.")
+    return sources
+
+
+def _read_regulation(match: re.Match[str], name: str) -> Regulation:
+    """Valida una referencia normativa anotada antes de seleccionarla o componerla."""
+    try:
+        data = json.loads(match[1])
+        if not isinstance(data, dict):
+            raise ValueError("Metadatos normativos no válidos.")
+        refs = data["uni"]
+        if (not isinstance(refs, list) or not refs
+                or any(not isinstance(ref, str) or not ref for ref in refs)
+                or any(not isinstance(data.get(key), str) or not data[key]
+                       for key in ("id", "seleccion", "condicion"))
+                or data["seleccion"] not in {"candidata", "revision"}):
+            raise ValueError("Metadatos normativos no válidos.")
+        return Regulation(
+            data["id"], refs, data["seleccion"], data["condicion"], match[2],
+            data["seleccion"] == "candidata",
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f"Clasificación normativa no válida en {name}: {exc}") from exc
+
+
+def load_regulations(root: Path | ZipLibrary, codes: set[str]) -> list[Regulation]:
+    """Filtra referencias de todos los documentos generales sin depender de su ordinal."""
     result: dict[str, Regulation] = {}
-    for name, source in sources:
+    for name, source in load_documents(root):
         source = document_markdown(source)
-        for match in re.finditer(r"<!--\s*NORMATIVA_UNI\s+(\{[^\n]*\})\s*-->\s*\n([*+-] [^\n]+)", source):
-            try:
-                data = json.loads(match[1])
-                refs = data["uni"]
-                if (not isinstance(refs, list) or not refs
-                        or any(not isinstance(ref, str) or not ref for ref in refs)
-                        or any(not isinstance(data.get(key), str) or not data[key]
-                               for key in ("id", "seleccion", "condicion"))
-                        or data["seleccion"] not in {"candidata", "revision"}):
-                    raise ValueError("Metadatos normativos no válidos.")
-                relevant = "*" in refs or any(
-                    code.startswith(ref) or ref.startswith(code) for ref in refs for code in codes
-                )
-                if relevant:
-                    result.setdefault(data["id"], Regulation(
-                        data["id"], refs, data["seleccion"], data["condicion"], match[2],
-                        data["seleccion"] == "candidata",
-                    ))
-            except (KeyError, TypeError, json.JSONDecodeError) as exc:
-                raise ValueError(f"Clasificación normativa no válida en {name}: {exc}") from exc
+        for match in REGULATION_PATTERN.finditer(source):
+            ref = _read_regulation(match, name)
+            if "*" in ref.codes or any(
+                code.startswith(prefix) or prefix.startswith(code)
+                for prefix in ref.codes for code in codes
+            ):
+                result.setdefault(ref.id, ref)
     if not result:
         raise ValueError("No se encontraron disposiciones legales clasificadas.")
     return list(result.values())
@@ -295,11 +360,23 @@ def restore_state(data: object) -> dict:
     if not data:
         return {}
     toc_depth = validate_toc_depth(data.get("toc_depth", DEFAULT_TOC_DEPTH))
+    price_revision = data.get("aplica_revision_precios", False)
+    if type(price_revision) is not bool:
+        raise ValueError("La opción de revisión de precios debe ser verdadera o falsa.")
+    price_start = data.get("revision_inicio_planificacion", "")
+    if not isinstance(price_start, str):
+        raise ValueError("La fecha de inicio para la revisión de precios no es válida.")
+    if price_start:
+        try:
+            date.fromisoformat(price_start)
+        except ValueError as exc:
+            raise ValueError("La fecha de inicio para la revisión de precios no es válida.") from exc
     variables = data.get("variables")
     rows = data.get("selections")
     regulations = data.get("regulations")
     if (not isinstance(variables, dict)
             or any(not isinstance(variables.get(key), str) for key in VARIABLES)
+            or any(not isinstance(variables.get(key, ""), str) for key in PRICE_VARIABLES)
             or not isinstance(rows, list) or not isinstance(regulations, dict)
             or any(not isinstance(key, str) or not isinstance(value, bool)
                    for key, value in regulations.items())):
@@ -317,12 +394,65 @@ def restore_state(data: object) -> dict:
         elif row["selected"]:
             raise ValueError("Una partida seleccionada no tiene ficha PPTP.")
         selections.append(asdict(Selection(**{key: row[key] for key in Selection.__dataclass_fields__})))
-    return {"variables": {key: variables[key] for key in VARIABLES},
-            "selections": selections, "regulations": dict(regulations), "toc_depth": toc_depth}
+    return {"variables": {
+                **{key: variables[key] for key in VARIABLES},
+                **{key: variables.get(key, "") for key in PRICE_VARIABLES},
+            },
+            "selections": selections, "regulations": dict(regulations), "toc_depth": toc_depth,
+            "aplica_revision_precios": price_revision,
+            "revision_inicio_planificacion": price_start}
 
 
-def substitute(source: str, variables: dict[str, str]) -> str:
-    """Sustituye variables conocidas y rechaza marcadores sin resolver."""
+def price_revision_field(applies: bool) -> str:
+    """Identifica el dato obligatorio de la alternativa de revisión elegida."""
+    return PRICE_VARIABLES[0] if applies else PRICE_VARIABLES[1]
+
+
+def price_revision_fields(applies: bool) -> tuple[str, ...]:
+    """Exige fórmula y motivo de aplicación o el motivo de no aplicación según la decisión."""
+    return (PRICE_VARIABLES[0], PRICE_VARIABLES[2]) if applies else (PRICE_VARIABLES[1],)
+
+
+def conditional_markdown(source: str, applies: bool) -> str:
+    """Resuelve únicamente condiciones booleanas conocidas sin ejecutar expresiones Markdown."""
+    parts = []
+    stack: list[tuple[bool, bool]] = []
+    previous = 0
+    active = True
+    for match in re.finditer(r"\{\{\s*(#if\b[^{}]*|else\b[^{}]*|/if\b[^{}]*)\s*\}\}", source):
+        if active:
+            parts.append(source[previous:match.start()])
+        token = match[1].strip()
+        if token.startswith("#if"):
+            if token != "#if APLICA_REVISION_PRECIOS":
+                raise ValueError(f"Condición PPTP no admitida: {token}.")
+            stack.append((active, False))
+            active = active and applies
+        elif token == "else":
+            if not stack or stack[-1][1]:
+                raise ValueError("El documento contiene un {{else}} sin {{#if}} o repetido.")
+            parent, _ = stack[-1]
+            stack[-1] = (parent, True)
+            active = parent and not applies
+        elif token == "/if":
+            if not stack:
+                raise ValueError("El documento contiene un {{/if}} sin {{#if}}.")
+            active, _ = stack.pop()
+        else:
+            raise ValueError(f"Marcador condicional PPTP no válido: {token}.")
+        previous = match.end()
+    if stack:
+        raise ValueError("El documento contiene un {{#if}} sin cerrar con {{/if}}.")
+    if active:
+        parts.append(source[previous:])
+    return "".join(parts)
+
+
+def substitute(
+    source: str, variables: dict[str, str], *, price_revision: bool = False,
+) -> str:
+    """Resuelve alternativas y sustituye solo las variables de la rama elegida."""
+    source = conditional_markdown(source, price_revision)
     def replace(match: re.Match[str]) -> str:
         """Exige un valor expreso para cada variable utilizada en los textos."""
         name = match[1].strip()
@@ -340,6 +470,11 @@ def substitute(source: str, variables: dict[str, str]) -> str:
 def compose(root: Path | ZipLibrary, state: dict, regulations: list[Regulation]) -> str:
     """Ensambla secciones y fichas unicas, con normativa revisada por el tecnico."""
     state = restore_state(state)
+    state["aplica_revision_precios"], state["variables"]["JUSTIFICACION_NO_APLICACION"] = duration_price_revision(
+        state["variables"], state["aplica_revision_precios"], state["revision_inicio_planificacion"],
+    )
+    if state["aplica_revision_precios"] and not state["variables"]["JUSTIFICACION_APLICACION"].strip():
+        raise ValueError("Rellena el campo JUSTIFICACION_APLICACION antes de generar.")
     if isinstance(root, ZipLibrary):
         chosen = list(dict.fromkeys(
             path for row in state["selections"] if row["selected"]
@@ -363,26 +498,24 @@ def compose(root: Path | ZipLibrary, state: dict, regulations: list[Regulation])
         return code, relative.casefold()
 
     chosen.sort(key=sheet_order)
+    selected = {
+        ref.id for ref in regulations if state["regulations"].get(ref.id, ref.selected)
+    }
+    included: set[str] = set()
     sections = []
-    for prefix in ("01", "02", "03", "04"):
-        sources = (
-            root.read_documents(prefix) if isinstance(root, ZipLibrary) else [
-                (path.name, path.read_text(encoding="utf-8-sig"))
-                for path in sorted(root.glob(f"{prefix}*.md"))
-            ]
-        )
-        if not sources:
-            raise ValueError(f"Falta la sección {prefix} del PPTP.")
-        sources = [(name, document_markdown(source)) for name, source in sources]
-        if prefix == "02":
-            selected = [ref.text for ref in regulations if state["regulations"].get(ref.id, ref.selected)]
-            introductions = []
-            for _, source in sources:
-                source = source.split("<!-- NORMATIVA_UNI", 1)[0]
-                introductions.append(re.sub(r"<!--.*?-->", "", source, flags=re.DOTALL).strip())
-            sections.append("\n\n".join(introductions + selected))
-        else:
-            sections.extend(source for _, source in sources)
+    for name, source in load_documents(root):
+        source = document_markdown(source)
+
+        def filter_regulation(match: re.Match[str]) -> str:
+            """Incluye cada norma marcada en su posición original y una sola vez."""
+            ref = _read_regulation(match, name)
+            if ref.id not in selected or ref.id in included:
+                return ""
+            included.add(ref.id)
+            return match[2]
+
+        source = REGULATION_PATTERN.sub(filter_regulation, source)
+        sections.append(re.sub(r"<!--.*?-->", "", source, flags=re.DOTALL).strip())
     previous_chapter = None
     for relative in chosen:
         chapter = sheet_order(relative)[0][:2]
@@ -426,7 +559,10 @@ def compose(root: Path | ZipLibrary, state: dict, regulations: list[Regulation])
                         lambda match: "#" * min(len(match[1]) + 2, 6) + " " + match[2],
                         source, flags=re.MULTILINE)
         sections.append(source)
-    return number_headings(substitute("\n\n".join(sections), state["variables"]))
+    return number_headings(substitute(
+        "\n\n".join(sections), state["variables"],
+        price_revision=state["aplica_revision_precios"],
+    ))
 
 
 def number_headings(source: str) -> str:
@@ -460,9 +596,11 @@ def text_blocks(source: str, *, preserve_bold: bool = False) -> list[tuple[int, 
     for line in [*source.splitlines(), ""]:
         heading = re.match(r"^(#{1,6})\s+(.*)", line)
         bullet = re.match(r"^(?P<indent>[ \t]*)(?:[-*+]\s+|•\s*)(?P<text>.*)", line)
-        ordered = re.match(r"^(?P<indent>[ \t]*)(?P<number>\d+[.)])\s+(?P<text>.*)", line)
+        ordered = re.match(
+            r"^(?P<indent>[ \t]*)(?P<bold>\*\*)?(?P<number>\d+[.)])[ \t]+(?P<text>.*)", line,
+        )
         separator = re.fullmatch(r"\s*\*\*[^*\n]+\*\*\s*", line)
-        if not line.strip() or heading or bullet or ordered or separator or line.startswith(">"):
+        if not line.strip() or heading or bullet or ordered or separator or "\t" in line or line.startswith(">"):
             if paragraph:
                 blocks.append((0, " ".join(paragraph)))
                 paragraph = []
@@ -475,11 +613,14 @@ def text_blocks(source: str, *, preserve_bold: bool = False) -> list[tuple[int, 
             elif ordered:
                 spaces = len(ordered["indent"].expandtabs(4))
                 depth = (spaces + 3) // 4
-                blocks.append((-(depth + 1), ordered["number"] + " " + ordered["text"].strip()))
+                text = (ordered["bold"] or "") + ordered["number"] + " " + ordered["text"].strip()
+                blocks.append((-(depth + 1), text))
             elif separator:
-                blocks.append((0, line.strip()))
+                blocks.append((0, line.rstrip()))
             elif line.startswith(">"):
                 blocks.append((0, line.lstrip("> ")))
+            elif line.strip():
+                blocks.append((0, line.rstrip(" \r")))
         else:
             paragraph.append(line.strip())
     return blocks if preserve_bold else [(level, text.replace("**", "")) for level, text in blocks]
@@ -499,6 +640,37 @@ def bold_runs(text: str) -> list[tuple[str, bool]]:
     return runs
 
 
+def template_paragraph_styles(template: dict) -> dict[str, str]:
+    """Localiza estilos de cuerpo y títulos por nombres ODF o su nivel semántico."""
+    styles = [
+        style for style in template["styles"]
+        if style.get("{urn:oasis:names:tc:opendocument:xmlns:style:1.0}family") == "paragraph"
+    ]
+    namespace = "{urn:oasis:names:tc:opendocument:xmlns:style:1.0}"
+    result = {}
+    for style in styles:
+        name = style.get(namespace + "name", "")
+        label = style.get(namespace + "display-name", name.removeprefix("Template"))
+        label = re.sub(r"_([0-9A-Fa-f]{2})_", lambda match: chr(int(match[1], 16)), label)
+        label = "".join(
+            char for char in unicodedata.normalize("NFKD", label.casefold())
+            if not unicodedata.combining(char)
+        )
+        if label in {"text body", "body text", "cuerpo", "cuerpo de texto", "texto del cuerpo"}:
+            result["body"] = name
+        level = style.get(namespace + "default-outline-level")
+        match = re.fullmatch(r"(?:heading|titulo)\s*([1-6])", label)
+        if match:
+            result[f"heading{match[1]}"] = name
+        elif level in {"1", "2", "3", "4", "5", "6"}:
+            result.setdefault(f"heading{level}", name)
+        if label in {"heading", "encabezado", "titulo"}:
+            result.setdefault("heading", name)
+        if label in {"standard", "normal", "predeterminado"}:
+            result.setdefault("body", name)
+    return result
+
+
 def write_document(
     source: str, target: Path, variables: dict[str, str], settings: ReportSettings, *,
     toc_depth: int = DEFAULT_TOC_DEPTH,
@@ -514,6 +686,9 @@ def write_document(
         from odt_reports import _new_report, _tag
 
         document = _new_report(title, project, settings, repeat_titles=False, footer_title=title)
+        document.preserve_template_styles = True
+        template_styles = template_paragraph_styles(document.template_header)
+        body_parent = template_styles.get("body", "ReportBody")
         bold_style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
             _tag("style:name"): "PPTPBold", _tag("style:family"): "text",
         })
@@ -523,21 +698,26 @@ def write_document(
             _tag("style:font-weight-complex"): "bold",
         })
         for name, parent, heading in [
-            ("PPTPBody", "ReportBody", False),
+            ("PPTPBody", body_parent, False),
             ("PPTPSeparator", "PPTPBody", True),
-            *[(f"PPTPHeading{level}", f"Heading{level}", True) for level in range(1, 7)],
+            *[(
+                f"PPTPHeading{level}",
+                template_styles.get(f"heading{level}", template_styles.get("heading", f"Heading{level}")),
+                True,
+            ) for level in range(1, 7)],
         ]:
             style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
                 _tag("style:name"): name, _tag("style:family"): "paragraph",
                 _tag("style:parent-style-name"): parent,
             })
-            ET.SubElement(style, _tag("style:paragraph-properties"), {
-                _tag("fo:text-align"): "start" if heading else "justify",
-                _tag("fo:break-before"): "auto", _tag("fo:break-after"): "auto",
-                _tag("fo:keep-with-next"): "always" if heading else "auto",
-                _tag("fo:keep-together"): "auto",
-                _tag("fo:orphans"): "2", _tag("fo:widows"): "2",
-            })
+            if not parent.startswith("Template"):
+                ET.SubElement(style, _tag("style:paragraph-properties"), {
+                    _tag("fo:text-align"): "start" if heading else "justify",
+                    _tag("fo:break-before"): "auto", _tag("fo:break-after"): "auto",
+                    _tag("fo:keep-with-next"): "always" if heading else "auto",
+                    _tag("fo:keep-together"): "auto",
+                    _tag("fo:orphans"): "2", _tag("fo:widows"): "2",
+                })
         for depth in bullet_depths:
             style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
                 _tag("style:name"): f"PPTPBullet{depth}", _tag("style:family"): "paragraph",
@@ -570,13 +750,18 @@ def write_document(
                 })
                 for value, bold in bold_runs(text):
                     attributes = {_tag("text:style-name"): "PPTPBold"} if bold else {}
-                    ET.SubElement(paragraph, _tag("text:span"), attributes).text = value
+                    span = ET.SubElement(paragraph, _tag("text:span"), attributes)
+                    for index, part in enumerate(value.split("\t")):
+                        if index:
+                            ET.SubElement(span, _tag("text:tab")).tail = part
+                        else:
+                            span.text = part
         document.write(target)
     else:
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import ParagraphStyle
         from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
-        from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate
+        from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Table
         from reportlab.platypus.doctemplate import LayoutError
         from reportlab.platypus.tableofcontents import TableOfContents
         from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
@@ -606,8 +791,46 @@ def write_document(
         story = [
             layout.text("ÍNDICE", layout.title_style), toc, PageBreak(),
         ]
+
+        def pdf_paragraph(text: str, style):
+            """Crea un párrafo PDF con negritas explícitas y sin interpretar HTML del usuario."""
+            markup = "".join(
+                f'<font name="{escape(layout.bold_font, quote=True)}">{escape(value)}</font>'
+                if bold else escape(value)
+                for value, bold in bold_runs(text)
+            )
+            return Paragraph(markup, style)
+
+        tabular_rows = []
+
+        def flush_tabular_rows() -> None:
+            """Alinea las columnas separadas por tabuladores con celdas que admiten ajuste."""
+            if not tabular_rows:
+                return
+            width = A4[0] - LEFT_MARGIN - RIGHT_MARGIN
+            columns = max(len(row) for row in tabular_rows)
+            rows = [
+                [pdf_paragraph(cell, body) for cell in row] + [""] * (columns - len(row))
+                for row in tabular_rows
+            ]
+            story.append(Table(
+                rows, colWidths=[width / columns] * columns, hAlign="LEFT",
+                style=[
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ],
+            ))
+            tabular_rows.clear()
+
         heading_index = 0
         for level, text in blocks:
+            if level == 0 and "\t" in text.lstrip("\t"):
+                tabular_rows.append(text.split("\t"))
+                continue
+            flush_tabular_rows()
             style = body
             if level > 0:
                 style = ParagraphStyle(
@@ -622,18 +845,20 @@ def write_document(
                     "PPTPSeparator", parent=body, spaceBefore=8,
                     keepWithNext=True, alignment=TA_LEFT,
                 )
-            markup = "".join(
-                f'<font name="{escape(layout.bold_font, quote=True)}">{escape(value)}</font>'
-                if bold else escape(value)
-                for value, bold in bold_runs(text)
-            )
-            paragraph = Paragraph(markup, style)
+            if text.startswith("\t"):
+                tabs = len(text) - len(text.lstrip("\t"))
+                style = ParagraphStyle(
+                    style.name + "Indented", parent=style, leftIndent=style.leftIndent + 12 * tabs,
+                )
+                text = text.lstrip("\t")
+            paragraph = pdf_paragraph(text, style)
             if level > 0:
                 paragraph._pptp_heading = (
                     level - 1, text.replace("**", ""), f"PPTPHeading{heading_index}",
                 )
                 heading_index += 1
             story.append(paragraph)
+        flush_tabular_rows()
 
         class PptpKeepTogether(KeepTogether):
             """Conserva los titulos con dos lineas, no con todo el parrafo siguiente."""

@@ -2,12 +2,13 @@
 from copy import deepcopy
 import json
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
 from zipfile import ZipFile
 
-from tools.pptp.document import compose, load_catalog, load_regulations
+from tools.pptp.document import VARIABLES, compose, load_catalog, load_documents, load_regulations
 from tools.pptp.library import ZipLibrary, validate_relative
 
 
@@ -227,6 +228,145 @@ class ZipLibraryTests(unittest.TestCase):
         (self.docs / "03_description.md").unlink()
         with self.assertRaisesRegex(ValueError, "sección 03"):
             compose(library, state, [])
+
+    def test_expanded_general_documents_and_relocated_regulations_keep_their_order(self):
+        """Read every numbered base, filtering only annotated bullets wherever they occur."""
+        bases = {f"{index:02}_Base.md": f"# {index} Sección {index}\n\nTexto base {index}."
+                 for index in reversed(range(1, 11))}
+        bases["02_Base.md"] += "\n\nDisposiciones generales que deben conservarse."
+        bases["07_Base.md"] += (
+            '\n\n<!-- NORMATIVA_UNI {"id":"A","uni":["*"],'
+            '"seleccion":"candidata","condicion":"Revisar A"} -->\n- Norma elegida A\n'
+            '\n## Normas adicionales\n\nTexto intermedio.\n'
+            '<!-- NORMATIVA_UNI {"id":"B","uni":["05"],'
+            '"seleccion":"candidata","condicion":"Revisar B"} -->\n- Norma ajena B\n'
+            '<!-- NORMATIVA_UNI {"id":"C","uni":["01TR"],'
+            '"seleccion":"revision","condicion":"Revisar C"} -->\n- Norma opcional C\n'
+            '\nTexto final obligatorio de la sección normativa.'
+        )
+        bases["08_Base.md"] += (
+            '\n\n<!-- NORMATIVA_UNI {"id":"A","uni":["*"],'
+            '"seleccion":"candidata","condicion":"Revisar A"} -->\n- Norma elegida A\n'
+        )
+        self.write_zip(members={**self.members, **bases, "notas.md": "No publicar notas."})
+        for name, content in bases.items():
+            (self.docs / name).write_text(content, encoding="utf-8")
+        (self.docs / "notas.md").write_text("No publicar notas.", encoding="utf-8")
+        sheet = self.docs.joinpath("UNI", *Path(self.rows[0]["archivo"]).parts)
+        sheet.parent.mkdir(parents=True)
+        sheet.write_text(self.content, encoding="utf-8")
+        state = {
+            "variables": {key: "Valor" for key in VARIABLES},
+            "selections": [{
+                "item": 0, "code": "01TR001", "chapter": "01#", "summary": "Redes",
+                "path": "UNI/" + self.rows[0]["archivo"], "selected": True, "automatic": True,
+            }],
+            "regulations": {},
+        }
+        for root in (ZipLibrary(self.archive, self.docs), self.docs):
+            with self.subTest(root=type(root).__name__):
+                refs = load_regulations(root, {"01TR001"})
+                self.assertEqual([ref.id for ref in refs], ["A", "C"])
+                self.assertFalse(refs[1].selected)
+                state["regulations"] = {}
+                source = compose(root, state, refs)
+                positions = [source.index(f"# {index} SECCIÓN {index}") for index in range(1, 11)]
+                self.assertEqual(positions, sorted(positions))
+                self.assertIn("### 10.1.1 FICHA SINTÉTICA", source)
+                self.assertIn("Disposiciones generales que deben conservarse.", source)
+                self.assertIn("Texto intermedio.", source)
+                self.assertIn("Texto final obligatorio de la sección normativa.", source)
+                self.assertEqual(source.count("Norma elegida A"), 1)
+                self.assertLess(source.index("Norma elegida A"), source.index("# 8 SECCIÓN 8"))
+                for excluded in ("Norma ajena B", "Norma opcional C", "NORMATIVA_UNI", "No publicar"):
+                    self.assertNotIn(excluded, source)
+                state["regulations"] = {"A": False, "C": True}
+                source = compose(root, state, refs)
+                self.assertNotIn("Norma elegida A", source)
+                self.assertIn("Norma opcional C", source)
+        (self.docs / "11_Antiguo.md").write_text("# Copia externa obsoleta", encoding="utf-8")
+        self.assertEqual(len(load_documents(ZipLibrary(self.archive, self.docs))), 10)
+
+    def test_expanded_library_reports_invalid_regulation_metadata(self):
+        """Report malformed annotations in new sections instead of publishing them unfiltered."""
+        bases = {f"{index:02}_Base.md": f"# Sección {index}" for index in range(1, 10)}
+        bases["07_Base.md"] += '\n<!-- NORMATIVA_UNI {"id":"X","uni":5} -->\n- No publicar'
+        self.write_zip(members={**self.members, **bases})
+        with self.assertRaisesRegex(ValueError, "07_Base.md"):
+            load_regulations(ZipLibrary(self.archive, self.docs), {"01TR001"})
+
+    def test_base_fallback_never_combines_partial_zip_with_external_sections(self):
+        """Ignore unnumbered resources and use external bases only when the ZIP has none."""
+        for index in range(1, 5):
+            (self.docs / f"{index:02}_Base.MD").write_text(f"# Base {index}", encoding="utf-8")
+        self.write_zip(members={**self.members, "notas.md": "No publicar."})
+        self.assertEqual(len(load_documents(ZipLibrary(self.archive, self.docs))), 4)
+        self.write_zip(members={**self.members, "01_Base.md": "# Base del ZIP"})
+        with self.assertRaisesRegex(ValueError, "sección 02"):
+            load_documents(ZipLibrary(self.archive, self.docs))
+        bases = {f"{index:02}_Base.md": f"# Base {index}"
+                 for index in range(1, 10) if index != 7}
+        self.write_zip(members={**self.members, **bases})
+        with self.assertRaisesRegex(ValueError, "sección 07"):
+            load_documents(ZipLibrary(self.archive, self.docs))
+
+
+class DistributedGeneralDocumentsTests(unittest.TestCase):
+    def test_nine_sections_and_selected_regulations_reach_pdf_and_odt(self):
+        """Exercise the updated real ZIP through composition and both document exporters."""
+        from xml.etree import ElementTree as ET
+        from pypdf import PdfReader
+        from budget_reports import ReportSettings
+        from tools.pptp import DOCS_ROOT, LIBRARY_PATH
+        from tools.pptp.document import write_document
+
+        library = ZipLibrary(LIBRARY_PATH, DOCS_ROOT)
+        documents = load_documents(library)
+        self.assertGreaterEqual(len(documents), 9)
+        self.assertTrue(documents[6][0].startswith("07"))
+        sheet = next(entry for entry in library.entries.values() if entry.code == "01RPN")
+        refs = load_regulations(library, {"01RPN00001"})
+        self.assertTrue(any(ref.id == "LEY-9-2017" for ref in refs))
+        state = {
+            "variables": {
+                "titulo_proyecto": "Proyecto de prueba", "entidad": "Entidad de prueba",
+                "plazo_garantia": "12 meses", "plazo_ejecucion": "2 meses",
+                "bullet_capitulos_obra": "- Peldaños de piedra natural",
+                "JUSTIFICACION_NO_APLICACION": "no cumplirse los supuestos de prueba",
+            },
+            "selections": [{
+                "item": 0, "code": "01RPN00001", "chapter": "01#", "summary": "Peldaños",
+                "path": sheet.path, "selected": True, "automatic": True,
+            }],
+            "regulations": {"LEY-9-2017": True, "RD-30-1991": False},
+        }
+        source = compose(library, state, refs)
+        headings = re.findall(r"^# (.+)$", source, flags=re.MULTILINE)
+        self.assertEqual(len(headings), len(documents))
+        self.assertIn("## 9.1 DEMOLICIONES Y TRABAJOS PREVIOS", source)
+        self.assertIn("### 9.1.1 " + sheet.title.upper(), source)
+        self.assertIn("El Contratista está obligado al cumplimiento", source)
+        self.assertNotIn("NORMATIVA_UNI", source)
+        self.assertNotIn("Real Decreto 30/1991", source)
+        with tempfile.TemporaryDirectory() as directory:
+            for extension in ("pdf", "odt"):
+                with self.subTest(format=extension):
+                    target = Path(directory) / ("PPTP." + extension)
+                    write_document(source, target, state["variables"],
+                                   ReportSettings(output_format=extension))
+                    if extension == "pdf":
+                        text = "\n".join(page.extract_text() for page in PdfReader(target).pages)
+                    else:
+                        with ZipFile(target) as archive:
+                            text = "".join(ET.fromstring(archive.read("content.xml")).itertext())
+                    text = " ".join(text.split())
+                    for heading in headings:
+                        self.assertIn(" ".join(heading.split()), text)
+                    for expected in ("Proyecto de prueba", "Entidad de prueba", "12 meses", "2 meses",
+                                     "9.1.1 " + sheet.title.upper(), "Ley 9/2017"):
+                        self.assertIn(expected, text)
+                    self.assertNotIn("Real Decreto 30/1991", text)
+                    self.assertNotIn("{{", text)
 
 
 if __name__ == "__main__":

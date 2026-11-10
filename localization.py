@@ -77,10 +77,121 @@ _TEXT = {
         "Green: used sheets and their containing folders.",
         "Vert : fiches utilisées et dossiers qui les contiennent.",
     ),
-    "Amarillo: bloques informativos entre comillas triples.": (
-        "Yellow: informational blocks between triple quotes.",
-        "Jaune : blocs informatifs entre triples guillemets.",
+    "Amarillo: referencia editable que no se exporta. Blanco: prescripciones editables.": (
+        "Yellow: editable reference, not exported. White: editable specifications.",
+        "Jaune : référence modifiable, non exportée. Blanc : prescriptions modifiables.",
     ),
+    "Referencia (no se exporta)": ("Reference (not exported)", "Référence (non exportée)"),
+    "Registro de cambios": ("Change log", "Historique des modifications"),
+    "Aplicar revisión de precios": ("Apply price revision", "Appliquer la révision des prix"),
+    "Hasta dos años se justifica automáticamente la no revisión. En días se usa "
+    "el inicio de la planificación; sin él o con un plazo no reconocible, revisa "
+    "la justificación manualmente. Superar dos años no activa la revisión.": (
+        "Up to two years, the non-revision reason is filled automatically. For days, the planning "
+        "start is used; without it or with an unrecognized duration, review the justification "
+        "manually. Exceeding two years does not enable revision.",
+        "Jusqu'à deux ans, le motif de non-révision est rempli automatiquement. Pour les jours, "
+        "le début du planning est utilisé ; sans cette date ou avec une durée non reconnue, "
+        "vérifiez la justification manuellement. Dépasser deux ans n'active pas la révision.",
+    ),
+    "La fecha de inicio para la revisión de precios no es válida.": (
+        "The start date for price revision is invalid.",
+        "La date de début pour la révision des prix n'est pas valide.",
+    ),
+    "Fórmula de revisión de precios": ("Price revision formula", "Formule de révision des prix"),
+    "Justificación": ("Justification", "Justification"),
+    "Justificación de aplicación de revisión": (
+        "Justification for applying price revision", "Justification de l'application de la révision",
+    ),
+    "La no revisión se propone con su justificación para plazos de hasta dos años. "
+    "Puedes marcar la revisión indicando fórmula y justificación de aplicación. "
+    "La decisión requiere comprobación técnica y contractual.": (
+        "For durations up to two years, no revision is proposed with a justification. "
+        "You can enable revision by providing a formula and application justification. "
+        "The decision requires technical and contractual review.",
+        "Pour les durées allant jusqu'à deux ans, la non-révision est proposée avec sa justification. "
+        "Vous pouvez activer la révision en indiquant une formule et une justification d'application. "
+        "La décision nécessite une vérification technique et contractuelle.",
+    ),
+    "Justificación de no aplicación de revisión": (
+        "Justification for not applying price revision", "Justification de l'absence de révision des prix",
+    ),
+    "La revisión y la fórmula requieren comprobación técnica y contractual; "
+    "no se determinan automáticamente por importe o duración.": (
+        "Price revision and its formula require technical and contractual review; "
+        "they are not determined automatically by amount or duration.",
+        "La révision et sa formule nécessitent une vérification technique et contractuelle ; "
+        "elles ne sont pas déterminées automatiquement selon le montant ou la durée.",
+    ),
+    "La opción de revisión de precios debe ser verdadera o falsa.": (
+        "The price revision option must be true or false.",
+        "L'option de révision des prix doit être vraie ou fausse.",
+    ),
+    "El documento contiene un {{else}} sin {{#if}} o repetido.": (
+        "The document contains an unmatched or repeated {{else}}.",
+        "Le document contient un {{else}} sans {{#if}} ou répété.",
+    ),
+    "El documento contiene un {{/if}} sin {{#if}}.": (
+        "The document contains a {{/if}} without a {{#if}}.",
+        "Le document contient un {{/if}} sans {{#if}}.",
+    ),
+    "El documento contiene un {{#if}} sin cerrar con {{/if}}.": (
+        "The document contains a {{#if}} not closed by {{/if}}.",
+        "Le document contient un {{#if}} non fermé par {{/if}}.",
+    ),
+    "Versión": ("Version", "Version"),
+    "Último autor": ("Last author", "Dernier auteur"),
+    "Autor del cambio": ("Change author", "Auteur de la modification"),
+    "Fecha del cambio (DD/MM/AAAA)": ("Change date (DD/MM/YYYY)", "Date de modification (JJ/MM/AAAA)"),
+    "Descripción del cambio (opcional)": ("Change description (optional)", "Description de la modification (facultative)"),
+    "Indica el autor y la fecha del cambio antes de guardar.": (
+        "Enter the change author and date before saving.",
+        "Indiquez l'auteur et la date de la modification avant d'enregistrer.",
+    ),
+    "La fecha del cambio debe ser una fecha válida con formato DD/MM/AAAA.": (
+        "The change date must be a valid date in DD/MM/YYYY format.",
+        "La date de modification doit être une date valide au format JJ/MM/AAAA.",
+    ),
+    "La fecha del cambio debe tener formato DD/MM/AAAA.": (
+        "The change date must use DD/MM/YYYY format.",
+        "La date de modification doit être au format JJ/MM/AAAA.",
+    ),
+    "Los datos del cambio no admiten saltos de línea, barras verticales ni comillas triples.": (
+        "Change details cannot contain line breaks, vertical bars or triple quotes.",
+        "Les informations de modification ne peuvent contenir ni sauts de ligne, ni barres verticales, ni triples guillemets.",
+    ),
+    "No modifiques las entradas anteriores del registro de cambios.": (
+        "Do not modify existing change log entries.",
+        "Ne modifiez pas les entrées précédentes de l'historique.",
+    ),
+    "El registro de cambios debe conservarse al principio de la ficha.": (
+        "The change log must remain at the start of the sheet.",
+        "L'historique des modifications doit rester au début de la fiche.",
+    ),
+    "El registro de cambios no tiene un bloque informativo válido.": (
+        "The change log does not have a valid informational block.",
+        "L'historique des modifications ne comporte pas de bloc informatif valide.",
+    ),
+    "El registro de cambios no tiene un cierre válido.": (
+        "The change log does not have a valid closing delimiter.",
+        "L'historique des modifications ne comporte pas de délimiteur de fin valide.",
+    ),
+    "El registro de cambios contiene una entrada no válida.": (
+        "The change log contains an invalid entry.",
+        "L'historique des modifications contient une entrée non valide.",
+    ),
+    "Las versiones del registro de cambios deben ser consecutivas.": (
+        "Change log versions must be consecutive.",
+        "Les versions de l'historique des modifications doivent être consécutives.",
+    ),
+    'Edita el texto dentro de las comillas triples del panel amarillo sin añadir '
+    'ni eliminar bloques. Para añadir bloques utiliza el panel de prescripciones.': (
+        "Edit the text inside the yellow panel's triple quotes without adding or removing blocks. "
+        "To add blocks, use the specifications panel.",
+        "Modifiez le texte entre les triples guillemets du panneau jaune sans ajouter ni supprimer "
+        "de blocs. Pour ajouter des blocs, utilisez le panneau des prescriptions.",
+    ),
+    "Prescripciones de la ficha": ("Sheet specifications", "Prescriptions de la fiche"),
     "Editar biblioteca de fichas...": ("Edit sheet library...", "Modifier la bibliothèque de fiches..."),
     "Nueva ficha...": ("New sheet...", "Nouvelle fiche..."),
     "Renombrar ficha...": ("Rename sheet...", "Renommer la fiche..."),
@@ -184,9 +295,7 @@ _TEXT = {
     "Revisa los datos del proyecto antes de continuar.": (
         "Review the project data before continuing.", "Vérifiez les données du projet avant de continuer.",
     ),
-    "Resumen de las obras ({{bullet_capitulos_obra}})": (
-        "Works summary ({{bullet_capitulos_obra}})", "Résumé des travaux ({{bullet_capitulos_obra}})",
-    ),
+    "Resumen de las obras": ("Works summary", "Résumé des travaux"),
     "Fichas encontradas por código. Desmarca las que no procedan.": (
         "Sheets found by code. Uncheck those that do not apply.",
         "Fiches trouvées par code. Décochez celles qui ne conviennent pas.",

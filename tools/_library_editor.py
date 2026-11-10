@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from datetime import date
 from pathlib import Path, PurePosixPath
 import tempfile
 import tkinter as tk
@@ -11,7 +12,8 @@ from zipfile import BadZipFile, ZipFile
 
 from localization import localize_widget_tree, simpledialog
 from ui_theme import COLORS
-from ._library_markdown import informational_ranges
+from ._library_markdown import document_markdown, informational_ranges
+from ._library_history import add_revision, read_revisions, revision_values
 
 MAX_MARKDOWN_BYTES = 16 * 1024 * 1024
 
@@ -133,6 +135,7 @@ class LibraryEditor(tk.Toplevel):
         self, master: tk.Misc, archive_path: Path, title: str,
         on_saved: Callable[[], None] | None = None,
         *, used_members: set[str] | None = None,
+        track_changes: bool = False,
     ):
         """Construye el navegador y editor vinculado a un archivo ZIP."""
         super().__init__(master)
@@ -142,6 +145,9 @@ class LibraryEditor(tk.Toplevel):
         self.selected_member: str | None = None
         self.dirty = False
         self.loading = False
+        self.track_changes = track_changes
+        self.original_source = ""
+        self.reference_blocks: list[tuple[str, str]] = []
         self.title(title)
         self.geometry("1000x650")
         self.minsize(760, 460)
@@ -155,7 +161,7 @@ class LibraryEditor(tk.Toplevel):
             background=COLORS["teal_soft"], foreground=COLORS["teal_text"], anchor="w",
         ).pack(fill="x", padx=8, pady=(0, 4))
         tk.Label(
-            self, text="Amarillo: bloques informativos entre comillas triples.",
+            self, text="Amarillo: referencia editable que no se exporta. Blanco: prescripciones editables.",
             background=COLORS["warning_soft"], foreground=COLORS["warning_text"], anchor="w",
         ).pack(fill="x", padx=8, pady=(0, 4))
         self.save_button = ttk.Button(toolbar, text="Guardar", command=self.save, state="disabled")
@@ -184,9 +190,54 @@ class LibraryEditor(tk.Toplevel):
         self.tree.configure(yscrollcommand=tree_scroll.set)
         self.tree.pack(side="left", fill="both", expand=True)
         tree_scroll.pack(side="right", fill="y")
-        self.text = tk.Text(editor_frame, wrap="word", undo=True, state="disabled")
+        text_panes = ttk.Panedwindow(editor_frame, orient="vertical")
+        self.revision_version = tk.StringVar(self)
+        self.revision_last_author = tk.StringVar(self)
+        self.revision_author = tk.StringVar(self)
+        self.revision_date = tk.StringVar(self, value=date.today().strftime("%d/%m/%Y"))
+        self.revision_description = tk.StringVar(self)
+        if self.track_changes:
+            revision_frame = ttk.LabelFrame(editor_frame, text="Registro de cambios", padding=4)
+            revision_frame.pack(fill="x")
+            for column, (label, variable, readonly) in enumerate((
+                ("Versión", self.revision_version, True),
+                ("Último autor", self.revision_last_author, True),
+                ("Autor del cambio", self.revision_author, False),
+                ("Fecha del cambio (DD/MM/AAAA)", self.revision_date, False),
+            )):
+                ttk.Label(revision_frame, text=label).grid(row=0, column=column, sticky="w", padx=3)
+                ttk.Entry(
+                    revision_frame, textvariable=variable, width=12 if column == 0 else 22,
+                    state="readonly" if readonly else "normal",
+                ).grid(row=1, column=column, sticky="ew", padx=3)
+                revision_frame.columnconfigure(column, weight=1 if column else 0)
+            ttk.Label(revision_frame, text="Descripción del cambio (opcional)").grid(
+                row=2, column=0, columnspan=4, sticky="w", padx=3,
+            )
+            ttk.Entry(revision_frame, textvariable=self.revision_description).grid(
+                row=3, column=0, columnspan=4, sticky="ew", padx=3,
+            )
+        text_panes.pack(fill="both", expand=True)
+        reference_frame = ttk.LabelFrame(text_panes, text="Referencia (no se exporta)")
+        writing_frame = ttk.LabelFrame(text_panes, text="Prescripciones de la ficha")
+        text_panes.add(reference_frame, weight=1)
+        text_panes.add(writing_frame, weight=3)
+        self.reference_text = tk.Text(
+            reference_frame, wrap="word", height=7, state="disabled", undo=True,
+            background=COLORS["warning_soft"], foreground=COLORS["warning_text"],
+        )
+        reference_scroll = ttk.Scrollbar(
+            reference_frame, orient="vertical", command=self.reference_text.yview,
+        )
+        self.reference_text.configure(yscrollcommand=reference_scroll.set)
+        self.reference_text.pack(side="left", fill="both", expand=True)
+        reference_scroll.pack(side="right", fill="y")
+        self.text = tk.Text(
+            writing_frame, wrap="word", undo=True, state="disabled",
+            background=COLORS["surface"],
+        )
         self.text.tag_configure("informational", background=COLORS["warning_soft"])
-        text_scroll = ttk.Scrollbar(editor_frame, orient="vertical", command=self.text.yview)
+        text_scroll = ttk.Scrollbar(writing_frame, orient="vertical", command=self.text.yview)
         self.text.configure(yscrollcommand=text_scroll.set)
         self.text.pack(side="left", fill="both", expand=True)
         text_scroll.pack(side="right", fill="y")
@@ -194,6 +245,7 @@ class LibraryEditor(tk.Toplevel):
         ttk.Label(self, textvariable=self.status, anchor="w", padding=(8, 2)).pack(fill="x")
         self.tree.bind("<<TreeviewSelect>>", self._select)
         self.text.bind("<<Modified>>", self._edited)
+        self.reference_text.bind("<<Modified>>", self._edited)
         self._populate()
         self.highlight_used(used_members or set())
         localize_widget_tree(self)
@@ -255,13 +307,15 @@ class LibraryEditor(tk.Toplevel):
 
     def _edited(self, event=None) -> None:
         """Habilita el guardado únicamente tras editar una ficha seleccionada."""
-        if event is not None and event.widget is not self.text:
+        widget = event.widget if event is not None else self.text
+        if widget not in (self.text, self.reference_text):
             return
-        if not self.loading and self.text.edit_modified():
-            self._highlight_information()
+        if not self.loading and self.selected_member and widget.edit_modified():
+            if widget is self.text:
+                self._highlight_information()
             self.dirty = True
             self.save_button.configure(state="normal")
-            self.text.edit_modified(False)
+            widget.edit_modified(False)
 
     def _highlight_information(self) -> None:
         """Resalta los bloques internos, incluido uno abierto mientras se escribe."""
@@ -270,6 +324,63 @@ class LibraryEditor(tk.Toplevel):
         for start, end in informational_ranges(source, strict=False):
             self.text.tag_add("informational", f"1.0 + {start} chars", f"1.0 + {end} chars")
         self.text.tag_raise("sel")
+
+    def _load_sheet_text(self, source: str) -> None:
+        """Separa referencias y texto editable con marcas para reconstruir el original."""
+        for mark, _ in self.reference_blocks:
+            self.text.mark_unset(mark)
+        self.reference_blocks = []
+        self.reference_text.configure(state="normal")
+        self.reference_text.delete("1.0", "end")
+        previous = 0
+        for index, (start, end) in enumerate(informational_ranges(source)):
+            self.text.insert("end-1c", source[previous:start])
+            mark = f"reference_{index}"
+            self.text.mark_set(mark, "end-1c")
+            self.text.mark_gravity(mark, "left")
+            block = source[start:end]
+            self.reference_blocks.append((mark, block))
+            self.reference_text.insert("end", block + "\n")
+            previous = end
+        self.text.insert("end-1c", source[previous:])
+        self.reference_text.edit_reset()
+        self.reference_text.edit_modified(False)
+        self.reference_text.yview_moveto(0)
+        self.text.edit_reset()
+        self.text.mark_set("insert", "1.0")
+        self.text.yview_moveto(0)
+
+    def _sheet_source(self) -> str:
+        """Reinserta las referencias editadas sin convertirlas en texto exportable."""
+        reference = self.reference_text.get("1.0", "end-1c")
+        ranges = informational_ranges(reference)
+        if len(ranges) != len(self.reference_blocks) or document_markdown(reference).strip():
+            raise ValueError(
+                'Edita el texto dentro de las comillas triples del panel amarillo sin añadir '
+                'ni eliminar bloques. Para añadir bloques utiliza el panel de prescripciones.'
+            )
+        blocks = [reference[start:end] for start, end in ranges]
+        parts = []
+        previous = "1.0"
+        after_reference = False
+        for (mark, original), block in zip(self.reference_blocks, blocks):
+            if not original.endswith("\n"):
+                block = block.rstrip("\r\n")
+            position = self.text.index(mark)
+            text = self.text.get(previous, position)
+            if after_reference and text and parts and not parts[-1].endswith("\n"):
+                parts.append("\n")
+            parts.append(text)
+            if any(parts) and not "".join(parts).endswith("\n"):
+                parts.append("\n")
+            parts.append(block)
+            after_reference = True
+            previous = position
+        text = self.text.get(previous, "end-1c")
+        if after_reference and text and not parts[-1].endswith("\n"):
+            parts.append("\n")
+        parts.append(text)
+        return "".join(parts)
 
     def _select(self, event=None) -> None:
         """Abre la ficha elegida o muestra el mensaje inicial para carpetas."""
@@ -295,9 +406,13 @@ class LibraryEditor(tk.Toplevel):
         self.loading = True
         self.text.configure(state="normal")
         self.text.delete("1.0", "end")
+        self._load_sheet_text("")
         if member and PurePosixPath(member).suffix.casefold() == ".md":
             try:
-                self.text.insert("1.0", read_markdown(self.archive_path, member))
+                content = read_markdown(self.archive_path, member)
+                if self.track_changes:
+                    read_revisions(content)
+                self._load_sheet_text(content)
                 self.status.set(member)
             except ValueError as exc:
                 self.status.set(str(exc))
@@ -306,12 +421,39 @@ class LibraryEditor(tk.Toplevel):
             self.status.set("Este archivo no se puede editar aquí." if member
                             else "Selecciona un archivo Markdown.")
         self.selected_member = member
+        self.original_source = self._sheet_source() if member else ""
+        if self.track_changes:
+            self._show_revision()
         self._highlight_information()
         self.text.edit_modified(False)
         self.text.configure(state="normal" if member else "disabled")
+        self.reference_text.configure(state="normal" if member else "disabled")
         self.loading = False
         self.dirty = False
         self.save_button.configure(state="disabled")
+
+    def _show_revision(self) -> None:
+        """Muestra la última revisión y solicita nuevos datos para la próxima edición."""
+        revisions, _ = read_revisions(self.original_source)
+        self.revision_version.set(str(revisions[0].version) if revisions else "0")
+        self.revision_last_author.set(revisions[0].author if revisions else "")
+        self.revision_author.set("")
+        self.revision_date.set(date.today().strftime("%d/%m/%Y"))
+        self.revision_description.set("")
+
+    def _revision_content(
+        self, source: str, values: tuple[str, str, str] | None = None,
+    ) -> str:
+        """Registra una edición conservando las entradas históricas ya guardadas."""
+        previous, _ = read_revisions(self.original_source)
+        current, _ = read_revisions(source)
+        if previous != current:
+            raise ValueError("No modifiques las entradas anteriores del registro de cambios.")
+        if values is None:
+            values = (
+                self.revision_author.get(), self.revision_date.get(), self.revision_description.get(),
+            )
+        return add_revision(source, *values)
 
     def _terminal_folder(self, node: str) -> str | None:
         """Obtiene la carpeta seleccionada solo si tiene fichas y no subcarpetas."""
@@ -346,11 +488,17 @@ class LibraryEditor(tk.Toplevel):
         try:
             name, code, title = sheet_name(name)
             member = (PurePosixPath(folder) / name).as_posix()
+            revision = revision_values(
+                self.revision_author.get(), self.revision_date.get(), self.revision_description.get(),
+            ) if self.track_changes else None
             if self.dirty and not self._confirm_discard_or_save():
                 return
+            content = f"# {title}\n\n**Clasificación:** {code}\n\n"
+            if revision is not None:
+                content = add_revision(content, *revision)
             self.signature = update_library(
                 self.archive_path, self.signature,
-                additions={member: f"# {title}\n\n**Clasificación:** {code}\n\n"},
+                additions={member: content},
             )
         except (OSError, ValueError) as exc:
             messagebox.showerror("No se pudo crear la ficha", str(exc), parent=self)
@@ -382,10 +530,16 @@ class LibraryEditor(tk.Toplevel):
             new = (PurePosixPath(old).parent / name).as_posix()
             if new == old:
                 return
+            revision = revision_values(
+                self.revision_author.get(), self.revision_date.get(), self.revision_description.get(),
+            ) if self.track_changes else None
             if self.dirty and not self._confirm_discard_or_save():
                 return
+            updates = None
+            if revision is not None:
+                updates = {old: self._revision_content(read_markdown(self.archive_path, old), revision)}
             self.signature = update_library(
-                self.archive_path, self.signature, renames={old: new},
+                self.archive_path, self.signature, renames={old: new}, updates=updates,
             )
         except (OSError, ValueError) as exc:
             messagebox.showerror("No se pudo renombrar la ficha", str(exc), parent=self)
@@ -422,12 +576,30 @@ class LibraryEditor(tk.Toplevel):
         if not self.selected_member or not self.dirty:
             return True
         try:
+            source = self._sheet_source()
+            if self.track_changes and source == self.original_source:
+                self.dirty = False
+                self.text.edit_modified(False)
+                self.reference_text.edit_modified(False)
+                self.save_button.configure(state="disabled")
+                return True
+            if self.track_changes:
+                source = self._revision_content(source)
             self.signature = write_markdown(
-                self.archive_path, self.selected_member, self.text.get("1.0", "end-1c"),
+                self.archive_path, self.selected_member, source,
                 self.signature,
             )
+            self.original_source = source
+            if self.track_changes:
+                self.loading = True
+                self.text.delete("1.0", "end")
+                self._load_sheet_text(source)
+                self._show_revision()
+                self._highlight_information()
+                self.loading = False
             self.dirty = False
             self.text.edit_modified(False)
+            self.reference_text.edit_modified(False)
             self.save_button.configure(state="disabled")
             self.status.set(f"Guardado: {self.selected_member}")
         except (OSError, UnicodeError, ValueError) as exc:

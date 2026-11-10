@@ -279,6 +279,8 @@ def reorganize_library(archive_path: Path, source_path: Path) -> tuple[int, int]
                     title = context.summary + " - " + title
             title += " - Común"
             new = (PurePosixPath(entry.path).parent / _filename(entry.code, title)).as_posix()
+            if entry.title.endswith(" - Común") and PurePosixPath(entry.path).name.startswith(entry.code + "-"):
+                new = entry.path
             if new != entry.path:
                 renames[entry.path] = new
             original = archive.read(entry.path).decode("utf-8-sig")

@@ -12,8 +12,9 @@ from typing import TYPE_CHECKING
 from localization import filedialog, localize_widget_tree, messagebox
 from .library import ZipLibrary
 from .document import (
-    DEFAULT_TOC_DEPTH, PENDING_DURATION, Selection, compose, directory_codes, initial_variables,
-    load_catalog, load_regulations, normalized_code, propose, restore_state, write_document,
+    DEFAULT_TOC_DEPTH, PENDING_DURATION, VARIABLES, Selection, compose, directory_codes, initial_variables,
+    load_catalog, load_regulations, normalized_code, price_revision_fields, propose, restore_state, write_document,
+    duration_price_revision,
 )
 
 if TYPE_CHECKING:
@@ -65,6 +66,11 @@ class PptpWindow(tk.Toplevel):
         self.geometry("1120x720")
         self.minsize(860, 560)
         self.variables = {key: tk.StringVar(self, value=value) for key, value in values.items()}
+        self.price_revision = tk.BooleanVar(self, value=saved.get("aplica_revision_precios", False))
+        self.price_start = (
+            app.planning_state.get("params", {}).get("start", "")
+            if app.planning_state else saved.get("revision_inicio_planificacion", "")
+        )
         self.toc_depth = tk.StringVar(self, value=str(saved.get("toc_depth", DEFAULT_TOC_DEPTH)))
         self.regulations = []
         self.regulation_choices = dict(saved.get("regulations", {}))
@@ -82,6 +88,7 @@ class PptpWindow(tk.Toplevel):
         self.back_button = ttk.Button(self.buttons, text="Atrás", command=self.back)
         self.back_button.pack(side="left")
         self.show_step()
+        self.variables["plazo_ejecucion"].trace_add("write", self.duration_changed)
 
     def show_step(self) -> None:
         """Reconstruye el paso conservando los valores editados en memoria."""
@@ -199,15 +206,32 @@ class PptpWindow(tk.Toplevel):
             form, textvariable=self.toc_depth, values=tuple(str(level) for level in range(1, 7)),
             state="readonly", width=5,
         ).grid(row=4, column=1, sticky="w")
-        ttk.Label(
-            self.content, wraplength=1000,
-            text=("No se ha realizado la planificación. Realiza Herramientas → Planificación "
-                  "para obtener el plazo de ejecución. Mientras tanto, debes rellenarlo manualmente; "
-                  "no se asigna un plazo ficticio."
-                  if self.missing_plan else
-                  "Plazo de ejecución obtenido de la planificación del proyecto, en días naturales."),
-        ).pack(fill="x", pady=12)
-        ttk.Label(self.content, text="Resumen de las obras ({{bullet_capitulos_obra}})").pack(anchor="w")
+        self.price_check = ttk.Checkbutton(
+            form, text="Aplicar revisión de precios", variable=self.price_revision,
+            command=self.update_price_revision,
+        )
+        self.price_check.grid(row=5, column=0, columnspan=2, sticky="w", pady=6)
+        self.price_entries = {}
+        for index, (key, label) in enumerate((
+            ("JUSTIFICACION", "Justificación"),
+            ("FORMULA_REVISION_PRECIOS", "Fórmula de revisión de precios"),
+        ), start=6):
+            ttk.Label(form, text=label).grid(row=index, column=0, sticky="w", padx=(0, 12), pady=4)
+            variable = self.variables[
+                "JUSTIFICACION_APLICACION" if self.price_revision.get() else "JUSTIFICACION_NO_APLICACION"
+            ] if key == "JUSTIFICACION" else self.variables[key]
+            entry = ttk.Entry(form, textvariable=variable)
+            entry.grid(row=index, column=1, sticky="ew")
+            self.price_entries[key] = entry
+        self.duration_changed()
+        if self.missing_plan:
+            ttk.Label(
+                self.content, wraplength=1000,
+                text="No se ha realizado la planificación. Realiza Herramientas → Planificación "
+                     "para obtener el plazo de ejecución. Mientras tanto, debes rellenarlo manualmente; "
+                     "no se asigna un plazo ficticio.",
+            ).pack(fill="x", pady=12)
+        ttk.Label(self.content, text="Resumen de las obras").pack(anchor="w")
         self.summary = tk.Text(self.content, wrap="word", height=12)
         self.summary.insert("1.0", self.variables["bullet_capitulos_obra"].get())
         self.summary.pack(fill="both", expand=True, pady=6)
@@ -233,8 +257,28 @@ class PptpWindow(tk.Toplevel):
             return
         self.library_editor = LibraryEditor(
             self, LIBRARY_PATH, "Biblioteca de fichas PPTP", on_saved=self.reload_library,
-            used_members=used_members,
+            used_members=used_members, track_changes=True,
         )
+
+    def update_price_revision(self) -> None:
+        """Vincula la justificación visible a la alternativa elegida conservando ambos textos."""
+        applies = self.price_revision.get()
+        self.price_entries["JUSTIFICACION"].configure(textvariable=self.variables[
+            "JUSTIFICACION_APLICACION" if applies else "JUSTIFICACION_NO_APLICACION"
+        ])
+        self.price_entries["FORMULA_REVISION_PRECIOS"].configure(
+            state="normal" if applies else "disabled",
+        )
+
+    def duration_changed(self, *_args) -> None:
+        """Actualiza el límite temporal y la justificación conservando las aportaciones manuales."""
+        values = {key: variable.get() for key, variable in self.variables.items()}
+        applies, reason = duration_price_revision(values, self.price_revision.get(), self.price_start)
+        self.price_revision.set(applies)
+        self.variables["JUSTIFICACION_NO_APLICACION"].set(reason)
+        if self.step == 0:
+            self.price_check.configure(state="normal")
+            self.update_price_revision()
 
     def reload_library(self) -> None:
         """Actualiza el catálogo abierto tras modificar una ficha del ZIP."""
@@ -377,9 +421,11 @@ class PptpWindow(tk.Toplevel):
         """Valida cada paso y persiste la revision antes de emitir el documento."""
         try:
             if self.step == 0:
+                self.duration_changed()
                 self.selected_toc_depth()
                 self.variables["bullet_capitulos_obra"].set(self.summary.get("1.0", "end-1c").strip())
-                for key, variable in self.variables.items():
+                for key in (*VARIABLES, *price_revision_fields(self.price_revision.get())):
+                    variable = self.variables[key]
                     if not variable.get().strip() or variable.get().strip() == PENDING_DURATION:
                         raise ValueError(f"Rellena el campo {key} antes de continuar.")
             if self.step < 2:
@@ -402,6 +448,7 @@ class PptpWindow(tk.Toplevel):
         if self.app.budget_items != self.budget_snapshot:
             raise ValueError("El presupuesto ha cambiado. Cierra y vuelve a abrir PPTP para revisar las nuevas partidas.")
         self.update_regulations()
+        self.duration_changed()
         for row in [*self.automatic, *self.unmatched]:
             if row.selected and not row.path:
                 raise ValueError(f"Asigna una ficha a {row.code} o desmarca su incorporación.")
@@ -412,6 +459,8 @@ class PptpWindow(tk.Toplevel):
             "selections": [asdict(row) for row in [*self.automatic, *self.unmatched]],
             "regulations": self.regulation_choices,
             "toc_depth": self.selected_toc_depth(),
+            "aplica_revision_precios": self.price_revision.get(),
+            "revision_inicio_planificacion": self.price_start,
         })
         source = compose(self.library, state, self.regulations)
         extension = "." + self.app.report_settings.output_format
