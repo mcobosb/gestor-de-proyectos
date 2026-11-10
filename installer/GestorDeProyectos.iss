@@ -1,5 +1,5 @@
 #define AppName "Gestor de Proyectos"
-#define AppVersion "1.5.3"
+#define AppVersion "1.6.0"
 #define AppPublisher "Manuel Cobos Budia"
 #define AppExecutable "GestorDeProyectos.exe"
 

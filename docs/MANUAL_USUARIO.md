@@ -1,6 +1,6 @@
 # Manual de usuario
 
-## Gestor de Proyectos (v1.5.3)
+## Gestor de Proyectos (v1.6.0)
 
 Herramienta para preparar presupuestos, mediciones, planificación de obra y
 certificaciones. Los ejemplos de rutas de este manual son ficticios.
@@ -324,8 +324,9 @@ referencia o completa los precios necesarios antes de volver a generarlo.
 ## 8. Estimar residuos de construcción y demolición (RCDs)
 
 Si el presupuesto importado ya tiene un capítulo de gestión de residuos, RCDs
-o escombros no creado por la herramienta, **Herramientas → RCDs** queda
-desactivada. No se recalculan sus importes ni se crea otro capítulo.
+o escombros no creado por la herramienta, **Herramientas → RCDs** permite
+abrir la ventana, pero protege ese capítulo al intentar guardar una estimación.
+No se recalculan sus importes ni se crea otro capítulo.
 Lo mismo se aplica a **Herramientas → Seguridad y salud** si existe un capítulo
 externo de seguridad y salud, seguridad e higiene o prevención de riesgos.
 
@@ -337,6 +338,21 @@ el presupuesto. En JSON antiguos sin la revisión de Seguridad y Salud, se
 muestran las partidas generadas ya guardadas en el presupuesto, sin consultar
 de nuevo la matriz. Para aplicar cambios hay que aceptarlos o guardarlos
 expresamente en la herramienta.
+
+En la primera ventana de Seguridad y Salud, **Centros Asistenciales** enlaza al
+registro SICESS. Incluye al menos Hospitales Generales y Centros de Salud.
+Puedes elegir **Texto libre** para pegar la información directamente, o
+**Tabla SICESS** para rellenar los campos de cada centro. El botón **+** añade
+otro centro; selecciónalo en la lista para editarlo y utiliza **Eliminar** para
+quitarlo.
+
+La tabla conserva todos los campos SICESS y genera un resumen con el nombre,
+la dirección y el teléfono de cada centro. **Pasar tabla a texto** muestra ese
+resumen en Texto libre para revisarlo o modificarlo; pide confirmación antes de
+sustituir texto existente. Al aceptar la propuesta se conservan ambos modos,
+las fichas y el texto final del modo seleccionado en el proyecto. Guarda después
+el proyecto JSON para recuperarlos en la siguiente sesión. Abrir la ventana o
+cambiar de pestaña no modifica las partidas del presupuesto.
 
 Abre **Herramientas → RCDs**, primera entrada del menú. El modelo procede de las
 hojas **Resumen**, **Lista MAM** y **Presupuesto** del ODS aportado, pero no

@@ -25,14 +25,12 @@ TOOL_ORDER = 10
 
 
 def is_available(app: BudgetApp) -> bool:
-    """Evita duplicar capitulos de residuos importados de otro presupuesto."""
-    return not app._has_external_tool_chapter("rcd")
+    """Mantiene la herramienta accesible aunque el presupuesto ya incluya RCDs."""
+    return True
 
 
 def open_tool(app: BudgetApp) -> None:
     """Abre o recupera la ventana de RCDs del proyecto activo."""
-    if not app._tool_chapter_available("rcd"):
-        return
     if not app.budget_items:
         messagebox.showinfo("RCDs", "Carga o crea un presupuesto antes de estimar residuos.")
         return
@@ -49,7 +47,7 @@ def restore_project_state(data: dict) -> dict:
 
 def before_project_save(app: BudgetApp) -> None:
     """Actualiza solo un presupuesto de RCDs previamente generado y revisado."""
-    if (app.rcd_state and is_available(app)
+    if (app.rcd_state and not app._has_external_tool_chapter("rcd")
             and any(item.source.startswith(RCD_BUDGET_SOURCE) for item in app.budget_items)):
         synchronize_budget(app, RcdState.from_dict(app.rcd_state))
 

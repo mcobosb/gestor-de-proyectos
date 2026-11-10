@@ -68,11 +68,9 @@ $compiledTools = @()
 $toolsSource = Join-Path $repositoryRoot "tools"
 foreach ($requiredResource in @(
     "safety_health\datos\seguridad_salud_relaciones_bcca2023.csv",
+    "safety_health\BIBLIOTECA.zip",
     "pptp\BIBLIOTECA.zip",
-    "pptp\docs\01_Introduccion.md",
-    "pptp\docs\02_DisposicionesTecnicasLegalesAplicables.md",
-    "pptp\docs\03_DescripcionObras.md",
-    "pptp\docs\04_Materiales_Ejecucion_Medicion_Abono.md"
+    "BCCA2023_V02.bc3"
 )) {
     $resourcePath = Join-Path $toolsSource $requiredResource
     if (-not (Test-Path -LiteralPath $resourcePath -PathType Leaf)) {
@@ -82,6 +80,10 @@ foreach ($requiredResource in @(
 & $python -c "from pathlib import Path; import sys; from tools.pptp.library import ZipLibrary; root = Path(sys.argv[1]) / 'pptp'; library = ZipLibrary(root / 'BIBLIOTECA.zip', root / 'docs'); print('Fichas PPTP:', len(library.entries))" $toolsSource
 if ($LASTEXITCODE -ne 0) {
     throw "La biblioteca comprimida PPTP no es válida."
+}
+& $python -c "from pathlib import Path; import sys; from zipfile import ZipFile; path = Path(sys.argv[1]) / 'safety_health' / 'BIBLIOTECA.zip'; names = ZipFile(path).namelist(); required = {'00_guia_integracion.md', '01_datos_proyecto.md'}; resources = {'RECURSOS/MATERIALES/', 'RECURSOS/MAQUINARIA/'}; sys.exit(1 if not required.issubset(names) or not all(any(name.startswith(prefix) for name in names) for prefix in resources) else 0)" $toolsSource
+if ($LASTEXITCODE -ne 0) {
+    throw "La biblioteca comprimida de Seguridad y Salud no contiene los documentos y recursos esperados."
 }
 foreach ($tool in Get-ChildItem $toolsSource -Filter "*.py" -Recurse -File) {
     $relativePath = $tool.FullName.Substring($toolsSource.Length + 1)
@@ -138,8 +140,8 @@ foreach ($tool in Get-ChildItem $toolsSource -Filter "*.py" -Recurse -File) {
     --windows-icon-from-ico=iconos\logo.ico `
     --company-name="Manuel Cobos Budia" `
     --product-name="Gestor de Proyectos" `
-    --file-version=1.5.3 `
-    --product-version=1.5.3 `
+    --file-version=1.6.0 `
+    --product-version=1.6.0 `
     --file-description="Gestión de presupuestos, planificación y certificaciones" `
     --output-dir=$nuitkaOutput `
     --output-filename=GestorDeProyectos.exe `
@@ -210,4 +212,4 @@ if ($LASTEXITCODE -ne 0) {
     throw "La creación del instalador con Inno Setup ha fallado."
 }
 
-Write-Host "Instalador creado en dist\GestorDeProyectos-Setup-1.5.3.exe"
+Write-Host "Instalador creado en dist\GestorDeProyectos-Setup-1.6.0.exe"

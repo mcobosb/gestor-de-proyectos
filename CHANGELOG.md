@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.6.0 — 2026-11-10
+
+### Añadido
+- Editor de bibliotecas Markdown de PPTP y Seguridad y Salud.
+- Fichas de materiales y maquinaria BC3 en la biblioteca de Seguridad y Salud.
+- Centros asistenciales con texto libre o tabla SICESS, resumen con dirección y
+  teléfono y conservación de los datos en el proyecto.
+
+### Corregido
+- Conservación de la sangría de las listas de PPTP al generar PDF y ODT.
+- Acceso a RCDs y Seguridad y Salud sin modificar el presupuesto al abrirlos.
+- Los capítulos vacíos no bloquean la recreación de sus partidas.
+
 ## 1.5.3
 
 ### Corregido

@@ -32,8 +32,8 @@ from tool_loader import discover_tools
 
 
 APPLICATION_NAME = "Gestor de Proyectos"
-APPLICATION_VERSION = "1.5.3"
-APPLICATION_RELEASE_DATE = date(2026, 11, 2)
+APPLICATION_VERSION = "1.6.0"
+APPLICATION_RELEASE_DATE = date(2026, 11, 10)
 REPOSITORY_URL = "https://github.com/mcobosb/gestor-de-proyectos"
 BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/mcobosb"
 REFERENCE_PRICE_DATABASES = (
@@ -4455,7 +4455,7 @@ th {{ background: #1f4e78; color: white; }}
         self._rcd_window = None
 
     def _has_external_tool_chapter(self, tool: str) -> bool:
-        """Detecta capítulos de la especialidad que no fueron generados por su herramienta."""
+        """Detecta capítulos con partidas ajenas a la herramienta, ignorando los vacíos."""
         prefix = "RCD:" if tool == "rcd" else "SS:"
         chapters = set(self.chapter_order) | set(self.chapter_titles)
         chapters.update(item.chapter for item in self.budget_items)
@@ -4477,7 +4477,7 @@ th {{ background: #1f4e78; color: white; }}
                     text,
                 ) or re.fullmatch(r"(?:ss|sys)\d*", code))
             members = [item for item in self.budget_items if item.chapter == chapter]
-            if matches and not any(item.source.startswith(prefix) for item in members):
+            if matches and members and not any(item.source.startswith(prefix) for item in members):
                 return True
         return False
 
