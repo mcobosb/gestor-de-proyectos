@@ -66,6 +66,72 @@ _TEXT = {
     "Exportar recursos a ODS…": ("Export resources to ODS…", "Exporter les ressources au format ODS…"),
     "Exportar descompuestos a ODS…": ("Export breakdowns to ODS…", "Exporter les décompositions au format ODS…"),
     "Herramientas": ("Tools", "Outils"),
+    "Editar biblioteca de fichas...": ("Edit sheet library...", "Modifier la bibliothèque de fiches..."),
+    "Biblioteca de fichas PPTP": ("PPTP sheet library", "Bibliothèque de fiches PPTP"),
+    "Biblioteca de fichas de Seguridad y Salud": (
+        "Health and Safety sheet library", "Bibliothèque de fiches Sécurité et Santé",
+    ),
+    "Información básica del Estudio de Seguridad y Salud": (
+        "Basic Health and Safety Plan information",
+        "Informations de base du Plan de sécurité et de santé",
+    ),
+    "Centros Asistenciales": ("Healthcare Facilities", "Établissements de santé"),
+    "Texto libre": ("Free text", "Texte libre"),
+    "Tabla SICESS": ("SICESS table", "Tableau SICESS"),
+    "Pasar tabla a texto": ("Convert table to text", "Convertir le tableau en texte"),
+    "Nombre": ("Name", "Nom"),
+    "Ámbito": ("Scope", "Portée"),
+    "Dep. funcional": ("Managing organization", "Organisme gestionnaire"),
+    "Sistema Sanitario Público Andaluz": (
+        "Andalusian Public Health System", "Système de santé public andalou",
+    ),
+    "Zona Básica de Salud": ("Basic health area", "Zone de santé de base"),
+    "Es C. Hospitalario": ("Hospital complex", "Complexe hospitalier"),
+    "Vía": ("Street type", "Type de voie"),
+    "Domicilio": ("Street address", "Adresse"),
+    "Nº": ("No.", "Nº"),
+    "Escalera": ("Staircase", "Escalier"),
+    "Piso": ("Floor", "Étage"),
+    "Puerta": ("Door", "Porte"),
+    "CP": ("Postcode", "Code postal"),
+    "Provincia": ("Province", "Province"),
+    "Municipio": ("Municipality", "Commune"),
+    "Teléfono": ("Telephone", "Téléphone"),
+    "Eliminar": ("Delete", "Supprimer"),
+    "¿Eliminar el centro seleccionado?": (
+        "Delete the selected healthcare facility ?", "Supprimer l'établissement sélectionné ?",
+    ),
+    "¿Sustituir el texto libre por el texto generado desde la tabla?": (
+        "Replace the free text with the text generated from the table?",
+        "Remplacer le texte libre par le texte généré à partir du tableau ?",
+    ),
+    "Rellena este apartado con la información del registro SICESS de la Junta de Andalucía "
+    "(al menos Hospitales Generales y Centros de Salud).": (
+        "Fill in this section using the Junta de Andalucía SICESS register (at least General "
+        "Hospitals and Health Centres).",
+        "Renseignez cette section à partir du registre SICESS de la Junta de Andalucía "
+        "(au moins les hôpitaux généraux et les centres de santé).",
+    ),
+    "Registro SICESS abierto en el navegador.": (
+        "SICESS register opened in the browser.",
+        "Registre SICESS ouvert dans le navigateur.",
+    ),
+    "Selecciona un archivo .md para verlo y editarlo.": (
+        "Select a .md file to view and edit it.",
+        "Sélectionnez un fichier .md pour le consulter et le modifier.",
+    ),
+    "Este archivo no se puede editar aquí.": (
+        "This file cannot be edited here.", "Ce fichier ne peut pas être modifié ici.",
+    ),
+    "Selecciona un archivo Markdown.": (
+        "Select a Markdown file.", "Sélectionnez un fichier Markdown.",
+    ),
+    "¿Quieres guardar los cambios de esta ficha?": (
+        "Do you want to save changes to this sheet?",
+        "Voulez-vous enregistrer les modifications de cette fiche ?",
+    ),
+    "No se pudo guardar": ("Could not save", "Enregistrement impossible"),
+    "Biblioteca guardada": ("Library saved", "Bibliothèque enregistrée"),
     "Plazo de garantía (con unidad)": ("Warranty period (with unit)", "Délai de garantie (avec unité)"),
     "Plazo de ejecución (con unidad)": ("Execution period (with unit)", "Délai d'exécution (avec unité)"),
     "Entidad": ("Organization", "Organisme"),
