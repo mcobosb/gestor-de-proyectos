@@ -2,6 +2,7 @@
 from hashlib import sha256
 import json
 from pathlib import Path, PurePosixPath
+import posixpath
 import re
 import tempfile
 import unittest
@@ -12,7 +13,8 @@ from bc3_gui import Bc3Dataset, ProjectItem
 from tools._library_editor import _signature
 from tools.pptp import DOCS_ROOT, LIBRARY_PATH
 from tools.pptp.bcca_library import reorganize_library
-from tools.pptp.document import load_catalog, propose
+from tools.pptp.document import VARIABLES, Selection, compose, load_catalog, propose
+from dataclasses import asdict
 from tools.pptp.library import ZipLibrary
 
 
@@ -24,8 +26,10 @@ class DistributedBccaLibraryTests(unittest.TestCase):
         cls.catalog = load_catalog(cls.library)
 
     def test_all_original_sheets_keep_aliases_and_readable_classified_names(self):
-        """Retain all 684 original sheets and enforce descriptive BCCA file names."""
-        self.assertEqual(len(self.library.aliases), 684)
+        """Keep originals without descendants and track replaced historical paths."""
+        self.assertEqual(len(self.library.entries), 1656)
+        self.assertEqual(len(self.library.aliases), 35)
+        self.assertEqual(len(self.library.replacements), 649 * 2)
         for entry in self.library.entries.values():
             path = PurePosixPath(entry.path)
             with self.subTest(path=entry.path):
@@ -51,8 +55,12 @@ class DistributedBccaLibraryTests(unittest.TestCase):
                     seen.add(row["codigo_uni"])
                     text = archive.read(path).decode("utf-8-sig")
                     for link in re.findall(r"\]\(([^)]+)\)", text):
-                        destination = (PurePosixPath(path).parent / unquote(link)).as_posix()
-                        self.assertIn(destination, archive.namelist())
+                        destination = posixpath.normpath(
+                            posixpath.join(posixpath.dirname(path), unquote(link.split("#")[0])),
+                        )
+                        self.assertNotIn(destination, self.library.replacements)
+                        if destination not in {"../PPTP.md", "UNI/CONDICIONES_GENERALES.md"}:
+                            self.assertIn(destination, archive.namelist())
             self.assertEqual(len(seen), 1621)
             for name in archive.namelist():
                 if name.endswith("/"):
@@ -75,13 +83,17 @@ class DistributedBccaLibraryTests(unittest.TestCase):
             ], {}, self.catalog, {})
             self.assertFalse(manual)
             chosen_codes = {self.library.entries[row.path].code for row in auto}
-            self.assertEqual(chosen_codes, {"01RP", code})
+            self.assertEqual(chosen_codes, {code})
             self.assertEqual(len({PurePosixPath(row.path).parent for row in auto}), 1)
         natural = next(sheet for sheet in self.catalog if sheet.code == "01RPN")
         content = self.library.read_sheet(natural.path)
         self.assertIn("piedra natural", content.lower())
         self.assertIn("01RPN00001", content)
         self.assertNotIn("01RPC00001", content)
+        self.assertIn("## Prescripciones integradas de la familia", content)
+        self.assertIn("#### Ejecución", content)
+        self.assertIn("#### Medición", content)
+        self.assertNotIn("## Condiciones comunes de la familia", content)
 
     def test_empty_bcca_groups_explicitly_require_completing_prescriptions(self):
         """Do not invent unit descriptions where the source only defines a classification."""
@@ -110,6 +122,8 @@ class BccaReorganizationTests(unittest.TestCase):
                 }))
                 target.writestr("UNI/INDICE_FICHAS.md", "# Índice\n")
                 target.writestr("UNI/" + old, original)
+                for prefix in ("01", "02", "03", "04"):
+                    target.writestr(prefix + "-Base.md", "# Sección " + prefix)
             source.write_text(
                 "~V|TEST|FIEBDC-3/2016|\n"
                 "~C|01RP#||Peldaños|0||0|\n"
@@ -123,9 +137,35 @@ class BccaReorganizationTests(unittest.TestCase):
             )
             self.assertEqual(reorganize_library(archive, source), (1, 2))
             library = ZipLibrary(archive, folder / "docs")
-            self.assertEqual(library.read_sheet("UNI/" + old).split("\n", 1)[1], original.split("\n", 1)[1])
             natural = next(entry for entry in library.entries.values() if entry.code == "01RPN")
+            ceramic = next(entry for entry in library.entries.values() if entry.code == "01RPC")
+            self.assertEqual(len(library.entries), 2)
+            self.assertIn("Condiciones comunes originales.", library.read_sheet(natural.path))
+            self.assertIn("Condiciones comunes originales.", library.read_sheet(ceramic.path))
+            self.assertEqual(library.resolve_sheets("UNI/" + old, "01RPN00001"), (natural.path,))
+            with ZipFile(archive) as target:
+                self.assertNotIn("UNI/" + old, target.namelist())
+                self.assertNotIn("GENERICA.md", target.read("UNI/INDICE_FICHAS.md").decode())
             self.assertIn("Retirada de piedra natural", library.read_sheet(natural.path))
+            saved = {
+                "variables": {key: "Valor" for key in VARIABLES},
+                "selections": [asdict(Selection(0, "01RPN00001", "01#", "Peldaño", "UNI/" + old))],
+                "regulations": {},
+            }
+            auto, manual = propose(
+                [ProjectItem("01RPN00001", "01#", "m", "Peldaño")], {},
+                load_catalog(library), saved,
+            )
+            self.assertEqual([row.path for row in auto], [natural.path])
+            self.assertFalse(manual)
+            self.assertIn("Condiciones comunes originales.", compose(library, saved, []))
+            self.assertNotIn("código BCCA comienza por `01RPC`", compose(library, saved, []))
+            saved["selections"][0]["selected"] = False
+            auto, _ = propose(
+                [ProjectItem("01RPN00001", "01#", "m", "Peldaño")], {},
+                load_catalog(library), saved,
+            )
+            self.assertFalse(auto[0].selected)
             content = archive.read_bytes()
             signature = _signature(archive)
             self.assertEqual(reorganize_library(archive, source), (0, 0))

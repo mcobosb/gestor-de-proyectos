@@ -3,14 +3,159 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path, PurePosixPath
+import posixpath
 import re
 import unicodedata
+from urllib.parse import quote, unquote, urlsplit
 from zipfile import ZipFile
 
 from bc3_gui import Bc3Dataset, Concept
 from tools._library_archive import sheet_name, update_library
 from tools._library_editor import _signature
+from tools._library_markdown import informational_ranges
 from .library import ZipLibrary
+
+
+def mark_sheet_information(source: str) -> str:
+    """Delimita metadatos y trazabilidad conservando literalmente las prescripciones."""
+    if informational_ranges(source):
+        return source
+    integrated = re.search(r"^## Prescripciones integradas de la familia\s*$", source, re.MULTILINE)
+    if integrated:
+        groups = list(re.finditer(r"^### .+$", source[integrated.end():], re.MULTILINE))
+        groups = [
+            (integrated.end() + group.start(), integrated.end() + group.end())
+            for group in groups
+        ]
+        if not groups:
+            raise ValueError("La ficha integrada no contiene ninguna sección de prescripciones.")
+        spans = []
+        for index, (start, end) in enumerate(groups):
+            limit = groups[index + 1][0] if index + 1 < len(groups) else len(source)
+            heading = re.search(r"^#### .+$", source[end:limit], re.MULTILINE)
+            if heading is None:
+                # Las fichas de mantenimiento pueden contener un cuerpo sin subtítulos.
+                body = re.search(r"\n\s*\n", source[end:limit])
+                stop = end + body.end() if body else end
+            else:
+                stop = end + heading.start()
+            if len(groups) == 1:
+                spans.append((0, stop))
+            else:
+                if index == 0:
+                    spans.append((0, start))
+                spans.append((end + (1 if source[end:end + 1] == "\n" else 0), stop))
+    elif re.search(r"^\*\*Clasificación BCCA:\*\*", source, re.MULTILINE):
+        spans = [(0, len(source))]
+    else:
+        first = re.search(r"^## .+$", source, re.MULTILINE)
+        if first is None:
+            raise ValueError("La ficha común no contiene secciones técnicas reconocibles.")
+        spans = [(0, first.start())]
+    spans.extend(
+        (match.start(), match.end())
+        for match in re.finditer(r"^Fuente: [^\n]*(?:\n|\Z)", source, re.MULTILINE)
+        if not any(start <= match.start() < end for start, end in spans)
+    )
+    result = []
+    previous = 0
+    for start, end in sorted(spans):
+        if end <= start:
+            continue
+        result.extend((source[previous:start], '"""\n', source[start:end]))
+        if not source[start:end].endswith("\n"):
+            result.append("\n")
+        result.append('"""\n')
+        previous = end
+    result.append(source[previous:])
+    return "".join(result)
+
+
+def mark_library_information(archive_path: Path) -> int:
+    """Marca la información interna en todas las fichas mediante guardado atómico."""
+    library = ZipLibrary(archive_path, archive_path.parent / "docs")
+    signature = _signature(archive_path)
+    updates = {}
+    with ZipFile(archive_path) as source:
+        for entry in library.entries.values():
+            original = source.read(entry.path).decode("utf-8-sig")
+            try:
+                marked = mark_sheet_information(original)
+            except ValueError as exc:
+                raise ValueError(f"No se pudo marcar la ficha {entry.path}: {exc}") from exc
+            if marked != original:
+                updates[entry.path] = marked
+    if updates:
+        update_library(archive_path, signature, updates=updates)
+    return len(updates)
+
+
+def _integrated_body(text: str, origin: str, destination: str) -> str:
+    """Conserva las prescripciones y rebasa sus enlaces al insertarlas en otra ficha."""
+    def relocate(match: re.Match[str]) -> str:
+        """Mantiene destinos locales, consultas y fragmentos desde la nueva carpeta."""
+        target = urlsplit(match[1])
+        if target.scheme or target.netloc or not target.path:
+            return match[0]
+        absolute = posixpath.normpath(posixpath.join(posixpath.dirname(origin), unquote(target.path)))
+        relative = posixpath.relpath(absolute, posixpath.dirname(destination))
+        suffix = ("?" + target.query if target.query else "") + ("#" + target.fragment if target.fragment else "")
+        return "](" + quote(relative, safe="/._-") + suffix + ")"
+
+    text = re.sub(r"\]\(([^)\s]+)\)", relocate, text)
+    lines = text.splitlines()
+    if lines and lines[0].startswith("# "):
+        lines = lines[1:]
+    return re.sub(r"^(#{1,4}) ", r"##\1 ", "\n".join(lines).strip(), flags=re.MULTILINE)
+
+
+def integrate_common_sheets(archive_path: Path) -> int:
+    """Integra las comunes en sus descendientes y retira solo las que tienen sustituto."""
+    library = ZipLibrary(archive_path, archive_path.parent / "docs")
+    signature = _signature(archive_path)
+    entries = list(library.entries.values())
+    specific = [entry for entry in entries if len(entry.code) == 5]
+    common = [
+        entry for entry in entries
+        if len(entry.code) < 5 and entry.title.endswith(" - Común")
+    ]
+    replacements = {
+        entry.path: [child.path for child in specific if child.code.startswith(entry.code)]
+        for entry in common
+        if any(child.code.startswith(entry.code) for child in specific)
+    }
+    if not replacements:
+        return 0
+    updates = {}
+    with ZipFile(archive_path) as source:
+        bodies = {entry.path: source.read(entry.path).decode("utf-8-sig") for entry in common}
+        for entry in specific:
+            applicable = [parent for parent in common if entry.path in replacements.get(parent.path, [])]
+            if not applicable:
+                continue
+            text = source.read(entry.path).decode("utf-8-sig")
+            text = re.sub(
+                r"^## Condiciones comunes de la familia\n.*?(?=^## |\Z)", "",
+                text, flags=re.MULTILINE | re.DOTALL,
+            )
+            sections = [
+                "## Prescripciones integradas de la familia", "",
+                "Estas condiciones se aplican exclusivamente al material y a la operación "
+                "de esta ficha, en lo compatible con la partida aprobada. Las condiciones "
+                "de variantes distintas son alternativas, no acumulables. Si una prescripción "
+                "general contradice las inclusiones, exclusiones o la medición de la unidad "
+                "concreta, debe revisarse antes de incorporar la ficha al contrato.", "",
+            ]
+            for parent in applicable:
+                sections += [
+                    "### " + parent.title.removesuffix(" - Común"), "",
+                    _integrated_body(bodies[parent.path], parent.path, entry.path), "",
+                ]
+            updates[entry.path] = text.rstrip() + "\n\n" + "\n".join(sections)
+    update_library(
+        archive_path, signature, updates=updates, replacements=replacements,
+    )
+    return len(replacements)
 
 
 def _filename(code: str, title: str) -> str:
@@ -175,6 +320,8 @@ def reorganize_library(archive_path: Path, source_path: Path) -> tuple[int, int]
             archive_path, signature, renames=renames, additions=additions,
             updates=updates, allow_new_folders=True,
         )
+    integrate_common_sheets(archive_path)
+    mark_library_information(archive_path)
     with ZipFile(archive_path) as archive:
         if archive.testzip() is not None:
             raise ValueError("La biblioteca generada no supera la comprobación CRC.")

@@ -11,6 +11,7 @@ from zipfile import BadZipFile, ZipFile
 
 from localization import localize_widget_tree, simpledialog
 from ui_theme import COLORS
+from ._library_markdown import informational_ranges
 
 MAX_MARKDOWN_BYTES = 16 * 1024 * 1024
 
@@ -73,6 +74,7 @@ def write_markdown(
     member_name = _validate_member_name(member_name)
     if PurePosixPath(member_name).suffix.casefold() != ".md":
         raise ValueError("Solo se pueden guardar archivos Markdown.")
+    informational_ranges(content)
     encoded = content.encode("utf-8")
     if len(encoded) > MAX_MARKDOWN_BYTES:
         raise ValueError("El archivo Markdown supera el tamaño máximo permitido.")
@@ -152,6 +154,10 @@ class LibraryEditor(tk.Toplevel):
             self, text="Verde: fichas utilizadas y carpetas que las contienen.",
             background=COLORS["teal_soft"], foreground=COLORS["teal_text"], anchor="w",
         ).pack(fill="x", padx=8, pady=(0, 4))
+        tk.Label(
+            self, text="Amarillo: bloques informativos entre comillas triples.",
+            background=COLORS["warning_soft"], foreground=COLORS["warning_text"], anchor="w",
+        ).pack(fill="x", padx=8, pady=(0, 4))
         self.save_button = ttk.Button(toolbar, text="Guardar", command=self.save, state="disabled")
         self.save_button.pack(side="right")
         self.rename_button = ttk.Button(
@@ -179,6 +185,7 @@ class LibraryEditor(tk.Toplevel):
         self.tree.pack(side="left", fill="both", expand=True)
         tree_scroll.pack(side="right", fill="y")
         self.text = tk.Text(editor_frame, wrap="word", undo=True, state="disabled")
+        self.text.tag_configure("informational", background=COLORS["warning_soft"])
         text_scroll = ttk.Scrollbar(editor_frame, orient="vertical", command=self.text.yview)
         self.text.configure(yscrollcommand=text_scroll.set)
         self.text.pack(side="left", fill="both", expand=True)
@@ -251,9 +258,18 @@ class LibraryEditor(tk.Toplevel):
         if event is not None and event.widget is not self.text:
             return
         if not self.loading and self.text.edit_modified():
+            self._highlight_information()
             self.dirty = True
             self.save_button.configure(state="normal")
             self.text.edit_modified(False)
+
+    def _highlight_information(self) -> None:
+        """Resalta los bloques internos, incluido uno abierto mientras se escribe."""
+        self.text.tag_remove("informational", "1.0", "end")
+        source = self.text.get("1.0", "end-1c")
+        for start, end in informational_ranges(source, strict=False):
+            self.text.tag_add("informational", f"1.0 + {start} chars", f"1.0 + {end} chars")
+        self.text.tag_raise("sel")
 
     def _select(self, event=None) -> None:
         """Abre la ficha elegida o muestra el mensaje inicial para carpetas."""
@@ -290,6 +306,7 @@ class LibraryEditor(tk.Toplevel):
             self.status.set("Este archivo no se puede editar aquí." if member
                             else "Selecciona un archivo Markdown.")
         self.selected_member = member
+        self._highlight_information()
         self.text.edit_modified(False)
         self.text.configure(state="normal" if member else "disabled")
         self.loading = False

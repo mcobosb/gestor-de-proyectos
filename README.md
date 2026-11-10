@@ -302,18 +302,33 @@ las fichas deben ser únicos, aunque varias compartan código UNI.
 
 La última letra BCCA se representa con fichas, no con subcarpetas: por ejemplo,
 `01RP_PELDAÑOS/01RPN-Retirada de peldaños - piedras naturales.md`. Se conservan
-684 fichas comunes y se añaden 1.621 fichas específicas de tres letras BCCA.
+1.621 fichas específicas de tres letras BCCA, con las prescripciones de las
+649 comunes sustituidas integradas en sus descendientes. Solo permanecen las
+35 fichas comunes sin sustituto: 1.656 fichas en total.
 Las fichas nuevas recogen la clasificación y las descripciones del BC3 de origen;
 cuando no hay partidas desarrolladas, indican que deben completarse las
 prescripciones. No se inventan condiciones técnicas ausentes.
 El catálogo admite `rutas_anteriores` para recuperar decisiones de proyectos
-guardados antes de renombrar una ficha. El editor permite crear y renombrar fichas
+guardados antes de renombrar una ficha y `fichas_sustituidas` para resolver las
+comunes retiradas a sus específicas según el código de la partida. Si el código
+no permite distinguir el material, se conservan las alternativas para revisión
+manual; no se escoge una arbitrariamente. El editor permite crear y renombrar fichas
 en carpetas terminales y actualiza catálogo, índice y enlaces en una sola operación.
 
 La reorganización puede reproducirse con
 `python -m tools.pptp.bcca_library tools\pptp\BIBLIOTECA.zip tools\BCCA2023_V02.bc3`.
 El BC3 solo se necesita para esa operación de mantenimiento, no para utilizar PPTP.
-Repetirla no duplica fichas ni sobrescribe las específicas existentes.
+Repetirla no duplica fichas ni cambia una biblioteca ya migrada; conserva el
+contenido técnico al integrar las comunes y delimitar la información interna.
+
+Las líneas independientes `"""` delimitan bloques informativos no exportables
+en las fichas PPTP. El editor los resalta en amarillo; la composición excluye su
+contenido antes de sustituir variables y numerar encabezados, tanto en PDF como
+en ODT. La migración marca metadatos y trazabilidad sin borrar las prescripciones.
+Los bloques sin cerrar y las fichas sin contenido contractual producen un error
+explícito, no documentos vacíos. Las tres clasificaciones `18RPA`, `18RPB` y
+`18RPC` carecen de prescripciones heredadas y requieren completarlas antes de
+generar un pliego con ellas.
 
 La búsqueda usa el JSON, no recorre los textos Markdown ni interpreta el índice.
 `INDICE_FICHAS.md` permanece dentro del ZIP como índice de lectura para las

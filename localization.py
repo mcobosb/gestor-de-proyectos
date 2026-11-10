@@ -77,6 +77,10 @@ _TEXT = {
         "Green: used sheets and their containing folders.",
         "Vert : fiches utilisées et dossiers qui les contiennent.",
     ),
+    "Amarillo: bloques informativos entre comillas triples.": (
+        "Yellow: informational blocks between triple quotes.",
+        "Jaune : blocs informatifs entre triples guillemets.",
+    ),
     "Editar biblioteca de fichas...": ("Edit sheet library...", "Modifier la bibliothèque de fiches..."),
     "Nueva ficha...": ("New sheet...", "Nouvelle fiche..."),
     "Renombrar ficha...": ("Rename sheet...", "Renommer la fiche..."),

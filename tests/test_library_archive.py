@@ -143,6 +143,38 @@ class LibraryArchiveTests(unittest.TestCase):
         self.assertEqual(read_markdown(self.archive, "UNI/INDICE_FICHAS.md"), index)
         self.assertEqual(self.library().read_sheet(self.old), content)
 
+    def test_retired_common_paths_follow_later_renames_and_preserve_explicit_choices(self):
+        """Recover one-to-many historical paths without guessing a material or losing checks."""
+        ceramic = self.parent + "/01RPC-Cerámica.md"
+        update_library(
+            self.archive, _signature(self.archive),
+            additions={self.specific: "# Piedra natural\n", ceramic: "# Cerámica\n"},
+        )
+        update_library(
+            self.archive, _signature(self.archive),
+            replacements={self.old: [self.specific, ceramic]},
+        )
+        renamed = self.parent + "/01RPN-Nombre nuevo.md"
+        update_library(
+            self.archive, _signature(self.archive), renames={self.specific: renamed},
+        )
+        library = self.library()
+        self.assertEqual(library.resolve_sheets(self.old, "01RPN00001"), (renamed,))
+        self.assertNotIn(self.old, library.entries)
+        saved = {"selections": [
+            asdict(Selection(0, "01RPN00001", "01#", "Anterior", self.old, selected=False)),
+            asdict(Selection(0, "01RPN00001", "01#", "Anterior", self.specific, selected=True)),
+            asdict(Selection(1, "MANUAL", "01#", "Manual", self.old, selected=False, automatic=False)),
+        ]}
+        auto, manual = propose([
+            ProjectItem("01RPN00001", "01#", "m", "Peldaño"),
+            ProjectItem("MANUAL", "01#", "m", "Manual"),
+        ], {}, load_catalog(library), saved)
+        self.assertEqual([row.path for row in auto], [renamed])
+        self.assertTrue(auto[0].selected)
+        self.assertEqual({row.path for row in manual}, {renamed, ceramic})
+        self.assertFalse(any(row.selected or row.automatic for row in manual))
+
     def test_new_specific_sheet_is_cataloged_without_matching_other_materials(self):
         """Use the sheet's BCCA code rather than the containing family for matching."""
         update_library(
@@ -170,11 +202,14 @@ class LibraryArchiveTests(unittest.TestCase):
             {"additions": {self.parent + "/01RP-Base?.md": "invalid"}},
             {"updates": {"missing.md": "invalid"}},
             {"updates": {"binary.dat": "invalid"}},
+            {"replacements": {self.old: ["missing.md"]}},
+            {"replacements": {self.old: [self.old]}},
         ):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 update_library(
                     self.archive, signature, renames=kwargs.get("renames"),
                     additions=kwargs.get("additions"), updates=kwargs.get("updates"),
+                    replacements=kwargs.get("replacements"),
                 )
             self.assertEqual(self.archive.read_bytes(), original)
         with self.assertRaises(ValueError):

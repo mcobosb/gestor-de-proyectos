@@ -49,8 +49,10 @@ def _update_links(text: str, member: str, renames: dict[str, str]) -> str:
 def _catalog_changes(
     source: ZipFile, renames: dict[str, str], additions: dict[str, str],
     edits: dict[str, bytes],
+    replacements: dict[str, list[str]] | None = None,
 ) -> dict[str, bytes]:
     """Actualiza catálogo PPTP, alias históricos e índice sin cambiar identificadores."""
+    replacements = replacements or {}
     catalogs = [name for name in source.namelist() if PurePosixPath(name).name == "catalogo.json"]
     changes: dict[str, bytes] = {}
     for member in catalogs:
@@ -59,6 +61,23 @@ def _catalog_changes(
             continue
         directory = PurePosixPath(member).parent
         rows = catalog["fichas"]
+        retired = catalog.setdefault("fichas_sustituidas", [])
+        for record in retired:
+            record["destinos"] = [
+                renames.get(path, path) for path in record["destinos"]
+            ]
+        for row in rows:
+            old = (directory / row["archivo"]).as_posix()
+            if old in replacements:
+                retired.append({
+                    "id": row["id"], "codigo_uni": row["codigo_uni"],
+                    "rutas": [old, *row.get("rutas_anteriores", [])],
+                    "destinos": replacements[old],
+                })
+        rows[:] = [
+            row for row in rows
+            if (directory / row["archivo"]).as_posix() not in replacements
+        ]
         for row in rows:
             old = (directory / row["archivo"]).as_posix()
             if old not in renames:
@@ -117,7 +136,7 @@ def _catalog_changes(
                     content = source.read(old_path)
             row["sha256"] = sha256(content).hexdigest()
         changes[member] = (json.dumps(catalog, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
-        if not renames and not additions:
+        if not renames and not additions and not replacements:
             continue
         index_member = (directory / catalog["indice"]).as_posix()
         original = source.read(index_member).decode("utf-8-sig")
@@ -128,6 +147,8 @@ def _catalog_changes(
             match = re.match(r"\|\s*\d{2}[A-Z]*\s*\|\s*\[([^]]*)\]\(([^)]+)\)(.*)", line)
             if match:
                 old_member = posixpath.normpath(posixpath.join(directory.as_posix(), unquote(match[2])))
+                if old_member in replacements:
+                    continue
                 new_member = renames.get(old_member, old_member)
                 row = by_member.get(new_member)
                 if row is not None:
@@ -152,6 +173,7 @@ def update_library(
     archive_path: Path, expected_signature: tuple[int, int], *,
     renames: dict[str, str] | None = None, additions: dict[str, str] | None = None,
     updates: dict[str, str] | None = None,
+    replacements: dict[str, list[str]] | None = None,
     allow_new_folders: bool = False,
 ) -> tuple[int, int]:
     """Crea o renombra fichas y actualiza sus enlaces mediante un único reemplazo ZIP."""
@@ -160,10 +182,18 @@ def update_library(
     )
 
     renames, additions, updates = renames or {}, additions or {}, updates or {}
+    replacements = replacements or {}
     if _signature(archive_path) != expected_signature:
         raise ValueError("La biblioteca ha cambiado desde que se abrió. Ciérrala y vuelve a intentarlo.")
     members = library_members(archive_path)
     names = set(members)
+    if set(replacements) & (set(renames) | set(updates)):
+        raise ValueError("No se puede editar o renombrar una ficha que se va a sustituir.")
+    for old, targets in replacements.items():
+        if old not in names or not old.lower().endswith(".md") or not targets:
+            raise ValueError(f"Sustitución de ficha no válida: {old}")
+        if any(target not in names | set(additions) or target in replacements for target in targets):
+            raise ValueError(f"El destino de la sustitución no existe: {old}")
     if any(name not in names or not name.lower().endswith(".md") for name in updates):
         raise ValueError("Solo se pueden actualizar fichas Markdown existentes.")
     for old in renames:
@@ -192,16 +222,22 @@ def update_library(
     try:
         with ZipFile(archive_path) as source:
             changes: dict[str, bytes] = {}
+            redirects = {
+                old: targets[0] if len(targets) == 1 else "UNI/INDICE_FICHAS.md"
+                for old, targets in replacements.items()
+            }
             for name in members:
+                if name in replacements:
+                    continue
                 if name.lower().endswith(".md"):
                     info = source.getinfo(name)
                     if info.file_size > MAX_MARKDOWN_BYTES or info.flag_bits & 1:
                         raise ValueError(f"Archivo Markdown demasiado grande o cifrado: {name}")
                     original = source.read(name).decode("utf-8-sig")
-                    updated = _update_links(updates.get(name, original), name, renames)
+                    updated = _update_links(updates.get(name, original), name, {**redirects, **renames})
                     if updated != original and name not in changes:
                         changes[name] = updated.encode("utf-8")
-            changes.update(_catalog_changes(source, renames, additions, changes))
+            changes.update(_catalog_changes(source, renames, additions, changes, replacements))
             for name, content in additions.items():
                 changes[name] = content.encode("utf-8")
             if any(len(content) > MAX_MARKDOWN_BYTES for content in changes.values()):
@@ -215,6 +251,8 @@ def update_library(
                 target.comment = source.comment
                 for info in source.infolist():
                     name = info.filename
+                    if name in replacements:
+                        continue
                     output = copy(info)
                     output.filename = renames.get(name, name)
                     if name in changes:

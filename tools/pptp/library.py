@@ -42,6 +42,7 @@ class ZipLibrary:
         self.docs = docs
         self.entries: dict[str, CatalogEntry] = {}
         self.aliases: dict[str, str] = {}
+        self.replacements: dict[str, tuple[str, ...]] = {}
         self.chapter_titles: dict[str, str] = {}
         self._signature = self._file_signature()
         try:
@@ -134,6 +135,24 @@ class ZipLibrary:
                     identifiers.add(row["id"])
                 if any(alias in self.entries and alias != target for alias, target in self.aliases.items()):
                     raise ValueError("Un alias de ficha coincide con otra ficha del catálogo.")
+                retired = catalog.get("fichas_sustituidas", [])
+                if not isinstance(retired, list):
+                    raise ValueError("Las sustituciones de fichas no son válidas.")
+                for record in retired:
+                    if not isinstance(record, dict):
+                        raise ValueError("Sustitución de ficha no válida.")
+                    paths, targets = record.get("rutas"), record.get("destinos")
+                    if (not isinstance(paths, list) or not paths
+                            or not isinstance(targets, list) or not targets
+                            or any(not isinstance(target, str) or target not in self.entries for target in targets)):
+                        raise ValueError("Las rutas de sustitución no son válidas.")
+                    for path in paths:
+                        if not isinstance(path, str) or not path.startswith("UNI/"):
+                            raise ValueError("Ruta de ficha sustituida no válida.")
+                        validate_relative(path)
+                        if path in self.entries or path in self.aliases or path in self.replacements:
+                            raise ValueError(f"Ruta de ficha sustituida duplicada: {path}")
+                        self.replacements[path] = tuple(targets)
         except (BadZipFile, RuntimeError, NotImplementedError, UnicodeError) as exc:
             raise ValueError(f"No se pudo leer la biblioteca ZIP: {exc}") from exc
 
@@ -187,6 +206,18 @@ class ZipLibrary:
     def resolve_sheet(self, relative: str) -> str:
         """Traduce rutas anteriores a la ficha actual sin perder decisiones de proyecto."""
         return self.aliases.get(relative, relative)
+
+    def resolve_sheets(self, relative: str, code: str = "") -> tuple[str, ...]:
+        """Resuelve sustituciones por código sin escoger arbitrariamente un material."""
+        targets = self.replacements.get(relative)
+        if targets is None:
+            return (self.resolve_sheet(relative),)
+        code = code.strip().upper().rstrip("#*")
+        matching = tuple(
+            target for target in targets
+            if code and (code.startswith(self.entries[target].code) or self.entries[target].code.startswith(code))
+        )
+        return matching or targets
 
     def read_documents(self, prefix: str) -> list[tuple[str, str]]:
         """Lee documentos base del ZIP y conserva el directorio externo como respaldo."""

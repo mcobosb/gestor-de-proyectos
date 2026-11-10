@@ -55,12 +55,12 @@ class PptpTests(unittest.TestCase):
 
     def test_index_decodes_unicode_paths_and_keeps_distinct_variants(self):
         """Las fichas del mismo codigo no se confunden por clasificacion."""
-        self.assertEqual(len(self.catalog), 2305)
-        matches = [sheet for sheet in self.catalog if sheet.code == "01TR"]
+        self.assertEqual(len(self.catalog), 1656)
+        matches = [sheet for sheet in self.catalog if sheet.code == "01TRA"]
         self.assertEqual(len(matches), 1)
         self.assertTrue(bool(self.library.read_sheet(matches[0].path)))
         self.assertIn("Ó", matches[0].path)
-        self.assertGreater(len([sheet for sheet in self.catalog if sheet.code == "02RR"]), 1)
+        self.assertGreater(len([sheet for sheet in self.catalog if sheet.code.startswith("02RR")]), 1)
 
     def test_all_document_placeholders_have_supported_project_variables(self):
         """Comprueba secciones generales y todas las fichas para detectar campos olvidados."""
@@ -114,7 +114,7 @@ class PptpTests(unittest.TestCase):
         """No infiere codigos de titulos ni incorpora RCD o seguridad importados."""
         items = [
             ProjectItem("P1", "01#", "ud", "Demoliciones 01TR"),
-            ProjectItem("01TR001", "02#", "ud", "Servicios"),
+            ProjectItem("01TRA00001", "02#", "ud", "Servicios"),
             ProjectItem("01TR002", "R#", "ud", "Residuo", source="RCD:X"),
             ProjectItem("01TR003", "S#", "ud", "Seguridad", source="SS:X"),
             ProjectItem("01TR004", "17A#", "ud", "Residuo"),
@@ -125,13 +125,13 @@ class PptpTests(unittest.TestCase):
             "01#": "Demoliciones", "02#": "Redes", "17#": "Gestión de residuos",
             "SYS#": "Seguridad e higiene",
         }, self.catalog, {})
-        self.assertEqual([row.code for row in automatic], ["01TR001"])
+        self.assertEqual([row.code for row in automatic], ["01TRA00001"])
         self.assertEqual([row.code for row in manual], ["P1"])
         self.assertEqual(manual[0].path, "")
 
     def test_restoring_checks_manual_assignments_and_multiple_sheets(self):
         """Recupera tanto filas desmarcadas como asignaciones multiples."""
-        items = [ProjectItem("01TR001", "01#", "ud", "Servicios"),
+        items = [ProjectItem("01TRA00001", "01#", "ud", "Servicios"),
                  ProjectItem("P1", "02#", "ud", "Manual")]
         automatic, manual = propose(items, {}, self.catalog, {})
         automatic[0].selected = False
@@ -310,7 +310,7 @@ class PptpTests(unittest.TestCase):
         """Ordena las fichas del capitulo cuatro por codigo, no por partida ni titulo."""
         early = next(sheet for sheet in self.catalog if sheet.code.startswith("01A"))
         late = next(sheet for sheet in self.catalog if sheet.code.startswith("15P"))
-        variants = [sheet for sheet in self.catalog if sheet.code == "02RR"][:2]
+        variants = [sheet for sheet in self.catalog if sheet.code.startswith("02RR")][:2]
         sheets = [late, variants[1], early, variants[0], late]
         state = state_for([
             Selection(index, "P" + str(index), "01#", "Prueba", sheet.path)
@@ -459,7 +459,7 @@ class PptpWindowTests(unittest.TestCase):
         self.app.report_settings.organization = "Entidad ficticia"
         self.app.report_settings.guarantee_period = "12 meses"
         self.app.budget_items = [
-            ProjectItem("01TR001", "01#", "ud", "Servicios"),
+            ProjectItem("01TRA00001", "01#", "ud", "Servicios"),
             ProjectItem("P1", "01#", "ud", "Sin clasificación"),
         ]
         self.app._reset_history()
@@ -505,10 +505,10 @@ class PptpWindowTests(unittest.TestCase):
         """Create and rename real sheets while keeping open wizard decisions intact."""
         archive = self.folder / "library.zip"
         shutil.copyfile(LIBRARY_PATH, archive)
-        self.app.budget_items[0].code = "01TRX00001"
+        self.app.budget_items[0].code = "01TRA00001"
         with patch("tools.pptp.LIBRARY_PATH", archive):
             window = self.make_window()
-            common = next(sheet for sheet in window.catalog if sheet.code == "01TR")
+            common = next(sheet for sheet in window.catalog if sheet.code == "01TRA")
             next(row for row in window.automatic if row.path == common.path).selected = False
             window.unmatched[0].path = common.path
             window.unmatched[0].selected = False
@@ -520,7 +520,7 @@ class PptpWindowTests(unittest.TestCase):
             editor._select()
             with patch(
                 "tools._library_editor.simpledialog.askstring",
-                return_value="01TR-Condiciones comunes de prueba.md",
+                return_value="01TRA-Condiciones de prueba.md",
             ):
                 editor.rename_sheet()
             renamed = window.library.resolve_sheet(common.path)
@@ -530,7 +530,7 @@ class PptpWindowTests(unittest.TestCase):
             self.assertFalse(window.unmatched[0].selected)
             with patch(
                 "tools._library_editor.simpledialog.askstring",
-                return_value="01TRX-Ficha de prueba.md",
+                return_value="01TRA-Ficha de prueba.md",
             ):
                 editor.new_sheet()
             new_path = editor.selected_member
@@ -541,7 +541,7 @@ class PptpWindowTests(unittest.TestCase):
             self.assertEqual(window.step, 1)
             with patch(
                 "tools._library_editor.simpledialog.askstring",
-                return_value="01TRX-Ficha de prueba renombrada.md",
+                return_value="01TRA-Ficha de prueba renombrada.md",
             ):
                 editor.rename_sheet()
             self.assertTrue(any(
@@ -567,7 +567,7 @@ class PptpWindowTests(unittest.TestCase):
         self.assertIsNotNone(window.editor)
         choices = window.editor.cget("values")
         self.assertEqual(len(choices), len(window.catalog))
-        target_index = next(index for index, sheet in enumerate(window.catalog) if sheet.code == "15SH")
+        target_index = next(index for index, sheet in enumerate(window.catalog) if sheet.code.startswith("15SH"))
         window.editor.current(target_index)
         window.editor.event_generate("<<ComboboxSelected>>")
         self.assertEqual(window.unmatched[0].path, window.catalog[target_index].path)

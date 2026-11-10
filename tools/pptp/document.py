@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 import unicodedata
 from urllib.parse import unquote
 from .library import ZipLibrary
+from tools._library_markdown import document_markdown
 
 if TYPE_CHECKING:
     from bc3_gui import BudgetApp, ProjectItem
@@ -37,6 +38,7 @@ class Sheet:
     path: str
     warning: str = ""
     aliases: tuple[str, ...] = ()
+    replaces: tuple[str, ...] = ()
 
 
 @dataclass
@@ -79,7 +81,10 @@ def load_catalog(root: Path | ZipLibrary) -> list[Sheet]:
     """Lee todas las opciones del indice y valida sus archivos asociados."""
     if isinstance(root, ZipLibrary):
         return [
-            Sheet(entry.code, entry.title, entry.path, entry.warning, entry.aliases)
+            Sheet(
+                entry.code, entry.title, entry.path, entry.warning, entry.aliases,
+                tuple(path for path, targets in root.replacements.items() if entry.path in targets),
+            )
             for entry in root.entries.values()
         ]
     source = (root / "UNI" / "INDICE_FICHAS.md").read_text(encoding="utf-8-sig")
@@ -160,10 +165,27 @@ def propose(items: list[ProjectItem], titles: dict[str, str], catalog: list[Shee
     })
     old: dict[tuple[int, str, str], list[dict]] = {}
     aliases = {alias: sheet.path for sheet in catalog for alias in sheet.aliases}
+    replacements: dict[str, list[Sheet]] = {}
+    for sheet in catalog:
+        for path in sheet.replaces:
+            replacements.setdefault(path, []).append(sheet)
     for row in saved.get("selections", []):
-        old.setdefault((row["item"], row["code"], row["chapter"]), []).append({
-            **row, "path": aliases.get(row["path"], row["path"]),
-        })
+        candidates = replacements.get(row["path"], [])
+        code = normalized_code(row["code"])
+        matching = [sheet for sheet in candidates if code.startswith(sheet.code) or sheet.code.startswith(code)]
+        if not matching:
+            chapter = normalized_code(row["chapter"])
+            matching = [sheet for sheet in candidates if chapter.startswith(sheet.code) or sheet.code.startswith(chapter)]
+        targets = matching or candidates
+        paths = [sheet.path for sheet in targets] if targets else [aliases.get(row["path"], row["path"])]
+        for path in paths:
+            previous = old.setdefault((row["item"], row["code"], row["chapter"]), [])
+            mapped = {**row, "path": path}
+            existing = next((entry for entry in previous if entry["path"] == path), None)
+            if existing is None:
+                previous.append(mapped)
+            elif row["path"] not in replacements:
+                previous[previous.index(existing)] = mapped
     for index, item in enumerate(items):
         if excluded_item(item, excluded):
             continue
@@ -240,6 +262,7 @@ def load_regulations(root: Path | ZipLibrary, codes: set[str]) -> list[Regulatio
         raise ValueError("Falta la sección 02 de disposiciones técnicas legales.")
     result: dict[str, Regulation] = {}
     for name, source in sources:
+        source = document_markdown(source)
         for match in re.finditer(r"<!--\s*NORMATIVA_UNI\s+(\{[^\n]*\})\s*-->\s*\n([*+-] [^\n]+)", source):
             try:
                 data = json.loads(match[1])
@@ -317,9 +340,13 @@ def substitute(source: str, variables: dict[str, str]) -> str:
 def compose(root: Path | ZipLibrary, state: dict, regulations: list[Regulation]) -> str:
     """Ensambla secciones y fichas unicas, con normativa revisada por el tecnico."""
     state = restore_state(state)
-    chosen = list(dict.fromkeys(row["path"] for row in state["selections"] if row["selected"]))
     if isinstance(root, ZipLibrary):
-        chosen = list(dict.fromkeys(root.resolve_sheet(path) for path in chosen))
+        chosen = list(dict.fromkeys(
+            path for row in state["selections"] if row["selected"]
+            for path in root.resolve_sheets(row["path"], row["code"])
+        ))
+    else:
+        chosen = list(dict.fromkeys(row["path"] for row in state["selections"] if row["selected"]))
     if not chosen:
         raise ValueError("Selecciona al menos una ficha para generar el PPTP.")
     if isinstance(root, ZipLibrary):
@@ -346,6 +373,7 @@ def compose(root: Path | ZipLibrary, state: dict, regulations: list[Regulation])
         )
         if not sources:
             raise ValueError(f"Falta la sección {prefix} del PPTP.")
+        sources = [(name, document_markdown(source)) for name, source in sources]
         if prefix == "02":
             selected = [ref.text for ref in regulations if state["regulations"].get(ref.id, ref.selected)]
             introductions = []
@@ -369,6 +397,31 @@ def compose(root: Path | ZipLibrary, state: dict, regulations: list[Regulation])
             root.read_sheet(relative) if isinstance(root, ZipLibrary)
             else safe_path(root, relative).read_text(encoding="utf-8-sig")
         )
+        try:
+            source = document_markdown(source)
+        except ValueError as exc:
+            raise ValueError(f"Ficha {relative}: {exc}") from exc
+        if not source or not re.sub(r"^#{1,6}\s+.*$", "", source, flags=re.MULTILINE).strip():
+            raise ValueError(
+                f"La ficha {relative} no contiene prescripciones para el PPTP fuera de los "
+                'bloques informativos ("""). Complétala o desmarca su incorporación.'
+            )
+        source = re.sub(
+            r"^#{2,6}\s+(Descripción|Ejecución|Medición|Valoración|Medición y valoración)\s*$",
+            lambda match: f"\n**{match[1]}**\n",
+            source, flags=re.MULTILINE | re.IGNORECASE,
+        )
+        if not re.search(r"^# ", source, flags=re.MULTILINE):
+            title = root.entries[relative].title if isinstance(root, ZipLibrary) else PurePosixPath(relative).stem
+            levels = [len(match[1]) for match in re.finditer(r"^(#{2,6}) ", source, flags=re.MULTILINE)]
+            if levels:
+                offset = min(levels) - 2
+                source = re.sub(
+                    r"^(#{2,6}) ",
+                    lambda match: "#" * (len(match[1]) - offset) + " ",
+                    source, flags=re.MULTILINE,
+                )
+            source = f"# {title}\n\n{source}"
         source = re.sub(r"^(#{1,6}) (.*)$",
                         lambda match: "#" * min(len(match[1]) + 2, 6) + " " + match[2],
                         source, flags=re.MULTILINE)
@@ -395,18 +448,21 @@ def number_headings(source: str) -> str:
     return "\n".join(result)
 
 
-def text_blocks(source: str) -> list[tuple[int, str]]:
+def text_blocks(source: str, *, preserve_bold: bool = False) -> list[tuple[int, str]]:
     """Transforma Markdown y conserva niveles de lista junto a titulos y avisos."""
+    source = document_markdown(source)
     source = re.sub(r"<!--.*?-->", "", source, flags=re.DOTALL)
     source = re.sub(r"\[([^]]+)\]\(([^)]+)\)",
                     lambda match: (f"{match[1]} ({match[2]})" if match[2].startswith(("http:", "https:"))
                                    else match[1]), source)
-    source = source.replace("**", "").replace("`", "")
+    source = source.replace("`", "")
     blocks, paragraph = [], []
     for line in [*source.splitlines(), ""]:
         heading = re.match(r"^(#{1,6})\s+(.*)", line)
         bullet = re.match(r"^(?P<indent>[ \t]*)(?:[-*+]\s+|•\s*)(?P<text>.*)", line)
-        if not line.strip() or heading or bullet or line.startswith(">"):
+        ordered = re.match(r"^(?P<indent>[ \t]*)(?P<number>\d+[.)])\s+(?P<text>.*)", line)
+        separator = re.fullmatch(r"\s*\*\*[^*\n]+\*\*\s*", line)
+        if not line.strip() or heading or bullet or ordered or separator or line.startswith(">"):
             if paragraph:
                 blocks.append((0, " ".join(paragraph)))
                 paragraph = []
@@ -416,11 +472,31 @@ def text_blocks(source: str) -> list[tuple[int, str]]:
                 spaces = len(bullet["indent"].expandtabs(4))
                 depth = (spaces + 3) // 4
                 blocks.append((-(depth + 1), "• " + bullet["text"].strip()))
+            elif ordered:
+                spaces = len(ordered["indent"].expandtabs(4))
+                depth = (spaces + 3) // 4
+                blocks.append((-(depth + 1), ordered["number"] + " " + ordered["text"].strip()))
+            elif separator:
+                blocks.append((0, line.strip()))
             elif line.startswith(">"):
                 blocks.append((0, line.lstrip("> ")))
         else:
             paragraph.append(line.strip())
-    return blocks
+    return blocks if preserve_bold else [(level, text.replace("**", "")) for level, text in blocks]
+
+
+def bold_runs(text: str) -> list[tuple[str, bool]]:
+    """Separa negritas Markdown equilibradas sin interpretar etiquetas del usuario."""
+    runs = []
+    previous = 0
+    for match in re.finditer(r"\*\*(.+?)\*\*", text):
+        if match.start() > previous:
+            runs.append((text[previous:match.start()], False))
+        runs.append((match[1], True))
+        previous = match.end()
+    if previous < len(text):
+        runs.append((text[previous:], False))
+    return runs
 
 
 def write_document(
@@ -429,7 +505,7 @@ def write_document(
 ) -> None:
     """Emite PDF u ODT con la misma plantilla de cabecera y pie del proyecto."""
     toc_depth = validate_toc_depth(toc_depth)
-    blocks = text_blocks(number_headings(source))
+    blocks = text_blocks(number_headings(source), preserve_bold=True)
     title = "PLIEGO DE PRESCRIPCIONES TÉCNICAS PARTICULARES"
     project = variables["titulo_proyecto"]
     bullet_depths = sorted({-level - 1 for level, _ in blocks if level < 0})
@@ -438,8 +514,17 @@ def write_document(
         from odt_reports import _new_report, _tag
 
         document = _new_report(title, project, settings, repeat_titles=False, footer_title=title)
+        bold_style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+            _tag("style:name"): "PPTPBold", _tag("style:family"): "text",
+        })
+        ET.SubElement(bold_style, _tag("style:text-properties"), {
+            _tag("fo:font-weight"): "bold",
+            _tag("style:font-weight-asian"): "bold",
+            _tag("style:font-weight-complex"): "bold",
+        })
         for name, parent, heading in [
             ("PPTPBody", "ReportBody", False),
+            ("PPTPSeparator", "PPTPBody", True),
             *[(f"PPTPHeading{level}", f"Heading{level}", True) for level in range(1, 7)],
         ]:
             style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
@@ -463,26 +548,35 @@ def write_document(
                 _tag("fo:text-indent"): "-12pt",
             })
         document.table_of_contents(
-            [(level, text) for level, text in blocks if level > 0], max_level=toc_depth,
+            [(level, text.replace("**", "")) for level, text in blocks if level > 0],
+            max_level=toc_depth,
         )
         heading_index = 0
         for level, text in blocks:
             if level > 0:
                 document.heading(
-                    text, level, style=f"PPTPHeading{level}",
+                    text.replace("**", ""), level, style=f"PPTPHeading{level}",
                     bookmark=f"PPTPHeading{heading_index}",
                 )
                 heading_index += 1
-            elif level < 0:
-                document.paragraph(text, f"PPTPBullet{-level - 1}")
             else:
-                document.paragraph(text, "PPTPBody")
+                separator = re.fullmatch(r"\*\*[^*]+\*\*", text) is not None
+                style = (
+                    f"PPTPBullet{-level - 1}" if level < 0
+                    else "PPTPSeparator" if separator else "PPTPBody"
+                )
+                paragraph = ET.SubElement(document.body, _tag("text:p"), {
+                    _tag("text:style-name"): style,
+                })
+                for value, bold in bold_runs(text):
+                    attributes = {_tag("text:style-name"): "PPTPBold"} if bold else {}
+                    ET.SubElement(paragraph, _tag("text:span"), attributes).text = value
         document.write(target)
     else:
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import ParagraphStyle
         from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
-        from reportlab.platypus import KeepTogether, PageBreak, SimpleDocTemplate
+        from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate
         from reportlab.platypus.doctemplate import LayoutError
         from reportlab.platypus.tableofcontents import TableOfContents
         from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
@@ -523,9 +617,21 @@ def write_document(
                 )
             elif level < 0:
                 style = bullet_styles[-level - 1]
-            paragraph = layout.text(text, style)
+            elif re.fullmatch(r"\*\*[^*]+\*\*", text):
+                style = ParagraphStyle(
+                    "PPTPSeparator", parent=body, spaceBefore=8,
+                    keepWithNext=True, alignment=TA_LEFT,
+                )
+            markup = "".join(
+                f'<font name="{escape(layout.bold_font, quote=True)}">{escape(value)}</font>'
+                if bold else escape(value)
+                for value, bold in bold_runs(text)
+            )
+            paragraph = Paragraph(markup, style)
             if level > 0:
-                paragraph._pptp_heading = (level - 1, text, f"PPTPHeading{heading_index}")
+                paragraph._pptp_heading = (
+                    level - 1, text.replace("**", ""), f"PPTPHeading{heading_index}",
+                )
                 heading_index += 1
             story.append(paragraph)
 

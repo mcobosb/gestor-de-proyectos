@@ -375,6 +375,27 @@ y maquinaria presentes en sus descomposiciones; no se incluye personal.
 Si vuelves a pulsar el botón con el editor abierto, las marcas se actualizan
 sin descartar el texto que estés editando.
 
+Los bloques delimitados por una línea con `"""` al principio y otra igual al
+final se muestran con fondo amarillo. En PPTP contienen información interna:
+clasificación BCCA, unidades de referencia, alcance, avisos de revisión y
+trazabilidad. Se conservan en la ficha para consulta y edición, pero **no se
+incorporan al PDF ni al ODT**. Solo se exportan las prescripciones situadas fuera
+de esos bloques; el título de la ficha se obtiene del catálogo cuando está dentro
+del bloque informativo. Las variantes técnicas con condiciones distintas
+conservan sus encabezados para no confundir sus prescripciones.
+
+Puedes añadir varios bloques informativos a una ficha. Las comillas deben estar
+en líneas independientes y quedar emparejadas; un bloque sin cerrar impide
+guardar o generar. Si una ficha solo contiene información interna y carece de
+prescripciones, la generación avisa: debes completarla o desmarcarla, no se
+inserta una ficha vacía.
+
+En el PDF y el ODT, los apartados **Descripción**, **Ejecución**, **Medición**,
+**Valoración** y **Medición y valoración** se presentan como líneas en negrita,
+sin numeración ni entrada propia en el índice. El título de cada ficha conserva
+su numeración. Las listas `1.`, `2.`, `3.` se exportan con un párrafo por elemento
+y las expresiones entre `**` conservan la negrita, también dentro de las listas.
+
 Selecciona una carpeta terminal que ya tenga fichas para activar **Nueva ficha...**.
 Utiliza nombres como `01RPN-Retirada de peldaños de piedra natural.md`: el código
 debe pertenecer a la familia de la carpeta. Tras crearla, escribe sus prescripciones
@@ -567,9 +588,17 @@ No incorpora partidas de RCDs ni de Seguridad y Salud.
 
 La biblioteca se organiza hasta la tercera letra BCCA: `01RP_PELDAÑOS` es la
 carpeta y `01RPA-…md`, `01RPC-…md`, `01RPN-…md`, etc. son fichas dentro de ella,
-no subcarpetas. Se conservan las 684 fichas anteriores como contenido común
-identificado con **Común**, y se añaden 1.621 fichas específicas procedentes de
-la clasificación y las descripciones del BC3 BCCA 2023 V02.
+no subcarpetas. Las 1.621 fichas específicas proceden de la clasificación y las
+descripciones del BC3 BCCA 2023 V02. Incorporan las prescripciones de las 649
+fichas comunes sustituidas, que ya no aparecen como archivos separados.
+Se conservan únicamente las 35 comunes sin descendientes específicos, para no
+perder sus condiciones: la biblioteca contiene 1.656 fichas.
+Las condiciones heredadas de variantes distintas se identifican como alternativas
+no acumulables y requieren revisión de compatibilidad con la partida concreta.
+Las selecciones de comunes retiradas en proyectos anteriores se trasladan a las
+específicas correspondientes al código de la partida, conservando las marcas.
+Si el código no distingue la variante, las alternativas se mantienen para revisión
+manual, sin escoger un material arbitrariamente.
 Cada ficha específica delimita su material u operación y distingue las partidas
 de referencia como alternativas, no como prestaciones acumulables. Si el BC3
 solo define una clasificación sin partidas desarrolladas, la ficha avisa
@@ -585,8 +614,8 @@ la revisión técnica de sus condiciones antes de incorporarlas al contrato.
    Si no has realizado la planificación, aparece «Pendiente de planificación»
    y un aviso para realizarla. Debes sustituir ese marcador por un plazo manual
    antes de continuar; no se inventa una duración.
-2. **Correspondencias automáticas.** Para una partida `01RPN…`, se proponen
-   las condiciones comunes de `01RP` y la ficha específica `01RPN`, no las de
+2. **Correspondencias automáticas.** Para una partida `01RPN…`, se propone
+   la ficha específica `01RPN` con las prescripciones generales ya integradas, no las de
    piedra artificial, cerámica o madera. Se usa el código de cada ficha, no
    únicamente el de la carpeta. También se incluyen las fichas comunes existentes
    en los niveles antecesores, sin añadir los de sus
