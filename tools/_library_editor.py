@@ -9,7 +9,8 @@ from tkinter import messagebox, ttk
 from typing import Callable
 from zipfile import BadZipFile, ZipFile
 
-from localization import localize_widget_tree
+from localization import localize_widget_tree, simpledialog
+from ui_theme import COLORS
 
 MAX_MARKDOWN_BYTES = 16 * 1024 * 1024
 
@@ -92,6 +93,10 @@ def write_markdown(
                 raise ValueError(f"El archivo Markdown no se puede modificar: {member_name}")
             if selected.file_size > MAX_MARKDOWN_BYTES:
                 raise ValueError(f"Archivo Markdown demasiado grande: {member_name}")
+            from ._library_archive import _catalog_changes
+
+            changes = {member_name: encoded}
+            changes.update(_catalog_changes(source, {}, {}, changes))
             with tempfile.NamedTemporaryFile(
                 prefix=f".{archive_path.name}.", suffix=".tmp",
                 dir=archive_path.parent, delete=False,
@@ -100,8 +105,8 @@ def write_markdown(
             with ZipFile(temporary_path, "w") as target:
                 target.comment = source.comment
                 for info, name in zip(infos, names):
-                    if name == member_name:
-                        target.writestr(info, encoded)
+                    if name in changes:
+                        target.writestr(info, changes[name])
                     else:
                         with source.open(info) as original:
                             with target.open(info, "w") as copy:
@@ -125,6 +130,7 @@ class LibraryEditor(tk.Toplevel):
     def __init__(
         self, master: tk.Misc, archive_path: Path, title: str,
         on_saved: Callable[[], None] | None = None,
+        *, used_members: set[str] | None = None,
     ):
         """Construye el navegador y editor vinculado a un archivo ZIP."""
         super().__init__(master)
@@ -142,8 +148,20 @@ class LibraryEditor(tk.Toplevel):
         toolbar = ttk.Frame(self, padding=8)
         toolbar.pack(fill="x")
         ttk.Label(toolbar, text="Selecciona un archivo .md para verlo y editarlo.").pack(side="left")
+        tk.Label(
+            self, text="Verde: fichas utilizadas y carpetas que las contienen.",
+            background=COLORS["teal_soft"], foreground=COLORS["teal_text"], anchor="w",
+        ).pack(fill="x", padx=8, pady=(0, 4))
         self.save_button = ttk.Button(toolbar, text="Guardar", command=self.save, state="disabled")
         self.save_button.pack(side="right")
+        self.rename_button = ttk.Button(
+            toolbar, text="Renombrar ficha...", command=self.rename_sheet, state="disabled",
+        )
+        self.rename_button.pack(side="right", padx=4)
+        self.new_button = ttk.Button(
+            toolbar, text="Nueva ficha...", command=self.new_sheet, state="disabled",
+        )
+        self.new_button.pack(side="right")
 
         panes = ttk.Panedwindow(self, orient="horizontal")
         panes.pack(fill="both", expand=True, padx=8, pady=(0, 8))
@@ -153,6 +171,9 @@ class LibraryEditor(tk.Toplevel):
         panes.add(editor_frame, weight=3)
 
         self.tree = ttk.Treeview(tree_frame, show="tree", selectmode="browse")
+        self.tree.tag_configure(
+            "used", background=COLORS["teal_soft"], foreground=COLORS["teal_text"],
+        )
         tree_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=tree_scroll.set)
         self.tree.pack(side="left", fill="both", expand=True)
@@ -167,6 +188,7 @@ class LibraryEditor(tk.Toplevel):
         self.tree.bind("<<TreeviewSelect>>", self._select)
         self.text.bind("<<Modified>>", self._edited)
         self._populate()
+        self.highlight_used(used_members or set())
         localize_widget_tree(self)
 
     def _populate(self) -> None:
@@ -208,6 +230,22 @@ class LibraryEditor(tk.Toplevel):
                 values=(member,),
             )
 
+    def highlight_used(self, members: set[str]) -> None:
+        """Marca las fichas utilizadas y todos sus antecesores sin cambiar la selección."""
+        self.used_members = set(members)
+        stack = list(self.tree.get_children())
+        while stack:
+            node = stack.pop()
+            self.tree.item(node, tags=())
+            stack.extend(self.tree.get_children(node))
+        for member in members:
+            node = f"file:{member}"
+            if not self.tree.exists(node) or PurePosixPath(member).suffix.casefold() != ".md":
+                continue
+            while node:
+                self.tree.item(node, tags=("used",))
+                node = self.tree.parent(node)
+
     def _edited(self, event=None) -> None:
         """Habilita el guardado únicamente tras editar una ficha seleccionada."""
         if event is not None and event.widget is not self.text:
@@ -223,6 +261,12 @@ class LibraryEditor(tk.Toplevel):
             return
         selection = self.tree.selection()
         item = selection[0] if selection else ""
+        folder = self._terminal_folder(item)
+        self.new_button.configure(state="normal" if folder else "disabled")
+        self.rename_button.configure(
+            state="normal" if folder and item.startswith("file:") and item.lower().endswith(".md")
+            else "disabled",
+        )
         member = self.tree.item(item, "values")[0] if item.startswith("file:") else None
         if member == self.selected_member:
             return
@@ -252,6 +296,98 @@ class LibraryEditor(tk.Toplevel):
         self.dirty = False
         self.save_button.configure(state="disabled")
 
+    def _terminal_folder(self, node: str) -> str | None:
+        """Obtiene la carpeta seleccionada solo si tiene fichas y no subcarpetas."""
+        parent = node if node.startswith("dir:") else self.tree.parent(node) if node else ""
+        if not parent.startswith("dir:"):
+            return None
+        children = self.tree.get_children(parent)
+        if any(child.startswith("dir:") for child in children):
+            return None
+        if not any(child.startswith("file:") and child.lower().endswith(".md") for child in children):
+            return None
+        return parent.removeprefix("dir:")
+
+    def new_sheet(self) -> None:
+        """Crea una ficha catalogada en la carpeta terminal seleccionada."""
+        from ._library_archive import sheet_name, update_library
+
+        selection = self.tree.selection()
+        folder = self._terminal_folder(selection[0]) if selection else None
+        if folder is None:
+            messagebox.showwarning(
+                "Nueva ficha", "Selecciona una carpeta terminal que ya contenga fichas Markdown.",
+                parent=self,
+            )
+            return
+        name = simpledialog.askstring(
+            "Nueva ficha", "Nombre de ficha (CÓDIGO-Descripción.md):", parent=self,
+            initialvalue=PurePosixPath(folder).name.split("_", 1)[0] + "-",
+        )
+        if name is None:
+            return
+        try:
+            name, code, title = sheet_name(name)
+            member = (PurePosixPath(folder) / name).as_posix()
+            if self.dirty and not self._confirm_discard_or_save():
+                return
+            self.signature = update_library(
+                self.archive_path, self.signature,
+                additions={member: f"# {title}\n\n**Clasificación:** {code}\n\n"},
+            )
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("No se pudo crear la ficha", str(exc), parent=self)
+            return
+        self._refresh_members(member)
+        self._notify_saved()
+
+    def rename_sheet(self) -> None:
+        """Renombra una ficha conservando catálogo, enlaces y selecciones anteriores."""
+        from ._library_archive import sheet_name, update_library
+
+        selection = self.tree.selection()
+        node = selection[0] if selection else ""
+        if not self._terminal_folder(node) or not node.startswith("file:") or not node.lower().endswith(".md"):
+            messagebox.showwarning(
+                "Renombrar ficha", "Selecciona una ficha Markdown de una carpeta terminal.",
+                parent=self,
+            )
+            return
+        old = node.removeprefix("file:")
+        name = simpledialog.askstring(
+            "Renombrar ficha", "Nombre de ficha (CÓDIGO-Descripción.md):", parent=self,
+            initialvalue=PurePosixPath(old).name,
+        )
+        if name is None:
+            return
+        try:
+            name, _, _ = sheet_name(name)
+            new = (PurePosixPath(old).parent / name).as_posix()
+            if new == old:
+                return
+            if self.dirty and not self._confirm_discard_or_save():
+                return
+            self.signature = update_library(
+                self.archive_path, self.signature, renames={old: new},
+            )
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("No se pudo renombrar la ficha", str(exc), parent=self)
+            return
+        self.used_members = {new if member == old else member for member in self.used_members}
+        self._refresh_members(new)
+        self._notify_saved()
+
+    def _refresh_members(self, member: str) -> None:
+        """Recarga el árbol tras crear o renombrar sin perder las marcas de uso."""
+        self.selected_member = None
+        self.dirty = False
+        self.tree.delete(*self.tree.get_children())
+        self._populate()
+        self.highlight_used(self.used_members)
+        self.tree.selection_set(f"file:{member}")
+        self.tree.see(f"file:{member}")
+        self._select()
+
     def _confirm_discard_or_save(self) -> bool:
         """Pregunta si se guardan o descartan cambios antes de cambiar de ficha."""
         answer = messagebox.askyesnocancel(
@@ -280,6 +416,11 @@ class LibraryEditor(tk.Toplevel):
         except (OSError, UnicodeError, ValueError) as exc:
             messagebox.showerror("No se pudo guardar", str(exc), parent=self)
             return False
+        self._notify_saved()
+        return True
+
+    def _notify_saved(self) -> None:
+        """Actualiza el asistente e informa de fallos posteriores al guardado."""
         if self.on_saved is not None:
             try:
                 self.on_saved()
@@ -288,7 +429,6 @@ class LibraryEditor(tk.Toplevel):
                     "Biblioteca guardada", f"Se guardó el archivo, pero no se pudo actualizar "
                     f"la herramienta: {exc}", parent=self,
                 )
-        return True
 
     def close(self) -> None:
         """Cierra la ventana solo después de resolver cambios pendientes."""

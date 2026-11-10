@@ -36,6 +36,7 @@ class Sheet:
     title: str
     path: str
     warning: str = ""
+    aliases: tuple[str, ...] = ()
 
 
 @dataclass
@@ -78,7 +79,7 @@ def load_catalog(root: Path | ZipLibrary) -> list[Sheet]:
     """Lee todas las opciones del indice y valida sus archivos asociados."""
     if isinstance(root, ZipLibrary):
         return [
-            Sheet(entry.code, entry.title, entry.path, entry.warning)
+            Sheet(entry.code, entry.title, entry.path, entry.warning, entry.aliases)
             for entry in root.entries.values()
         ]
     source = (root / "UNI" / "INDICE_FICHAS.md").read_text(encoding="utf-8-sig")
@@ -97,7 +98,7 @@ def load_catalog(root: Path | ZipLibrary) -> list[Sheet]:
         sheet = Sheet(code.upper(), title, relative, warning.strip())
         levels = directory_codes(sheet)
         if (not levels or any(not re.fullmatch(r"\d{2}[A-Z]*", level) for level in levels)
-                or sheet.code != levels[-1]
+                or not sheet.code.startswith(levels[-1])
                 or any(not child.startswith(parent) for parent, child in zip(levels, levels[1:]))):
             raise ValueError(f"Clasificación de ficha no válida en el índice: {relative}")
         result[relative] = sheet
@@ -158,24 +159,34 @@ def propose(items: list[ProjectItem], titles: dict[str, str], catalog: list[Shee
         **{item.chapter: "" for item in items}, **titles,
     })
     old: dict[tuple[int, str, str], list[dict]] = {}
+    aliases = {alias: sheet.path for sheet in catalog for alias in sheet.aliases}
     for row in saved.get("selections", []):
-        old.setdefault((row["item"], row["code"], row["chapter"]), []).append(row)
+        old.setdefault((row["item"], row["code"], row["chapter"]), []).append({
+            **row, "path": aliases.get(row["path"], row["path"]),
+        })
     for index, item in enumerate(items):
         if excluded_item(item, excluded):
             continue
         code = normalized_code(item.code)
         # Solo los archivos del propio nivel: no se incluyen hermanos por compartir capitulo.
-        matches = [sheet for sheet in catalog if code.startswith(directory_codes(sheet)[-1])]
+        matches = [sheet for sheet in catalog if code.startswith(sheet.code)]
         chapter = normalized_code(item.chapter)
         if not matches and re.fullmatch(r"\d{2}[A-Z]+", chapter):
             matches = [
                 sheet for sheet in catalog
-                if (chapter.startswith(directory_codes(sheet)[-1])
-                    or directory_codes(sheet)[-1].startswith(chapter))
+                if (chapter.startswith(sheet.code) or sheet.code.startswith(chapter))
             ]
         previous = old.get((index, item.code, item.chapter), [])
         if matches:
+            manual = [row for row in previous if not row["automatic"] and row["path"]]
+            manual_paths = {row["path"] for row in manual}
+            unmatched.extend(
+                Selection(**{**row, "summary": item.summary, "automatic": False})
+                for row in manual
+            )
             for sheet in matches:
+                if sheet.path in manual_paths:
+                    continue
                 row = next((row for row in previous if row["path"] == sheet.path), None)
                 automatic.append(Selection(index, item.code, item.chapter, item.summary,
                                            sheet.path, row["selected"] if row else True))
@@ -307,6 +318,8 @@ def compose(root: Path | ZipLibrary, state: dict, regulations: list[Regulation])
     """Ensambla secciones y fichas unicas, con normativa revisada por el tecnico."""
     state = restore_state(state)
     chosen = list(dict.fromkeys(row["path"] for row in state["selections"] if row["selected"]))
+    if isinstance(root, ZipLibrary):
+        chosen = list(dict.fromkeys(root.resolve_sheet(path) for path in chosen))
     if not chosen:
         raise ValueError("Selecciona al menos una ficha para generar el PPTP.")
     if isinstance(root, ZipLibrary):

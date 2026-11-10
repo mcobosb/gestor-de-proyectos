@@ -300,13 +300,29 @@ y las rutas son relativas a la carpeta interna del catálogo y usan `/`. Se
 conserva el árbol de carpetas UNI; los identificadores y las rutas de
 las fichas deben ser únicos, aunque varias compartan código UNI.
 
+La última letra BCCA se representa con fichas, no con subcarpetas: por ejemplo,
+`01RP_PELDAÑOS/01RPN-Retirada de peldaños - piedras naturales.md`. Se conservan
+684 fichas comunes y se añaden 1.621 fichas específicas de tres letras BCCA.
+Las fichas nuevas recogen la clasificación y las descripciones del BC3 de origen;
+cuando no hay partidas desarrolladas, indican que deben completarse las
+prescripciones. No se inventan condiciones técnicas ausentes.
+El catálogo admite `rutas_anteriores` para recuperar decisiones de proyectos
+guardados antes de renombrar una ficha. El editor permite crear y renombrar fichas
+en carpetas terminales y actualiza catálogo, índice y enlaces en una sola operación.
+
+La reorganización puede reproducirse con
+`python -m tools.pptp.bcca_library tools\pptp\BIBLIOTECA.zip tools\BCCA2023_V02.bc3`.
+El BC3 solo se necesita para esa operación de mantenimiento, no para utilizar PPTP.
+Repetirla no duplica fichas ni sobrescribe las específicas existentes.
+
 La búsqueda usa el JSON, no recorre los textos Markdown ni interpreta el índice.
 `INDICE_FICHAS.md` permanece dentro del ZIP como índice de lectura para las
 personas. Solo al generar se leen las fichas seleccionadas. No se incorporan al
 pliego los documentos de origen del ZIP ni el índice.
 Si reemplazas el ZIP con PPTP abierto, cierra y vuelve a abrir el asistente.
-Los archivos de las secciones 01, 02, 03 y 04 se leen de `tools/pptp/docs`;
-la normativa propuesta procede de la sección 02 de esa carpeta.
+Los archivos de las secciones 01, 02, 03 y 04 se leen de la raíz del ZIP;
+`tools/pptp/docs` se admite como respaldo para bibliotecas antiguas.
+La normativa propuesta procede de la sección 02.
 El programa informa de bibliotecas inválidas, fichas ausentes o modificadas y
 secciones que falten, sin generar documentos incompletos.
 

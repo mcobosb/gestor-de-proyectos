@@ -30,6 +30,7 @@ class CatalogEntry:
     title: str
     path: str
     warning: str
+    aliases: tuple[str, ...] = ()
 
 
 class ZipLibrary:
@@ -40,6 +41,7 @@ class ZipLibrary:
         self.archive = archive
         self.docs = docs
         self.entries: dict[str, CatalogEntry] = {}
+        self.aliases: dict[str, str] = {}
         self.chapter_titles: dict[str, str] = {}
         self._signature = self._file_signature()
         try:
@@ -92,7 +94,7 @@ class ZipLibrary:
                         part.split("_", 1)[0].upper()
                         for part in PurePosixPath(relative).parts[1:-1]
                     ]
-                    if (not levels or levels[-1] != code
+                    if (not levels or not code.startswith(levels[-1])
                             or any(not re.fullmatch(r"\d{2}[A-Z]*", level) for level in levels)
                             or any(not child.startswith(parent) for parent, child in zip(levels, levels[1:]))):
                         raise ValueError(f"Clasificación de ficha no válida: {relative}")
@@ -111,14 +113,27 @@ class ZipLibrary:
                     selection = row.get("seleccion", {})
                     if not isinstance(selection, dict):
                         raise ValueError(f"Datos de selección no válidos: {relative}")
+                    aliases = row.get("rutas_anteriores", [])
+                    if not isinstance(aliases, list) or any(
+                        not isinstance(alias, str) or not alias.startswith("UNI/")
+                        for alias in aliases
+                    ):
+                        raise ValueError(f"Alias de ficha no válidos: {relative}")
+                    for alias in aliases:
+                        validate_relative(alias)
+                        if alias in self.aliases and self.aliases[alias] != relative:
+                            raise ValueError(f"Alias de ficha duplicado: {alias}")
+                        self.aliases[alias] = relative
                     warning = (
                         "Revisar operación, material y uso antes de incorporar la ficha."
                         if selection.get("requiere_confirmacion") else ""
                     )
                     self.entries[relative] = CatalogEntry(
-                        row["id"], code, row["titulo"], relative, warning,
+                        row["id"], code, row["titulo"], relative, warning, tuple(aliases),
                     )
                     identifiers.add(row["id"])
+                if any(alias in self.entries and alias != target for alias, target in self.aliases.items()):
+                    raise ValueError("Un alias de ficha coincide con otra ficha del catálogo.")
         except (BadZipFile, RuntimeError, NotImplementedError, UnicodeError) as exc:
             raise ValueError(f"No se pudo leer la biblioteca ZIP: {exc}") from exc
 
@@ -151,6 +166,7 @@ class ZipLibrary:
 
     def read_sheet(self, relative: str) -> str:
         """Lee solo una ficha seleccionada."""
+        relative = self.resolve_sheet(relative)
         entry = self.entries.get(relative)
         if entry is None:
             raise ValueError(f"La ficha no figura en catalogo.json: {relative}")
@@ -167,6 +183,10 @@ class ZipLibrary:
         except (BadZipFile, RuntimeError, NotImplementedError) as exc:
             raise ValueError(f"No se pudo leer la ficha {relative}: {exc}") from exc
         return content.decode("utf-8-sig")
+
+    def resolve_sheet(self, relative: str) -> str:
+        """Traduce rutas anteriores a la ficha actual sin perder decisiones de proyecto."""
+        return self.aliases.get(relative, relative)
 
     def read_documents(self, prefix: str) -> list[tuple[str, str]]:
         """Lee documentos base del ZIP y conserva el directorio externo como respaldo."""

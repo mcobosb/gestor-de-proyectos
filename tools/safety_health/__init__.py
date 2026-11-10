@@ -4,7 +4,7 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import tkinter as tk
 from tkinter import ttk
 from typing import TYPE_CHECKING
@@ -382,13 +382,35 @@ class SafetyHealthWindow(tk.Toplevel):
 
     def open_library_editor(self) -> None:
         """Abre el editor de fichas de Seguridad y Salud."""
-        from tools._library_editor import LibraryEditor
+        from tools._library_editor import LibraryEditor, library_members
 
+        item_codes = {item.code.upper() for item in self.app.budget_items}
+        resource_codes = {
+            resource.code.upper()
+            for item in self.app.budget_items
+            for resource, _, _ in self.app._report_components(item)
+            if resource.ctype in {"2", "3"}
+        }
+        used_members = set()
+        for member in library_members(LIBRARY_PATH):
+            path = PurePosixPath(member)
+            if path.suffix.casefold() != ".md":
+                continue
+            if member.startswith("UNI/"):
+                code = path.stem.removeprefix("FICHA_ESS_").split("-", 1)[0].upper()
+                if not code[:2].isdigit() or not code[2:].isalpha():
+                    continue
+                if any(item_code.startswith(code) for item_code in item_codes):
+                    used_members.add(member)
+            elif member.startswith("RECURSOS/") and path.stem.split("-", 1)[0].upper() in resource_codes:
+                used_members.add(member)
         if self.library_editor is not None and self.library_editor.winfo_exists():
+            self.library_editor.highlight_used(used_members)
             self.library_editor.lift()
             return
         self.library_editor = LibraryEditor(
             self, LIBRARY_PATH, "Biblioteca de fichas de Seguridad y Salud",
+            used_members=used_members,
         )
 
     def _toggle(self, event=None):

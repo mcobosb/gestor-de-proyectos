@@ -155,7 +155,7 @@ class PptpWindow(tk.Toplevel):
                 sheet = self.sheets[row.path]
                 levels = directory_codes(sheet)
                 code = normalized_code(row.code)
-                codes.add(code if row.automatic and code.startswith(levels[0]) else levels[-1])
+                codes.add(code if row.automatic and code.startswith(levels[0]) else sheet.code)
         self.regulations = load_regulations(self.library, codes)
         for ref in self.regulations:
             self.regulation_choices.setdefault(ref.id, ref.selected)
@@ -223,11 +223,17 @@ class PptpWindow(tk.Toplevel):
         """Abre el editor de fichas PPTP sin cerrar el asistente del proyecto."""
         from tools._library_editor import LibraryEditor
 
+        used_members = {
+            row.path for row in [*self.automatic, *self.unmatched]
+            if row.selected and row.path in self.sheets
+        }
         if self.library_editor is not None and self.library_editor.winfo_exists():
+            self.library_editor.highlight_used(used_members)
             self.library_editor.lift()
             return
         self.library_editor = LibraryEditor(
             self, LIBRARY_PATH, "Biblioteca de fichas PPTP", on_saved=self.reload_library,
+            used_members=used_members,
         )
 
     def reload_library(self) -> None:
@@ -235,6 +241,19 @@ class PptpWindow(tk.Toplevel):
         self.library = ZipLibrary(LIBRARY_PATH, DOCS_ROOT)
         self.catalog = load_catalog(self.library)
         self.sheets = {sheet.path: sheet for sheet in self.catalog}
+        for row in [*self.automatic, *self.unmatched]:
+            row.path = self.library.resolve_sheet(row.path)
+        self.automatic, self.unmatched = propose(
+            self.budget_snapshot, self.app.chapter_titles, self.catalog,
+            {"selections": [asdict(row) for row in [*self.automatic, *self.unmatched]]},
+        )
+        if self.step:
+            self.show_step()
+        if self.library_editor is not None and self.library_editor.winfo_exists():
+            self.library_editor.highlight_used({
+                row.path for row in [*self.automatic, *self.unmatched]
+                if row.selected and row.path in self.sheets
+            })
 
     def selection_table(
         self, parent: tk.Misc,

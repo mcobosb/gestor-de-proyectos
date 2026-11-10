@@ -66,7 +66,28 @@ _TEXT = {
     "Exportar recursos a ODS…": ("Export resources to ODS…", "Exporter les ressources au format ODS…"),
     "Exportar descompuestos a ODS…": ("Export breakdowns to ODS…", "Exporter les décompositions au format ODS…"),
     "Herramientas": ("Tools", "Outils"),
+    "Verde: fichas utilizadas y carpetas que las contienen.": (
+        "Green: used sheets and their containing folders.",
+        "Vert : fiches utilisées et dossiers qui les contiennent.",
+    ),
     "Editar biblioteca de fichas...": ("Edit sheet library...", "Modifier la bibliothèque de fiches..."),
+    "Nueva ficha...": ("New sheet...", "Nouvelle fiche..."),
+    "Renombrar ficha...": ("Rename sheet...", "Renommer la fiche..."),
+    "Nueva ficha": ("New sheet", "Nouvelle fiche"),
+    "Renombrar ficha": ("Rename sheet", "Renommer la fiche"),
+    "Nombre de ficha (CÓDIGO-Descripción.md):": (
+        "Sheet name (CODE-Description.md):", "Nom de fiche (CODE-Description.md) :",
+    ),
+    "No se pudo crear la ficha": ("Could not create sheet", "Impossible de créer la fiche"),
+    "No se pudo renombrar la ficha": ("Could not rename sheet", "Impossible de renommer la fiche"),
+    "Selecciona una carpeta terminal que ya contenga fichas Markdown.": (
+        "Select a leaf folder that already contains Markdown sheets.",
+        "Sélectionnez un dossier terminal contenant déjà des fiches Markdown.",
+    ),
+    "Selecciona una ficha Markdown de una carpeta terminal.": (
+        "Select a Markdown sheet in a leaf folder.",
+        "Sélectionnez une fiche Markdown dans un dossier terminal.",
+    ),
     "Biblioteca de fichas PPTP": ("PPTP sheet library", "Bibliothèque de fiches PPTP"),
     "Biblioteca de fichas de Seguridad y Salud": (
         "Health and Safety sheet library", "Bibliothèque de fiches Sécurité et Santé",

@@ -3,6 +3,8 @@ from pathlib import Path
 import tempfile
 import tkinter as tk
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from tools._library_editor import LibraryEditor, library_members, read_markdown, write_markdown
@@ -105,6 +107,80 @@ class LibraryEditorTests(unittest.TestCase):
             archive.writestr("duplicado.md", "segundo")
         with self.assertRaisesRegex(ValueError, "duplicada"):
             library_members(self.archive_path)
+
+    def test_used_sheets_highlight_all_ancestors_and_refresh_without_editing(self):
+        """Color only used Markdown paths and clear outdated marks on refresh."""
+        root = tk.Tk()
+        root.withdraw()
+        self.addCleanup(root.destroy)
+        member = "UNI/01_PRUEBAS/01AB_FICHA.md"
+        editor = LibraryEditor(root, self.archive_path, "Prueba", used_members={member})
+        for node in ("dir:UNI", "dir:UNI/01_PRUEBAS", f"file:{member}"):
+            self.assertEqual(editor.tree.item(node, "tags"), ("used",))
+        self.assertFalse(editor.tree.item("file:UNI/02_GUIA.txt", "tags"))
+        self.assertFalse(editor.tree.item("file:00_base.md", "tags"))
+        editor.tree.selection_set(f"file:{member}")
+        editor._select()
+        editor.text.insert("end", "\nEdición pendiente")
+        editor._edited()
+        editor.highlight_used({"00_base.md", "no-existe.md", "UNI/02_GUIA.txt"})
+        self.assertTrue(editor.dirty)
+        self.assertEqual(editor.selected_member, member)
+        self.assertIn("Edición pendiente", editor.text.get("1.0", "end-1c"))
+        self.assertFalse(editor.tree.item("dir:UNI", "tags"))
+        self.assertEqual(editor.tree.item("file:00_base.md", "tags"), ("used",))
+        self.assertFalse(editor.tree.item("file:UNI/02_GUIA.txt", "tags"))
+
+    def test_pptp_uses_current_selected_paths_and_refreshes_open_editor(self):
+        """Include manual assignments but not excluded or missing catalog entries."""
+        from tools.pptp import PptpWindow
+
+        used = "UNI/01_PRUEBAS/01AB_FICHA.md"
+        window = SimpleNamespace(
+            library_editor=None, reload_library=lambda: None,
+            automatic=[SimpleNamespace(path=used, selected=True)],
+            unmatched=[
+                SimpleNamespace(path="manual.md", selected=True),
+                SimpleNamespace(path="excluded.md", selected=False),
+                SimpleNamespace(path="missing.md", selected=True),
+            ],
+            sheets={used: None, "manual.md": None, "excluded.md": None},
+        )
+        with patch("tools._library_editor.LibraryEditor") as editor:
+            PptpWindow.open_library_editor(window)
+        self.assertEqual(editor.call_args.kwargs["used_members"], {used, "manual.md"})
+        window.automatic[0].selected = False
+        PptpWindow.open_library_editor(window)
+        editor.return_value.highlight_used.assert_called_once_with({"manual.md"})
+
+    def test_safety_highlights_matching_units_and_materials_but_not_personnel(self):
+        """Resolve preventive sheets by work code and resources by budget components."""
+        from tools.safety_health import SafetyHealthWindow
+
+        members = [
+            "UNI/grupo/FICHA_ESS_01UPP.md", "UNI/otro/FICHA_ESS_15CP.md",
+            "RECURSOS/MATERIALES/MAT.md", "RECURSOS/MAQUINARIA/MAQ.md",
+            "RECURSOS/PERSONAL/MO.md",
+        ]
+        app = SimpleNamespace(
+            budget_items=[SimpleNamespace(code="01UPP00001")],
+            _report_components=lambda item: [
+                (SimpleNamespace(code=code, ctype=kind), 1, 10)
+                for code, kind in (("MAT", "3"), ("MAQ", "2"), ("MO", "1"))
+            ],
+        )
+        window = SimpleNamespace(app=app, library_editor=None)
+        with (
+            patch("tools._library_editor.library_members", return_value=members),
+            patch("tools._library_editor.LibraryEditor") as editor,
+        ):
+            SafetyHealthWindow.open_library_editor(window)
+            self.assertEqual(
+                editor.call_args.kwargs["used_members"], {members[0], members[2], members[3]},
+            )
+            app.budget_items = []
+            SafetyHealthWindow.open_library_editor(window)
+        editor.return_value.highlight_used.assert_called_once_with(set())
 
 
 if __name__ == "__main__":

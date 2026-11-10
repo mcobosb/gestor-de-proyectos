@@ -360,6 +360,24 @@ las fichas y el texto final del modo seleccionado en el proyecto. Guarda despué
 el proyecto JSON para recuperarlos en la siguiente sesión. Abrir la ventana o
 cambiar de pestaña no modifica las partidas del presupuesto.
 
+En **Editar biblioteca de fichas...**, tanto en PPTP como en Seguridad y Salud,
+se resaltan en verde las fichas vinculadas al proyecto y todas las carpetas
+que las contienen. En PPTP se utilizan las asignaciones seleccionadas del
+asistente, incluidas las manuales. En Seguridad y Salud se señalan las fichas
+cuya clasificación coincide con las partidas del presupuesto y los materiales
+y maquinaria presentes en sus descomposiciones; no se incluye personal.
+Si vuelves a pulsar el botón con el editor abierto, las marcas se actualizan
+sin descartar el texto que estés editando.
+
+Selecciona una carpeta terminal que ya tenga fichas para activar **Nueva ficha...**.
+Utiliza nombres como `01RPN-Retirada de peldaños de piedra natural.md`: el código
+debe pertenecer a la familia de la carpeta. Tras crearla, escribe sus prescripciones
+y pulsa **Guardar**. Para cambiar el nombre, selecciona una ficha y pulsa
+**Renombrar ficha...**. Si hay cambios pendientes, puedes guardarlos, descartarlos
+o cancelar. La creación y el renombrado actualizan el ZIP de forma atómica; en
+PPTP también actualizan el catálogo y el índice. Las rutas anteriores quedan
+registradas para recuperar las selecciones de proyectos guardados antes del cambio.
+
 Abre **Herramientas → RCDs**, primera entrada del menú. El modelo procede de las
 hojas **Resumen**, **Lista MAM** y **Presupuesto** del ODS aportado, pero no
 necesita ese archivo para funcionar. Es una estimación revisable, no una
@@ -532,14 +550,25 @@ original por su distinto redondeo de B2.
 ## 8 bis. Preparar el PPTP
 
 Abre **Herramientas → PPTP**, justo debajo de **Planificación**.
-Necesita un presupuesto, `tools/pptp/BIBLIOTECA.zip` y las cuatro secciones
-generales en `tools/pptp/docs`. No necesitas descomprimir las fichas ni conservar
+Necesita un presupuesto y `tools/pptp/BIBLIOTECA.zip`, que contiene las cuatro
+secciones generales en su raíz. No necesitas descomprimir las fichas ni conservar
 una carpeta `archivos`: el asistente detecta el ZIP automáticamente al abrirse.
 Busca las fichas mediante `catalogo.json` y lee únicamente las seleccionadas
 al generar. `INDICE_FICHAS.md` está dentro
 del ZIP para consultar el inventario cómodamente y no se incluye en el pliego.
 Si actualizas la biblioteca, cierra y vuelve a abrir PPTP para cargarla de nuevo.
 No incorpora partidas de RCDs ni de Seguridad y Salud.
+
+La biblioteca se organiza hasta la tercera letra BCCA: `01RP_PELDAÑOS` es la
+carpeta y `01RPA-…md`, `01RPC-…md`, `01RPN-…md`, etc. son fichas dentro de ella,
+no subcarpetas. Se conservan las 684 fichas anteriores como contenido común
+identificado con **Común**, y se añaden 1.621 fichas específicas procedentes de
+la clasificación y las descripciones del BC3 BCCA 2023 V02.
+Cada ficha específica delimita su material u operación y distingue las partidas
+de referencia como alternativas, no como prestaciones acumulables. Si el BC3
+solo define una clasificación sin partidas desarrolladas, la ficha avisa
+expresamente de que hay que completar sus prescripciones. Ninguna ficha sustituye
+la revisión técnica de sus condiciones antes de incorporarlas al contrato.
 
 1. **Datos del proyecto.** Revisa el título, la entidad y el plazo de garantía
    (incluye la unidad, por ejemplo, «12 meses»). Se toman del proyecto y de
@@ -550,8 +579,11 @@ No incorpora partidas de RCDs ni de Seguridad y Salud.
    Si no has realizado la planificación, aparece «Pendiente de planificación»
    y un aviso para realizarla. Debes sustituir ese marcador por un plazo manual
    antes de continuar; no se inventa una duración.
-2. **Correspondencias automáticas.** Para una partida `01TR…`, se buscan
-   los archivos de los niveles `01`, `01T` y `01TR`, sin añadir los de sus
+2. **Correspondencias automáticas.** Para una partida `01RPN…`, se proponen
+   las condiciones comunes de `01RP` y la ficha específica `01RPN`, no las de
+   piedra artificial, cerámica o madera. Se usa el código de cada ficha, no
+   únicamente el de la carpeta. También se incluyen las fichas comunes existentes
+   en los niveles antecesores, sin añadir los de sus
    ramas hermanas. Cada fila muestra la partida, el código y título de la ficha
    y su check, inicialmente marcado. Puedes desmarcarlo con el ratón o con Espacio.
    Al seleccionar una fila puedes leer su ruta y advertencias.

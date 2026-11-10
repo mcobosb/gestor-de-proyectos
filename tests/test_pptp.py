@@ -55,7 +55,7 @@ class PptpTests(unittest.TestCase):
 
     def test_index_decodes_unicode_paths_and_keeps_distinct_variants(self):
         """Las fichas del mismo codigo no se confunden por clasificacion."""
-        self.assertEqual(len(self.catalog), 684)
+        self.assertEqual(len(self.catalog), 2305)
         matches = [sheet for sheet in self.catalog if sheet.code == "01TR"]
         self.assertEqual(len(matches), 1)
         self.assertTrue(bool(self.library.read_sheet(matches[0].path)))
@@ -501,6 +501,55 @@ class PptpWindowTests(unittest.TestCase):
             window.variables["bullet_capitulos_obra"].get(), "Resumen ficticio de obras",
         )
 
+    def test_library_edits_reload_matches_without_losing_review_or_project_text(self):
+        """Create and rename real sheets while keeping open wizard decisions intact."""
+        archive = self.folder / "library.zip"
+        shutil.copyfile(LIBRARY_PATH, archive)
+        self.app.budget_items[0].code = "01TRX00001"
+        with patch("tools.pptp.LIBRARY_PATH", archive):
+            window = self.make_window()
+            common = next(sheet for sheet in window.catalog if sheet.code == "01TR")
+            next(row for row in window.automatic if row.path == common.path).selected = False
+            window.unmatched[0].path = common.path
+            window.unmatched[0].selected = False
+            window.variables["plazo_ejecucion"].set("2 meses")
+            window.summary.insert("1.0", "Texto pendiente del proyecto")
+            window.open_library_editor()
+            editor = window.library_editor
+            editor.tree.selection_set("file:" + common.path)
+            editor._select()
+            with patch(
+                "tools._library_editor.simpledialog.askstring",
+                return_value="01TR-Condiciones comunes de prueba.md",
+            ):
+                editor.rename_sheet()
+            renamed = window.library.resolve_sheet(common.path)
+            self.assertNotEqual(renamed, common.path)
+            self.assertFalse(next(row for row in window.automatic if row.path == renamed).selected)
+            self.assertEqual(window.unmatched[0].path, renamed)
+            self.assertFalse(window.unmatched[0].selected)
+            with patch(
+                "tools._library_editor.simpledialog.askstring",
+                return_value="01TRX-Ficha de prueba.md",
+            ):
+                editor.new_sheet()
+            new_path = editor.selected_member
+            self.assertTrue(any(row.path == new_path for row in window.automatic))
+            self.assertEqual(window.summary.get("1.0", "end-1c"), "Texto pendiente del proyecto")
+            self.assertEqual(editor.tree.item("file:" + new_path, "tags"), ("used",))
+            window.accept()
+            self.assertEqual(window.step, 1)
+            with patch(
+                "tools._library_editor.simpledialog.askstring",
+                return_value="01TRX-Ficha de prueba renombrada.md",
+            ):
+                editor.rename_sheet()
+            self.assertTrue(any(
+                row.path == editor.selected_member for row in window.automatic
+            ))
+            self.assertEqual(len(window.tree.get_children()), len(window.automatic))
+            self.assertEqual(self.app.pptp_state, {})
+
     def test_steps_checks_manual_dropdown_and_regulation_refresh(self):
         """Navega, abre desplegable, selecciona ficha y recalcula normas vinculadas."""
         window = self.make_window()
@@ -517,7 +566,7 @@ class PptpWindowTests(unittest.TestCase):
         self.root.update_idletasks()
         self.assertIsNotNone(window.editor)
         choices = window.editor.cget("values")
-        self.assertEqual(len(choices), 684)
+        self.assertEqual(len(choices), len(window.catalog))
         target_index = next(index for index, sheet in enumerate(window.catalog) if sheet.code == "15SH")
         window.editor.current(target_index)
         window.editor.event_generate("<<ComboboxSelected>>")
