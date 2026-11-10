@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from bc3_gui import BudgetApp
     from tools._library_editor import LibraryEditor
 
-TOOL_LABEL = "PPTP"
+TOOL_LABEL = "PPTP (BCCA · Junta de Andalucía)"
 TOOL_ORDER = 35
 LIBRARY_PATH = Path(__file__).resolve().parent / "BIBLIOTECA.zip"
 DOCS_ROOT = Path(__file__).resolve().parent / "docs"

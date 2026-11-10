@@ -329,6 +329,12 @@ referencia o completa los precios necesarios antes de volver a generarlo.
 
 ## 8. Estimar residuos de construcción y demolición (RCDs)
 
+En el menú **Herramientas**, **PPTP** y **Seguridad y salud** llevan la indicación
+**(BCCA · Junta de Andalucía)**: sus bibliotecas y correspondencias automáticas
+están basadas en esa clasificación de precios. No debe suponerse una
+correspondencia automática con códigos de otras bases. Esta indicación no bloquea
+la apertura de las herramientas ni modifica el presupuesto.
+
 Si el presupuesto importado ya tiene un capítulo de gestión de residuos, RCDs
 o escombros no creado por la herramienta, **Herramientas → RCDs** permite
 abrir la ventana, pero protege ese capítulo al intentar guardar una estimación.

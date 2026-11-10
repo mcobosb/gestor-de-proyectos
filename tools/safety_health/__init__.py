@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from tools._library_editor import LibraryEditor
 
 
-TOOL_LABEL = "Seguridad y salud"
+TOOL_LABEL = "Seguridad y salud (BCCA · Junta de Andalucía)"
 TOOL_ORDER = 20
 LIBRARY_PATH = Path(__file__).resolve().parent / "BIBLIOTECA.zip"
 CARE_CENTERS_URL = (

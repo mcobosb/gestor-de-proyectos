@@ -66,6 +66,13 @@ _TEXT = {
     "Exportar recursos a ODS…": ("Export resources to ODS…", "Exporter les ressources au format ODS…"),
     "Exportar descompuestos a ODS…": ("Export breakdowns to ODS…", "Exporter les décompositions au format ODS…"),
     "Herramientas": ("Tools", "Outils"),
+    "PPTP (BCCA · Junta de Andalucía)": (
+        "PPTP (BCCA · Junta de Andalucía)", "PPTP (BCCA · Junta de Andalucía)",
+    ),
+    "Seguridad y salud (BCCA · Junta de Andalucía)": (
+        "Health and safety (BCCA · Junta de Andalucía)",
+        "Sécurité et santé (BCCA · Junta de Andalucía)",
+    ),
     "Verde: fichas utilizadas y carpetas que las contienen.": (
         "Green: used sheets and their containing folders.",
         "Vert : fiches utilisées et dossiers qui les contiennent.",

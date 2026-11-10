@@ -134,6 +134,12 @@ class ToolDiscoveryTests(ToolTestCase):
             [tool.name for tool in loaded],
             ["rcd", "safety_health", "planning", "pptp", "certifications", "invoicing"],
         )
+        labels = {tool.name: tool.label for tool in loaded}
+        self.assertEqual(labels["pptp"], "PPTP (BCCA · Junta de Andalucía)")
+        self.assertEqual(
+            labels["safety_health"], "Seguridad y salud (BCCA · Junta de Andalucía)",
+        )
+        self.assertNotIn("BCCA", labels["rcd"])
         for tool in loaded:
             self.assertFalse((ROOT / f"{tool.name}.py").exists())
             self.assertFalse((ROOT / "tools" / f"{tool.name}.py").exists())
