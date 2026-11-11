@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from hashlib import sha256
 from html import escape, unescape
 import re
 from typing import TYPE_CHECKING
@@ -14,11 +15,32 @@ if TYPE_CHECKING:
 
 INDEX_MARKER = "<!-- TABLA_FICHAS_CAPITULOS -->"
 INDEX_TOKEN = "[[PPTP_SHEET_INDEX]]"
-HEADERS = ("Capítulo del proyecto", "Ficha")
+HEADERS = ("Capítulo del proyecto", "Ficha", "Normas UNE")
 HEADER_BACKGROUND = "#4472C4"
 ALTERNATE_BACKGROUND = "#D9E5F5"
-COLUMN_RATIOS = (0.35, 0.65)
-TABLE_HEADER = "| " + " | ".join(HEADERS) + " |\n| --- | --- |"
+COLUMN_RATIOS = (0.26, 0.44, 0.30)
+TABLE_HEADER = "| " + " | ".join(HEADERS) + " |\n| --- | --- | --- |"
+
+
+@dataclass(frozen=True)
+class UneIndexLink:
+    """Designación UNE seleccionada y destino de su referencia normativa."""
+
+    label: str
+    bookmark: str
+
+
+def regulation_bookmark(identifier: str) -> str:
+    """Genera un destino estable sin interpretar caracteres del identificador."""
+    return "PPTPRegulation" + sha256(identifier.encode("utf-8")).hexdigest()
+
+
+def take_regulation_anchor(text: str) -> tuple[str, str]:
+    """Retira del texto visible el marcador interno de una referencia UNE."""
+    match = re.search(r"\[\[PPTP_REGULATION:(PPTPRegulation[0-9a-f]{64})\]\]", text)
+    if match is None:
+        return text, ""
+    return text[:match.start()] + text[match.end():], match[1]
 
 
 @dataclass(frozen=True)
@@ -28,6 +50,7 @@ class SheetIndexRow:
     chapter: str
     sheet: str
     bookmark: str
+    unes: tuple[UneIndexLink, ...] = ()
 
 
 def chapter_groups(rows: list[SheetIndexRow]) -> dict[str, list[SheetIndexRow]]:
@@ -36,6 +59,11 @@ def chapter_groups(rows: list[SheetIndexRow]) -> dict[str, list[SheetIndexRow]]:
     for row in rows:
         groups.setdefault(row.chapter, []).append(row)
     return groups
+
+
+def chapter_unes(sheets: list[SheetIndexRow]) -> tuple[UneIndexLink, ...]:
+    """Reúne las UNE de un capítulo sin repetir referencias compartidas por fichas."""
+    return tuple({link.bookmark: link for sheet in sheets for link in sheet.unes}.values())
 
 
 def escape_cell(value: str) -> str:
@@ -53,7 +81,10 @@ def markdown_index(rows: list[SheetIndexRow]) -> str:
         links = "<br/>".join(
             f"[{escape_cell(row.sheet)}](#{row.bookmark})" for row in sheets
         )
-        lines.append(f"| {escape_cell(chapter)} | {links} |")
+        unes = "<br/>".join(
+            f"[{escape_cell(link.label)}](#{link.bookmark})" for link in chapter_unes(sheets)
+        ) or "—"
+        lines.append(f"| {escape_cell(chapter)} | {links} | {unes} |")
     return "\n".join(lines)
 
 
@@ -72,13 +103,20 @@ def extract_index(source: str) -> tuple[str, list[SheetIndexRow]]:
     rows = []
     for line in match[1].splitlines():
         cells = [cell.strip() for cell in line.strip("|").split("|")]
-        if len(cells) != 2:
-            raise ValueError("La tabla de fichas debe contener dos columnas.")
+        if len(cells) != 3:
+            raise ValueError("La tabla de fichas debe contener tres columnas.")
+        unes = []
+        if cells[2] != "—":
+            for value in cells[2].split("<br/>"):
+                link = re.fullmatch(r"\[([^]]+)\]\(#(PPTPRegulation[0-9a-f]{64})\)", value)
+                if link is None:
+                    raise ValueError("La tabla de fichas contiene un enlace UNE no válido.")
+                unes.append(UneIndexLink(unescape(link[1]), link[2]))
         for value in cells[1].split("<br/>"):
             link = re.fullmatch(r"\[([^]]+)\]\(#(PPTPHeading\d+)\)", value)
             if link is None:
                 raise ValueError("La tabla de fichas contiene un enlace de ficha no válido.")
-            rows.append(SheetIndexRow(unescape(cells[0]), unescape(link[1]), link[2]))
+            rows.append(SheetIndexRow(unescape(cells[0]), unescape(link[1]), link[2], tuple(unes)))
     return source[:match.start()] + INDEX_TOKEN + "\n\n" + source[match.end():], rows
 
 
@@ -133,7 +171,7 @@ def write_odt_index(document: _OdtReport, rows: list[SheetIndexRow]) -> None:
         })
     groups = chapter_groups(rows)
     document.table(
-        HEADERS, [[chapter, ""] for chapter in groups],
+        HEADERS, [[chapter, "", ""] for chapter in groups],
         ratios=COLUMN_RATIOS, body_text_style="PPTPIndexText",
     )
     table = document.body[-1]
@@ -148,16 +186,23 @@ def write_odt_index(document: _OdtReport, rows: list[SheetIndexRow]) -> None:
                 _tag("table:style-name"),
                 "PPTPIndexBlueCell" if index % 2 == 0 else "PPTPIndexWhiteCell",
             )
-        cell = cells[-1]
-        cell.remove(cell.find(_tag("text:p")))
-        for sheet in sheets:
-            paragraph = ET.SubElement(cell, _tag("text:p"), {
-                _tag("text:style-name"): "PPTPIndexBullet",
-            })
-            paragraph.text = "• "
-            ET.SubElement(paragraph, _tag("text:a"), {
-                _tag("xlink:href"): "#" + sheet.bookmark, _tag("xlink:type"): "simple",
-            }).text = sheet.sheet
+        for cell, links in (
+            (cells[1], [(sheet.sheet, sheet.bookmark) for sheet in sheets]),
+            (cells[2], [(link.label, link.bookmark) for link in chapter_unes(sheets)]),
+        ):
+            cell.remove(cell.find(_tag("text:p")))
+            if not links:
+                ET.SubElement(cell, _tag("text:p"), {
+                    _tag("text:style-name"): "PPTPIndexText",
+                }).text = "—"
+            for label, bookmark in links:
+                paragraph = ET.SubElement(cell, _tag("text:p"), {
+                    _tag("text:style-name"): "PPTPIndexBullet",
+                })
+                paragraph.text = "• "
+                ET.SubElement(paragraph, _tag("text:a"), {
+                    _tag("xlink:href"): "#" + bookmark, _tag("xlink:type"): "simple",
+                }).text = label
 
 
 def pdf_index(rows: list[SheetIndexRow], layout: ReportLayout, body: ParagraphStyle):
@@ -189,6 +234,12 @@ def pdf_index(rows: list[SheetIndexRow], layout: ReportLayout, body: ParagraphSt
                 )
                 for row in sheets
             ],
+            [
+                Paragraph(
+                    f'<a href="#{link.bookmark}">{escape(link.label)}</a>', bullet, bulletText="•",
+                )
+                for link in chapter_unes(sheets)
+            ] or [Paragraph("—", normal)],
         ])
     class SheetIndexTable(Table):
         """Mantiene la alineación y reserva las cabeceras repetidas para la página siguiente."""

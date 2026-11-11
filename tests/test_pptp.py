@@ -643,6 +643,130 @@ class PptpWindowTests(unittest.TestCase):
         self.assertIn("Resumen ficticio", window.summary.get("1.0", "end"))
         self.assertEqual(self.app.pptp_state, {})
 
+    def test_normative_table_shows_relations_and_toggles_inclusion(self):
+        """Las UNE se pueden revisar por partida y ficha sin incluirlas automáticamente."""
+        self.app.budget_items = [
+            ProjectItem("03ACC00011", "01#", "kg", "Acero en cimentacion"),
+            ProjectItem("P1", "01#", "ud", "Asignacion manual"),
+        ]
+        window = self.make_window()
+        window.regulation_choices["UNE-EN-15361-2009"] = False
+        window.reviewed_unes.add("UNE-EN-15361-2009")
+        self.next_steps(window)
+        self.assertEqual(tuple(window.legal_tree["columns"]), ("item", "sheet", "related", "selected"))
+        self.assertEqual(window.legal_tree.heading("sheet")["text"], "Partidas relacionadas")
+        self.assertEqual(window.legal_tree.heading("related")["text"], "Fichas relacionadas")
+        index = next(i for i, ref in enumerate(window.regulations) if ref.id == "UNE-EN-15361-2009")
+        ref = window.regulations[index]
+        iid = str(index)
+        self.assertIn("03ACC00011", window.legal_tree.set(iid, "sheet"))
+        self.assertIn("Acero en cimentacion", window.legal_tree.set(iid, "sheet"))
+        self.assertIn("03ACC", window.legal_tree.set(iid, "related"))
+        self.assertFalse(window.regulation_choices[ref.id])
+        window.legal_tree.selection_set(iid)
+        window.show_regulation()
+        self.assertIn("No incluida.", window.legal_detail.get("1.0", "end"))
+        window.toggle_regulation(SimpleNamespace(keysym="space"))
+        self.assertTrue(window.regulation_choices[ref.id])
+        self.assertEqual(window.legal_tree.set(iid, "selected"), "☑")
+        self.assertIn("Incluida en el pliego.", window.legal_detail.get("1.0", "end"))
+        with patch.object(window.legal_tree, "identify_row", return_value=iid), \
+                patch.object(window.legal_tree, "identify_column", return_value="#4"):
+            window.toggle_regulation(SimpleNamespace(keysym="", x=0, y=0))
+        self.assertFalse(window.regulation_choices[ref.id])
+        common = next(sheet for sheet in window.catalog if sheet.code == "03ACC")
+        window.unmatched[0].path = common.path
+        window.show_step()
+        index = next(i for i, value in enumerate(window.regulations) if value.id == ref.id)
+        self.assertIn("Asignacion manual", window.legal_tree.set(str(index), "sheet"))
+        self.assertFalse(window.regulation_choices[ref.id])
+        self.assertTrue(any("P1" in item for item, _ in window.regulation_relations[ref.id]))
+        window.unmatched[0].selected = False
+        window.show_step()
+        index = next(i for i, value in enumerate(window.regulations) if value.id == ref.id)
+        self.assertNotIn("Asignacion manual", window.legal_tree.set(str(index), "sheet"))
+        self.assertFalse(window.regulation_choices[ref.id])
+
+    def test_selected_une_is_saved_exported_and_restored(self):
+        """Verifica el recorrido real desde el check UNE hasta JSON, PDF y reapertura."""
+        self.app.budget_items = [
+            ProjectItem("03ACC00011", "01#", "kg", "Acero en cimentacion"),
+        ]
+        window = self.make_window()
+        self.next_steps(window)
+        identifier = "UNE-EN-15361-2009"
+        index = next(i for i, ref in enumerate(window.regulations) if ref.id == identifier)
+        window.legal_tree.selection_set(str(index))
+        self.assertTrue(window.regulation_choices[identifier])
+        self.app.project_path = self.folder / "proyecto-une.json"
+        self.app.report_settings.output_format = "pdf"
+        target = self.folder / "PPTP-UNE.pdf"
+        with patch("tools.pptp.filedialog.asksaveasfilename", return_value=str(target)), \
+                patch("tools.pptp.messagebox.showinfo"):
+            window.generate()
+        saved = json.loads(self.app.project_path.read_text(encoding="utf-8"))
+        self.assertIs(saved["pptp"]["regulations"][identifier], True)
+        with PdfReader(target) as reader:
+            pages = [page.extract_text() for page in reader.pages]
+            self.assertIn("UNE-EN 15361:2009", "\n".join(pages))
+            table_pages = [
+                (page, text) for page, text in zip(reader.pages, pages)
+                if "Capítulo del proyecto" in text and "Normas UNE" in text
+            ]
+            self.assertTrue(table_pages)
+            self.assertTrue(any("UNE-EN 15361:2009" in text for _, text in table_pages))
+            self.assertTrue(any(
+                annotation.get_object().get("/Dest", [None, None])[1] == "/XYZ"
+                for page, _ in table_pages for annotation in page.get("/Annots", [])
+            ))
+        self.app.pptp_state = {}
+        self.assertTrue(self.app._load_project_file(self.app.project_path))
+        reopened = self.make_window()
+        self.next_steps(reopened)
+        index = next(i for i, ref in enumerate(reopened.regulations) if ref.id == identifier)
+        self.assertIs(reopened.regulation_choices[identifier], True)
+        self.assertEqual(reopened.legal_tree.set(str(index), "selected"), "☑")
+        reopened.legal_tree.selection_set(str(index))
+        reopened.toggle_regulation(SimpleNamespace(keysym="space"))
+        with patch("tools.pptp.filedialog.asksaveasfilename", return_value=str(target)), \
+                patch("tools.pptp.messagebox.showinfo"):
+            reopened.generate()
+        saved = json.loads(self.app.project_path.read_text(encoding="utf-8"))
+        self.assertIs(saved["pptp"]["regulations"][identifier], False)
+        self.assertIn(identifier, saved["pptp"]["une_revisadas"])
+        self.app.pptp_state = {}
+        self.assertTrue(self.app._load_project_file(self.app.project_path))
+        reviewed = self.make_window()
+        self.next_steps(reviewed)
+        self.assertFalse(reviewed.regulation_choices[identifier])
+
+    def test_automatic_preselection_replaces_legacy_choices_and_preserves_manual_changes(self):
+        """El proyecto antiguo aplica una sola UNE por familia con revisión manual posterior."""
+        window = self.make_window()
+        self.next_steps(window)
+        from tools.pptp.document import Regulation
+        references = [
+            Regulation("OLD", ["01"], "revision", "Revisar", "* UNE-EN 1234-1:2020. Titulo.", False),
+            Regulation("NEW", ["01"], "revision", "Revisar", "* UNE-EN 1234-2:2024. Titulo.", True),
+            Regulation("LAW", ["*"], "candidata", "Revisar", "* Ley de prueba.", True),
+        ]
+        window.regulation_choices = {"OLD": True, "NEW": False, "LAW": False}
+        with patch("tools.pptp.load_regulations", return_value=references):
+            window.show_step()
+            self.assertEqual(window.regulation_choices, {"OLD": False, "NEW": True, "LAW": False})
+            self.assertEqual(window.legal_tree.set("1", "selected"), "☑")
+            window.legal_tree.selection_set("1")
+            window.toggle_regulation(SimpleNamespace(keysym="space"))
+            self.assertIn("NEW", window.reviewed_unes)
+            window.show_step()
+            self.assertFalse(window.regulation_choices["NEW"])
+        widgets = list(window.content.winfo_children())
+        while widgets:
+            widget = widgets.pop()
+            widgets.extend(widget.winfo_children())
+            if isinstance(widget, ttk.Button):
+                self.assertNotIn("Preseleccionar", widget.cget("text"))
+
     def test_generate_saves_json_and_reopens_selections(self):
         """Guarda de verdad el proyecto y un ODT recuperable con las selecciones."""
         window = self.make_window()

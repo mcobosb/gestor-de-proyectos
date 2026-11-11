@@ -13,8 +13,8 @@ import unicodedata
 from urllib.parse import unquote
 from .library import ZipLibrary
 from .sheet_index import (
-    INDEX_MARKER, INDEX_TOKEN, SheetIndexRow, extract_index, markdown_index,
-    pdf_index, write_odt_index,
+    INDEX_MARKER, INDEX_TOKEN, SheetIndexRow, UneIndexLink, extract_index, markdown_index,
+    pdf_index, regulation_bookmark, take_regulation_anchor, write_odt_index,
 )
 from tools._library_markdown import document_markdown
 
@@ -113,6 +113,8 @@ class Regulation:
     condition: str
     text: str
     selected: bool = False
+    une_code: str = ""
+    publication_date: str = ""
 
 
 def safe_path(root: Path, relative: str) -> Path:
@@ -332,12 +334,51 @@ def _read_regulation(match: re.Match[str], name: str) -> Regulation:
                        for key in ("id", "seleccion", "condicion"))
                 or data["seleccion"] not in {"candidata", "revision"}):
             raise ValueError("Metadatos normativos no válidos.")
+        for key in ("codigo_une", "fecha_publicacion"):
+            if key in data and not isinstance(data[key], str):
+                raise ValueError("Metadatos UNE no válidos.")
+        if data.get("fecha_publicacion"):
+            date.fromisoformat(data["fecha_publicacion"])
         return Regulation(
             data["id"], refs, data["seleccion"], data["condicion"], match[2],
             data["seleccion"] == "candidata",
+            data.get("codigo_une", ""), data.get("fecha_publicacion", ""),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError(f"Clasificación normativa no válida en {name}: {exc}") from exc
+
+
+def regulation_matches(ref: Regulation, codes: set[str]) -> bool:
+    """Comprueba la correspondencia BCCA usada por propuestas y enlaces normativos."""
+    return "*" in ref.codes or any(
+        code.startswith(prefix) or prefix.startswith(code)
+        for prefix in ref.codes for code in codes
+    )
+
+
+def une_designation(ref: Regulation) -> str:
+    """Obtiene la designación sin truncar versiones UNE que contienen puntos."""
+    if ref.une_code:
+        return ref.une_code
+    match = re.match(r"[*+-] ((?:ESPECIFICACION )?UNE[^ \n]*.*?)(?:\. |$)", ref.text)
+    return match[1] if match else ""
+
+
+def latest_une_ids(regulations: list[Regulation]) -> set[str]:
+    """Propone una UNE por familia BCCA, ignorando partes y priorizando fecha de publicación."""
+    families: dict[str, tuple[tuple[str, str, str], str]] = {}
+    for ref in regulations:
+        designation = une_designation(ref)
+        family = re.match(r"^((?:ESPECIFICACION )?UNE[^0-9]*\d+)", designation)
+        if family is None:
+            continue
+        years = re.findall(r"(?<!\d)((?:19|20)\d{2})(?!\d)", designation[family.end():])
+        publication = ref.publication_date or (max(years) + "-01-01" if years else "")
+        rank = (publication, designation, ref.id)
+        key = family[1]
+        if key not in families or rank > families[key][0]:
+            families[key] = (rank, ref.id)
+    return {identifier for _, identifier in families.values()}
 
 
 def load_regulations(root: Path | ZipLibrary, codes: set[str]) -> list[Regulation]:
@@ -347,14 +388,16 @@ def load_regulations(root: Path | ZipLibrary, codes: set[str]) -> list[Regulatio
         source = document_markdown(source)
         for match in REGULATION_PATTERN.finditer(source):
             ref = _read_regulation(match, name)
-            if "*" in ref.codes or any(
-                code.startswith(prefix) or prefix.startswith(code)
-                for prefix in ref.codes for code in codes
-            ):
+            if regulation_matches(ref, codes):
                 result.setdefault(ref.id, ref)
     if not result:
         raise ValueError("No se encontraron disposiciones legales clasificadas.")
-    return list(result.values())
+    references = list(result.values())
+    latest = latest_une_ids(references)
+    for ref in references:
+        if une_designation(ref):
+            ref.selected = ref.id in latest
+    return references
 
 
 def restore_state(data: object) -> dict:
@@ -378,6 +421,10 @@ def restore_state(data: object) -> dict:
     variables = data.get("variables")
     rows = data.get("selections")
     regulations = data.get("regulations")
+    reviewed_unes = data.get("une_revisadas", [])
+    if (not isinstance(reviewed_unes, list)
+            or any(not isinstance(identifier, str) or not identifier for identifier in reviewed_unes)):
+        raise ValueError("Las decisiones UNE revisadas no son válidas.")
     if (not isinstance(variables, dict)
             or any(not isinstance(variables.get(key), str) for key in VARIABLES)
             or any(not isinstance(variables.get(key, ""), str) for key in PRICE_VARIABLES)
@@ -404,7 +451,8 @@ def restore_state(data: object) -> dict:
             },
             "selections": selections, "regulations": dict(regulations), "toc_depth": toc_depth,
             "aplica_revision_precios": price_revision,
-            "revision_inicio_planificacion": price_start}
+            "revision_inicio_planificacion": price_start,
+            "une_revisadas": list(dict.fromkeys(reviewed_unes))}
 
 
 def price_revision_field(applies: bool) -> str:
@@ -512,6 +560,21 @@ def compose(
         )
         return code, relative.casefold()
 
+    sheet_codes: dict[str, set[str]] = {}
+    for row in selected_rows:
+        paths = (
+            root.resolve_sheets(row["path"], row["code"])
+            if isinstance(root, ZipLibrary) else (row["path"],)
+        )
+        for path in paths:
+            sheet_code = sheet_order(path)[0]
+            item_code = normalized_code(row["code"])
+            code = (
+                item_code if row["automatic"] and item_code.startswith(sheet_code[:2])
+                else sheet_code
+            )
+            sheet_codes.setdefault(path, set()).add(code)
+
     if budget_chapter_titles is None:
         chosen.sort(key=sheet_order)
     else:
@@ -523,6 +586,7 @@ def compose(
         ref.id for ref in regulations if state["regulations"].get(ref.id, ref.selected)
     }
     included: set[str] = set()
+    included_unes: dict[str, tuple[Regulation, UneIndexLink]] = {}
     sections = []
     for name, source in load_documents(root):
         source = document_markdown(source)
@@ -533,6 +597,11 @@ def compose(
             if ref.id not in selected or ref.id in included:
                 return ""
             included.add(ref.id)
+            designation = une_designation(ref)
+            if designation:
+                bookmark = regulation_bookmark(ref.id)
+                included_unes[ref.id] = (ref, UneIndexLink(designation, bookmark))
+                return ref.text[:2] + f"[[PPTP_REGULATION:{bookmark}]]" + ref.text[2:]
             return match[2]
 
         source = REGULATION_PATTERN.sub(filter_regulation, source)
@@ -551,7 +620,7 @@ def compose(
         source = source.replace(INDEX_MARKER, INDEX_TOKEN)
         sections.append(re.sub(r"<!--.*?-->", "", source, flags=re.DOTALL).strip())
     previous_chapter = None
-    sheet_sections: list[tuple[int, int]] = []
+    sheet_sections: list[tuple[int, int, str]] = []
     chapter_labels: dict[int, str] = {}
     chapter_section = 0
     for relative in chosen:
@@ -609,7 +678,7 @@ def compose(
         source = re.sub(r"^(#{1,6}) (.*)$",
                         lambda match: "#" * min(len(match[1]) + 2, 6) + " " + match[2],
                         source, flags=re.MULTILINE)
-        sheet_sections.append((chapter_section, len(sections)))
+        sheet_sections.append((chapter_section, len(sections), relative))
         sections.append(source)
     sections = [
         substitute(section, state["variables"], price_revision=state["aplica_revision_precios"])
@@ -626,6 +695,16 @@ def compose(
             offsets.append(heading_count)
             heading_count += len(re.findall(heading_pattern, section, flags=re.MULTILINE))
         headings = re.findall(heading_pattern, result, flags=re.MULTILINE)
+        chapter_codes: dict[int, set[str]] = {}
+        for chapter, _, relative in sheet_sections:
+            chapter_codes.setdefault(chapter, set()).update(sheet_codes[relative])
+        chapter_unes = {
+            chapter: tuple(
+                link for ref, link in included_unes.values()
+                if regulation_matches(ref, codes)
+            )
+            for chapter, codes in chapter_codes.items()
+        }
         rows = [
             SheetIndexRow(
                 substitute(
@@ -634,8 +713,9 @@ def compose(
                 ).upper(),
                 re.sub(r"^\d+(?:\.\d+)*\s+", "", headings[offsets[sheet]]),
                 f"PPTPHeading{offsets[sheet]}",
+                chapter_unes[chapter],
             )
-            for chapter, sheet in sheet_sections
+            for chapter, sheet, _ in sheet_sections
         ]
         result = result.replace(INDEX_TOKEN, markdown_index(rows))
     return result
@@ -879,6 +959,7 @@ def write_document(
                 )
                 heading_index += 1
             else:
+                text, bookmark = take_regulation_anchor(text)
                 separator = re.fullmatch(r"\*\*[^*]+\*\*", text) is not None
                 style = (
                     f"PPTPBullet{-level - 1}" if level < 0
@@ -889,6 +970,8 @@ def write_document(
                 paragraph = ET.SubElement(document.body, _tag("text:p"), {
                     _tag("text:style-name"): style,
                 })
+                if bookmark:
+                    ET.SubElement(paragraph, _tag("text:bookmark"), {_tag("text:name"): bookmark})
                 if level < 0:
                     text = re.sub(r"^(\*\*)?(\d+[.)]|•) ", r"\1\2\t ", text)
                 for value, bold in bold_runs(text):
@@ -963,11 +1046,14 @@ def write_document(
 
         def pdf_paragraph(text: str, style):
             """Crea un párrafo PDF con negritas explícitas y sin interpretar HTML del usuario."""
+            text, bookmark = take_regulation_anchor(text)
             markup = "".join(
                 f'<font name="{escape(layout.bold_font, quote=True)}">{escape(value)}</font>'
                 if bold else escape(value)
                 for value, bold in bold_runs(text)
             )
+            if bookmark:
+                markup = f'<a name="{bookmark}"/>' + markup
             return Paragraph(markup, style)
 
         tabular_rows = []

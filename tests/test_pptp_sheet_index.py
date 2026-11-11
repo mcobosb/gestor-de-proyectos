@@ -1,5 +1,6 @@
 """Tabla de fichas, estilo de filas y enlaces reales en los documentos PPTP."""
 from dataclasses import asdict
+import json
 from pathlib import Path
 import re
 import tempfile
@@ -13,11 +14,11 @@ from budget_reports import ReportSettings
 from odt_reports import _tag
 from tools._library_history import read_revisions
 from tools.pptp import DOCS_ROOT, LIBRARY_PATH
-from tools.pptp.document import Selection, VARIABLES, compose, write_document
+from tools.pptp.document import Selection, VARIABLES, compose, load_regulations, write_document
 from tools.pptp.library import ZipLibrary
 from tools.pptp.sheet_index import (
     ALTERNATE_BACKGROUND, HEADER_BACKGROUND, HEADERS, INDEX_MARKER, INDEX_TOKEN,
-    SheetIndexRow, extract_index, markdown_index,
+    SheetIndexRow, UneIndexLink, extract_index, markdown_index, regulation_bookmark,
 )
 
 
@@ -81,7 +82,7 @@ class PptpSheetIndexTests(unittest.TestCase):
         headings = re.findall(r"^#{1,6}\s+(.+)$", source, flags=re.MULTILINE)
         for row in rows:
             self.assertTrue(headings[int(row.bookmark.removeprefix("PPTPHeading"))].endswith(" " + row.sheet))
-        table = source.split("| --- | --- |", 1)[1].split("\n\n", 1)[0]
+        table = source.split("| --- | --- | --- |", 1)[1].split("\n\n", 1)[0]
         self.assertEqual(len(table.strip().splitlines()), 2)
         self.assertIn("<br/>", table)
         self.assertNotIn("9.1.1", table)
@@ -104,9 +105,113 @@ class PptpSheetIndexTests(unittest.TestCase):
 
     def test_table_round_trip_preserves_special_characters(self):
         """Los títulos no rompen columnas ni se interpretan como negritas o etiquetas."""
-        rows = [SheetIndexRow("A | B <C> & D", "Ficha [literal] <br/> **texto** &gt;", "PPTPHeading10")]
+        rows = [SheetIndexRow(
+            "A | B <C> & D", "Ficha [literal] <br/> **texto** &gt;", "PPTPHeading10",
+            (UneIndexLink("UNE [A] | B & C", regulation_bookmark("UNE A")),),
+        )]
         _, restored = extract_index(markdown_index(rows))
         self.assertEqual(restored, rows)
+
+    def test_selected_unes_are_grouped_once_and_link_to_legislation_in_both_formats(self):
+        """Solo las UNE marcadas y correspondientes al capítulo aparecen con destino real."""
+        references = [
+            ("UNE-A", ["01RPN", "15PAA"], "UNE-EN 1:2024", True),
+            ("UNE-B", ["02AAA"], "UNE 2:2024", True),
+            ("UNE-EXCLUIDA", ["01RPN"], "UNE 3:2024", False),
+            ("UNE-AJENA", ["08OU"], "UNE 4:2024", True),
+            ("LEY-A", ["*"], "Ley de prueba", True),
+        ]
+        source = "# Legislacion\n\n## Normas tecnicas\n\n"
+        for identifier, codes, title, selected in references:
+            data = {"id": identifier, "uni": codes, "seleccion": "revision", "condicion": "Revisar"}
+            source += (
+                "<!-- NORMATIVA_UNI " + json.dumps(data) + " -->\n"
+                + f"* {title}. Titulo de la referencia {identifier}.\n\n"
+            )
+            self.state["regulations"][identifier] = selected
+        (self.root / "07_Base.md").write_text(source, encoding="utf-8")
+        refs = load_regulations(self.root, {"01RPN", "15PAA", "02AAA", "08OU"})
+        source = compose(self.root, self.state, refs, budget_chapter_titles=self.titles)
+        _, rows = extract_index(source)
+        self.assertEqual([tuple(link.label for link in row.unes) for row in rows], [
+            ("UNE-EN 1:2024",), ("UNE-EN 1:2024",), ("UNE 2:2024",),
+        ])
+        table = markdown_index(rows)
+        self.assertEqual(table.count("UNE-EN 1:2024"), 1)
+        self.assertNotIn("UNE 3:2024", source)
+        self.assertNotIn("UNE 4:2024", table)
+        self.assertNotIn("Ley de prueba", table)
+        for extension in ("odt", "pdf"):
+            with self.subTest(format=extension):
+                target = self.root / ("UNE." + extension)
+                write_document(source, target, self.state["variables"], ReportSettings(output_format=extension))
+                if extension == "odt":
+                    with ZipFile(target) as archive:
+                        content = ET.fromstring(archive.read("content.xml"))
+                    text = "".join(content.itertext())
+                    bookmarks = {
+                        node.get(_tag("text:name")) for node in content.iter(_tag("text:bookmark"))
+                    }
+                    index = next(
+                        node for node in content.iter(_tag("table:table"))
+                        if node.get(_tag("table:name")) == "PPTPSheetIndex"
+                    )
+                    links = [
+                        link for row in index.findall(_tag("table:table-row"))
+                        for link in row.findall(_tag("table:table-cell"))[2].iter(_tag("text:a"))
+                    ]
+                    self.assertEqual([link.text for link in links], ["UNE-EN 1:2024", "UNE 2:2024"])
+                    for link in links:
+                        self.assertIn(link.get(_tag("xlink:href"))[1:], bookmarks)
+                else:
+                    reader = PdfReader(target)
+                    pages = [page.extract_text() for page in reader.pages]
+                    text = "\n".join(pages)
+                    destinations = []
+                    for page, page_text in zip(reader.pages, pages):
+                        if HEADERS[0] not in page_text:
+                            continue
+                        for annotation in page.get("/Annots", []):
+                            destination = annotation.get_object().get("/Dest")
+                            if destination:
+                                page_index = next(
+                                    index for index, candidate in enumerate(reader.pages)
+                                    if candidate.indirect_reference == destination[0]
+                                )
+                                if destination[1] == "/XYZ":
+                                    self.assertIn("Titulo de la referencia UNE-", pages[page_index])
+                                    if page_index == pages.index(page_text):
+                                        self.assertGreater(float(destination[3]), float(
+                                            annotation.get_object()["/Rect"][3]
+                                        ))
+                                    destinations.append(page_index)
+                    self.assertEqual(len(destinations), 2)
+                    self.assertTrue(all(index <= next(
+                        i for i, value in enumerate(pages) if HEADERS[0] in value
+                    ) for index in destinations))
+                self.assertNotIn("PPTP_REGULATION", text)
+                self.assertNotIn("UNE 3:2024", text)
+
+    def test_unes_match_actual_automatic_item_code_not_entire_sheet_family(self):
+        """La tabla no amplía asociaciones de otras partidas de una misma familia."""
+        from tools.pptp.document import Regulation
+        path = self.paths[0]
+        self.state["selections"] = [
+            asdict(Selection(0, "01RPN00001", "CAP-A#", "Partida", path)),
+        ]
+        refs = [
+            Regulation("UNE-A", ["01RPN00001"], "revision", "Revisar", "* UNE 1:2024. Titulo A.", True),
+            Regulation("UNE-B", ["01RPN00002"], "revision", "Revisar", "* UNE 2:2024. Titulo B.", True),
+        ]
+        source = "# Normas\n\n" + "\n\n".join(
+            '<!-- NORMATIVA_UNI {"id":"%s","uni":["%s"],"seleccion":"revision",'
+            '"condicion":"Revisar"} -->\n%s' % (ref.id, ref.codes[0], ref.text)
+            for ref in refs
+        )
+        (self.root / "07_Base.md").write_text(source, encoding="utf-8")
+        result = compose(self.root, self.state, refs, budget_chapter_titles=self.titles)
+        _, rows = extract_index(result)
+        self.assertEqual([link.label for link in rows[0].unes], ["UNE 1:2024"])
 
     def test_odt_has_one_row_per_chapter_and_linked_names_in_same_cell(self):
         """Comprueba estilos explícitos, enlaces y destinos en el XML ODF persistido."""
@@ -143,7 +248,8 @@ class PptpSheetIndexTests(unittest.TestCase):
         actual = []
         for index, row in enumerate(body_rows):
             cells = row.findall(_tag("table:table-cell"))
-            self.assertEqual(len(cells), 2)
+            self.assertEqual(len(cells), 3)
+            self.assertEqual("".join(cells[2].itertext()), "—")
             for cell in cells:
                 style = styles[cell.get(_tag("table:style-name"))]
                 self.assertEqual(
@@ -284,6 +390,29 @@ class PptpSheetIndexTests(unittest.TestCase):
             for position in positions:
                 self.assertAlmostEqual(position, positions[0], places=3)
             self.assertEqual(sum(len(page.get("/Annots", [])) for page in table_pages), len(rows))
+
+    def test_long_une_column_splits_without_duplicate_headers_or_lost_links(self):
+        """Una celda UNE más alta que las fichas conserva todos sus enlaces al dividirse."""
+        links = tuple(
+            UneIndexLink(f"UNE {index}:2024", regulation_bookmark(f"UNE-{index}"))
+            for index in range(100)
+        )
+        rows = [SheetIndexRow("CAP. 01", "FICHA", "PPTPHeading2", links)]
+        references = "\n\n".join(
+            f"* [[PPTP_REGULATION:{link.bookmark}]]{link.label}. Titulo de la norma."
+            for link in links
+        )
+        source = (
+            "# Legislacion\n\n" + references + "\n\n# Fichas\n\n"
+            + markdown_index(rows) + "\n\n### Ficha\n\nPrescripciones."
+        )
+        target = self.root / "long-unes.pdf"
+        write_document(source, target, self.state["variables"], ReportSettings(output_format="pdf"))
+        with PdfReader(target) as reader:
+            table_pages = [page for page in reader.pages if HEADERS[0] in page.extract_text()]
+            self.assertGreater(len(table_pages), 1)
+            self.assertTrue(all(page.extract_text().count(HEADERS[0]) == 1 for page in table_pages))
+            self.assertEqual(sum(len(page.get("/Annots", [])) for page in table_pages), len(links) + 1)
 
     def test_distributed_section_nine_contains_editable_intro_caption_and_marker(self):
         """El ZIP real conserva el historial y ofrece el punto de inserción de la tabla."""

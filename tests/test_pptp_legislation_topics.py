@@ -81,7 +81,17 @@ class LegislationTopicsTests(unittest.TestCase):
         library = ZipLibrary(LIBRARY_PATH, DOCS_ROOT)
         legal = next(source for name, source in load_documents(library) if name.startswith("07"))
         groups = re.findall(r"<!--\s*(\w+)\s*-->(.*?)<!--\s*FIN_\1\s*-->", legal, flags=re.DOTALL)
-        self.assertEqual(len(groups), 15)
+        existing_topics = {
+            "Normativa_Base_Contratacion", "Accesibilidad_Urbanismo", "Urbanismo_Medio_Ambiente",
+            "Edificacion", "Estructuras_Hormigon_Cementos", "Firmes_Pavimentos",
+            "Saneamiento_Abastecimiento", "Redes_Electricas_Alumbrado",
+            "Carreteras_Movilidad_Transporte", "Telecomunicaciones",
+            "Proteccion_Contra_Incendios", "Jardineria_Fertilizantes",
+            "Gestion_Residuos_Medio_Ambiente", "Seguridad_Salud_Laboral", "Control_Calidad_NTE",
+        }
+        self.assertEqual(sum(topic in existing_topics for topic, _ in groups), 15)
+        self.assertFalse(any(topic.startswith("UNE_BCCA_") for topic, _ in groups))
+        self.assertNotIn("Normas UNE relacionadas con", legal)
         for topic, body in groups:
             with self.subTest(topic=topic):
                 self.assertRegex(body, r"(?m)^## .+")

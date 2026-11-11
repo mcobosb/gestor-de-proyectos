@@ -14,7 +14,7 @@ from .library import ZipLibrary
 from .document import (
     DEFAULT_TOC_DEPTH, PENDING_DURATION, VARIABLES, Selection, compose, directory_codes, initial_variables,
     load_catalog, load_regulations, normalized_code, price_revision_fields, propose, restore_state, write_document,
-    duration_price_revision,
+    duration_price_revision, regulation_matches, une_designation,
 )
 
 if TYPE_CHECKING:
@@ -74,6 +74,7 @@ class PptpWindow(tk.Toplevel):
         self.toc_depth = tk.StringVar(self, value=str(saved.get("toc_depth", DEFAULT_TOC_DEPTH)))
         self.regulations = []
         self.regulation_choices = dict(saved.get("regulations", {}))
+        self.reviewed_unes = set(saved.get("une_revisadas", []))
         self.step = 0
         self.editor: ttk.Combobox | None = None
         self.library_editor: LibraryEditor | None = None
@@ -136,17 +137,14 @@ class PptpWindow(tk.Toplevel):
             ttk.Label(
                 legal, wraplength=1000,
                 text="Confirma ámbito, vigencia y condiciones de cada referencia. "
-                     "Las referencias «revision» no se marcan automáticamente. "
-                     "Las candidatas se proponen marcadas; desmarca las que no procedan.",
+                     "Se preselecciona la UNE más reciente por familia, sin distinguir partes; "
+                     "las decisiones UNE ajustadas manualmente se conservan. Las otras referencias «revision» "
+                     "no se marcan automáticamente. Desmarca las que no procedan.",
             ).pack(fill="x", pady=6)
             self.legal_tree = self.selection_table(
-                legal, labels=("Referencia / estado", "Condición de aplicación", "Incluir"),
+                legal, labels=("Referencia / estado", "Partidas relacionadas", "Fichas relacionadas", "Incluir"),
             )
-            for index, ref in enumerate(self.regulations):
-                self.legal_tree.insert("", "end", iid=str(index), values=(
-                    f"{ref.id} [{ref.status}] — {ref.text[2:]}",
-                    ref.condition, "☑" if self.regulation_choices[ref.id] else "☐",
-                ))
+            self.refresh_regulations()
             self.legal_tree.bind("<ButtonRelease-1>", self.toggle_regulation)
             self.legal_tree.bind("<space>", self.toggle_regulation)
             self.legal_tree.bind("<<TreeviewSelect>>", self.show_regulation)
@@ -157,15 +155,41 @@ class PptpWindow(tk.Toplevel):
     def update_regulations(self) -> None:
         """Recalcula propuestas legales al cambiar las fichas manuales o sus checks."""
         codes = set()
+        relations: list[tuple[str, str, str]] = []
         for row in [*self.automatic, *self.unmatched]:
             if row.selected and row.path in self.sheets:
                 sheet = self.sheets[row.path]
                 levels = directory_codes(sheet)
                 code = normalized_code(row.code)
-                codes.add(code if row.automatic and code.startswith(levels[0]) else sheet.code)
+                code = code if row.automatic and code.startswith(levels[0]) else sheet.code
+                codes.add(code)
+                relations.append((
+                    code, f"{row.code} — {row.summary}",
+                    f"{sheet.code} — {sheet.title}",
+                ))
         self.regulations = load_regulations(self.library, codes)
+        self.regulation_relations: dict[str, list[tuple[str, str]]] = {}
         for ref in self.regulations:
-            self.regulation_choices.setdefault(ref.id, ref.selected)
+            if une_designation(ref) and ref.id not in self.reviewed_unes:
+                self.regulation_choices[ref.id] = ref.selected
+            else:
+                self.regulation_choices.setdefault(ref.id, ref.selected)
+            self.regulation_relations[ref.id] = list(dict.fromkeys(
+                (item, sheet) for code, item, sheet in relations
+                if regulation_matches(ref, {code})
+            ))
+
+    def refresh_regulations(self) -> None:
+        """Presenta cada norma una sola vez junto a las partidas y fichas vinculadas."""
+        self.legal_tree.delete(*self.legal_tree.get_children())
+        for index, ref in enumerate(self.regulations):
+            relations = self.regulation_relations[ref.id]
+            self.legal_tree.insert("", "end", iid=str(index), values=(
+                f"{ref.id} [{ref.status}] — {ref.text[2:]}",
+                "; ".join(dict.fromkeys(item for item, _ in relations)),
+                "; ".join(dict.fromkeys(sheet for _, sheet in relations)),
+                "☑" if self.regulation_choices[ref.id] else "☐",
+            ))
 
     def add_sheet_detail(self, parent) -> None:
         """Permite leer ruta y advertencias de las fichas antes de aceptarlas."""
@@ -301,14 +325,16 @@ class PptpWindow(tk.Toplevel):
 
     def selection_table(
         self, parent: tk.Misc,
-        labels: tuple[str, str, str] = ("Partida del presupuesto", "Código y nombre de ficha", "Incluir"),
+        labels: tuple[str, ...] = ("Partida del presupuesto", "Código y nombre de ficha", "Incluir"),
     ) -> ttk.Treeview:
-        """Construye una tabla desplazable con la inclusion en la tercera columna."""
+        """Construye una tabla desplazable con la inclusión en la última columna."""
         frame = ttk.Frame(parent)
         frame.pack(fill="both", expand=True, pady=6)
-        tree = ttk.Treeview(frame, columns=("item", "sheet", "selected"),
+        columns = ("item", "sheet", "related", "selected") if len(labels) == 4 else ("item", "sheet", "selected")
+        widths = (380, 300, 380, 70) if len(labels) == 4 else (380, 520, 70)
+        tree = ttk.Treeview(frame, columns=columns,
                             show="headings", selectmode="browse")
-        for column, label, width in zip(("item", "sheet", "selected"), labels, (380, 520, 70)):
+        for column, label, width in zip(columns, labels, widths):
             tree.heading(column, text=label)
             tree.column(column, width=width, minwidth=60, stretch=column != "selected")
         vertical = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
@@ -394,11 +420,14 @@ class PptpWindow(tk.Toplevel):
         keyboard = event.keysym == "space"
         iid = ((self.legal_tree.selection() or ("",))[0] if keyboard
                else self.legal_tree.identify_row(event.y))
-        if iid and (keyboard or self.legal_tree.identify_column(event.x) == "#3"):
+        if iid and (keyboard or self.legal_tree.identify_column(event.x) == "#4"):
             ref = self.regulations[int(iid)]
             value = not self.regulation_choices.get(ref.id, False)
             self.regulation_choices[ref.id] = value
+            if une_designation(ref):
+                self.reviewed_unes.add(ref.id)
             self.legal_tree.set(iid, "selected", "☑" if value else "☐")
+            self.show_regulation()
         return "break" if keyboard else ""
 
     def show_regulation(self, event=None) -> None:
@@ -408,7 +437,19 @@ class PptpWindow(tk.Toplevel):
             ref = self.regulations[int(selected[0])]
             self.legal_detail.configure(state="normal")
             self.legal_detail.delete("1.0", "end")
-            self.legal_detail.insert("1.0", f"{ref.text}\n\n{ref.condition}")
+            relations = "\n".join(
+                f"• {item}\n  Ficha: {sheet}"
+                for item, sheet in self.regulation_relations[ref.id]
+            )
+            included = self.regulation_choices[ref.id]
+            status = (
+                "Incluida en el pliego. Las UNE vinculadas aparecerán también en la tabla del apartado 9."
+                if included else "No incluida. Marca «Incluir» para incorporarla al pliego y, si es UNE, a la tabla del apartado 9."
+            )
+            self.legal_detail.insert(
+                "1.0", f"{ref.text}\n\n{ref.condition}\n\n{status}\n\n"
+                f"Partidas y fichas relacionadas:\n{relations}",
+            )
             self.legal_detail.configure(state="disabled")
 
     def back(self) -> None:
@@ -461,6 +502,7 @@ class PptpWindow(tk.Toplevel):
             "toc_depth": self.selected_toc_depth(),
             "aplica_revision_precios": self.price_revision.get(),
             "revision_inicio_planificacion": self.price_start,
+            "une_revisadas": sorted(self.reviewed_unes),
         })
         budget_chapter_titles = {
             row["chapter"]: self.app._chapter_title(row["chapter"])
