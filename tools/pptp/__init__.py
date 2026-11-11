@@ -462,7 +462,14 @@ class PptpWindow(tk.Toplevel):
             "aplica_revision_precios": self.price_revision.get(),
             "revision_inicio_planificacion": self.price_start,
         })
-        source = compose(self.library, state, self.regulations)
+        budget_chapter_titles = {
+            row["chapter"]: self.app._chapter_title(row["chapter"])
+            for row in state["selections"] if row["selected"]
+        }
+        source = compose(
+            self.library, state, self.regulations,
+            budget_chapter_titles=budget_chapter_titles,
+        )
         extension = "." + self.app.report_settings.output_format
         target = filedialog.asksaveasfilename(
             parent=self, title="Generar PPTP", initialfile="PPTP" + extension,

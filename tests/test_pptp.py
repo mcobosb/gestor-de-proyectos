@@ -346,6 +346,28 @@ class PptpTests(unittest.TestCase):
                 if level == 0:
                     self.assertIn(text, "\n".join(text for _, text in text_blocks(source)))
 
+    def test_composition_groups_unique_sheets_by_budget_chapter(self):
+        """Presenta fichas por capítulo presupuestario sin alterar la selección BCCA."""
+        early = next(sheet for sheet in self.catalog if sheet.code.startswith("01A"))
+        late = next(sheet for sheet in self.catalog if sheet.code.startswith("15P"))
+        state = state_for([
+            Selection(2, "P3", "02#", "Tercera partida", early.path),
+            Selection(0, "P1", "01#", "Primera partida", late.path),
+            Selection(1, "P2", "02#", "Segunda partida", early.path),
+        ])
+        source = compose(
+            self.library, state, [],
+            budget_chapter_titles={"01#": "Demoliciones del presupuesto", "02#": "Redes del presupuesto"},
+        )
+        first_heading = "## 9.1 DEMOLICIONES DEL PRESUPUESTO"
+        second_heading = "## 9.2 REDES DEL PRESUPUESTO"
+        self.assertIn(first_heading, source)
+        self.assertIn(second_heading, source)
+        self.assertLess(source.index(first_heading), source.index(second_heading))
+        self.assertLess(source.index(late.title.upper()), source.index(second_heading))
+        self.assertGreater(source.index(early.title.upper()), source.index(second_heading))
+        self.assertEqual(source.count(early.title.upper()), 1)
+
     def test_markdown_preserves_structure_and_external_references(self):
         """No imprime comentarios internos ni enlaces locales rotos como URLs."""
         blocks = text_blocks("# Título\n\nPárrafo **destacado**.\n\n"
@@ -392,6 +414,7 @@ class PptpTests(unittest.TestCase):
                         }
                         with ZipFile(target) as archive:
                             content = ET.fromstring(archive.read("content.xml"))
+                            named_styles = ET.fromstring(archive.read("styles.xml"))
                         paragraphs = content.findall(".//text:p", namespaces)
                         bullet_styles = [
                             paragraph.get(f"{{{namespaces['text']}}}style-name")
@@ -403,7 +426,8 @@ class PptpTests(unittest.TestCase):
                         ])
                         styles = {
                             style.get(f"{{{namespaces['style']}}}name"): style
-                            for style in content.findall(".//style:style", namespaces)
+                            for root in (content, named_styles)
+                            for style in root.findall(".//style:style", namespaces)
                         }
                         for depth in range(3):
                             properties = styles[f"PPTPBullet{depth}"].find(

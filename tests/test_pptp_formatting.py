@@ -14,6 +14,70 @@ from tools.pptp.document import text_blocks, write_document
 
 
 class PptpFormattingTests(unittest.TestCase):
+    def test_generic_template_gets_distinct_heading_levels_and_readable_spacing(self):
+        """Una plantilla sin títulos por nivel no aplana la jerarquía del documento."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            template = root / "generic.odt"
+            with ZipFile(DEFAULT_TEMPLATE_PATH) as source, ZipFile(template, "w") as archive:
+                styles = ET.fromstring(source.read("styles.xml"))
+                named = styles.find(_tag("office:styles"))
+                for style in list(named):
+                    if style.get(_tag("style:default-outline-level")):
+                        named.remove(style)
+                for info in source.infolist():
+                    archive.writestr(
+                        info, ET.tostring(styles) if info.filename == "styles.xml" else source.read(info),
+                    )
+            target = root / "formatted.odt"
+            markdown = "\n\n".join("#" * level + " Titulo" for level in range(1, 7))
+            markdown += "\n\n**Descripcion**\n\nParrafo de prueba.\n\n1. Primer elemento.\n2. Segundo elemento."
+            write_document(
+                markdown, target, {"titulo_proyecto": "Proyecto"},
+                ReportSettings(output_format="odt", template_path=str(template)),
+            )
+            with ZipFile(target) as archive:
+                content = ET.fromstring(archive.read("content.xml"))
+                named_styles = ET.fromstring(archive.read("styles.xml"))
+            automatic = {
+                style.get(_tag("style:name")): style
+                for style in named_styles.find(_tag("office:styles"))
+            }
+            for level, size in enumerate(("14pt", "12pt", "11pt", "10.5pt", "10pt", "10pt"), 1):
+                style = automatic[f"PPTPHeading{level}"]
+                text = style.find(_tag("style:text-properties"))
+                self.assertEqual(text.get(_tag("fo:font-size")), size)
+                self.assertEqual(text.get(_tag("fo:font-weight")), "bold")
+                paragraph = style.find(_tag("style:paragraph-properties"))
+                self.assertEqual(paragraph.get(_tag("fo:keep-with-next")), "always")
+                self.assertEqual(paragraph.get(_tag("fo:break-before")), "auto")
+                self.assertEqual(style.get(_tag("style:next-style-name")), "PPTPBody")
+            body = automatic["PPTPBody"].find(_tag("style:paragraph-properties"))
+            self.assertEqual(body.get(_tag("fo:line-height")), "115%")
+            self.assertEqual(body.get(_tag("fo:margin-bottom")), "6pt")
+            separator = automatic["PPTPSeparator"].find(_tag("style:paragraph-properties"))
+            self.assertEqual(separator.get(_tag("fo:margin-top")), "8pt")
+            self.assertEqual(separator.get(_tag("fo:keep-with-next")), "always")
+            bullet = automatic["PPTPBullet0"].find(_tag("style:paragraph-properties"))
+            self.assertEqual(bullet.get(_tag("fo:text-align")), "start")
+            self.assertEqual(bullet.get(_tag("fo:margin-bottom")), "3pt")
+            items = [
+                paragraph for paragraph in content.iter(_tag("text:p"))
+                if paragraph.get(_tag("text:style-name")) == "PPTPBullet0"
+            ]
+            self.assertEqual(len(items), 2)
+            self.assertTrue(all(paragraph.find(".//" + _tag("text:tab")) is not None for paragraph in items))
+            for name in ("PPTPContents1", "PPTPContents2"):
+                style = automatic[name]
+                self.assertEqual(style.get(_tag("style:parent-style-name")), "PPTPBody")
+                self.assertEqual(
+                    style.find(_tag("style:text-properties")).get(_tag("fo:font-size")), "10pt",
+                )
+                self.assertEqual(
+                    style.find(_tag("style:text-properties")).get(_tag("fo:font-weight")),
+                    "bold" if name == "PPTPContents1" else "normal",
+                )
+
     def test_tabbed_rows_and_bold_numbered_items_do_not_merge_or_lose_indentation(self):
         """Retain tabbed rows and recognize numbering even inside bold markup."""
         self.assertEqual(text_blocks(
@@ -80,8 +144,8 @@ class PptpFormattingTests(unittest.TestCase):
                         self.assertAlmostEqual(position("Interior")[0], position("Exterior")[0])
                         self.assertNotEqual(position("Clase")[1], position("Sin riesgo")[1])
 
-    def test_odt_inherits_template_named_styles_and_defaults_without_pdf_overrides(self):
-        """Preserve template fonts, spacing, alignment, tabs and semantic heading parents."""
+    def test_odt_inherits_template_typography_and_normalizes_pptp_paragraph_flow(self):
+        """Conserva fuentes y tamaños personalizados y normaliza la maquetación del PPTP."""
         with tempfile.TemporaryDirectory() as directory:
             template = Path(directory) / "template.odt"
             with ZipFile(DEFAULT_TEMPLATE_PATH) as source, ZipFile(template, "w") as target:
@@ -136,7 +200,7 @@ class PptpFormattingTests(unittest.TestCase):
                 result = ET.fromstring(archive.read("styles.xml"))
             automatic = {
                 style.get(_tag("style:name")): style
-                for style in content.find(_tag("office:automatic-styles"))
+                for style in result.find(_tag("office:styles"))
             }
             for name, parent in (
                 ("PPTPBody", "TemplateCustomBody"),
@@ -144,7 +208,15 @@ class PptpFormattingTests(unittest.TestCase):
                 ("PPTPHeading2", "TemplateCustomHeading2"),
             ):
                 self.assertEqual(automatic[name].get(_tag("style:parent-style-name")), parent)
-                self.assertIsNone(automatic[name].find(_tag("style:paragraph-properties")))
+                properties = automatic[name].find(_tag("style:paragraph-properties"))
+                self.assertEqual(
+                    properties.get(_tag("fo:text-align")), "justify" if name == "PPTPBody" else "start",
+                )
+                self.assertEqual(properties.get(_tag("fo:line-height")), "115%")
+                self.assertEqual(properties.get(_tag("fo:break-before")), "auto")
+                self.assertEqual(
+                    properties.get(_tag("fo:keep-with-next")), "auto" if name == "PPTPBody" else "always",
+                )
                 self.assertIsNone(automatic[name].find(_tag("style:text-properties")))
             named = {
                 style.get(_tag("style:name")): style
@@ -210,6 +282,7 @@ class PptpFormattingTests(unittest.TestCase):
                     if extension == "odt":
                         with ZipFile(target) as archive:
                             content = ET.fromstring(archive.read("content.xml"))
+                            named_styles = ET.fromstring(archive.read("styles.xml"))
                         paragraphs = content.findall(".//text:p", namespaces)
                         items = [
                             paragraph for paragraph in paragraphs
@@ -220,7 +293,7 @@ class PptpFormattingTests(unittest.TestCase):
                             bold = item.find("text:span[@text:style-name='PPTPBold']", namespaces)
                             self.assertIsNotNone(bold)
                             self.assertEqual(bold.text, label)
-                        bold_properties = content.find(
+                        bold_properties = named_styles.find(
                             ".//style:style[@style:name='PPTPBold']/style:text-properties", namespaces,
                         )
                         self.assertEqual(bold_properties.get(f"{{{namespaces['fo']}}}font-weight"), "bold")

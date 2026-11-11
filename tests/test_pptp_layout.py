@@ -60,9 +60,11 @@ class PptpLayoutTests(unittest.TestCase):
             )
             with ZipFile(target) as archive:
                 xml = ET.fromstring(archive.read("content.xml"))
+                named_styles = ET.fromstring(archive.read("styles.xml"))
             styles = {
                 element.get(f"{{{STYLE}}}name"): element
-                for element in xml.findall(f".//{{{STYLE}}}style")
+                for root in (xml, named_styles)
+                for element in root.findall(f".//{{{STYLE}}}style")
             }
             for name in ("PPTPBody", *(f"PPTPHeading{level}" for level in range(1, 7))):
                 properties = styles[name].find(f"{{{STYLE}}}paragraph-properties")

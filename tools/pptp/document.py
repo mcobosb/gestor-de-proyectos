@@ -12,6 +12,10 @@ from typing import TYPE_CHECKING
 import unicodedata
 from urllib.parse import unquote
 from .library import ZipLibrary
+from .sheet_index import (
+    INDEX_MARKER, INDEX_TOKEN, SheetIndexRow, extract_index, markdown_index,
+    pdf_index, write_odt_index,
+)
 from tools._library_markdown import document_markdown
 
 if TYPE_CHECKING:
@@ -467,21 +471,32 @@ def substitute(
     return result
 
 
-def compose(root: Path | ZipLibrary, state: dict, regulations: list[Regulation]) -> str:
-    """Ensambla secciones y fichas unicas, con normativa revisada por el tecnico."""
+def compose(
+    root: Path | ZipLibrary, state: dict, regulations: list[Regulation], *,
+    budget_chapter_titles: dict[str, str] | None = None,
+) -> str:
+    """Ensambla secciones y fichas únicas, agrupadas opcionalmente por capítulo presupuestario."""
     state = restore_state(state)
     state["aplica_revision_precios"], state["variables"]["JUSTIFICACION_NO_APLICACION"] = duration_price_revision(
         state["variables"], state["aplica_revision_precios"], state["revision_inicio_planificacion"],
     )
     if state["aplica_revision_precios"] and not state["variables"]["JUSTIFICACION_APLICACION"].strip():
         raise ValueError("Rellena el campo JUSTIFICACION_APLICACION antes de generar.")
-    if isinstance(root, ZipLibrary):
-        chosen = list(dict.fromkeys(
-            path for row in state["selections"] if row["selected"]
-            for path in root.resolve_sheets(row["path"], row["code"])
-        ))
-    else:
-        chosen = list(dict.fromkeys(row["path"] for row in state["selections"] if row["selected"]))
+    selected_rows = sorted(
+        (row for row in state["selections"] if row["selected"]),
+        key=lambda row: row["item"],
+    )
+    chosen_chapters: dict[str, str] = {}
+    budget_chapter_order: dict[str, int] = {}
+    for row in selected_rows:
+        budget_chapter_order.setdefault(row["chapter"], row["item"])
+        paths = (
+            root.resolve_sheets(row["path"], row["code"])
+            if isinstance(root, ZipLibrary) else (row["path"],)
+        )
+        for path in paths:
+            chosen_chapters.setdefault(path, row["chapter"])
+    chosen = list(chosen_chapters)
     if not chosen:
         raise ValueError("Selecciona al menos una ficha para generar el PPTP.")
     if isinstance(root, ZipLibrary):
@@ -497,7 +512,13 @@ def compose(root: Path | ZipLibrary, state: dict, regulations: list[Regulation])
         )
         return code, relative.casefold()
 
-    chosen.sort(key=sheet_order)
+    if budget_chapter_titles is None:
+        chosen.sort(key=sheet_order)
+    else:
+        chosen.sort(key=lambda relative: (
+            budget_chapter_order[chosen_chapters[relative]],
+            sheet_order(relative),
+        ))
     selected = {
         ref.id for ref in regulations if state["regulations"].get(ref.id, ref.selected)
     }
@@ -515,15 +536,45 @@ def compose(root: Path | ZipLibrary, state: dict, regulations: list[Regulation])
             return match[2]
 
         source = REGULATION_PATTERN.sub(filter_regulation, source)
+
+        def filter_topic(match: re.Match[str]) -> str:
+            """Suprime encabezados de grupos temáticos que no conservan contenido seleccionado."""
+            body = match[2]
+            content = re.sub(r"<!--.*?-->", "", body, flags=re.DOTALL)
+            content = re.sub(r"^#{1,6}[ \t]+.*$", "", content, flags=re.MULTILINE)
+            return body if content.strip() else ""
+
+        source = re.sub(
+            r"<!--\s*(\w+)\s*-->(.*?)<!--\s*FIN_\1\s*-->",
+            filter_topic, source, flags=re.DOTALL,
+        )
+        source = source.replace(INDEX_MARKER, INDEX_TOKEN)
         sections.append(re.sub(r"<!--.*?-->", "", source, flags=re.DOTALL).strip())
     previous_chapter = None
+    sheet_sections: list[tuple[int, int]] = []
+    chapter_labels: dict[int, str] = {}
+    chapter_section = 0
     for relative in chosen:
-        chapter = sheet_order(relative)[0][:2]
+        chapter = (
+            chosen_chapters[relative]
+            if budget_chapter_titles is not None
+            else sheet_order(relative)[0][:2]
+        )
         if chapter != previous_chapter:
-            chapter_title = root.chapter_titles.get(chapter, "") if isinstance(root, ZipLibrary) else ""
-            if not chapter_title:
-                folder = PurePosixPath(relative).parts[1]
-                chapter_title = folder.split("_", 1)[-1].replace("_", " ")
+            if budget_chapter_titles is not None:
+                chapter_title = budget_chapter_titles.get(chapter, "").strip() or chapter.rstrip("#*")
+            else:
+                chapter_title = root.chapter_titles.get(chapter, "") if isinstance(root, ZipLibrary) else ""
+                if not chapter_title:
+                    folder = PurePosixPath(relative).parts[1]
+                    chapter_title = folder.split("_", 1)[-1].replace("_", " ")
+            chapter_section = len(sections)
+            from bc3_gui import format_chapter_code
+
+            budget_code = format_chapter_code(chosen_chapters[relative])
+            chapter_labels[chapter_section] = (
+                f"{budget_code} — {chapter_title}" if chapter_title != budget_code else budget_code
+            )
             sections.append(f"## {chapter_title}")
             previous_chapter = chapter
         source = (
@@ -558,11 +609,36 @@ def compose(root: Path | ZipLibrary, state: dict, regulations: list[Regulation])
         source = re.sub(r"^(#{1,6}) (.*)$",
                         lambda match: "#" * min(len(match[1]) + 2, 6) + " " + match[2],
                         source, flags=re.MULTILINE)
+        sheet_sections.append((chapter_section, len(sections)))
         sections.append(source)
-    return number_headings(substitute(
-        "\n\n".join(sections), state["variables"],
-        price_revision=state["aplica_revision_precios"],
-    ))
+    sections = [
+        substitute(section, state["variables"], price_revision=state["aplica_revision_precios"])
+        for section in sections
+    ]
+    result = number_headings("\n\n".join(sections))
+    if INDEX_TOKEN in result:
+        if result.count(INDEX_TOKEN) != 1:
+            raise ValueError("El PPTP solo admite un marcador de tabla de fichas por capítulos.")
+        heading_pattern = r"^#{1,6}\s+(.+)$"
+        offsets = []
+        heading_count = 0
+        for section in sections:
+            offsets.append(heading_count)
+            heading_count += len(re.findall(heading_pattern, section, flags=re.MULTILINE))
+        headings = re.findall(heading_pattern, result, flags=re.MULTILINE)
+        rows = [
+            SheetIndexRow(
+                substitute(
+                    chapter_labels[chapter], state["variables"],
+                    price_revision=state["aplica_revision_precios"],
+                ).upper(),
+                re.sub(r"^\d+(?:\.\d+)*\s+", "", headings[offsets[sheet]]),
+                f"PPTPHeading{offsets[sheet]}",
+            )
+            for chapter, sheet in sheet_sections
+        ]
+        result = result.replace(INDEX_TOKEN, markdown_index(rows))
+    return result
 
 
 def number_headings(source: str) -> str:
@@ -677,7 +753,8 @@ def write_document(
 ) -> None:
     """Emite PDF u ODT con la misma plantilla de cabecera y pie del proyecto."""
     toc_depth = validate_toc_depth(toc_depth)
-    blocks = text_blocks(number_headings(source), preserve_bold=True)
+    source, sheet_rows = extract_index(number_headings(source))
+    blocks = text_blocks(source, preserve_bold=True)
     title = "PLIEGO DE PRESCRIPCIONES TÉCNICAS PARTICULARES"
     project = variables["titulo_proyecto"]
     bullet_depths = sorted({-level - 1 for level, _ in blocks if level < 0})
@@ -710,14 +787,43 @@ def write_document(
                 _tag("style:name"): name, _tag("style:family"): "paragraph",
                 _tag("style:parent-style-name"): parent,
             })
-            if not parent.startswith("Template"):
-                ET.SubElement(style, _tag("style:paragraph-properties"), {
-                    _tag("fo:text-align"): "start" if heading else "justify",
-                    _tag("fo:break-before"): "auto", _tag("fo:break-after"): "auto",
-                    _tag("fo:keep-with-next"): "always" if heading else "auto",
-                    _tag("fo:keep-together"): "auto",
-                    _tag("fo:orphans"): "2", _tag("fo:widows"): "2",
+            properties = {
+                _tag("fo:text-align"): "start" if heading else "justify",
+                _tag("fo:break-before"): "auto", _tag("fo:break-after"): "auto",
+                _tag("fo:keep-with-next"): "always" if heading else "auto",
+                _tag("fo:keep-together"): "auto",
+                _tag("fo:orphans"): "2", _tag("fo:widows"): "2",
+                _tag("fo:text-indent"): "0pt",
+            }
+            if name == "PPTPBody":
+                properties.update({
+                    _tag("fo:margin-top"): "0pt", _tag("fo:margin-bottom"): "6pt",
+                    _tag("fo:line-height"): "115%",
                 })
+            elif name == "PPTPSeparator":
+                properties.update({
+                    _tag("fo:margin-top"): "8pt", _tag("fo:margin-bottom"): "3pt",
+                })
+            else:
+                level = int(name.removeprefix("PPTPHeading"))
+                properties.update({
+                    _tag("fo:margin-top"): f"{14 if level == 1 else 10}pt",
+                    _tag("fo:margin-bottom"): "5pt",
+                    _tag("fo:line-height"): "115%",
+                })
+                style.set(_tag("style:next-style-name"), "PPTPBody")
+                if f"heading{level}" not in template_styles:
+                    size = (14, 12, 11, 10.5, 10, 10)[level - 1]
+                    ET.SubElement(style, _tag("style:text-properties"), {
+                        _tag("fo:font-size"): f"{size}pt",
+                        _tag("style:font-size-asian"): f"{size}pt",
+                        _tag("style:font-size-complex"): f"{size}pt",
+                        _tag("fo:font-weight"): "bold",
+                        _tag("style:font-weight-asian"): "bold",
+                        _tag("style:font-weight-complex"): "bold",
+                        _tag("fo:font-style"): "normal",
+                    })
+            ET.SubElement(style, _tag("style:paragraph-properties"), properties)
         for depth in bullet_depths:
             style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
                 _tag("style:name"): f"PPTPBullet{depth}", _tag("style:family"): "paragraph",
@@ -726,13 +832,46 @@ def write_document(
             ET.SubElement(style, _tag("style:paragraph-properties"), {
                 _tag("fo:margin-left"): f"{12 * (depth + 1)}pt",
                 _tag("fo:text-indent"): "-12pt",
+                _tag("fo:margin-top"): "0pt", _tag("fo:margin-bottom"): "3pt",
+                _tag("fo:text-align"): "start",
+            })
+            properties = style.find(_tag("style:paragraph-properties"))
+            tabs = ET.SubElement(properties, _tag("style:tab-stops"))
+            ET.SubElement(tabs, _tag("style:tab-stop"), {
+                _tag("style:position"): "12pt", _tag("style:type"): "left",
+            })
+        if sheet_rows:
+            style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+                _tag("style:name"): "PPTPIndexCaption", _tag("style:family"): "paragraph",
+                _tag("style:parent-style-name"): "PPTPBody",
+            })
+            ET.SubElement(style, _tag("style:paragraph-properties"), {
+                _tag("fo:text-align"): "center", _tag("fo:keep-with-next"): "always",
+                _tag("fo:margin-top"): "8pt", _tag("fo:margin-bottom"): "5pt",
+                _tag("fo:line-height"): "115%",
             })
         document.table_of_contents(
             [(level, text.replace("**", "")) for level, text in blocks if level > 0],
             max_level=toc_depth,
         )
+        for style in document.automatic_styles:
+            name = style.get(_tag("style:name"), "")
+            if re.fullmatch(r"PPTPContents[1-6]", name):
+                style.set(_tag("style:parent-style-name"), "PPTPBody")
+                properties = style.find(_tag("style:paragraph-properties"))
+                properties.set(_tag("fo:text-align"), "start")
+                properties.set(_tag("fo:line-height"), "115%")
+                properties.set(_tag("fo:margin-bottom"), "4pt")
+                properties.set(_tag("fo:keep-with-next"), "auto")
+                ET.SubElement(style, _tag("style:text-properties"), {
+                    _tag("fo:font-size"): "10pt",
+                    _tag("fo:font-weight"): "bold" if name == "PPTPContents1" else "normal",
+                })
         heading_index = 0
-        for level, text in blocks:
+        for block_index, (level, text) in enumerate(blocks):
+            if level == 0 and text == INDEX_TOKEN:
+                write_odt_index(document, sheet_rows)
+                continue
             if level > 0:
                 document.heading(
                     text.replace("**", ""), level, style=f"PPTPHeading{level}",
@@ -745,9 +884,13 @@ def write_document(
                     f"PPTPBullet{-level - 1}" if level < 0
                     else "PPTPSeparator" if separator else "PPTPBody"
                 )
+                if block_index + 1 < len(blocks) and blocks[block_index + 1] == (0, INDEX_TOKEN):
+                    style = "PPTPIndexCaption"
                 paragraph = ET.SubElement(document.body, _tag("text:p"), {
                     _tag("text:style-name"): style,
                 })
+                if level < 0:
+                    text = re.sub(r"^(\*\*)?(\d+[.)]|•) ", r"\1\2\t ", text)
                 for value, bold in bold_runs(text):
                     attributes = {_tag("text:style-name"): "PPTPBold"} if bold else {}
                     span = ET.SubElement(paragraph, _tag("text:span"), attributes)
@@ -756,11 +899,37 @@ def write_document(
                             ET.SubElement(span, _tag("text:tab")).tail = part
                         else:
                             span.text = part
+        style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+            _tag("style:name"): "PPTPTitle", _tag("style:family"): "paragraph",
+            _tag("style:parent-style-name"): "ReportTitle",
+        })
+        for element in document.body.iter():
+            if element.get(_tag("text:style-name")) == "ReportTitle":
+                element.set(_tag("text:style-name"), "PPTPTitle")
+        for level in range(1, 7):
+            style = next(
+                style for style in document.automatic_styles
+                if style.get(_tag("style:name")) == f"PPTPHeading{level}"
+            )
+            style.set(_tag("style:default-outline-level"), str(level))
+        document.name_text_styles({
+            "PPTPBody": "PPTP - Cuerpo",
+            "PPTPTitle": "PPTP - Título del índice",
+            "PPTPSeparator": "PPTP - Apartado de ficha",
+            "PPTPBold": "PPTP - Énfasis",
+            "PPTPIndexCaption": "PPTP - Título de tabla",
+            "PPTPIndexHeader": "PPTP - Tabla - Cabecera",
+            "PPTPIndexText": "PPTP - Tabla - Capítulo",
+            "PPTPIndexBullet": "PPTP - Tabla - Ficha con viñeta",
+            **{f"PPTPHeading{level}": f"PPTP - Título {level}" for level in range(1, 7)},
+            **{f"PPTPBullet{depth}": f"PPTP - Lista {depth + 1}" for depth in bullet_depths},
+            **{f"PPTPContents{level}": f"PPTP - Índice {level}" for level in range(1, 7)},
+        })
         document.write(target)
     else:
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import ParagraphStyle
-        from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
+        from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
         from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Table
         from reportlab.platypus.doctemplate import LayoutError
         from reportlab.platypus.tableofcontents import TableOfContents
@@ -826,7 +995,11 @@ def write_document(
             tabular_rows.clear()
 
         heading_index = 0
-        for level, text in blocks:
+        for block_index, (level, text) in enumerate(blocks):
+            if level == 0 and text == INDEX_TOKEN:
+                flush_tabular_rows()
+                story.append(pdf_index(sheet_rows, layout, body))
+                continue
             if level == 0 and "\t" in text.lstrip("\t"):
                 tabular_rows.append(text.split("\t"))
                 continue
@@ -844,6 +1017,10 @@ def write_document(
                 style = ParagraphStyle(
                     "PPTPSeparator", parent=body, spaceBefore=8,
                     keepWithNext=True, alignment=TA_LEFT,
+                )
+            if block_index + 1 < len(blocks) and blocks[block_index + 1] == (0, INDEX_TOKEN):
+                style = ParagraphStyle(
+                    "PPTPIndexCaption", parent=body, keepWithNext=True, alignment=TA_CENTER,
                 )
             if text.startswith("\t"):
                 tabs = len(text) - len(text.lstrip("\t"))
@@ -873,8 +1050,8 @@ def write_document(
                     + heading.getSpaceBefore() + heading.getSpaceAfter()
                     for heading in headings
                 ) + min(
-                    following.wrap(available_width, available_height)[1],
-                    following.style.leading * 2,
+                    following.wrapOn(self.canv, available_width, available_height)[1],
+                    following.style.leading * 2 if isinstance(following, Paragraph) else 40,
                 )
                 self._maxHeight = self._H
                 return size

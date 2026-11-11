@@ -62,6 +62,9 @@ expresamente en la herramienta.
   Las partidas sin correspondencia pueden vincularse a una o varias fichas del índice.
 - Revisa también las condiciones de aplicación de la normativa propuesta.
   Las referencias pendientes de revisión no se marcan automáticamente.
+  En el apartado 7, las referencias seleccionadas se presentan con subtítulos
+  temáticos (contratación, accesibilidad, medio ambiente, estructuras, instalaciones,
+  etc.), tanto en PDF como en ODT. Los grupos sin referencias incluidas se omiten.
 - Al generar se guarda la selección en el JSON del proyecto y se emite PDF u ODT
   según la configuración, con su plantilla de cabecera y pie y las variables sustituidas.
   Las fichas compartidas por varias partidas solo se incorporan una vez.
@@ -82,13 +85,34 @@ expresamente en la herramienta.
   forzados; solo se separa el índice inicial del cuerpo.
   En el primer paso, **Niveles del índice (1–6)** limita la profundidad del índice
   PDF y ODT (2 por defecto), sin quitar subtítulos del cuerpo. Se guarda con el proyecto.
-  El apartado de fichas (capítulo 9 en la biblioteca actual) se agrupa por capítulo de dos dígitos de la base de precios
-  (`01`, `02`, …), mostrando solo su nombre junto a la numeración del documento
-  (por ejemplo, `9.1 DEMOLICIONES Y TRABAJOS PREVIOS`). Dentro de cada grupo, las fichas
+  El apartado de fichas (capítulo 9 en la biblioteca actual) se agrupa por capítulos
+  del presupuesto, siguiendo su orden y sus títulos. Las fichas compartidas aparecen
+  solo en el primer capítulo que las utiliza. Dentro de cada grupo, las fichas
   completas se ordenan por código UNI, conservando definición, ejecución,
-  medición y abono, sin modificar la biblioteca ni la selección guardada.
+  medición y abono, sin cambiar la selección ni la edición basada en BCCA.
   Con dos niveles, el índice muestra los grupos; con tres, también las fichas.
+- El apartado 9 incluye una tabla de dos columnas, capítulo del proyecto y ficha:
+  cabecera azul en negrita y filas de texto normal alternadas en azul claro y blanco.
+  Cada fila corresponde a un capítulo real del presupuesto (código y título),
+  no a la numeración de secciones del PPTP. Todas sus fichas aparecen en la misma
+  celda, con viñetas y sin número de sección; cada nombre enlaza con su
+  ficha, tanto en PDF como en ODT. No hay columna de página.
+  Las tablas largas repiten la cabecera solo al continuar en otra página y conservan
+  la alineación y los anchos de columna.
+  La introducción y el título de la tabla se editan en el documento general del ZIP;
+  `<!-- TABLA_FICHAS_CAPITULOS -->` inserta la tabla según las fichas seleccionadas.
 - El PPTP no repite los títulos del documento y del proyecto en la cabecera.
+  El ODT conserva las fuentes y los tamaños de los estilos específicos de la
+  plantilla, pero normaliza el espaciado, la justificación del cuerpo, las listas
+  con sangría y la continuidad de títulos. Si la plantilla solo tiene un título
+  genérico, se aplica una jerarquía tipográfica por niveles. La cabecera y el pie
+  personalizados no se modifican.
+  Los estilos del PPTP se publican como estilos editables de Writer, con nombres
+  `PPTP - Cuerpo`, `PPTP - Título 1` a `6`, `PPTP - Lista…`, `PPTP - Tabla…`,
+  `PPTP - Índice…` y el estilo de carácter `PPTP - Énfasis`. En **Estilos → Gestionar
+  estilos** (F11), modifica el estilo correspondiente para actualizar todos sus
+  párrafos o fragmentos, sin seleccionarlos uno por uno. Se conserva la herencia
+  de la plantilla y de los estilos derivados del cuerpo.
   En el pie de la plantilla, `{{capítulo}}` (o `{{capitulo}}`) se sustituye por
   «PLIEGO DE PRESCRIPCIONES TÉCNICAS PARTICULARES» y `{{no_pagina}}`
   (o `{no_pagina}`) por el número de página (campo automático en ODT).

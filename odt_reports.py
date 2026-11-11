@@ -78,6 +78,7 @@ class _OdtReport:
             _tag("office:version"): "1.3",
         })
         self.automatic_styles = ET.SubElement(self.content_root, _tag("office:automatic-styles"))
+        self.named_styles = ET.Element(_tag("office:styles"))
         body = ET.SubElement(self.content_root, _tag("office:body"))
         self.body = ET.SubElement(body, _tag("office:text"))
 
@@ -311,6 +312,18 @@ class _OdtReport:
         """Añade las líneas económicas como filas destacadas."""
         self.table([], rows, bold_rows=range(len(rows)))
 
+    def name_text_styles(self, labels: dict[str, str]) -> None:
+        """Publica estilos de párrafo y carácter en Writer sin duplicar formato directo."""
+        for style in list(self.automatic_styles):
+            name = style.get(_tag("style:name"))
+            if name not in labels or style.get(_tag("style:family")) not in {"paragraph", "text"}:
+                continue
+            style.set(_tag("style:display-name"), labels[name])
+            if style.get(_tag("style:family")) == "paragraph":
+                style.set(_tag("style:class"), "text")
+            self.automatic_styles.remove(style)
+            self.named_styles.append(style)
+
     def write(self, target: Path) -> None:
         """Empaqueta el documento, los estilos, metadatos y recursos en un ODT."""
         styles = self._styles_xml()
@@ -369,6 +382,8 @@ class _OdtReport:
         self._paragraph_style(styles, "TableHeader", size="8pt", bold=True)
         if self.layout:
             self._pdf_styles(styles)
+        for style in self.named_styles:
+            styles.append(deepcopy(style))
         for name in (
             "TableHeader", "TableText", "TableTotal", "TableItemTitle",
             "Signature", "ChapterTitle", "AuxiliaryTitle",
