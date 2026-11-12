@@ -71,9 +71,9 @@ expresamente en la herramienta.
   tabla de referencias con sus partidas y fichas relacionadas y la casilla
   **Incluir**. El detalle inferior conserva la condición completa y las parejas
   partida–ficha; indica también si la norma está incluida o pendiente.
-  Marca las UNE que procedan para que aparezcan en el apartado 7 y en la columna
-  UNE de la tabla del apartado 9. Las relaciones se actualizan al cambiar las
-  fichas, conservando las decisiones de inclusión ya revisadas.
+  Marca las UNE que procedan para que aparezcan en el apartado 7. Las relaciones
+  se actualizan al cambiar las fichas, conservando las decisiones de inclusión
+  ya revisadas.
   La preselección se aplica automáticamente también a proyectos antiguos con
   UNE guardadas como desmarcadas. No hay botón adicional. Los cambios manuales
   de las casillas UNE quedan identificados en `pptp.une_revisadas` dentro del JSON
@@ -109,19 +109,15 @@ expresamente en la herramienta.
   completas se ordenan por código UNI, conservando definición, ejecución,
   medición y abono, sin cambiar la selección ni la edición basada en BCCA.
   Con dos niveles, el índice muestra los grupos; con tres, también las fichas.
-- El apartado 9 incluye una tabla de tres columnas: capítulo del proyecto, ficha y normas UNE:
+- El apartado 9 incluye una tabla de dos columnas: capítulo del proyecto y ficha:
   cabecera azul en negrita y filas de texto normal alternadas en azul claro y blanco.
   Cada fila corresponde a un capítulo real del presupuesto (código y título),
   no a la numeración de secciones del PPTP. Todas sus fichas aparecen en la misma
   celda, con viñetas y sin número de sección; cada nombre enlaza con su
   ficha, tanto en PDF como en ODT. No hay columna de página.
-  La columna UNE muestra las designaciones exactas seleccionadas en la revisión
-  normativa y relacionadas por BCCA con las partidas de las fichas de ese capítulo.
-  Cada norma se presenta una sola vez por capítulo, con viñeta y enlace a su
-  referencia del apartado legislativo; las no seleccionadas no aparecen.
-  Un guion indica que no hay UNE seleccionadas asociadas, no que no existan normas
-  aplicables. Los códigos, títulos completos y enlaces oficiales permanecen en el
-  apartado 7: no se añaden listados normativos al cuerpo de las fichas.
+  Los códigos, títulos completos y enlaces oficiales de las disposiciones legales,
+  incluidas las UNE seleccionadas, aparecen en el apartado 7; la tabla no repite
+  referencias normativas ni se añaden listados normativos al cuerpo de las fichas.
   Las tablas largas repiten la cabecera solo al continuar en otra página y conservan
   la alineación y los anchos de columna.
   La introducción y el título de la tabla se editan en el documento general del ZIP;

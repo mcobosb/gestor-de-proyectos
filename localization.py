@@ -289,7 +289,7 @@ _TEXT = {
     "Disposiciones técnicas legales": ("Technical legal provisions", "Dispositions techniques légales"),
     "Partida del presupuesto": ("Budget item", "Poste du budget"),
     "Código y nombre de ficha": ("Sheet code and name", "Code et nom de la fiche"),
-    "Referencia / estado": ("Reference / status", "Référence / état"),
+    "Referencia": ("Reference", "Référence"),
     "Condición de aplicación": ("Application condition", "Condition d'application"),
     "Añadir otra ficha a la partida": ("Add another sheet to this item", "Ajouter une autre fiche au poste"),
     "Revisa los datos del proyecto antes de continuar.": (

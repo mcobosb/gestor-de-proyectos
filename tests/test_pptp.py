@@ -654,11 +654,16 @@ class PptpWindowTests(unittest.TestCase):
         window.reviewed_unes.add("UNE-EN-15361-2009")
         self.next_steps(window)
         self.assertEqual(tuple(window.legal_tree["columns"]), ("item", "sheet", "related", "selected"))
+        self.assertEqual(window.legal_tree.heading("item")["text"], "Referencia")
         self.assertEqual(window.legal_tree.heading("sheet")["text"], "Partidas relacionadas")
         self.assertEqual(window.legal_tree.heading("related")["text"], "Fichas relacionadas")
         index = next(i for i, ref in enumerate(window.regulations) if ref.id == "UNE-EN-15361-2009")
         ref = window.regulations[index]
         iid = str(index)
+        reference = window.legal_tree.set(iid, "item")
+        self.assertEqual(reference, ref.text[2:])
+        self.assertNotIn(ref.id, reference)
+        self.assertNotIn(f"[{ref.status}]", reference)
         self.assertIn("03ACC00011", window.legal_tree.set(iid, "sheet"))
         self.assertIn("Acero en cimentacion", window.legal_tree.set(iid, "sheet"))
         self.assertIn("03ACC", window.legal_tree.set(iid, "related"))
@@ -711,14 +716,13 @@ class PptpWindowTests(unittest.TestCase):
             self.assertIn("UNE-EN 15361:2009", "\n".join(pages))
             table_pages = [
                 (page, text) for page, text in zip(reader.pages, pages)
-                if "Capítulo del proyecto" in text and "Normas UNE" in text
+                if "Capítulo del proyecto" in text
             ]
             self.assertTrue(table_pages)
-            self.assertTrue(any("UNE-EN 15361:2009" in text for _, text in table_pages))
-            self.assertTrue(any(
-                annotation.get_object().get("/Dest", [None, None])[1] == "/XYZ"
-                for page, _ in table_pages for annotation in page.get("/Annots", [])
-            ))
+            self.assertLess(
+                "\n".join(pages).index("UNE-EN 15361:2009"),
+                "\n".join(pages).index("Capítulo del proyecto"),
+            )
         self.app.pptp_state = {}
         self.assertTrue(self.app._load_project_file(self.app.project_path))
         reopened = self.make_window()
@@ -755,6 +759,9 @@ class PptpWindowTests(unittest.TestCase):
             window.show_step()
             self.assertEqual(window.regulation_choices, {"OLD": False, "NEW": True, "LAW": False})
             self.assertEqual(window.legal_tree.set("1", "selected"), "☑")
+            self.assertEqual(window.legal_tree.set("2", "item"), "Ley de prueba.")
+            self.assertNotIn("LAW", window.legal_tree.set("2", "item"))
+            self.assertNotIn("[candidata]", window.legal_tree.set("2", "item"))
             window.legal_tree.selection_set("1")
             window.toggle_regulation(SimpleNamespace(keysym="space"))
             self.assertIn("NEW", window.reviewed_unes)

@@ -142,7 +142,7 @@ class PptpWindow(tk.Toplevel):
                      "no se marcan automáticamente. Desmarca las que no procedan.",
             ).pack(fill="x", pady=6)
             self.legal_tree = self.selection_table(
-                legal, labels=("Referencia / estado", "Partidas relacionadas", "Fichas relacionadas", "Incluir"),
+                legal, labels=("Referencia", "Partidas relacionadas", "Fichas relacionadas", "Incluir"),
             )
             self.refresh_regulations()
             self.legal_tree.bind("<ButtonRelease-1>", self.toggle_regulation)
@@ -185,7 +185,7 @@ class PptpWindow(tk.Toplevel):
         for index, ref in enumerate(self.regulations):
             relations = self.regulation_relations[ref.id]
             self.legal_tree.insert("", "end", iid=str(index), values=(
-                f"{ref.id} [{ref.status}] — {ref.text[2:]}",
+                ref.text[2:],
                 "; ".join(dict.fromkeys(item for item, _ in relations)),
                 "; ".join(dict.fromkeys(sheet for _, sheet in relations)),
                 "☑" if self.regulation_choices[ref.id] else "☐",
