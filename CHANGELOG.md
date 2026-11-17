@@ -110,7 +110,24 @@
   Se mantienen consentimiento y confidencialidad sanitaria, sin revisiones médicas
   genéricas; servicios y recursos preventivos se condicionan a la situación real
   y a los supuestos exigibles, sin copiar una línea de alta tensión del ejemplo.
-  El pliego de condiciones se conserva a continuación como capítulo 5.
+- ESS organizado en Documento I (Memoria, capítulos 1 a 4) y Documento II
+  (Pliego de condiciones), dentro del mismo PDF/ODT y con índices propios
+  enlazados y actualizables en ODT, sin mezclar entradas entre documentos.
+  El pliego reinicia la numeración con normativa y disposiciones generales,
+  organización preventiva y obligaciones, y Plan de Seguridad y Salud, control
+  y certificación.
+  Se amplían las obligaciones de los agentes, la aprobación del PSS, el control
+  documental, las modificaciones y la certificación con el importe preventivo
+  real del presupuesto, adaptando las referencias del ejemplo a cada obra.
+- Confirmación persistente de normativa preventiva y NTP por unidades de obra.
+  Propuestas basadas en códigos BCCA y riesgos/medidas expresos de las fichas,
+  con exclusiones y asignación manual desde el catálogo oficial local.
+  Las coincidencias solo temáticas y las referencias con avisos no se marcan
+  automáticamente. Una modificación de las unidades o sus fichas requiere
+  nueva confirmación. El primer capítulo del Pliego incorpora las normas
+  confirmadas, condiciones generales, prioridad de protección colectiva y una
+  tabla enlazada a los códigos de riesgos/medidas con las NTP seleccionadas,
+  identificadas como guías técnicas y no como disposiciones obligatorias.
 - PPTP agrupado por capítulos del presupuesto, con tabla de fichas enlazadas,
   colores alternos e índice de profundidad configurable. Las disposiciones
   legales y UNE seleccionadas se agrupan por ámbitos temáticos en su apartado,

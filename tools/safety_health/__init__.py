@@ -16,6 +16,7 @@ from localization import filedialog, localize_widget_tree, messagebox, translate
 from tools._shared.scheduling import PlanParams, apply_saved_plan_state, build_activities, schedule
 from .care_centers import CareCentersEditor, restore_centers
 from .external_conditions import ExternalConditionsEditor, restore_external_conditions
+from .regulations import restore_review, review_context
 
 if TYPE_CHECKING:
     from bc3_gui import BudgetApp, ProjectItem
@@ -63,6 +64,7 @@ def restore_project_state(data: dict) -> dict:
         study_criteria=data.get("study_criteria"),
         external_conditions=data.get("external_conditions"),
         resumen_actuacion=data.get("resumen_actuacion"),
+        regulatory_review=data.get("regulatory_review"),
     )
 
 
@@ -231,6 +233,7 @@ def serialize_state(
     study_criteria: tuple[bool, bool, bool, bool] | list[bool] | dict[str, bool] | None = None,
     external_conditions: dict[str, dict[str, str]] | None = None,
     resumen_actuacion: str | None = None,
+    regulatory_review: dict | None = None,
 ) -> dict:
     """Conserva la revisión, sus partidas y la información de centros asistenciales."""
     state = {
@@ -250,6 +253,8 @@ def serialize_state(
         ],
     }
     criteria = _study_criteria_values(study_criteria)
+    if regulatory_review is not None:
+        state["regulatory_review"] = restore_review(regulatory_review)
     if resumen_actuacion is not None:
         state["resumen_actuacion"] = _checked_work_summary(resumen_actuacion)
     if external_conditions is not None:
@@ -269,6 +274,7 @@ def restore_state(data: object) -> tuple[list[SafetyLine], Decimal]:
     restore_external_conditions(data.get("external_conditions"))
     if "resumen_actuacion" in data:
         _checked_work_summary(data["resumen_actuacion"])
+    restore_review(data.get("regulatory_review"))
     if ("centros_asistenciales" in data
             and not isinstance(data["centros_asistenciales"], str)):
         raise ValueError("Los centros asistenciales deben ser texto.")
@@ -341,6 +347,9 @@ def synchronize_budget(
         study_work_summary(app) if resumen_actuacion is None
         else _checked_work_summary(resumen_actuacion)
     )
+    saved_review = app.safety_health_state.get("regulatory_review")
+    if saved_review is not None:
+        saved_review = restore_review(saved_review)
 
     if not lines:
         raise ValueError("Selecciona al menos una partida de Seguridad y Salud.")
@@ -409,6 +418,7 @@ def synchronize_budget(
         study_criteria=study_criteria,
         external_conditions=conditions or None,
         resumen_actuacion=work_summary,
+        regulatory_review=saved_review,
     )
     app.refresh_budget_tree()
     app._mark_dirty()
@@ -439,6 +449,7 @@ class SafetyHealthWindow(tk.Toplevel):
         self.minsize(950, 650)
         self._proposal_window: SafetyProposalWindow | None = None
         self._conditions_window: tk.Toplevel | None = None
+        self._regulatory_window: tk.Toplevel | None = None
         try:
             if app.safety_health_state:
                 self.lines, percentage = restore_state(app.safety_health_state)
@@ -519,10 +530,34 @@ class SafetyHealthWindow(tk.Toplevel):
             actions, text="Condicionantes externos...", command=self.open_external_conditions,
         ).pack(side="left")
         ttk.Button(
+            actions, text="Normativa y NTP...", command=self.open_regulatory_review,
+        ).pack(side="left", padx=8)
+        ttk.Button(
             actions, text="Revisar propuesta de unidades de Seguridad y Salud...",
             command=self.open_proposal,
         ).pack(side="right")
         localize_widget_tree(self)
+
+    def open_regulatory_review(self) -> tk.Toplevel | None:
+        """Abre la confirmacion de normativa y NTP con las partidas actuales."""
+        from .regulatory_review import RegulatoryReviewWindow
+        from .study_report import study_work_units
+
+        if self._regulatory_window is not None and self._regulatory_window.winfo_exists():
+            self._regulatory_window.lift()
+            return self._regulatory_window
+        try:
+            units = study_work_units(self.app)
+            if not units:
+                raise ValueError("No hay unidades de obra para revisar la normativa.")
+            self._regulatory_window = RegulatoryReviewWindow(
+                self, self.app, units,
+                serialize_state(self.lines, self._stored_percentage),
+            )
+        except ValueError as exc:
+            messagebox.showerror("Normativa y NTP", str(exc), parent=self)
+            return None
+        return self._regulatory_window
 
     def _summary_changed(self, _event=None) -> None:
         """Conserva el resumen editado sin recalcular el capitulo preventivo."""
@@ -829,6 +864,24 @@ class SafetyProposalWindow(tk.Toplevel):
     def generate_report(self) -> None:
         """Crea el capítulo integrado y genera el estudio completo desde las plantillas."""
         if not self._create_chapter():
+            return
+        from .study_report import study_work_units
+
+        try:
+            units = study_work_units(self.app)
+            if restore_review(self.app.safety_health_state.get("regulatory_review")).get(
+                "context"
+            ) != review_context(units):
+                review_window = self.owner.open_regulatory_review()
+                if review_window is None:
+                    return
+                self.wait_window(review_window)
+                if restore_review(self.app.safety_health_state.get("regulatory_review")).get(
+                    "context"
+                ) != review_context(units):
+                    return
+        except ValueError as exc:
+            messagebox.showerror("Normativa y NTP", str(exc), parent=self)
             return
         output_format = self.app.report_settings.output_format.lower()
         extension = ".odt" if output_format == "odt" else ".pdf"

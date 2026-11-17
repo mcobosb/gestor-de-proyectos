@@ -200,7 +200,32 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
   no se presupone una línea de alta tensión detectada.
   Los recursos preventivos se concretan cuando sean legalmente exigibles, con
   capacitación, medios y vigilancia de la eficacia y corrección de las medidas.
-  El **Pliego de condiciones** se conserva como capítulo 5.
+  Los capítulos 1 a 4 forman el **Documento I. Memoria**.
+- El **Documento II. Pliego de condiciones** se incluye en el mismo PDF/ODT,
+  con índice propio y numeración de capítulos reiniciada:
+  **1. Normativa y disposiciones generales**,
+  **2. Organización preventiva, coordinación y obligaciones** y
+  **3. Plan de Seguridad y Salud, control y certificación**.
+  Define las obligaciones de los agentes, el PSS y su aprobación, el control
+  documental, la certificación y las modificaciones. Utiliza el importe
+  preventivo realmente incorporado al presupuesto, no una cantidad de ejemplo.
+  Ambos índices están enlazados a sus propios epígrafes; en ODT son actualizables
+  de forma independiente. La numeración de páginas continúa entre documentos.
+- **Normativa y NTP...** permite confirmar las disposiciones y las asociaciones
+  entre partidas y NTP antes de generar el estudio. Las propuestas utilizan los
+  códigos BCCA y las referencias expresas de riesgos y medidas de las fichas ESS,
+  no palabras de la descripción presupuestaria. Se pueden excluir propuestas
+  y asignar manualmente otras NTP del catálogo; las decisiones se guardan en el
+  proyecto y se conservan al recalcular el capítulo preventivo.
+  Las coincidencias solo temáticas y las NTP con avisos no se preseleccionan.
+  El capítulo normativo incluye las disposiciones confirmadas, las condiciones
+  generales, la prioridad de la protección colectiva y la Tabla 6 de códigos de
+  unidades de obra, riesgos, medidas y NTP. Las NTP se presentan como guías
+  técnicas, no como legislación obligatoria. Deben comprobarse alcance, edición,
+  avisos y normativa vigente a la fecha de ejecución.
+  Si cambian las unidades, los códigos de fichas, riesgos o medidas, o los
+  catálogos locales, se requiere una nueva confirmación. Las unidades sin ficha
+  o asociación no se dan por evaluadas.
 - El informe y su índice no incluyen el anexo de trazabilidad con importes ni
   un capítulo independiente de datos pendientes.
   Al guardar se muestra una confirmación informativa con la ruta del documento

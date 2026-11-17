@@ -83,6 +83,10 @@ class SafetyHealthTests(unittest.TestCase):
                 "trafico_existente": {"description": "Un carril ocupado", "applicability": "yes"},
             },
             resumen_actuacion="Renovación del abastecimiento.",
+            regulatory_review={
+                "context": "contexto revisado", "laws": {"RD614-2001": False},
+                "ntps": {"01AAB00001": {"NTP 278": True}},
+            },
         )
         self.assertEqual(
             restore_project_state(state)["external_conditions"], state["external_conditions"],
@@ -90,6 +94,9 @@ class SafetyHealthTests(unittest.TestCase):
         self.assertEqual(restore_state(state), (lines, Decimal("2.5")))
         self.assertEqual(
             restore_project_state(state)["resumen_actuacion"], "Renovación del abastecimiento.",
+        )
+        self.assertEqual(
+            restore_project_state(state)["regulatory_review"], state["regulatory_review"],
         )
         self.assertEqual(
             restore_state({key: value for key, value in state.items() if key != "centros_asistenciales"}),
@@ -105,6 +112,13 @@ class SafetyHealthTests(unittest.TestCase):
             {**state, "external_conditions": []},
             {**state, "resumen_actuacion": None},
             {**state, "resumen_actuacion": []},
+            {**state, "regulatory_review": []},
+            {**state, "regulatory_review": {
+                "context": "x", "laws": {"RD614-2001": "yes"}, "ntps": {},
+            }},
+            {**state, "regulatory_review": {
+                "context": "x", "laws": {}, "ntps": {"01AAB": {"NTP inventada": True}},
+            }},
             {**state, "external_conditions": {
                 "trafico_existente": {"description": "Obra", "applicability": []},
             }},

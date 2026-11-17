@@ -109,16 +109,29 @@ class _OdtReport:
         if bookmark is not None:
             ET.SubElement(element, _tag("text:bookmark"), {_tag("text:name"): bookmark})
 
-    def table_of_contents(self, headings: list[tuple[int, str]], *, max_level: int = 6) -> None:
-        """Inserta un indice ODF actualizable con enlaces a los epigrafes del cuerpo."""
+    def table_of_contents(
+        self, headings: list[tuple[int, str]], *, max_level: int = 6,
+        name: str = "PPTPContents", bookmark_offset: int = 0,
+        source_styles: dict[int, str] | None = None,
+    ) -> None:
+        """Inserta un indice ODF, opcionalmente limitado a estilos de un documento."""
         toc = ET.SubElement(self.body, _tag("text:table-of-content"), {
-            _tag("text:name"): "PPTPContents",
+            _tag("text:name"): name,
             _tag("text:protected"): "false",
         })
         source = ET.SubElement(toc, _tag("text:table-of-content-source"), {
             _tag("text:outline-level"): str(max_level),
-            _tag("text:use-outline-level"): "true",
+            _tag("text:use-outline-level"): "false" if source_styles is not None else "true",
         })
+        if source_styles is not None:
+            source.set(_tag("text:use-index-source-styles"), "true")
+            for level, style_name in source_styles.items():
+                styles = ET.SubElement(source, _tag("text:index-source-styles"), {
+                    _tag("text:outline-level"): str(level),
+                })
+                ET.SubElement(styles, _tag("text:index-source-style"), {
+                    _tag("text:style-name"): style_name,
+                })
         title = ET.SubElement(source, _tag("text:index-title-template"), {
             _tag("text:style-name"): "ReportTitle",
         })
@@ -137,7 +150,7 @@ class _OdtReport:
             ET.SubElement(entry, _tag("text:index-entry-link-end"))
         body = ET.SubElement(toc, _tag("text:index-body"))
         title = ET.SubElement(body, _tag("text:index-title"), {
-            _tag("text:name"): "PPTPContentsTitle",
+            _tag("text:name"): f"{name}Title",
         })
         ET.SubElement(title, _tag("text:p"), {
             _tag("text:style-name"): "ReportTitle",
@@ -163,21 +176,26 @@ class _OdtReport:
                 _tag("text:style-name"): style_name,
             })
             link = ET.SubElement(paragraph, _tag("text:a"), {
-                _tag("xlink:href"): f"#PPTPHeading{index}", _tag("xlink:type"): "simple",
+                _tag("xlink:href"): f"#PPTPHeading{bookmark_offset + index}",
+                _tag("xlink:type"): "simple",
             })
             link.text = text
             ET.SubElement(link, _tag("text:tab"))
             ET.SubElement(link, _tag("text:bookmark-ref"), {
-                _tag("text:ref-name"): f"PPTPHeading{index}",
+                _tag("text:ref-name"): f"PPTPHeading{bookmark_offset + index}",
                 _tag("text:reference-format"): "page",
             }).text = "1"
-        style = ET.SubElement(self.automatic_styles, _tag("style:style"), {
-            _tag("style:name"): "PPTPContentsBreak", _tag("style:family"): "paragraph",
-            _tag("style:parent-style-name"): "ReportBody",
-        })
-        ET.SubElement(style, _tag("style:paragraph-properties"), {
-            _tag("fo:break-after"): "page",
-        })
+        if not any(
+            style.get(_tag("style:name")) == "PPTPContentsBreak"
+            for style in self.automatic_styles
+        ):
+            style = ET.SubElement(self.automatic_styles, _tag("style:style"), {
+                _tag("style:name"): "PPTPContentsBreak", _tag("style:family"): "paragraph",
+                _tag("style:parent-style-name"): "ReportBody",
+            })
+            ET.SubElement(style, _tag("style:paragraph-properties"), {
+                _tag("fo:break-after"): "page",
+            })
         self.paragraph("", "PPTPContentsBreak")
 
     def paragraph(self, text: str, style: str = "ReportBody") -> None:

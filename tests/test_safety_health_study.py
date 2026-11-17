@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import tkinter as tk
 import unittest
 from unittest.mock import create_autospec, patch
 from xml.etree import ElementTree as ET
@@ -18,11 +19,14 @@ from bc3_gui import BudgetApp, Concept, ProjectItem
 from budget_reports import ReportSettings
 from report_layout import DEFAULT_TEMPLATE_PATH, ReportLayout
 from tools.safety_health import (
-    SafetyLine, SafetyProposalWindow, synchronize_budget, write_study_report,
+    SafetyLine, SafetyProposalWindow, restore_project_state, synchronize_budget, write_study_report,
 )
 from tools.safety_health.study_report import (
     _Block, _StudyContent, _build_study_content, _markdown_blocks, _numbered_blocks,
-    _pdf_blue_table,
+    _pdf_blue_table, study_work_units,
+)
+from tools.safety_health.regulations import (
+    WorkUnit, initially_selected, law_proposals, load_ntps, ntp_proposals, review_context,
 )
 
 
@@ -145,7 +149,10 @@ class SafetyHealthStudyTests(unittest.TestCase):
                         "3.1.3.2 EQUIPOS DE PROTECCIÓN INDIVIDUAL",
                         "3.1.3.3 EQUIPOS DE TRABAJO", "3.1.3.4 VALIDACIÓN",
                         "4 SEGUIMIENTO, CONTROL, COORDINACIÓN, FORMACIÓN Y DOCUMENTACIÓN",
-                        "5 PLIEGO DE CONDICIONES",
+                        "DOCUMENTO I. MEMORIA", "DOCUMENTO II. PLIEGO DE CONDICIONES",
+                        "1 NORMATIVA Y DISPOSICIONES GENERALES",
+                        "2 ORGANIZACIÓN PREVENTIVA, COORDINACIÓN Y OBLIGACIONES",
+                        "3 PLAN DE SEGURIDAD Y SALUD, CONTROL Y CERTIFICACIÓN",
                     ):
                         self.assertIn(label, text)
                     self.assertIn("Partida sin ficha ESS BCCA: OBRA001", "\n".join(warnings))
@@ -187,7 +194,8 @@ class SafetyHealthStudyTests(unittest.TestCase):
         )
         introduction = content.blocks[:memory_index]
         text = "\n".join(block.text for block in introduction)
-        self.assertEqual(introduction[0].text, "Objeto y alcance")
+        self.assertEqual(introduction[0].kind, "document")
+        self.assertEqual(introduction[1].text, "Objeto y alcance")
         self.assertIn("Su objeto es servir de base al Plan de Seguridad", text)
         self.assertIn("La actuacion comprende", text)
         self.assertIn("PROYECTO DE PRUEBA", text)
@@ -393,7 +401,12 @@ class SafetyHealthStudyTests(unittest.TestCase):
 
     def test_memory_consolidates_common_rules_and_preserves_specific_obligations(self):
         """Reune criterios y comprobaciones sin eliminar obligaciones particulares."""
-        content = _build_study_content(self.make_app("odt"))
+        app = self.make_app("odt")
+        units = study_work_units(app)
+        app.safety_health_state["regulatory_review"] = {
+            "context": review_context(units), "laws": law_proposals(units), "ntps": {},
+        }
+        content = _build_study_content(app)
         headings = [block.text for block in content.blocks if block.kind == "heading"]
         self.assertEqual(headings.count("Criterios preventivos generales"), 1)
         self.assertNotIn("Condiciones generales de seguridad y salud", headings)
@@ -452,9 +465,9 @@ class SafetyHealthStudyTests(unittest.TestCase):
         self.assertEqual(text.count("Antes de abrir cada tajo"), 1)
         for obligation in (
             "tapas resistentes e inmovilizadas", "aristas peligrosas",
-            "se repondran inmediatamente", "RD 614/2001",
+            "se repondrán inmediatamente", "Real Decreto 614/2001",
             "No se admitira la entrada para rescate improvisado.",
-            "responsables, plazos de corrección", "La Direccion Facultativa",
+            "responsables, plazos de corrección", "La Dirección Facultativa",
             "Libro de incidencias", "Las futuras operaciones de mantenimiento",
         ):
             self.assertIn(obligation, text)
@@ -465,7 +478,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
         self.assertNotIn("Datos pendientes y advertencias de validacion", headings)
         self.assertEqual(
             [block.text for block in content.blocks if block.kind == "heading" and block.level == 1][-1],
-            "Pliego de condiciones",
+            "Plan de Seguridad y Salud, control y certificación",
         )
 
     def test_third_party_protection_adapts_the_example_to_generic_project_conditions(self):
@@ -611,6 +624,10 @@ class SafetyHealthStudyTests(unittest.TestCase):
                 with self.subTest(format=output_format, warnings=bool(warnings)):
                     proposal = create_autospec(SafetyProposalWindow, instance=True)
                     proposal.app = self.make_app(output_format)
+                    units = study_work_units(proposal.app)
+                    proposal.app.safety_health_state["regulatory_review"] = {
+                        "context": review_context(units), "laws": law_proposals(units), "ntps": {},
+                    }
                     proposal.app._set_status = lambda message: None
                     proposal._create_chapter.return_value = True
                     target = f"estudio.{output_format}"
@@ -812,12 +829,188 @@ class SafetyHealthStudyTests(unittest.TestCase):
                 "1 OBJETO Y ALCANCE", "2 MEMORIA DESCRIPTIVA",
                 "3 FICHAS DE UNIDADES DE OBRA APLICABLES",
                 "4 SEGUIMIENTO, CONTROL, COORDINACIÓN, FORMACIÓN Y DOCUMENTACIÓN",
-                "5 PLIEGO DE CONDICIONES",
+                "1 NORMATIVA Y DISPOSICIONES GENERALES",
+                "2 ORGANIZACIÓN PREVENTIVA, COORDINACIÓN Y OBLIGACIONES",
+                "3 PLAN DE SEGURIDAD Y SALUD, CONTROL Y CERTIFICACIÓN",
             ],
         )
         self.assertTrue(all(
             block.level == 0 for block in followup if block.kind == "list_item"
         ))
+
+    def test_specification_restarts_chapters_and_uses_actual_safety_budget(self):
+        """Separa el pliego de la memoria y adapta obligaciones e importe al proyecto."""
+        app = self.make_app("odt")
+        safety_item = next(item for item in app.budget_items if item.source.startswith("SS:"))
+        safety_item.measurement = 7
+        safety_item.unit_price = 12.34
+        blocks = _numbered_blocks(_build_study_content(app).blocks)
+        document_starts = [index for index, block in enumerate(blocks) if block.kind == "document"]
+        self.assertEqual([blocks[index].text for index in document_starts], [
+            "DOCUMENTO I. MEMORIA", "DOCUMENTO II. PLIEGO DE CONDICIONES",
+        ])
+        specification = blocks[document_starts[1] + 1:]
+        self.assertEqual(
+            [block.text for block in specification if block.kind == "heading" and block.level == 1],
+            [
+                "1 NORMATIVA Y DISPOSICIONES GENERALES",
+                "2 ORGANIZACIÓN PREVENTIVA, COORDINACIÓN Y OBLIGACIONES",
+                "3 PLAN DE SEGURIDAD Y SALUD, CONTROL Y CERTIFICACIÓN",
+            ],
+        )
+        self.assertEqual(
+            [block.text for block in specification if block.kind == "heading" and block.level == 2],
+            [
+                "1.1 NORMATIVA DE APLICACIÓN", "1.2 CONDICIONES GENERALES DE EJECUCIÓN",
+                "1.3 PRIORIDAD DE LA PROTECCIÓN COLECTIVA",
+                "1.4 NOTAS TÉCNICAS DE PREVENCIÓN RELACIONADAS CON LAS UNIDADES DE OBRA",
+                "2.1 PROMOTOR", "2.2 CONTRATISTA", "2.3 SUBCONTRATISTAS Y TRABAJADORES AUTÓNOMOS",
+                "2.4 COORDINADOR DE SEGURIDAD Y SALUD DURANTE LA EJECUCIÓN",
+                "2.5 RECURSOS PREVENTIVOS", "2.6 VIGILANCIA DE LA SALUD",
+                "3.1 PLAN DE SEGURIDAD Y SALUD", "3.2 LIBRO DE INCIDENCIAS Y CONTROL DOCUMENTAL",
+                "3.3 CERTIFICACIÓN DE MEDIDAS DE SEGURIDAD Y SALUD",
+                "3.4 MODIFICACIONES Y SITUACIONES NO PREVISTAS",
+            ],
+        )
+        text = "\n".join(block.text for block in specification)
+        for obligation in (
+            "asciende a 86,38", "medición real", "no sustituye la revisión de sus cantidades",
+            "por insuficiencia o agotamiento", "antes del comienzo de los trabajos",
+            "Administración pública que haya adjudicado la obra, previo informe",
+            "cuando no sea preceptivo, de la Dirección Facultativa",
+            "cuando corresponda, con la Policía Local", "cuando proceda, los de fresado",
+            "consentimiento del trabajador", "La documentación médica será confidencial",
+            "actividades y situaciones en que resulte preceptiva",
+        ):
+            self.assertIn(obligation, text)
+        self.assertNotIn("1.998,77", text)
+        self.assertNotIn("{{", text)
+
+    def test_ntp_proposals_use_explicit_references_and_do_not_confirm_thematic_matches(self):
+        """No infiere riesgos por la descripcion ni atribuye vigencia a coincidencias BCCA."""
+        app = self.make_app("pdf")
+        units = study_work_units(app)
+        catalog = load_ntps()
+        proposals = ntp_proposals(units, catalog)
+        self.assertIn("NTP 278", proposals["15APAA00001"])
+        self.assertIn("MP-ESTABILIDAD-EXCAVACION", proposals["15APAA00001"]["NTP 278"])
+        self.assertEqual(proposals["OBRA001"], {})
+        self.assertFalse(law_proposals([units[1]])["RD614-2001"])
+        self.assertTrue(law_proposals([units[0]])["RD614-2001"])
+        waste = WorkUnit("17RB00001", "Residuo", ("17RB",), (), ())
+        thematic = ntp_proposals([waste], catalog)[waste.code]
+        self.assertIn("NTP 781", thematic)
+        self.assertFalse(initially_selected(catalog["NTP 781"], thematic["NTP 781"]))
+        self.assertIn("Actualizada", catalog["NTP 359"].status)
+        self.assertFalse(initially_selected(catalog["NTP 359"], "Propuesta por R-QUIMICO."))
+        with tempfile.TemporaryDirectory() as folder:
+            data = Path(folder)
+            for name in ("ntps.csv", "NTP_tematica_por_codigo_BCCA.csv"):
+                (data / name).write_text("catálogo inicial", encoding="utf-8")
+            with patch("tools.safety_health.regulations.DATA_ROOT", data):
+                initial = review_context(units)
+                (data / "ntps.csv").write_text("catálogo actualizado", encoding="utf-8")
+                self.assertNotEqual(review_context(units), initial)
+
+    def test_confirmed_norms_and_manual_ntps_survive_budget_sync_and_export(self):
+        """Exporta solo decisiones confirmadas con codigos reales y conserva asignaciones manuales."""
+        with tempfile.TemporaryDirectory() as folder:
+            for output_format in ("pdf", "odt"):
+                with self.subTest(format=output_format):
+                    app = self.make_app(output_format)
+                    units = study_work_units(app)
+                    review = {
+                        "context": review_context(units),
+                        "laws": {"L31-1995": True, "RD614-2001": False},
+                        "ntps": {"15APAA00001": {"NTP 278": True, "NTP 477": False},
+                                 "OBRA001": {"NTP 4": True}},
+                    }
+                    app.safety_health_state["regulatory_review"] = review
+                    restored = restore_project_state(app.safety_health_state)
+                    self.assertEqual(restored["regulatory_review"], review)
+                    synchronize_budget(
+                        app, [SafetyLine("SS0001", "ud", "Protección", Decimal("3.11"), Decimal(1))],
+                        Decimal(2),
+                    )
+                    self.assertEqual(app.safety_health_state["regulatory_review"], review)
+                    content = _build_study_content(app)
+                    table = next(
+                        block for block in content.blocks if block.headers
+                        and block.headers[-1] == "NTP confirmadas"
+                    )
+                    self.assertTrue(table.blue_table)
+                    self.assertEqual(table.rows[0][1], ", ".join(units[0].risks))
+                    self.assertEqual(table.rows[0][2], ", ".join(units[0].measures))
+                    self.assertEqual(table.rows[0][3], "NTP 278")
+                    self.assertEqual(table.rows[1][3], "NTP 4")
+                    target = Path(folder) / f"normativa.{output_format}"
+                    write_study_report(app, target)
+                    if output_format == "pdf":
+                        text = "\n".join(page.extract_text() for page in PdfReader(target).pages)
+                    else:
+                        with ZipFile(target) as archive:
+                            tree = ET.fromstring(archive.read("content.xml"))
+                        text = "".join(tree.itertext())
+                    text = " ".join(text.split())
+                    for label in (
+                        "1 NORMATIVA Y DISPOSICIONES GENERALES", "Tabla 6.", "NTP 278",
+                        "NTP 4", "Ley 31/1995", "no disposiciones legales obligatorias",
+                        "2 ORGANIZACIÓN PREVENTIVA", "3 PLAN DE SEGURIDAD Y SALUD",
+                    ):
+                        self.assertIn(label, text)
+                    self.assertNotIn("NTP 477", text)
+                    self.assertNotIn("Real Decreto 614/2001", text)
+                    self.assertNotIn("Lucena", text)
+                    app.budget_items.append(ProjectItem("NUEVA", "01#", "ud", "Nueva fase"))
+                    changed = _build_study_content(app)
+                    table = next(
+                        block for block in changed.blocks if block.headers
+                        and block.headers[-1] == "NTP confirmadas"
+                    )
+                    self.assertTrue(all("pendiente de confirmación" in row[3] for row in table.rows))
+                    self.assertTrue(any("Confirmar normativa y NTP" in warning for warning in changed.warnings))
+
+    def test_regulatory_window_preserves_exclusions_and_manual_assignments_on_reopening(self):
+        """Guarda la revision explicita y mantiene independientes las parejas partida/NTP."""
+        from tools.safety_health.regulatory_review import RegulatoryReviewWindow
+
+        app = self.make_app("pdf")
+        app.budget_items.append(ProjectItem("15APA00002", "01#", "ud", "Otra arqueta"))
+        units = study_work_units(app)
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            window = RegulatoryReviewWindow(root, app, units, app.safety_health_state)
+            window.legal_tree.selection_set("RD614-2001")
+            window._toggle_law()
+            row = next(
+                row for row, pair in window.rows.items() if pair == ("15APAA00001", "NTP 278")
+            )
+            window.ntp_tree.selection_set(row)
+            window._toggle_ntp()
+            window.unit_choice.set("OBRA001")
+            window.ntp_choice.set("NTP 4")
+            window._assign()
+            window._accept()
+            reopened = RegulatoryReviewWindow(root, app, units, app.safety_health_state)
+            self.assertFalse(reopened.laws["RD614-2001"])
+            self.assertFalse(reopened.ntps["15APAA00001"]["NTP 278"])
+            self.assertTrue(reopened.ntps["15APA00002"]["NTP 278"])
+            self.assertTrue(reopened.ntps["OBRA001"]["NTP 4"])
+            self.assertEqual(app.safety_health_state["regulatory_review"]["context"], review_context(units))
+            reopened.destroy()
+        finally:
+            root.destroy()
+
+    def test_cancelling_required_regulatory_review_prevents_export(self):
+        """No genera ni pide ruta si se cancela la confirmacion pendiente."""
+        proposal = create_autospec(SafetyProposalWindow, instance=True)
+        proposal.app = self.make_app("pdf")
+        proposal.owner = SimpleNamespace(open_regulatory_review=lambda: None)
+        proposal._create_chapter.return_value = True
+        with patch("tools.safety_health.filedialog.asksaveasfilename") as choose:
+            SafetyProposalWindow.generate_report(proposal)
+        choose.assert_not_called()
 
     def test_catalogue_types_follow_native_pagination_without_forcing_category_breaks(self):
         """Repite tipo y cabecera una vez por pagina PDF y combina los grupos ODT."""
@@ -1646,6 +1839,157 @@ class SafetyHealthStudyTests(unittest.TestCase):
                 or props.get(f"{{{fo_ns}}}break-after") == "page"
             ]
             self.assertEqual(len(forced), 1)
+
+    def test_document_indices_stay_separate_with_real_pages_and_cross_document_links(self):
+        """Comprueba ambos indices, incluidos su paginado y actualizacion nativa ODT."""
+        from odt_reports import _tag
+
+        labels = [
+            f"Memoria preventiva {index:02d}: comprobaciones y condiciones del procedimiento para el tajo"
+            for index in range(36)
+        ]
+        blocks = [
+            _Block("document", "DOCUMENTO I. MEMORIA"),
+            _Block("heading", "Memoria", 1),
+            _Block("paragraph", "CUERPO MEMORIA."),
+        ]
+        for label in labels:
+            blocks.extend((
+                _Block("heading", label, 2),
+                _Block("paragraph", "Comprobación de las condiciones del tajo. " * 8),
+            ))
+        blocks.extend((
+            _Block("heading", "Detalle fuera del índice", 3),
+            _Block(
+                "table", headers=("Tipo", "Referencia", "Descripción"),
+                rows=(("Riesgos", "R-RUIDO", "Definición acústica de referencia."),),
+                blue_table=True,
+            ),
+            _Block("document", "DOCUMENTO II. PLIEGO DE CONDICIONES"),
+            _Block("heading", "Obligaciones", 1),
+            _Block("paragraph", "CUERPO PLIEGO. Consulta preventiva: R-RUIDO."),
+            _Block("heading", "Contratista", 2),
+            _Block("paragraph", "Obligaciones de la empresa."),
+            _Block("heading", "Plan y control", 1),
+            _Block("paragraph", "CIERRE PLIEGO."),
+        ))
+        expected = [
+            ["1 MEMORIA", *[f"1.{index + 1} {label.upper()}" for index, label in enumerate(labels)]],
+            ["1 OBLIGACIONES", "1.1 CONTRATISTA", "2 PLAN Y CONTROL"],
+        ]
+        soffice = shutil.which("soffice") or str(
+            Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
+            / "LibreOffice" / "program" / "soffice.exe"
+        )
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for output_format in ("pdf", "odt"):
+                with self.subTest(format=output_format):
+                    target = root / f"indices-{output_format}.{output_format}"
+                    content = _StudyContent(
+                        "ESTUDIO DE SEGURIDAD Y SALUD", "Proyecto de prueba", "CAP.03#", "EUR",
+                        blocks,
+                    )
+                    with patch(
+                        "tools.safety_health.study_report._build_study_content", return_value=content,
+                    ):
+                        write_study_report(self.make_app(output_format), target)
+                    if output_format == "odt":
+                        with ZipFile(target) as archive:
+                            tree = ET.fromstring(archive.read("content.xml"))
+                            styles = ET.fromstring(archive.read("styles.xml"))
+                        contents = tree.findall(f".//{_tag('text:table-of-content')}")
+                        self.assertEqual(len(contents), 2)
+                        names = [toc.get(_tag("text:name")) for toc in contents]
+                        self.assertEqual(len(set(names)), 2)
+                        bookmarks = {
+                            bookmark.get(_tag("text:name")): heading.text
+                            for heading in tree.findall(f".//{_tag('text:h')}")
+                            for bookmark in heading.findall(_tag("text:bookmark"))
+                        }
+                        for index, toc in enumerate(contents):
+                            source = toc.find(_tag("text:table-of-content-source"))
+                            self.assertEqual(source.get(_tag("text:use-outline-level")), "false")
+                            self.assertEqual(source.get(_tag("text:use-index-source-styles")), "true")
+                            self.assertEqual([
+                                style.get(_tag("text:style-name"))
+                                for style in source.findall(f".//{_tag('text:index-source-style')}")
+                            ], [f"ESSDocument{index}Heading{level}" for level in (1, 2)])
+                            entries = toc.findall(f".//{_tag('text:a')}")
+                            self.assertEqual([entry.text for entry in entries], expected[index])
+                            for entry in entries:
+                                reference = entry.find(_tag("text:bookmark-ref"))
+                                self.assertEqual(
+                                    bookmarks[reference.get(_tag("text:ref-name"))], entry.text,
+                                )
+                        style_names = [
+                            style.get(_tag("style:name")) for style in styles.findall(
+                                f".//{_tag('style:style')}",
+                            )
+                        ]
+                        for index in range(2):
+                            self.assertIn(f"ESSDocument{index}Heading1", style_names)
+                        if not Path(soffice).is_file():
+                            continue
+                        subprocess.run(
+                            [soffice, f"-env:UserInstallation={(root / 'profile').as_uri()}",
+                             "--headless", "--convert-to", "pdf", "--outdir", str(root), str(target)],
+                            check=True, capture_output=True, timeout=90,
+                        )
+                        target = target.with_suffix(".pdf")
+                    reader = PdfReader(target)
+                    texts = [" ".join(page.extract_text().split()) for page in reader.pages]
+                    compact_texts = [re.sub(r"\s+", "", text) for text in texts]
+                    first_body = next(index for index, text in enumerate(texts) if "CUERPO MEMORIA." in text)
+                    second_index = next(
+                        index for index, text in enumerate(texts)
+                        if "DOCUMENTO II. PLIEGO DE CONDICIONES" in text
+                    )
+                    second_body = next(index for index, text in enumerate(texts) if "CUERPO PLIEGO." in text)
+                    self.assertGreater(first_body, 1)
+                    regions = (
+                        (0, first_body, first_body, second_index),
+                        (second_index, second_body, second_body, len(texts)),
+                    )
+                    for index, (toc_start, toc_end, body_start, body_end) in enumerate(regions):
+                        contents_text = " ".join(texts[toc_start:toc_end])
+                        destinations = [
+                            destination[0]
+                            for page in reader.pages[toc_start:toc_end]
+                            for annotation in page.get("/Annots", [])
+                            if (destination := (
+                                annotation.get_object().get("/Dest")
+                                or annotation.get_object().get("/A", {}).get("/D")
+                            ))
+                        ]
+                        for heading in expected[index]:
+                            compact_heading = re.sub(r"\s+", "", heading)
+                            page_number = next((
+                                page + 1 for page in range(body_start, body_end)
+                                if compact_heading in compact_texts[page]
+                            ), 0)
+                            self.assertGreater(page_number, 0, heading)
+                            heading_pattern = r"\s*".join(map(re.escape, compact_heading))
+                            pattern = (
+                                rf"\b{page_number}\s+{heading_pattern}"
+                                if output_format == "pdf"
+                                else rf"{heading_pattern}\s+{page_number}\b"
+                            )
+                            self.assertRegex(contents_text, pattern)
+                            self.assertIn(reader.pages[page_number - 1].indirect_reference, destinations)
+                        for heading in expected[1 - index]:
+                            self.assertNotIn(
+                                re.sub(r"\s+", "", heading), re.sub(r"\s+", "", contents_text),
+                            )
+                        self.assertNotIn("DETALLEFUERADELÍNDICE", re.sub(r"\s+", "", contents_text))
+                    annotations = reader.pages[second_body].get("/Annots", [])
+                    self.assertEqual(len(annotations), 1)
+                    annotation = annotations[0].get_object()
+                    destination = annotation.get("/Dest") or annotation["/A"]["/D"]
+                    reference_page = next(
+                        page for page in reader.pages if page.indirect_reference == destination[0]
+                    )
+                    self.assertIn("Definición acústica de referencia.", reference_page.extract_text())
 
     def test_writer_resolves_odt_contents_page_numbers(self):
         """Comprueba las paginas del indice despues de paginar el ODT con Writer."""
