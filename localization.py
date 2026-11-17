@@ -16,6 +16,11 @@ LANGUAGES = {
 }
 
 _TEXT = {
+    "Resumen de la actuación": ("Work summary", "Résumé des travaux"),
+    "Se toma inicialmente del resumen guardado en PPTP; puedes editarlo aquí.": (
+        "Initially taken from the summary saved in PPTP; you can edit it here.",
+        "Repris initialement du résumé enregistré dans le PPTP ; vous pouvez le modifier ici.",
+    ),
     "Consultas": ("References", "Références"),
     "Buscador de {kind}": ("{kind} search", "Recherche {kind}"),
     "Buscar por código o texto:": ("Search by code or text:", "Rechercher par code ou texte :"),

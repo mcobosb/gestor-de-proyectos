@@ -1896,6 +1896,51 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.assertEqual(restored.study_criteria.fulfilled, (False, False, False, False))
         self.assertEqual(restored.selected_study_criteria, (True, False, False, False))
 
+    def test_safety_work_summary_starts_from_pptp_and_survives_review_and_reload(self):
+        """Edita el resumen sin tocar PPTP ni partidas y conserva la revision con el proyecto."""
+        from decimal import Decimal
+        from tools.safety_health import SafetyLine
+        from tools.pptp.document import VARIABLES
+
+        self.app.budget_items = [ProjectItem("BASE", "01#", "ud", "Obra", unit_price=1000)]
+        self.app.chapter_order = ["01#"]
+        self.app.pptp_state = {
+            "variables": {
+                **dict.fromkeys(VARIABLES, ""),
+                "bullet_capitulos_obra": "Resumen guardado en PPTP.",
+            },
+            "selections": [], "regulations": {},
+        }
+        self.app._reset_history()
+        self.app.open_safety_health()
+        owner = self.app._safety_health_window
+        self.root.update()
+        self.assertEqual(owner.summary_text.get("1.0", "end-1c"), "Resumen guardado en PPTP.")
+        self.assertFalse(self.app.is_dirty)
+        owner.summary_text.delete("1.0", "end")
+        owner.summary_text.insert("1.0", "Actuación revisada para Seguridad y Salud.")
+        self.root.update()
+        self.assertTrue(self.app.is_dirty)
+        self.assertEqual(len(self.app.budget_items), 1)
+        self.assertEqual(
+            self.app.pptp_state["variables"]["bullet_capitulos_obra"], "Resumen guardado en PPTP.",
+        )
+        owner.lines = [SafetyLine("A", "ud", "Protección", Decimal("12"), Decimal("3"))]
+        self.assertTrue(owner.open_proposal()._create_chapter())
+        path = self.directory / "resumen_ss.json"
+        self.assertTrue(self.app._write_project_file(path))
+        self.assertTrue(self.app._load_project_file(path))
+        self.app.open_safety_health()
+        self.assertEqual(
+            self.app._safety_health_window.summary_text.get("1.0", "end-1c"),
+            "Actuación revisada para Seguridad y Salud.",
+        )
+        self.app._safety_health_window.summary_text.delete("1.0", "end")
+        self.root.update()
+        self.app._safety_health_window.destroy()
+        self.app.open_safety_health()
+        self.assertEqual(self.app._safety_health_window.summary_text.get("1.0", "end-1c"), "")
+
     def test_sicess_centers_survive_safety_accept_and_project_reload(self):
         """Save structured centers and reopen the same mode without budget mutations."""
         from decimal import Decimal

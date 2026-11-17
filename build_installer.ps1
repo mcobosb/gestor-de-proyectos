@@ -86,7 +86,7 @@ foreach ($requiredResource in @(
 if ($LASTEXITCODE -ne 0) {
     throw "La biblioteca comprimida PPTP no es válida."
 }
-& $python -c "from pathlib import Path; import sys; from zipfile import ZipFile; path = Path(sys.argv[1]) / 'safety_health' / 'BIBLIOTECA.zip'; names = ZipFile(path).namelist(); required = {'01_datos_proyecto.md', '02_memoria_general.md'}; resources = {'RECURSOS/MATERIALES/', 'RECURSOS/MAQUINARIA/'}; sys.exit(1 if not required.issubset(names) or not all(any(name.startswith(prefix) for name in names) for prefix in resources) else 0)" $toolsSource
+& $python -c "from pathlib import Path; import sys; from zipfile import ZipFile; path = Path(sys.argv[1]) / 'safety_health' / 'BIBLIOTECA.zip'; names = ZipFile(path).namelist(); required = {'01_objeto_y_alcance.md', '02_memoria_general.md'}; resources = {'RECURSOS/MATERIALES/', 'RECURSOS/MAQUINARIA/'}; sys.exit(1 if not required.issubset(names) or not all(any(name.startswith(prefix) for name in names) for prefix in resources) else 0)" $toolsSource
 if ($LASTEXITCODE -ne 0) {
     throw "La biblioteca comprimida de Seguridad y Salud no contiene los documentos y recursos esperados."
 }

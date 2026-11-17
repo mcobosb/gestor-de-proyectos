@@ -295,7 +295,7 @@ class DistributionTests(unittest.TestCase):
         with ZipFile(safety_library) as archive:
             names = archive.namelist()
         self.assertNotIn("00_guia_integracion.md", names)
-        for document in ("01_datos_proyecto.md", "02_memoria_general.md"):
+        for document in ("01_objeto_y_alcance.md", "02_memoria_general.md"):
             self.assertIn(document, names)
         for category in ("RECURSOS/MATERIALES/", "RECURSOS/MAQUINARIA/"):
             self.assertTrue(any(name.startswith(category) for name in names))

@@ -82,11 +82,15 @@ class SafetyHealthTests(unittest.TestCase):
             external_conditions={
                 "trafico_existente": {"description": "Un carril ocupado", "applicability": "yes"},
             },
+            resumen_actuacion="Renovación del abastecimiento.",
         )
         self.assertEqual(
             restore_project_state(state)["external_conditions"], state["external_conditions"],
         )
         self.assertEqual(restore_state(state), (lines, Decimal("2.5")))
+        self.assertEqual(
+            restore_project_state(state)["resumen_actuacion"], "Renovación del abastecimiento.",
+        )
         self.assertEqual(
             restore_state({key: value for key, value in state.items() if key != "centros_asistenciales"}),
             (lines, Decimal("2.5")),
@@ -99,6 +103,8 @@ class SafetyHealthTests(unittest.TestCase):
             {**state, "lines": [{**state["lines"][0], "price": "inf"}]},
             {**state, "lines": [{**state["lines"][0], "selected": "yes"}]},
             {**state, "external_conditions": []},
+            {**state, "resumen_actuacion": None},
+            {**state, "resumen_actuacion": []},
             {**state, "external_conditions": {
                 "trafico_existente": {"description": "Obra", "applicability": []},
             }},
@@ -165,10 +171,11 @@ class SafetyHealthTests(unittest.TestCase):
             self.assertIn("ESTUDIO BÁSICO DE SEGURIDAD Y SALUD", text)
             self.assertIn("ÍNDICE", text)
             self.assertIn("UO-DEMOLICION", text)
-            self.assertIn("DATOS DEL PROYECTO", text)
+            self.assertNotIn("DATOS DEL PROYECTO", text)
+            self.assertIn("Tabla 1.", text)
             self.assertIn("PLIEGO DE CONDICIONES", text)
             self.assertNotIn("DESCOMPUESTOS", text)
-            self.assertIn("3,11", text)
+            self.assertNotIn("PARTIDAS DEL PRESUPUESTO GENERAL", text)
             self.assertNotIn("3.11", text)
             self.assertNotIn("{{", text)
 

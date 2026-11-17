@@ -62,6 +62,23 @@ def restore_project_state(data: dict) -> dict:
         centros_asistenciales_datos=restore_centers(data),
         study_criteria=data.get("study_criteria"),
         external_conditions=data.get("external_conditions"),
+        resumen_actuacion=data.get("resumen_actuacion"),
+    )
+
+
+def _checked_work_summary(value: object) -> str:
+    """Valida el resumen sin convertir datos incorrectos en texto de la memoria."""
+    if not isinstance(value, str):
+        raise ValueError("El resumen de la actuación debe ser texto.")
+    return value.strip()
+
+
+def study_work_summary(app: BudgetApp) -> str:
+    """Usa la revision de Seguridad y Salud o, inicialmente, el resumen guardado de PPTP."""
+    if "resumen_actuacion" in app.safety_health_state:
+        return _checked_work_summary(app.safety_health_state["resumen_actuacion"])
+    return _checked_work_summary(
+        getattr(app, "pptp_state", {}).get("variables", {}).get("bullet_capitulos_obra", "")
     )
 
 
@@ -213,6 +230,7 @@ def serialize_state(
     centros_asistenciales_datos: list[dict[str, str]] | None = None,
     study_criteria: tuple[bool, bool, bool, bool] | list[bool] | dict[str, bool] | None = None,
     external_conditions: dict[str, dict[str, str]] | None = None,
+    resumen_actuacion: str | None = None,
 ) -> dict:
     """Conserva la revisión, sus partidas y la información de centros asistenciales."""
     state = {
@@ -232,6 +250,8 @@ def serialize_state(
         ],
     }
     criteria = _study_criteria_values(study_criteria)
+    if resumen_actuacion is not None:
+        state["resumen_actuacion"] = _checked_work_summary(resumen_actuacion)
     if external_conditions is not None:
         state["external_conditions"] = restore_external_conditions(external_conditions)
     if criteria is not None:
@@ -247,6 +267,8 @@ def restore_state(data: object) -> tuple[list[SafetyLine], Decimal]:
         raise ValueError("Los datos de Seguridad y Salud no contienen una revisión válida.")
     _study_criteria_values(data.get("study_criteria"))
     restore_external_conditions(data.get("external_conditions"))
+    if "resumen_actuacion" in data:
+        _checked_work_summary(data["resumen_actuacion"])
     if ("centros_asistenciales" in data
             and not isinstance(data["centros_asistenciales"], str)):
         raise ValueError("Los centros asistenciales deben ser texto.")
@@ -307,12 +329,17 @@ def synchronize_budget(
     centros_asistenciales_datos: list[dict[str, str]] | None = None,
     study_criteria: tuple[bool, bool, bool, bool] | None = None,
     external_conditions: dict[str, dict[str, str]] | None = None,
+    resumen_actuacion: str | None = None,
 ) -> None:
     """Sustituye exclusivamente las partidas SS generadas por la revisión aceptada."""
     from bc3_gui import MeasurementLine, ProjectItem
     conditions = restore_external_conditions(
         external_conditions if external_conditions is not None
         else getattr(app, "safety_health_state", {}).get("external_conditions")
+    )
+    work_summary = (
+        study_work_summary(app) if resumen_actuacion is None
+        else _checked_work_summary(resumen_actuacion)
     )
 
     if not lines:
@@ -381,6 +408,7 @@ def synchronize_budget(
         centros_asistenciales_datos=centros_asistenciales_datos,
         study_criteria=study_criteria,
         external_conditions=conditions or None,
+        resumen_actuacion=work_summary,
     )
     app.refresh_budget_tree()
     app._mark_dirty()
@@ -393,11 +421,11 @@ def _chapter_number(code: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def write_study_report(app: BudgetApp, target: Path) -> None:
-    """Genera el Estudio de Seguridad y Salud completo en el formato configurado."""
+def write_study_report(app: BudgetApp, target: Path) -> tuple[str, ...]:
+    """Genera el estudio en el formato configurado y devuelve sus avisos de revision."""
     from .study_report import write_study_report as write
 
-    write(app, target)
+    return write(app, target)
 
 
 class SafetyHealthWindow(tk.Toplevel):
@@ -438,6 +466,7 @@ class SafetyHealthWindow(tk.Toplevel):
                 if isinstance(app.safety_health_state, dict) else None
             )
             restore_external_conditions(app.safety_health_state.get("external_conditions"))
+            work_summary = study_work_summary(app)
         except ValueError as exc:
             messagebox.showerror("Seguridad y salud", str(exc), parent=self)
             self.after_idle(self.destroy)
@@ -450,6 +479,17 @@ class SafetyHealthWindow(tk.Toplevel):
             self, text="Información básica del Estudio de Seguridad y Salud", padding=8,
         )
         basics.pack(fill="x", padx=12, pady=(8, 4))
+        ttk.Label(basics, text="Resumen de la actuación").pack(anchor="w")
+        summary_frame = ttk.Frame(basics)
+        summary_frame.pack(fill="x")
+        self.summary_text = tk.Text(summary_frame, height=3, wrap="word", undo=True)
+        summary_scroll = ttk.Scrollbar(summary_frame, command=self.summary_text.yview)
+        self.summary_text.configure(yscrollcommand=summary_scroll.set)
+        summary_scroll.pack(side="right", fill="y")
+        self.summary_text.insert("1.0", work_summary)
+        self.summary_text.pack(fill="x")
+        self.summary_text.edit_modified(False)
+        self.summary_text.bind("<<Modified>>", self._summary_changed)
         centers_label = tk.Label(
             basics, text="Centros Asistenciales", foreground="#0563C1",
             cursor="hand2", font=("TkDefaultFont", 9, "underline"),
@@ -460,6 +500,9 @@ class SafetyHealthWindow(tk.Toplevel):
         centers_label.configure(takefocus=True)
         from bc3_gui import ToolTip
 
+        ToolTip(self.summary_text, translate(
+            "Se toma inicialmente del resumen guardado en PPTP; puedes editarlo aquí."
+        ))
         ToolTip(
             centers_label,
             translate(
@@ -480,6 +523,20 @@ class SafetyHealthWindow(tk.Toplevel):
             command=self.open_proposal,
         ).pack(side="right")
         localize_widget_tree(self)
+
+    def _summary_changed(self, _event=None) -> None:
+        """Conserva el resumen editado sin recalcular el capitulo preventivo."""
+        if not self.summary_text.edit_modified():
+            return
+        self.summary_text.edit_modified(False)
+        summary = self.summary_text.get("1.0", "end-1c").strip()
+        state = self.app.safety_health_state
+        if state.get("resumen_actuacion") == summary:
+            return
+        state = dict(state) or serialize_state(self.lines, self._stored_percentage)
+        state["resumen_actuacion"] = summary
+        self.app.safety_health_state = state
+        self.app._mark_dirty()
 
     def _build_study_criteria(self) -> None:
         """Muestra los criterios legales evaluados con los datos del proyecto."""
@@ -760,6 +817,7 @@ class SafetyProposalWindow(tk.Toplevel):
                 self.app, self.lines, percentage,
                 **self.owner.centers_editor.collect_state(),
                 study_criteria=self.owner.selected_study_criteria,
+                resumen_actuacion=self.owner.summary_text.get("1.0", "end-1c").strip(),
             )
         except ValueError as exc:
             messagebox.showerror("Seguridad y salud", str(exc), parent=self)

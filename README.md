@@ -88,6 +88,10 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
   acumuladas y tipología especial de obra. Muestra los datos de la estimación
   junto a casillas editables, admite varios criterios y conserva la decisión.
   Si no se marca ninguno, corresponde un Estudio Básico de Seguridad y Salud.
+- El cuadro **Resumen de la actuación** de esa primera ventana toma inicialmente
+  el resumen guardado en PPTP y permite revisarlo sin modificar el pliego.
+  La edición se guarda con el proyecto y se utiliza en el estudio en lugar de
+  enumerar automáticamente las partidas. Si falta, se señala como dato pendiente.
 - La propuesta preventiva se abre en una ventana separada. Al aceptarla,
   se integra en el siguiente capítulo de la secuencia **CAP. XX**.
 - Porcentaje orientativo configurable y matriz CSV incluida en la aplicación.
@@ -101,8 +105,12 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
   y la numeración de página en el pie de la plantilla, donde figura
   «ESTUDIO DE SEGURIDAD Y SALUD» o «ESTUDIO BÁSICO DE SEGURIDAD Y SALUD»
   según los criterios seleccionados.
-- La primera ficha reúne objeto y alcance, los criterios seleccionados del artículo
-  4.1 del RD 1627/1997 que justifican el tipo de estudio y los datos del proyecto.
+- La primera ficha, `01_objeto_y_alcance.md`, reúne objeto y alcance, los criterios
+  seleccionados del artículo 4.1 del RD 1627/1997 y la tabla resumen, sin un
+  epígrafe adicional «Datos del proyecto». La justificación de los criterios
+  conserva la redacción normal, con mayúscula inicial y el tipo de estudio en
+  mayúsculas en «Por tanto, se define un ESTUDIO DE SEGURIDAD Y SALUD»
+  (o ESTUDIO BÁSICO, según corresponda).
   Su tabla tiene una leyenda superior, cabecera azul y filas alternas azul claro/blanco,
   sin contratista, con PEM y PEC con IVA. Mantiene el mismo ancho y margen al
   continuar en otra página, incluso al dividir una fila larga. La tipología recoge
@@ -111,13 +119,55 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
   la planificación y el máximo simultáneo se expresa en personas enteras, con al
   menos una por equipo de trabajo. La superficie es la mayor medición de las partidas en m²
   (no su suma); si no hay partidas de superficie, queda pendiente de validar.
-  Los valores insertados en las plantillas aparecen en mayúsculas y la biblioteca
+  Los demás valores insertados en las plantillas aparecen en mayúsculas y la biblioteca
   ya no incluye la ficha 0 de integración; la unidad m² conserva su grafía.
 - **Condicionantes externos...** permite editar la descripción de tráfico,
   peatones, servicios, terreno, ambiente, instalaciones provisionales, centro
   asistencial y coordinación de seguridad y salud, indicando **Sí / No / Pendiente**.
   Se guardan con el proyecto sin modificar el presupuesto y se muestran agrupados
   en el resumen. **Servicios afectados** aparece una sola vez en este grupo.
+- La **Memoria descriptiva** incluye, en **Criterios preventivos generales**, una tabla
+  con nueve grupos de riesgo, situaciones previsibles y criterios
+  preventivos, con cabecera azul y filas alternas azul claro/blanco en PDF y ODT.
+  Los criterios comunes, comprobaciones previas y medidas de delimitación se
+  reúnen sin repetir apartados, conservando las obligaciones específicas del
+  pliego, las emergencias y las fichas de cada unidad.
+  Las condiciones generales y la gestión preventiva, emergencias y seguimiento
+  se integran en el capítulo 2, sin repetirse como capítulos independientes.
+  La protección de terceros abarca cerramientos, accesos e itinerarios, señalización,
+  vertidos, residuos, acopios, polvo, humos, ruido, vibraciones, deslumbramientos
+  y barro en viales. Las medidas se adaptan a las afecciones y autorizaciones de
+  cada obra, sin copiar datos de proyectos de ejemplo ni imponer equipos fijos.
+  La consulta y participación de los trabajadores se recoge en la coordinación.
+  Incluye protecciones colectivas, tabla orientativa de nueve EPI con leyenda y
+  formato azul/blanco, señalización, orden y limpieza, equipos, acopios,
+  iluminación y circulación interna. La gestión preventiva desarrolla los
+  servicios higiénicos, la instalación eléctrica provisional si es necesaria,
+  botiquín, actuación ante accidentes, incendios y derrames y formación del personal,
+  sin duplicar emergencias ni fijar dotaciones o dimensiones ajenas al proyecto.
+- A continuación se incluye el **Catálogo preventivo**, con introducción, leyenda
+  superior, cabecera azul y filas alternas. Reúne las definiciones de riesgos,
+  medidas, protecciones colectivas, EPI y equipos citados en el documento.
+  Las referencias en párrafos y tablas son enlaces a su fila, tanto en PDF como
+  en ODT, también si se escriben con tilde, como `R-EXPLOSIÓN`.
+  Los tipos se mantienen consecutivos: en PDF se indican una vez por página y en
+  ODT se combinan sus celdas, con una etiqueta al inicio de cada grupo, sin exigir
+  LibreOffice. La cabecera se repite al continuar la tabla en otra página.
+  El contratista deberá confirmar y desarrollar la selección en el PSS según la
+  evaluación y el procedimiento real de cada tajo. Listas y enumeraciones tienen
+  sangría, también en las celdas del resumen.
+  La aplicabilidad se conserva en la tabla resumen, no en la narración de
+  instalaciones y coordinación; primeros auxilios remite a los centros de la
+  Tabla 1. El alcance de las fichas se introduce en el capítulo 3.
+  Las 50 definiciones de riesgos de la biblioteca se amplían de forma breve,
+  describiendo situaciones de exposición, posibles daños y criterios de control.
+  En la tabla del capítulo 1, **Riesgos detectados** y **Medidas preventivas**
+  muestran únicamente los códigos aplicables, separados por coma y espacio,
+  sin viñetas ni definiciones y con enlaces a las filas del catálogo.
+- El informe y su índice no incluyen el anexo de trazabilidad, la relación de
+  partidas del presupuesto general ni el apartado de datos pendientes.
+  Al guardar se muestra una confirmación informativa con la ruta del documento
+  y el botón Aceptar, como en PPTP, sin incluir avisos de revisión.
 - Antes de los **Riesgos detectados** se incluyen filas separadas de
   **Medios auxiliares** y **Maquinaria empleada**, extraídas de las partidas y
   sus descompuestos, también anidados. Los medios físicos reconocibles, como

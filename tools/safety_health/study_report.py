@@ -27,6 +27,7 @@ from tools._shared.document_layout import (
 )
 from tools.safety_health import (
     LIBRARY_PATH, SAFETY_BUDGET_SOURCE, _study_criteria_values, evaluate_study_criteria,
+    study_work_summary,
 )
 
 if TYPE_CHECKING:
@@ -34,7 +35,7 @@ if TYPE_CHECKING:
 
 
 _TEMPLATE_MEMBERS = {
-    "project_data": "01_datos_proyecto.md",
+    "project_data": "01_objeto_y_alcance.md",
     "memory": "02_memoria_general.md",
     "work_units": "03_fichas_unidades_obra.md",
     "catalogues": "04_catalogos_preventivos.md",
@@ -45,9 +46,12 @@ _TEMPLATE_MEMBERS = {
     "index": "UNI/INDICE_FICHAS_ESS.md",
     "general_conditions": "UNI/CONDICIONES_GENERALES_ESS.md",
 }
-_REFERENCE_RE = re.compile(r"\b(?:R|MP|PC|EPI|EQ)-[A-Z0-9]+(?:-[A-Z0-9]+)*\b")
+_REFERENCE_RE = re.compile(
+    r"\b(?:R|MP|PC|EPI|EQ)-[^\W_]+(?:-[^\W_]+)*\b", re.IGNORECASE,
+)
 _UNIT_RE = re.compile(r"\bUO-[A-Z0-9]+(?:-[A-Z0-9]+)*\b")
 _PLACEHOLDER_RE = re.compile(r"\{\{([A-Za-z0-9_]+)\}\}")
+_LIST_ITEM_RE = re.compile(r"^([-+*•]|\d+[.)]|[a-zA-Z]\))\s+(.+)$")
 _AUXILIARY_MEANS_RE = re.compile(
     r"\b(?:andamios?|borriquetas?|puntales?|apeos?|cimbras?|encofrados?|"
     r"pasarelas?|montacargas?|maquinillos?|polipastos?|cabrestantes?|"
@@ -59,9 +63,14 @@ _CATEGORY_LABELS = {
     "R": "Riesgos",
     "MP": "Medidas preventivas",
     "PC": "Protecciones colectivas",
-    "EPI": "Equipos de proteccion individual",
+    "EPI": "Equipos de protección individual",
     "EQ": "Equipos y maquinaria",
 }
+_GENERAL_RISK_HEADERS = (
+    "GRUPO DE RIESGO", "SITUACIONES PREVISIBLES", "CRITERIO PREVENTIVO GENERAL",
+)
+_CATALOGUE_HEADERS = ("Tipo", "Referencia", "Descripción")
+_PPE_HEADERS = ("EPI", "USOS PREVISIBLES", "OBSERVACIONES")
 
 
 @dataclass(frozen=True)
@@ -73,6 +82,7 @@ class _Block:
     rows: tuple[tuple[str, ...], ...] = ()
     project_summary: bool = False
     section_rows: tuple[int, ...] = ()
+    blue_table: bool = False
 
 
 @dataclass
@@ -82,6 +92,7 @@ class _StudyContent:
     chapter_label: str
     currency_label: str
     blocks: list[_Block] = field(default_factory=list)
+    warnings: tuple[str, ...] = ()
 
 
 def _normalized_text(value: str) -> str:
@@ -163,6 +174,11 @@ def _display_value(value: str) -> str:
     return re.sub(r"(?<!\w)M²(?!\w)", "m²", value.upper())
 
 
+def _template_value(name: str, value: str) -> str:
+    """Conserva la redaccion natural de los criterios y capitaliza los demas datos."""
+    return value if name == "justificacion_estudio" else _display_value(value)
+
+
 def _table_cells(line: str) -> list[str] | None:
     """Separa una fila Markdown en celdas y descarta las lineas que no son tablas."""
     stripped = line.strip()
@@ -186,8 +202,9 @@ def _markdown_blocks(
 
     def replace(match: re.Match[str]) -> str:
         """Sustituye una variable de plantilla o la marca para validacion."""
-        return _display_value(replacements.get(
-            match.group(1), f"[VALIDAR] Falta definir el dato {match.group(1)}."
+        name = match.group(1)
+        return _template_value(name, replacements.get(
+            name, f"[VALIDAR] Falta definir el dato {name}."
         ))
 
     lines = _PLACEHOLDER_RE.sub(replace, text).splitlines()
@@ -224,7 +241,10 @@ def _markdown_blocks(
                     tuple(_inline_text(cell) for cell in row)
                     for row in table_lines[1:]
                 )
-                result.append(_Block("table", headers=headers, rows=rows))
+                result.append(_Block(
+                    "table", headers=headers, rows=rows,
+                    blue_table=headers in (_GENERAL_RISK_HEADERS, _PPE_HEADERS),
+                ))
             continue
         if line.startswith("```"):
             index += 1
@@ -234,9 +254,17 @@ def _markdown_blocks(
             continue
         if line.startswith(">"):
             line = line[1:].strip()
-        elif line.startswith("- "):
-            line = f"- {line[2:].strip()}"
-        result.append(_Block("paragraph", _inline_text(line)))
+        item = _LIST_ITEM_RE.match(line)
+        if item:
+            expanded = lines[index].expandtabs(4)
+            indentation = len(expanded) - len(expanded.lstrip())
+            result.append(_Block(
+                "list_item", _inline_text(line), min(indentation // 2, 3),
+            ))
+            index += 1
+            continue
+        kind = "caption" if re.match(r"^Tabla\s+\d+\.", line) else "paragraph"
+        result.append(_Block(kind, _inline_text(line)))
         index += 1
     return result
 
@@ -285,8 +313,8 @@ def _parse_catalogues(text: str) -> dict[str, str]:
     """Resuelve cada identificador preventivo contra el catalogo de la biblioteca."""
     result = {}
     for row in _rows_from_markdown(text):
-        if len(row) >= 2 and re.fullmatch(r"(?:R|MP|PC|EPI|EQ)-[A-Z0-9-]+", row[0]):
-            result[row[0]] = row[1]
+        if len(row) >= 2 and _REFERENCE_RE.fullmatch(row[0]):
+            result[_normalized_text(row[0]).upper()] = row[1]
     return result
 
 
@@ -326,7 +354,8 @@ def _parse_fallbacks(text: str) -> list[tuple[tuple[str, ...], str]]:
 def _reference_groups(text: str) -> dict[str, list[str]]:
     """Agrupa las referencias preventivas encontradas por tipo de catalogo."""
     groups = {category: [] for category in _CATEGORY_ORDER}
-    for reference in _REFERENCE_RE.findall(text):
+    for match in _REFERENCE_RE.findall(text):
+        reference = _normalized_text(match).upper()
         category = reference.split("-", 1)[0]
         if reference not in groups[category]:
             groups[category].append(reference)
@@ -351,9 +380,14 @@ def _add_heading(blocks: list[_Block], text: str, level: int = 1) -> None:
 
 def _add_markdown(
     blocks: list[_Block], text: str, replacements: dict[str, str] | None = None,
+    *, heading_offset: int = 0,
 ) -> None:
-    """Agrega el contenido de una plantilla Markdown sin su titulo principal."""
-    blocks.extend(_markdown_blocks(text, replacements, skip_title=True))
+    """Agrega una plantilla sin su titulo principal y ajusta sus niveles de epigrafe."""
+    blocks.extend(
+        replace(block, level=min(block.level + heading_offset, 4))
+        if block.kind == "heading" else block
+        for block in _markdown_blocks(text, replacements, skip_title=True)
+    )
 
 
 def _currency_label(settings) -> str:
@@ -454,7 +488,6 @@ def _build_study_content(app) -> _StudyContent:
     pending: list[str] = []
     unit_ids = ["UO-IMPLANTACION"]
     matched_codes: list[str] = []
-    trace_rows: list[tuple[str, ...]] = []
     fiche_paths: list[str] = []
 
     def add_unit(unit: str) -> None:
@@ -468,13 +501,10 @@ def _build_study_content(app) -> _StudyContent:
         if matches:
             longest = max(len(prefix) for prefix, _ in matches)
             selected = [(prefix, path) for prefix, path in matches if len(prefix) == longest]
-            selected_names = []
-            for prefix, path in selected:
+            for _, path in selected:
                 if path not in fiche_paths:
                     fiche_paths.append(path)
-                selected_names.append(f"{prefix}: {PurePosixPath(path).name}")
                 matched_codes.append(item.code)
-            result_label = "; ".join(selected_names)
         else:
             description = _normalized_text(item.summary + " " + item.text)
             selected_units = list(dict.fromkeys(
@@ -486,15 +516,6 @@ def _build_study_content(app) -> _StudyContent:
             pending.append(
                 f"[VALIDAR] Partida sin ficha ESS BCCA: {item.code} - {item.summary}."
             )
-            result_label = (
-                "Clasificacion provisional: " + ", ".join(selected_units)
-                if selected_units else "Sin ficha ni clasificacion provisional"
-            )
-        trace_rows.append((
-            item.code.upper(), item.unit.upper(), item.summary.upper(),
-            _format_number(item.measurement),
-            _chapter_label(app, item.chapter).upper(), result_label.upper(),
-        ))
 
     fiche_paths = list(dict.fromkeys(fiche_paths))
     if fiche_paths:
@@ -526,11 +547,6 @@ def _build_study_content(app) -> _StudyContent:
         unit_references[unit] = _merge_references(template_refs, matrix_refs, fiche_refs)
 
     all_references = _merge_references(*unit_references.values())
-    for category in _CATEGORY_ORDER:
-        for reference in all_references[category]:
-            if reference not in catalogues:
-                pending.append(f"[VALIDAR] No existe descripcion de catalogo para {reference}.")
-
     assessment = evaluate_study_criteria(app)
     state = app.safety_health_state if isinstance(app.safety_health_state, dict) else {}
     selected_criteria = _study_criteria_values(state.get("study_criteria"))
@@ -555,14 +571,8 @@ def _build_study_content(app) -> _StudyContent:
         pending.append(message)
         return f"[VALIDAR] Falta definir {field_name}."
 
-    work_summaries = list(dict.fromkeys(item.summary for item in work_items if item.summary))
-    description = (
-        "Resumen automatico segun las partidas presupuestarias: "
-        + "; ".join(work_summaries)
-        + ". Validar el proceso constructivo y su secuencia."
-    )
-    pending.append(
-        "[VALIDAR] Contrastar el resumen de trabajos y la secuencia con el proyecto de ejecucion."
+    description = study_work_summary(app) or missing(
+        "el resumen de la actuación en la primera ventana de Seguridad y Salud"
     )
     totals = budget_totals(
         sum(float(item.import_total) for item in app.budget_items), settings,
@@ -674,6 +684,7 @@ def _build_study_content(app) -> _StudyContent:
         "Centro asistencial": centers,
     }
     external_values = {}
+    external_descriptions = {}
     for key, label, default in EXTERNAL_CONDITIONS:
         condition = saved_conditions.get(key, {
             "description": default, "applicability": "pending",
@@ -685,6 +696,7 @@ def _build_study_content(app) -> _StudyContent:
         ):
             condition_text = centers
         applicability = condition["applicability"]
+        external_descriptions[key] = condition_text
         external_values[key] = (
             f"{condition_text}\nAplicabilidad: {APPLICABILITY[applicability]}"
         ).strip()
@@ -726,40 +738,40 @@ def _build_study_content(app) -> _StudyContent:
         "partidas_presupuesto": data_values["Partidas presupuestarias"],
         "unidades_obra": "; ".join(unit_names),
         "unidades_obra_bcca": bcca_codes,
-        **external_values,
+        **external_descriptions,
         "medios_auxiliares": auxiliary_means,
         "maquinaria_empleada": machinery,
         "centros_asistenciales_resumen": "\n\n".join(contacts),
-        "riesgos_detectados": "\n".join(
-            f"• {reference}: {catalogues[reference]}"
-            for reference in all_references["R"] if reference in catalogues
-        ) or missing("los riesgos detectados"),
+        "riesgos_detectados": ", ".join(all_references["R"]),
+        "medidas_preventivas": ", ".join(all_references["MP"]),
         "tipo_estudio": title,
     }
     criteria_labels = (
-        "a) Presupuesto de ejecucion por contrata con IVA superior a 450.759,08 EUR.",
-        "b) Duracion superior a 30 dias laborables y mas de 20 trabajadores simultaneos.",
+        "a) Presupuesto de ejecución por contrata con IVA superior a 450.759,08 EUR.",
+        "b) Duración superior a 30 días laborables y más de 20 trabajadores simultáneos.",
         "c) Volumen de mano de obra superior a 500 jornadas.",
-        "d) Obra de tuneles, galerias, conducciones subterraneas o presas.",
+        "d) Obra de túneles, galerías, conducciones subterráneas o presas.",
     )
     fulfilled_labels = [
         label for selected, label in zip(selected_criteria, criteria_labels) if selected
     ]
     if fulfilled_labels:
         justification = (
-            "Se cumplen los siguientes criterios del articulo 4.1 del RD 1627/1997:\n\n"
+            "Se cumplen los siguientes criterios del artículo 4.1 del RD 1627/1997:\n\n"
             + "\n\n".join(f"- {label}" for label in fulfilled_labels)
             + f"\n\nPor tanto, se define un {title}."
         )
     else:
         justification = (
-            "No se cumple ninguno de los criterios del articulo 4.1 del RD 1627/1997. "
+            "No se cumple ninguno de los criterios del artículo 4.1 del RD 1627/1997.\n\n"
             f"Por tanto, se define un {title}."
         )
     replacements["justificacion_estudio"] = justification
-    replacements = {name: _display_value(value) for name, value in replacements.items()}
+    replacements = {name: _template_value(name, value) for name, value in replacements.items()}
     project_data_rows = []
     section_rows = []
+    reference_summary_rows = {}
+    summary_categories = {"riesgos_detectados": "R", "medidas_preventivas": "MP"}
     for line in templates["project_data"].splitlines():
         if line.strip() == "## Condicionantes externos":
             section_rows.append(len(project_data_rows))
@@ -775,17 +787,22 @@ def _build_study_content(app) -> _StudyContent:
             name = variable.group(1)
             if name not in replacements:
                 raise ValueError(f"No hay un valor preparado para la variable ESS {name}.")
-            project_data_rows.append((row[1], replacements[name]))
+            if name in summary_categories:
+                reference_summary_rows[len(project_data_rows)] = summary_categories[name]
+            project_data_rows.append((
+                row[1],
+                _display_value(external_values[name]) if name in external_values else replacements[name],
+            ))
 
     blocks: list[_Block] = []
     _add_heading(blocks, "Objeto y alcance", 1)
     introduction = re.split(r"(?m)^##\s+", templates["project_data"], maxsplit=1)[0]
     _add_markdown(blocks, introduction, replacements)
-    _add_heading(blocks, "Datos del proyecto", 2)
     blocks.append(_Block(
         "caption",
         "Tabla 1. Datos del proyecto y condiciones de ejecución de la obra.",
     ))
+    summary_index = len(blocks)
     blocks.append(_Block(
         "table",
         headers=("Aspecto del proyecto", "Descripción / información"),
@@ -794,10 +811,13 @@ def _build_study_content(app) -> _StudyContent:
         section_rows=tuple(section_rows),
     ))
 
-    _add_heading(blocks, "Memoria general", 1)
+    _add_heading(blocks, "Memoria descriptiva", 1)
     _add_markdown(blocks, templates["memory"], replacements)
+    _add_heading(blocks, "Gestión preventiva, emergencias y seguimiento", 2)
+    _add_markdown(blocks, templates["emergencies"], replacements, heading_offset=1)
 
     _add_heading(blocks, "Fichas de unidades de obra aplicables", 1)
+    _add_markdown(blocks, templates["general_conditions"], replacements)
     for unit in unit_ids:
         details = work_units.get(unit, {})
         _add_heading(
@@ -840,28 +860,9 @@ def _build_study_content(app) -> _StudyContent:
             ))
     if matrix_rows:
         blocks.append(_Block(
-            "table", headers=("Unidad", "Descripcion", "Riesgos identificados"),
+            "table", headers=("Unidad", "Descripción", "Riesgos identificados"),
             rows=tuple(matrix_rows),
         ))
-    _add_heading(blocks, "Catalogo preventivo consolidado", 1)
-    catalogue_rows = []
-    for category in _CATEGORY_ORDER:
-        for reference in all_references[category]:
-            catalogue_rows.append((
-                _CATEGORY_LABELS[category], reference,
-                catalogues.get(reference, "[VALIDAR] Descripcion de catalogo pendiente."),
-            ))
-    if catalogue_rows:
-        blocks.append(_Block(
-            "table", headers=("Tipo", "Referencia", "Descripcion"),
-            rows=tuple(catalogue_rows),
-        ))
-    blocks.append(_Block(
-        "paragraph",
-        "La seleccion de riesgos, medidas, protecciones, EPI y equipos debe confirmarse "
-        "con la evaluacion de riesgos y el procedimiento real de cada tajo.",
-    ))
-
     _add_heading(blocks, "Fichas ESS de la biblioteca BCCA", 1)
     for path, text in fiche_contents:
         heading = next(
@@ -872,55 +873,77 @@ def _build_study_content(app) -> _StudyContent:
         _add_heading(blocks, f"{heading} ({PurePosixPath(path).name})", 2)
         _add_markdown(blocks, text)
 
-    _add_heading(blocks, "Condiciones generales de seguridad y salud", 1)
-    _add_markdown(blocks, templates["general_conditions"])
-    _add_heading(blocks, "Gestion preventiva, emergencias y seguimiento", 1)
-    _add_markdown(blocks, templates["emergencies"], replacements)
     _add_heading(blocks, "Pliego de condiciones", 1)
     _add_markdown(blocks, templates["specification"])
 
-    _add_heading(blocks, "Anexo de trazabilidad presupuesto - ESS", 1)
-    blocks.append(_Block(
-        "paragraph",
-        "Se aplico el prefijo BCCA mas largo disponible. Las clasificaciones por descripcion "
-        "son provisionales y se senalan para revision.",
-    ))
-    if trace_rows:
-        blocks.append(_Block(
-            "table",
-            headers=("Codigo", "Ud.", "Descripcion", "Medicion", "Capitulo", "Ficha o clasificacion"),
-            rows=tuple(trace_rows),
+    all_references = _merge_references(all_references, _reference_groups("\n".join(
+        value for block in blocks
+        for value in (block.text, *block.headers, *(cell for row in block.rows for cell in row))
+    )))
+    catalogue_rows = []
+    described = set()
+    remaining = [reference for group in all_references.values() for reference in group]
+    while remaining:
+        reference = remaining.pop(0)
+        if reference in described:
+            continue
+        described.add(reference)
+        description_text = catalogues.get(reference)
+        if description_text is None:
+            pending.append(f"[VALIDAR] No existe descripcion de catalogo para {reference}.")
+            description_text = "[VALIDAR] Descripcion de catalogo pendiente."
+        catalogue_rows.append((
+            _CATEGORY_LABELS[reference.split("-", 1)[0]], reference, description_text,
         ))
-    _add_heading(blocks, "Partidas del presupuesto general", 2)
-    budget_rows = tuple(
-        (
-            item.code.upper(), item.unit.upper(), item.summary.upper(),
-            _format_number(item.measurement), _chapter_label(app, item.chapter).upper(),
-            _format_amount(item.import_total, currency),
+        remaining.extend(
+            child for group in _reference_groups(description_text).values()
+            for child in group if child not in described
         )
-        for item in app.budget_items
-    )
-    blocks.append(_Block(
-        "table",
-        headers=("Codigo", "Ud.", "Descripcion", "Medicion", "Capitulo", "Importe"),
-        rows=budget_rows,
-    ))
-    blocks.append(_Block(
-        "paragraph",
-        "Las partidas de Seguridad y Salud permanecen integradas en el presupuesto general; "
-        "este documento no genera un presupuesto preventivo independiente.",
-    ))
-
-    pending = list(dict.fromkeys(pending))
-    _add_heading(blocks, "Datos pendientes y advertencias de validacion", 1)
-    if pending:
-        blocks.extend(_Block("paragraph", message) for message in pending)
-    else:
-        blocks.append(_Block(
-            "paragraph",
-            "No se han detectado datos pendientes automaticamente. La comprobacion tecnica "
-            "de las condiciones reales de obra sigue siendo necesaria.",
-        ))
+    for row_index, category in reference_summary_rows.items():
+        project_data_rows[row_index] = (
+            project_data_rows[row_index][0],
+            ", ".join(row[1] for row in catalogue_rows if row[1].startswith(f"{category}-")),
+        )
+    blocks[summary_index] = replace(blocks[summary_index], rows=tuple(project_data_rows))
+    if catalogue_rows:
+        catalogue_rows.sort(key=lambda row: _CATEGORY_ORDER.index(row[1].split("-", 1)[0]))
+        catalogue_blocks = [
+            _Block("heading", "Catálogo preventivo", 2),
+            _Block(
+                "paragraph",
+                "El catálogo reúne las referencias preventivas aplicables a las unidades de obra "
+                "y a los condicionantes del proyecto. Define los riesgos y los criterios de "
+                "selección de las medidas preventivas, protecciones colectivas, equipos de "
+                "protección individual y maquinaria. Los códigos citados en el estudio enlazan "
+                "con su definición en la tabla siguiente.",
+            ),
+            _Block("caption", "Tabla 3. Catálogo preventivo: referencias y definiciones."),
+            _Block(
+                "table", headers=_CATALOGUE_HEADERS,
+                rows=tuple(catalogue_rows), blue_table=True,
+            ),
+            _Block(
+                "paragraph",
+                "La selección de riesgos, medidas, protecciones, EPI y equipos debe confirmarse "
+                "con la evaluación de riesgos y el procedimiento real de cada tajo. "
+                "El contratista deberá realizar esta comprobación al elaborar el Plan de Seguridad "
+                "y Salud (PSS), adaptando y desarrollando las previsiones del estudio según sus "
+                "métodos de ejecución, medios y organización. El PSS concretará las medidas, "
+                "responsables y controles necesarios y se someterá a la aprobación que proceda "
+                "antes del inicio de los trabajos; deberá actualizarse cuando cambien las "
+                "condiciones de ejecución.",
+            ),
+        ]
+        insertion = next(
+            (
+                index + 1 for index, block in enumerate(blocks)
+                if block.kind == "table" and block.headers == _GENERAL_RISK_HEADERS
+            ),
+            None,
+        )
+        if insertion is None:
+            raise ValueError("La memoria general no contiene la tabla de grupos de riesgo prevista.")
+        blocks[insertion:insertion] = catalogue_blocks
 
     for block in blocks:
         values = [block.text, *block.headers, *(value for row in block.rows for value in row)]
@@ -933,11 +956,16 @@ def _build_study_content(app) -> _StudyContent:
         chapter_label=chapter_label,
         currency_label=currency,
         blocks=blocks,
+        warnings=tuple(dict.fromkeys(pending)),
     )
 
 
 def _column_ratios(headers: tuple[str, ...]) -> tuple[float, ...]:
     """Define anchos de tabla legibles en PDF y ODT segun su numero de columnas."""
+    if headers in (_GENERAL_RISK_HEADERS, _PPE_HEADERS):
+        return (0.20, 0.36, 0.44)
+    if headers == _CATALOGUE_HEADERS:
+        return (0.18, 0.28, 0.54)
     if len(headers) == 2:
         return (1.2, 4.8)
     if len(headers) == 3:
@@ -962,11 +990,43 @@ def _numbered_blocks(blocks: list[_Block]) -> list[_Block]:
     ]
 
 
-def _pdf_project_summary(block: _Block, layout: ReportLayout):
-    """Maqueta los datos del proyecto con cabecera azul y filas alternas."""
+def _reference_target(reference: str) -> str:
+    """Genera un destino ASCII estable para una fila del catalogo preventivo."""
+    return f"ESSRef-{_normalized_text(reference).upper()}"
+
+
+def _catalogue_targets(content: _StudyContent) -> dict[str, str]:
+    """Indexa solo las referencias que disponen de una fila de destino."""
+    return {
+        _normalized_text(row[1]).upper(): _reference_target(row[1])
+        for block in content.blocks
+        if block.kind == "table" and block.headers == _CATALOGUE_HEADERS
+        for row in block.rows
+    }
+
+
+def _pdf_reference_markup(text: str, targets: dict[str, str]) -> str:
+    """Escapa el texto y convierte las referencias conocidas en enlaces internos."""
+    fragments = []
+    offset = 0
+    for match in _REFERENCE_RE.finditer(text):
+        fragments.append(escape(text[offset:match.start()]))
+        label = escape(match.group())
+        target = targets.get(_normalized_text(match.group()).upper())
+        fragments.append(
+            f'<link href="#{target}" color="#1F4E79"><u>{label}</u></link>'
+            if target else label
+        )
+        offset = match.end()
+    fragments.append(escape(text[offset:]))
+    return "".join(fragments).replace("\n", "<br/>")
+
+
+def _pdf_blue_table(block: _Block, layout: ReportLayout):
+    """Maqueta tablas ESS con cabecera azul, filas alternas y anchos propios."""
     from reportlab.lib import colors
     from reportlab.lib.styles import ParagraphStyle
-    from reportlab.platypus import Table
+    from reportlab.platypus import Paragraph, Table
 
     class SummaryTable(Table):
         """Conserva la alineacion tambien en las tablas internas creadas al partir una fila."""
@@ -976,24 +1036,116 @@ def _pdf_project_summary(block: _Block, layout: ReportLayout):
             kwargs.setdefault("hAlign", "LEFT")
             super().__init__(*args, **kwargs)
 
+        def wrap(self, availWidth, availHeight):
+            """Reserva una sola continuacion del catalogo en cada pagina."""
+            width, height = super().wrap(availWidth, availHeight)
+            if self._catalogue_drawn_on_page():
+                return width, max(height, availHeight + 1)
+            return width, height
+
+        def split(self, availWidth, availHeight):
+            """Lleva el siguiente fragmento a otra pagina sin repetir la cabecera."""
+            if self._catalogue_drawn_on_page():
+                return []
+            return super().split(availWidth, availHeight)
+
+        def _catalogue_drawn_on_page(self):
+            """Consulta el estado de dibujo, aislado por tabla y pasada del documento."""
+            if not hasattr(self, "canv"):
+                return False
+            return (
+                block.headers == _CATALOGUE_HEADERS
+                and getattr(self.canv, "_ess_catalogue_pages", {}).get(id(block))
+                == self.canv.getPageNumber()
+            )
+
+        def draw(self):
+            """Registra solo los fragmentos realmente colocados en la pagina."""
+            if block.headers == _CATALOGUE_HEADERS:
+                pages = getattr(self.canv, "_ess_catalogue_pages", None)
+                if pages is None:
+                    pages = self.canv._ess_catalogue_pages = {}
+                pages[id(block)] = self.canv.getPageNumber()
+            super().draw()
+
+        def _splitCell(self, value, style, oldHeight, newHeight, width):
+            """Conserva la categoria en las continuaciones de una definicion larga."""
+            if (
+                isinstance(value, (tuple, list)) and len(value) == 1
+                and isinstance(value[0], Paragraph)
+                and value[0].style.name == "ESSCatalogueType"
+            ):
+                if value[0].wrap(width - style.leftPadding - style.rightPadding, oldHeight)[1] > (
+                    newHeight - style.topPadding - style.bottomPadding
+                ):
+                    return []
+                return (value, value)
+            return super()._splitCell(value, style, oldHeight, newHeight, width)
+
+        def _drawCell(self, cellval, cellstyle, pos, size):
+            """Imprime cada tipo solo en su primera fila visible de cada pagina."""
+            if isinstance(cellval, (tuple, list)) and cellval:
+                paragraph = cellval[0]
+                if isinstance(paragraph, Paragraph) and paragraph.style.name == "ESSCatalogueType":
+                    seen = getattr(self.canv, "_ess_catalogue_types", None)
+                    if seen is None:
+                        seen = self.canv._ess_catalogue_types = set()
+                    key = (id(block), self.canv.getPageNumber(), paragraph.getPlainText())
+                    if key in seen:
+                        return
+                    seen.add(key)
+            super()._drawCell(cellval, cellstyle, pos, size)
+
     text = ParagraphStyle(
         "ESSSummaryText", parent=layout.normal, fontSize=9.5, leading=12,
     )
     header = ParagraphStyle(
         "ESSSummaryHeader", parent=text, fontName=layout.bold_font, textColor=colors.white,
     )
+    category_style = ParagraphStyle("ESSCatalogueType", parent=text)
+    cell_list_style = ParagraphStyle(
+        "ESSCellList", parent=text, leftIndent=24, firstLineIndent=0,
+        bulletIndent=18, bulletAnchor="end",
+        bulletFontName=layout.regular_font, bulletFontSize=9.5,
+    )
+
+    def cell_text(value, style):
+        """Da sangria tambien a las listas incluidas en las celdas del resumen."""
+        lines = value.splitlines()
+        if not any(_LIST_ITEM_RE.match(line.strip()) for line in lines):
+            return layout.text(value, style)
+        paragraphs = []
+        for line in lines:
+            item = _LIST_ITEM_RE.match(line.strip())
+            paragraph = layout.text(
+                item.group(2) if item else line or "\N{NO-BREAK SPACE}",
+                cell_list_style if item else style,
+            )
+            if item:
+                paragraph.bulletText = item.group(1)
+            paragraphs.append(paragraph)
+        return paragraphs
+
     rows = [
         [layout.text(value, header) for value in block.headers],
         *[
             [
-                layout.text(value, header if index in block.section_rows else text)
-                for value in row
+                Paragraph(
+                    f'<a name="{_reference_target(value)}"/>{escape(value)}', text,
+                ) if block.headers == _CATALOGUE_HEADERS and column == 1 else (
+                    cell_text(
+                        value, category_style if block.headers == _CATALOGUE_HEADERS and column == 0
+                        else header if index in block.section_rows else text,
+                    )
+                )
+                for column, value in enumerate(row)
             ]
             for index, row in enumerate(block.rows)
         ],
     ]
+    ratios = (0.3, 0.7) if block.project_summary else _column_ratios(block.headers)
     return SummaryTable(
-        rows, colWidths=[layout.content_width * ratio for ratio in (0.3, 0.7)],
+        rows, colWidths=[layout.content_width * ratio for ratio in ratios],
         repeatRows=1, splitInRow=1, hAlign="LEFT", style=[
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(TABLE_HEADER_BACKGROUND)),
@@ -1015,8 +1167,8 @@ def _pdf_project_summary(block: _Block, layout: ReportLayout):
     )
 
 
-def _write_odt_project_summary(document, block: _Block) -> None:
-    """Aplica al resumen ODT los mismos colores y filas alternas que al PDF."""
+def _add_odt_blue_table_styles(document) -> None:
+    """Registra una sola vez los estilos compartidos por las tablas azules."""
     from xml.etree import ElementTree as ET
     from odt_reports import _tag
 
@@ -1050,11 +1202,37 @@ def _write_odt_project_summary(document, block: _Block) -> None:
             _tag("fo:padding"): "4pt", _tag("fo:border"): "0.5pt solid #B7C9E2",
             _tag("style:vertical-align"): "top",
         })
+    style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+        _tag("style:name"): "ESSCellList", _tag("style:family"): "paragraph",
+        _tag("style:parent-style-name"): "ESSSummaryText",
+    })
+    properties = ET.SubElement(style, _tag("style:paragraph-properties"), {
+        _tag("fo:margin-left"): "24pt", _tag("fo:text-indent"): "-12pt",
+    })
+    tabs = ET.SubElement(properties, _tag("style:tab-stops"))
+    ET.SubElement(tabs, _tag("style:tab-stop"), {
+        _tag("style:position"): "12pt", _tag("style:type"): "left",
+    })
+
+
+def _write_odt_blue_table(document, block: _Block) -> None:
+    """Aplica a las tablas ODT los mismos colores y anchos que al PDF."""
+    from xml.etree import ElementTree as ET
+    from odt_reports import _tag
+
+    ratios = (0.3, 0.7) if block.project_summary else _column_ratios(block.headers)
     document.table(
-        block.headers, block.rows, ratios=(0.3, 0.7), body_text_style="ESSSummaryText",
+        block.headers, block.rows, ratios=ratios, body_text_style="ESSSummaryText",
     )
     table = document.body[-1]
-    table.set(_tag("table:name"), "ESSProjectSummary")
+    if block.project_summary:
+        table.set(_tag("table:name"), "ESSProjectSummary")
+    elif block.headers == _GENERAL_RISK_HEADERS:
+        table.set(_tag("table:name"), "ESSGeneralRisks")
+    elif block.headers == _CATALOGUE_HEADERS:
+        table.set(_tag("table:name"), "ESSPreventiveCatalogue")
+    elif block.headers == _PPE_HEADERS:
+        table.set(_tag("table:name"), "ESSPPE")
     for cell in table.find(_tag("table:table-header-rows")).iter(_tag("table:table-cell")):
         cell.set(_tag("table:style-name"), "ESSSummaryHeaderCell")
         cell.find(_tag("text:p")).set(_tag("text:style-name"), "ESSSummaryHeader")
@@ -1067,24 +1245,128 @@ def _write_odt_project_summary(document, block: _Block) -> None:
             row.remove(cells[1])
             ET.SubElement(row, _tag("table:covered-table-cell"))
             continue
-        for cell in row.findall(_tag("table:table-cell")):
+        for column, cell in enumerate(row.findall(_tag("table:table-cell"))):
             cell.set(
                 _tag("table:style-name"),
                 "ESSSummaryBlueCell" if index % 2 == 0 else "ESSSummaryWhiteCell",
             )
+            lines = block.rows[index][column].splitlines()
+            if any(_LIST_ITEM_RE.match(line.strip()) for line in lines):
+                for child in list(cell):
+                    cell.remove(child)
+                for line in lines:
+                    item = _LIST_ITEM_RE.match(line.strip())
+                    paragraph = ET.SubElement(cell, _tag("text:p"), {
+                        _tag("text:style-name"): "ESSCellList" if item else "ESSSummaryText",
+                    })
+                    paragraph.text = item.group(1) if item else line
+                    if item:
+                        ET.SubElement(paragraph, _tag("text:tab")).tail = item.group(2)
+    if block.headers == _CATALOGUE_HEADERS:
+        rows = table.findall(_tag("table:table-row"))
+        start = 0
+        while start < len(rows):
+            end = start + 1
+            while end < len(rows) and block.rows[end][0] == block.rows[start][0]:
+                end += 1
+            if end - start > 1:
+                rows[start][0].set(_tag("table:number-rows-spanned"), str(end - start))
+                for row in rows[start + 1:end]:
+                    row.remove(row[0])
+                    row.insert(0, ET.Element(_tag("table:covered-table-cell")))
+            start = end
+
+
+def _append_odt_reference_text(parent, text: str, targets: dict[str, str]) -> None:
+    """Anade texto y enlaces ODF sin perder los espacios entre fragmentos."""
+    from xml.etree import ElementTree as ET
+    from odt_reports import _tag
+
+    offset = 0
+    for match in _REFERENCE_RE.finditer(text):
+        target = targets.get(_normalized_text(match.group()).upper())
+        if target is None:
+            continue
+        prefix = text[offset:match.start()]
+        if len(parent):
+            parent[-1].tail = (parent[-1].tail or "") + prefix
+        else:
+            parent.text = (parent.text or "") + prefix
+        ET.SubElement(parent, _tag("text:a"), {
+            _tag("xlink:type"): "simple", _tag("xlink:href"): f"#{target}",
+            _tag("text:style-name"): "ESSReferenceLink",
+        }).text = match.group()
+        offset = match.end()
+    suffix = text[offset:]
+    if len(parent):
+        parent[-1].tail = (parent[-1].tail or "") + suffix
+    else:
+        parent.text = (parent.text or "") + suffix
+
+
+def _link_odt_references(document, targets: dict[str, str]) -> None:
+    """Vincula referencias en todo el cuerpo y situa cada destino en su propia fila."""
+    from xml.etree import ElementTree as ET
+    from odt_reports import _tag
+
+    anchors = {}
+    for table in document.body.iter(_tag("table:table")):
+        if table.get(_tag("table:name")) != "ESSPreventiveCatalogue":
+            continue
+        for row in table.findall(_tag("table:table-row")):
+            cells = [
+                cell for cell in row
+                if cell.tag in (_tag("table:table-cell"), _tag("table:covered-table-cell"))
+            ]
+            paragraph = cells[1].find(_tag("text:p"))
+            anchors[paragraph] = _reference_target("".join(paragraph.itertext()))
+
+    def link_element(element) -> None:
+        """Conserva estilos, campos y saltos de linea evitando enlaces anidados."""
+        if element.tag == _tag("text:a") or element in anchors:
+            return
+        children = list(element)
+        value = element.text or ""
+        element.text = None
+        for child in children:
+            element.remove(child)
+        _append_odt_reference_text(element, value, targets)
+        for child in children:
+            tail = child.tail or ""
+            child.tail = None
+            link_element(child)
+            element.append(child)
+            _append_odt_reference_text(element, tail, targets)
+
+    link_element(document.body)
+    for paragraph, target in anchors.items():
+        value = paragraph.text
+        paragraph.text = None
+        bookmark = ET.Element(_tag("text:bookmark"), {_tag("text:name"): target})
+        bookmark.tail = value
+        paragraph.insert(0, bookmark)
 
 
 def _write_pdf(app, target, content: _StudyContent) -> None:
     """Maqueta el estudio con indice enlazado y paginas reales, como el PPTP."""
     from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
     from reportlab.lib.styles import ParagraphStyle
-    from reportlab.platypus import PageBreak, SimpleDocTemplate
+    from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate
     from reportlab.platypus.doctemplate import LayoutError
     from reportlab.platypus.tableofcontents import TableOfContents
 
     settings = app.report_settings
     project = report_project_label(content.project_title, content.currency_label)
-    layout = ReportLayout(
+    targets = _catalogue_targets(content)
+
+    class StudyLayout(ReportLayout):
+        """Incorpora enlaces preventivos tambien en las tablas del maquetador comun."""
+
+        def text(self, value, style=None):
+            """Crea parrafos seguros con referencias navegables al catalogo."""
+            return Paragraph(_pdf_reference_markup(str(value), targets), style or self.normal)
+
+    layout = StudyLayout(
         template_path=settings.template_path,
         expediente=settings.expediente,
         template_title=content.project_title,
@@ -1103,6 +1385,14 @@ def _write_pdf(app, target, content: _StudyContent) -> None:
         "ESSBody", parent=layout.normal, fontSize=10,
         leading=13, spaceAfter=6, alignment=TA_JUSTIFY,
     )
+    list_styles = {
+        depth: ParagraphStyle(
+            f"ESSList{depth}", parent=body, leftIndent=30 + 12 * depth,
+            firstLineIndent=0, bulletIndent=24 + 12 * depth, bulletAnchor="end",
+            bulletFontName=layout.regular_font, bulletFontSize=10,
+        )
+        for depth in {block.level for block in content.blocks if block.kind == "list_item"}
+    }
     heading_styles = {
         level: ParagraphStyle(
             f"ESSHeading{level}", parent=body, fontName=layout.bold_font,
@@ -1140,11 +1430,17 @@ def _write_pdf(app, target, content: _StudyContent) -> None:
             story.append(paragraph)
         elif block.kind == "paragraph":
             story.append(layout.text(block.text, body))
+        elif block.kind == "list_item":
+            marker, value = block.text.split(maxsplit=1)
+            story.append(Paragraph(
+                _pdf_reference_markup(value, targets), list_styles[block.level],
+                bulletText=marker,
+            ))
         elif block.kind == "caption":
             story.append(layout.text(block.text, caption_style))
         elif block.kind == "table":
-            if block.project_summary:
-                story.append(_pdf_project_summary(block, layout))
+            if block.project_summary or block.blue_table:
+                story.append(_pdf_blue_table(block, layout))
             else:
                 ratios = _column_ratios(block.headers)
                 story.append(layout.table(block.headers, block.rows, ratios))
@@ -1278,6 +1574,19 @@ def _write_odt(app, target, content: _StudyContent) -> None:
         (block.level, block.text) for block in content.blocks
         if block.kind == "heading"
     ]
+    for depth in {block.level for block in content.blocks if block.kind == "list_item"}:
+        style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+            _tag("style:name"): f"ESSList{depth}", _tag("style:family"): "paragraph",
+            _tag("style:parent-style-name"): "ESSBody",
+        })
+        properties = ET.SubElement(style, _tag("style:paragraph-properties"), {
+            _tag("fo:margin-left"): f"{30 + 12 * depth}pt",
+            _tag("fo:text-indent"): "-12pt",
+        })
+        tabs = ET.SubElement(properties, _tag("style:tab-stops"))
+        ET.SubElement(tabs, _tag("style:tab-stop"), {
+            _tag("style:position"): "12pt", _tag("style:type"): "left",
+        })
     document.table_of_contents(headings, max_level=DEFAULT_TOC_DEPTH)
     for style in document.automatic_styles:
         name = style.get(_tag("style:name"), "")
@@ -1292,6 +1601,13 @@ def _write_odt(app, target, content: _StudyContent) -> None:
                 _tag("fo:font-size"): "10pt",
                 _tag("fo:font-weight"): "bold" if name == "PPTPContents1" else "normal",
             })
+    _add_odt_blue_table_styles(document)
+    reference_style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+        _tag("style:name"): "ESSReferenceLink", _tag("style:family"): "text",
+    })
+    ET.SubElement(reference_style, _tag("style:text-properties"), {
+        _tag("fo:color"): "#1F4E79", _tag("style:text-underline-style"): "solid",
+    })
     bookmark_index = 0
     for block in content.blocks:
         if block.kind == "heading":
@@ -1302,28 +1618,36 @@ def _write_odt(app, target, content: _StudyContent) -> None:
             bookmark_index += 1
         elif block.kind == "paragraph":
             document.paragraph(block.text, style="ESSBody")
+        elif block.kind == "list_item":
+            marker, value = block.text.split(maxsplit=1)
+            paragraph = ET.SubElement(document.body, _tag("text:p"), {
+                _tag("text:style-name"): f"ESSList{block.level}",
+            })
+            paragraph.text = marker
+            ET.SubElement(paragraph, _tag("text:tab")).tail = value
         elif block.kind == "caption":
             document.paragraph(block.text, style="ESSCaption")
         elif block.kind == "table":
-            if block.project_summary:
-                _write_odt_project_summary(document, block)
+            if block.project_summary or block.blue_table:
+                _write_odt_blue_table(document, block)
             else:
                 document.table(
                     block.headers, block.rows, ratios=_column_ratios(block.headers),
                 )
+    _link_odt_references(document, _catalogue_targets(content))
     document.name_text_styles({
         "ESSBody": "ESS - Cuerpo",
         "ESSCaption": "ESS - Leyenda de tabla",
-        "ESSSummaryHeader": "ESS - Datos - Cabecera",
-        "ESSSummaryText": "ESS - Datos - Texto",
+        "ESSSummaryHeader": "ESS - Tablas - Cabecera",
+        "ESSSummaryText": "ESS - Tablas - Texto",
         **{f"ESSHeading{level}": f"ESS - Titulo {level}" for level in range(1, 5)},
         **{f"PPTPContents{level}": f"ESS - Indice {level}" for level in range(1, 3)},
     })
     document.write(target)
 
 
-def write_study_report(app, target) -> None:
-    """Genera el Estudio ESS completo como PDF u ODT segun la configuracion del proyecto."""
+def write_study_report(app, target) -> tuple[str, ...]:
+    """Genera el ESS como PDF u ODT y devuelve los avisos, que no se imprimen."""
     target = Path(target)
     content = _build_study_content(app)
     content.blocks = _numbered_blocks(content.blocks)
@@ -1346,3 +1670,4 @@ def write_study_report(app, target) -> None:
     finally:
         if temporary is not None and temporary.exists():
             temporary.unlink()
+    return content.warnings

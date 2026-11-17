@@ -17,6 +17,9 @@
   con el plazo total calculado y la actividad de mayor duración.
 - Generación del Estudio de Seguridad y Salud o Estudio Básico completo desde
   las plantillas, fichas y catálogos de la biblioteca, en PDF u ODT.
+- Resumen de la actuación editable en la primera ventana de Seguridad y Salud,
+  inicialmente tomado del resumen guardado en PPTP, con persistencia propia
+  y sin sustituirlo por una enumeración automática de partidas.
 - Estimación de los cuatro criterios del artículo 4.1 del RD 1627/1997 con
   justificación numérica y casillas editables. Se admite cumplir varios criterios;
   si no se marca ninguno, se propone un Estudio Básico.
@@ -45,10 +48,48 @@
   y tabla resumen con leyenda superior, cabecera azul y filas alternas azul
   claro/blanco. Eliminada la ficha 0 y los resúmenes redundantes de unidades,
   partidas importadas y códigos.
+  Se renombra a `01_objeto_y_alcance.md` y se elimina el epígrafe «Datos del
+  proyecto», manteniendo la tabla. Los criterios se redactan con mayúscula
+  inicial, reservando las mayúsculas del tipo de estudio en la conclusión.
 - Resumen ESS/EBSS con denominación del proyecto, técnicos redactores, PEM,
   PEC con IVA, CPV y capítulos con viñetas, duración de planificación y superficie
   máxima de las partidas en m². Valores dinámicos en mayúsculas, preservando m²,
   y condicionantes externos antes de los riesgos.
+- Memoria ESS/EBSS con tabla de nueve grupos de riesgo, situaciones previsibles
+  y criterios preventivos generales, con cabecera azul y filas alternas en PDF
+  y ODT. Criterios comunes, comprobaciones previas y delimitación consolidados,
+  sin eliminar las obligaciones particulares del pliego, emergencias y fichas.
+- Catálogo preventivo a continuación de la tabla de riesgos, con leyenda,
+  cabecera azul y filas alternas. Referencias enlazadas a su fila de definición
+  desde párrafos y tablas en PDF/ODT, incluidas variantes con tilde. Ampliadas
+  de forma concisa las 50 definiciones de riesgos y varias medidas y EPI higiénicos.
+- Eliminados del informe y del índice el anexo de trazabilidad con la relación
+  de partidas y el apartado de datos pendientes. La confirmación de generación
+  muestra únicamente el documento generado y Aceptar, como en PPTP, sin avisos.
+- Condiciones generales y gestión preventiva integradas en la memoria del
+  capítulo 2, sin capítulos independientes duplicados. La tabla del capítulo 1
+  muestra los códigos de riesgos y medidas preventivas en filas separadas,
+  enlazados al catálogo y separados por coma y espacio, sin viñetas ni definiciones.
+- Ampliada la protección de terceros con control de accesos y señalización,
+  vertidos, residuos, acopios, polvo, humos, ruido, vibraciones, deslumbramientos,
+  barro y circulación de maquinaria. Texto adaptado a cada obra, sin datos del
+  proyecto de ejemplo ni dimensiones o equipos fijos; consulta y participación
+  de los trabajadores integradas en la coordinación preventiva.
+- Integrados en el capítulo 2 protecciones colectivas, tabla orientativa de nueve
+  EPI con leyenda y formato azul/blanco, señalización, equipos de trabajo, acopios,
+  iluminación y circulación. Ampliadas instalaciones provisionales, servicios
+  higiénicos, instalación eléctrica, primeros auxilios, accidentes, incendios,
+  derrames y formación, sin duplicados ni dotaciones universales del ejemplo.
+- Capítulo 2 denominado Memoria descriptiva, sin el apartado redundante de datos
+  y condicionantes; alcance de las fichas trasladado al capítulo 3 y títulos
+  revisados con tildes. Catálogo preventivo con introducción y desarrollo
+  posterior de las obligaciones del contratista en el PSS.
+- Catálogo con una cabecera por página y tipos consecutivos: una etiqueta por
+  página en PDF y celdas combinadas por grupo en ODT, sin exigir LibreOffice.
+  Sangrías en viñetas y enumeraciones, incluidas las celdas del resumen.
+  Eliminados los estados de aplicabilidad de la narración de instalaciones y
+  coordinación, conservándolos en la tabla resumen; centros de primeros auxilios
+  referidos a la Tabla 1.
 - PPTP agrupado por capítulos del presupuesto, con tabla de fichas enlazadas,
   colores alternos e índice de profundidad configurable. Las disposiciones
   legales y UNE seleccionadas se agrupan por ámbitos temáticos en su apartado,
