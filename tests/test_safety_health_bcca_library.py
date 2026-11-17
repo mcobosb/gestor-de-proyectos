@@ -1,10 +1,14 @@
 """Pruebas de importación selectiva de recursos BCCA a Seguridad y Salud."""
-from pathlib import Path
+import json
+from pathlib import Path, PurePosixPath
 import tempfile
 import unittest
 from zipfile import ZipFile
 
 from tools.safety_health.bcca_resources import add_bcca_resources
+from tools.safety_health.study_report import (
+    _load_selected_fiches, _markdown_blocks, _parse_catalogues, _parse_index,
+)
 
 
 SYNTHETIC_BC3 = (
@@ -44,6 +48,46 @@ class SafetyHealthBccaLibraryTests(unittest.TestCase):
             name.startswith("RECURSOS/MATERIALES/T_TRABAJO_MANO_DE_OBRA/")
             for name in names
         ))
+
+    def test_eleven_ess_fiches_use_pptp_folders_and_complete_text_sections(self):
+        """Conserva once fichas autonomas, con codigos BCCA y apartados uniformes."""
+        root = Path(__file__).resolve().parents[1]
+        with ZipFile(root / "tools" / "pptp" / "BIBLIOTECA.zip") as archive:
+            catalog = json.loads(archive.read("UNI/catalogo.json"))
+        folders = {
+            PurePosixPath("UNI", *PurePosixPath(row["archivo"]).parts[:level]).as_posix()
+            for row in catalog["fichas"]
+            for level in range(1, len(PurePosixPath(row["archivo"]).parts))
+        }
+        with ZipFile(root / "tools" / "safety_health" / "BIBLIOTECA.zip") as archive:
+            index = _parse_index(archive.read("UNI/INDICE_FICHAS_ESS.md").decode("utf-8-sig"))
+            paths = list(dict.fromkeys(path for _, path in index))
+            self.assertEqual(len(paths), 11)
+            references, fiches = _load_selected_fiches(archive, paths, [])
+            catalogues = _parse_catalogues(archive.read("04_catalogos_preventivos.md").decode("utf-8-sig"))
+            for path, text in fiches:
+                self.assertIn(PurePosixPath(path).parent.as_posix(), folders)
+                self.assertNotIn("FICHA_ESS_", path)
+                self.assertNotIn("UO-", text)
+                blocks = _markdown_blocks(text)
+                self.assertFalse(any(block.kind == "table" for block in blocks))
+                for category in ("R", "MP", "PC", "EPI"):
+                    self.assertTrue(references[path][category], (path, category))
+                self.assertTrue(all(
+                    reference in catalogues for group in references[path].values() for reference in group
+                ))
+            for name in archive.namelist():
+                if name.endswith(".md") and not name.startswith("RECURSOS/"):
+                    text = archive.read(name).decode("utf-8-sig")
+                    self.assertNotIn("UO-", text, name)
+                    for removed in ("03_fichas_unidades_obra.md", "08_matriz_riesgos_por_unidad.md",
+                                    "09_enlace_automatico_presupuesto.md"):
+                        self.assertNotIn(removed, text, name)
+            by_code = {PurePosixPath(path).stem.split("-", 1)[0]: text for path, text in fiches}
+            self.assertIn("muestras de escollera", by_code["18CEE"])
+            self.assertNotIn("EQ-EXTRACCION-TESTIGOS", by_code["18CEE"])
+            self.assertIn("pruebas de carga", by_code["18HHI"])
+            self.assertEqual(dict(index)["17RRBN"], dict(index)["17RB"])
 
     def test_imports_materials_and_machinery_and_preserves_base_library(self):
         """Crea fichas clasificadas para recursos 2/3 y excluye recursos 1."""

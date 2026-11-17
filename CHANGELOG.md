@@ -90,6 +90,27 @@
   Eliminados los estados de aplicabilidad de la narración de instalaciones y
   coordinación, conservándolos en la tabla resumen; centros de primeros auxilios
   referidos a la Tabla 1.
+- Capítulo 3 reorganizado con introducción, tabla resumen de todas las unidades,
+  riesgos y medidas preventivas, con leyenda superior y formato azul/blanco.
+  Las fichas específicas aparecen a continuación, sin duplicados y vinculadas
+  a sus partidas BCCA, sin códigos UO ni capítulos separados de matriz y fichas.
+- Reorganizadas las 11 fichas preventivas existentes en las carpetas y subcarpetas
+  de PPTP, con nombres por código y título, sin extender el catálogo a todas
+  sus familias. Cada ficha incluye definición y alcance, riesgos y medidas
+  preventivas, con protecciones colectivas, EPI, equipos y validación como
+  subapartados textuales. Sumideros varios dispone de ficha autónoma completa.
+  Las unidades sin ficha se señalan expresamente como pendientes y ya no se
+  clasifican por palabras de su descripción. Revisadas las correspondencias
+  de residuos bituminosos y ensayos; compatibilidad revisable de 17RRBN con 17RB.
+- Nuevo capítulo 4: Seguimiento, control, coordinación, formación y documentación.
+  Integra controles preventivos, coordinación empresarial, formación, documentos,
+  vigilancia de la salud, primeros auxilios, servicios ocultos, recursos preventivos
+  y trabajos posteriores. Formación, coordinación, documentación y previsiones de
+  mantenimiento se trasladan desde el capítulo 2 para evitar repeticiones.
+  Se mantienen consentimiento y confidencialidad sanitaria, sin revisiones médicas
+  genéricas; servicios y recursos preventivos se condicionan a la situación real
+  y a los supuestos exigibles, sin copiar una línea de alta tensión del ejemplo.
+  El pliego de condiciones se conserva a continuación como capítulo 5.
 - PPTP agrupado por capítulos del presupuesto, con tabla de fichas enlazadas,
   colores alternos e índice de profundidad configurable. Las disposiciones
   legales y UNE seleccionadas se agrupan por ámbitos temáticos en su apartado,

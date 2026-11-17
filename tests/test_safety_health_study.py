@@ -132,9 +132,22 @@ class SafetyHealthStudyTests(unittest.TestCase):
                     self.assertIn("ÍNDICE", text)
                     self.assertIn("LUCENA (CÓRDOBA); MADRID (MADRID)", text)
                     self.assertIn("ANDALUCÍA; MADRID, COMUNIDAD DE", text)
-                    self.assertIn("FICHA_ESS_15APA.MD", text)
-                    self.assertIn("UO-ARQUETAS", text)
-                    self.assertIn("UO-FRESADO", text)
+                    self.assertIn("15APA — IMBORNALES Y ARQUETAS DE SANEAMIENTO", text)
+                    self.assertIn("OBRA001", text)
+                    self.assertIn("Ficha específica pendiente.", text)
+                    self.assertNotIn("UO-", text)
+                    for label in (
+                        "Tabla 5. Unidades de obra, riesgos detectados y medidas preventivas.",
+                        "3.1.1 DEFINICIÓN Y ALCANCE",
+                        "3.1.2 RIESGOS DETECTADOS",
+                        "3.1.3 MEDIDAS PREVENTIVAS",
+                        "3.1.3.1 PROTECCIONES COLECTIVAS",
+                        "3.1.3.2 EQUIPOS DE PROTECCIÓN INDIVIDUAL",
+                        "3.1.3.3 EQUIPOS DE TRABAJO", "3.1.3.4 VALIDACIÓN",
+                        "4 SEGUIMIENTO, CONTROL, COORDINACIÓN, FORMACIÓN Y DOCUMENTACIÓN",
+                        "5 PLIEGO DE CONDICIONES",
+                    ):
+                        self.assertIn(label, text)
                     self.assertIn("Partida sin ficha ESS BCCA: OBRA001", "\n".join(warnings))
                     self.assertNotIn("Partida sin ficha ESS BCCA: OBRA001", text)
                     self.assertNotIn("DATOS PENDIENTES Y ADVERTENCIAS", text)
@@ -142,7 +155,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
                     self.assertNotIn("PARTIDAS DEL PRESUPUESTO GENERAL", text)
                     self.assertIn("PLIEGO DE CONDICIONES", text)
                     self.assertRegex(
-                        text, r"\b2\.\d+ GESTIÓN PREVENTIVA, EMERGENCIAS Y SEGUIMIENTO",
+                        text, r"\b2\.\d+ INSTALACIONES PROVISIONALES Y EMERGENCIAS",
                     )
                     self.assertNotIn("PRESUPUESTO DE SEGURIDAD Y SALUD", text)
                     self.assertNotIn("{{", text)
@@ -401,17 +414,16 @@ class SafetyHealthStudyTests(unittest.TestCase):
         self.assertNotIn("Aplicación por unidades de obra y alcance de las fichas", headings)
         self.assertNotIn("Datos y condicionantes", headings)
         self.assertEqual(
-            memory_headings["Gestión preventiva, emergencias y seguimiento"], 2,
+            memory_headings["Instalaciones provisionales y emergencias"], 2,
         )
         for title in (
             "Instalaciones y organización del tajo", "Emergencias y primeros auxilios",
-            "Coordinación y seguimiento", "Documentación disponible", "Trabajos posteriores",
         ):
             self.assertEqual(memory_headings[title], 3)
             self.assertEqual(headings.count(title), 1)
-        self.assertEqual(headings.count("Gestión preventiva, emergencias y seguimiento"), 1)
+        self.assertEqual(headings.count("Instalaciones provisionales y emergencias"), 1)
         self.assertNotIn(
-            "Gestión preventiva, emergencias y seguimiento",
+            "Instalaciones provisionales y emergencias",
             [block.text for block in content.blocks if block.kind == "heading" and block.level == 1],
         )
         start = next(
@@ -442,15 +454,13 @@ class SafetyHealthStudyTests(unittest.TestCase):
             "tapas resistentes e inmovilizadas", "aristas peligrosas",
             "se repondran inmediatamente", "RD 614/2001",
             "No se admitira la entrada para rescate improvisado.",
-            "responsables, plazos de correccion", "La Direccion Facultativa",
-            "libro de incidencias", "Las futuras operaciones de mantenimiento",
+            "responsables, plazos de corrección", "La Direccion Facultativa",
+            "Libro de incidencias", "Las futuras operaciones de mantenimiento",
         ):
             self.assertIn(obligation, text)
-        for heading in (
-            "Matriz detallada de riesgos por unidad", "Catálogo preventivo",
-            "Fichas ESS de la biblioteca BCCA",
-        ):
-            self.assertIn(heading, headings)
+        self.assertIn("Catálogo preventivo", headings)
+        self.assertNotIn("Matriz detallada de riesgos por unidad", headings)
+        self.assertNotIn("Fichas ESS de la biblioteca BCCA", headings)
         self.assertNotIn("Anexo de trazabilidad presupuesto - ESS", headings)
         self.assertNotIn("Datos pendientes y advertencias de validacion", headings)
         self.assertEqual(
@@ -528,7 +538,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
             "Iluminación de puestos y recorridos", "Circulación de personas y vehículos",
             "Instalación eléctrica provisional, si fuese necesaria",
             "Emergencias y primeros auxilios", "Actuación en caso de accidente",
-            "Incendio y derrames", "Formación e información de los trabajadores",
+            "Incendio y derrames",
         ):
             self.assertEqual(headings.count(title), 1, title)
         ppe = next(block for block in memory if block.kind == "table" and block.headers[0] == "EPI")
@@ -542,7 +552,6 @@ class SafetyHealthStudyTests(unittest.TestCase):
             "personal máximo simultáneo y la duración de la Tabla 1",
             "agua potable, aseos", "botiquín portátil accesible", "caducidades",
             "sobreintensidades y contactos eléctricos", "desconexión y consignación",
-            "teórica y práctica", "cuando cambien funciones, equipos, procedimientos o riesgos",
             "palés se apilarán conforme a las indicaciones del fabricante",
             "botellas de gases", "sin exposición a humos ni riesgos adicionales",
             "Los absorbentes y residuos contaminados",
@@ -639,8 +648,9 @@ class SafetyHealthStudyTests(unittest.TestCase):
         ]
         for heading in (
             "2 MEMORIA DESCRIPTIVA", "2.1 CRITERIOS PREVENTIVOS GENERALES",
-            "2.2 CATÁLOGO PREVENTIVO", "2.6 GESTIÓN PREVENTIVA, EMERGENCIAS Y SEGUIMIENTO",
-            "2.6.1 INSTALACIONES Y ORGANIZACIÓN DEL TAJO", "2.6.5 COORDINACIÓN Y SEGUIMIENTO",
+            "2.2 CATÁLOGO PREVENTIVO", "2.6 INSTALACIONES PROVISIONALES Y EMERGENCIAS",
+            "2.6.1 INSTALACIONES Y ORGANIZACIÓN DEL TAJO",
+            "4.2 COORDINACIÓN DE ACTIVIDADES EMPRESARIALES",
         ):
             self.assertIn(heading, numbered)
         text = "\n".join(block.text for block in content.blocks)
@@ -659,7 +669,155 @@ class SafetyHealthStudyTests(unittest.TestCase):
             index for index, block in enumerate(content.blocks)
             if block.kind == "heading" and block.text == "Fichas de unidades de obra aplicables"
         )
-        self.assertTrue(content.blocks[units + 1].text.startswith("Las unidades incluidas"))
+        self.assertTrue(content.blocks[units + 1].text.startswith("Este capítulo relaciona"))
+
+    def test_chapter_three_summarizes_budget_units_and_emits_unique_bcca_fiches(self):
+        """Vincula partidas y fichas BCCA sin clasificar por descripcion ni duplicar fichas."""
+        app = self.make_app("odt")
+        for code, summary in (
+            ("01UPP00001", "Retirada de pavimento"),
+            ("15APA00002", "Segunda arqueta"),
+            ("15APP00001", "Pozo de registro"),
+            ("15ASW00001", "Sumidero de variante"),
+            ("15CPP00001", "Marca vial"),
+            ("17RB00001", "Residuo bituminoso"),
+            ("17RRBN00001", "Residuo con código anterior"),
+        ):
+            app.budget_items.append(ProjectItem(
+                code, "01#", "ud", summary, measurement=1, unit_price=10,
+            ))
+        content = _build_study_content(app)
+        start = next(
+            index for index, block in enumerate(content.blocks)
+            if block.kind == "heading" and block.text == "Fichas de unidades de obra aplicables"
+        )
+        end = next(
+            index for index in range(start + 1, len(content.blocks))
+            if content.blocks[index].kind == "heading" and content.blocks[index].level == 1
+        )
+        chapter = content.blocks[start:end]
+        self.assertEqual(chapter[1].kind, "paragraph")
+        self.assertIn("unidades sin ficha específica", chapter[1].text)
+        self.assertEqual(chapter[2].kind, "caption")
+        self.assertTrue(chapter[2].text.startswith("Tabla 5."))
+        summary = chapter[3]
+        self.assertEqual(summary.kind, "table")
+        self.assertTrue(summary.blue_table)
+        self.assertEqual(len([block for block in chapter if block.kind == "table"]), 1)
+        rows = {row[0].split(" — ", 1)[0]: row for row in summary.rows}
+        self.assertEqual(
+            set(rows), {item.code for item in app.budget_items if not item.source.startswith("SS:")},
+        )
+        self.assertIn("Ficha BCCA: 15APA", rows["15APAA00001"][0])
+        self.assertEqual(rows["15APAA00001"][1:], rows["15APA00002"][1:])
+        self.assertNotEqual(rows["15APA00002"][1:], rows["15APP00001"][1:])
+        self.assertIn("Ficha BCCA: 15CP", rows["15CPP00001"][0])
+        self.assertIn("Ficha BCCA: 17RB", rows["17RRBN00001"][0])
+        self.assertTrue(all("[VALIDAR]" in cell for cell in rows["OBRA001"]))
+        for code, row in rows.items():
+            if code != "OBRA001":
+                self.assertRegex(row[1], r"^R-[A-Z0-9-]+(?:, R-[A-Z0-9-]+)*$")
+                self.assertRegex(row[2], r"^MP-[A-Z0-9-]+(?:, MP-[A-Z0-9-]+)*$")
+        fiche_starts = [
+            index for index, block in enumerate(chapter)
+            if block.kind == "heading" and block.level == 2
+        ]
+        self.assertEqual(
+            [chapter[index].text.split(" — ", 1)[0] for index in fiche_starts],
+            ["01UPP", "15APA", "15APP", "15ASW", "15CP", "17RB"],
+        )
+        for index, finish in zip(fiche_starts, [*fiche_starts[1:], len(chapter)]):
+            fiche = chapter[index:finish]
+            self.assertEqual([block.text for block in fiche if block.level == 3 and block.kind == "heading"], [
+                "Definición y alcance", "Riesgos detectados", "Medidas preventivas",
+            ])
+            self.assertEqual([block.text for block in fiche if block.level == 4 and block.kind == "heading"], [
+                "Protecciones colectivas", "Equipos de protección individual",
+                "Equipos de trabajo", "Validación",
+            ])
+            self.assertTrue(fiche[1].text.startswith("Unidades de obra vinculadas:"))
+            self.assertTrue(any(block.kind == "list_item" for block in fiche))
+        text = "\n".join(
+            value for block in content.blocks for value in (block.text, *(cell for row in block.rows for cell in row))
+        )
+        self.assertNotIn("UO-", text)
+        self.assertNotIn("FICHA_ESS_", text)
+        self.assertEqual(
+            content.blocks[end].text,
+            "Seguimiento, control, coordinación, formación y documentación",
+        )
+        self.assertTrue(any(
+            "código anterior 17RRBN00001 con la ficha BCCA 17RB" in warning
+            for warning in content.warnings
+        ))
+
+    def test_followup_chapter_integrates_texts_without_duplicate_training_or_project_assumptions(self):
+        """Reune obligaciones y condiciona salud, servicios y recursos a los riesgos reales."""
+        content = _build_study_content(self.make_app("odt"))
+        start = next(
+            index for index, block in enumerate(content.blocks)
+            if block.kind == "heading"
+            and block.text == "Seguimiento, control, coordinación, formación y documentación"
+        )
+        end = next(
+            index for index in range(start + 1, len(content.blocks))
+            if content.blocks[index].kind == "heading" and content.blocks[index].level == 1
+        )
+        followup = content.blocks[start:end]
+        self.assertEqual(followup[1].kind, "paragraph")
+        expected = [
+            "Seguimiento y control preventivo", "Coordinación de actividades empresariales",
+            "Formación e información de los trabajadores", "Documentación preventiva disponible",
+            "Vigilancia de la salud y primeros auxilios", "Localización y control de servicios ocultos",
+            "Presencia de recursos preventivos", "Previsiones para trabajos posteriores",
+        ]
+        self.assertEqual(
+            [block.text for block in followup if block.kind == "heading" and block.level == 2],
+            expected,
+        )
+        for title in expected:
+            self.assertEqual(sum(
+                block.kind == "heading" and block.text == title for block in content.blocks
+            ), 1)
+            self.assertFalse(any(
+                block.kind == "heading" and block.text == title for block in content.blocks[:start]
+            ))
+        text = "\n".join(block.text for block in followup)
+        for obligation in (
+            "Inspeccionar diariamente", "después de desplazar el tajo",
+            "responsables, plazos de corrección y cierre", "su modificación y aprobación",
+            "laboratorios, gestores de residuos", "consulta y participación de los trabajadores",
+            "artículo 19", "formación teórica y práctica", "procedimientos, tecnologías o riesgos",
+            "sin coste para el trabajador", "operadores y señalistas",
+            "Plan de Seguridad y Salud aprobado y sus modificaciones aprobadas",
+            "Libro de incidencias", "Documentación de mantenimiento",
+            "artículo 22", "consentimiento del trabajador", "previo informe de sus representantes",
+            "menores molestias posibles", "no los datos clínicos individuales",
+            "No se fija en este Estudio una periodicidad médica genérica",
+            "centros y teléfonos de la Tabla 1", "Cuando el tamaño de la obra o el tipo de actividad",
+            "apartado 14 de la parte A del anexo IV", "se considerará en servicio",
+            "se suspenderán los trabajos", "al titular del servicio",
+            "cuando concurran los supuestos legalmente exigibles",
+            "capacitación suficiente", "su corrección inmediata y se informará al empresario",
+            "mientras", "medios de apertura y manipulación de tapas", "medidas químicas y térmicas",
+        ):
+            self.assertIn(obligation, text)
+        self.assertNotIn("línea de alta tensión detectada", text)
+        self.assertNotIn("APLICABILIDAD:", text)
+        self.assertNotIn("{{", text)
+        self.assertEqual(
+            [block.text for block in _numbered_blocks(content.blocks)
+             if block.kind == "heading" and block.level == 1],
+            [
+                "1 OBJETO Y ALCANCE", "2 MEMORIA DESCRIPTIVA",
+                "3 FICHAS DE UNIDADES DE OBRA APLICABLES",
+                "4 SEGUIMIENTO, CONTROL, COORDINACIÓN, FORMACIÓN Y DOCUMENTACIÓN",
+                "5 PLIEGO DE CONDICIONES",
+            ],
+        )
+        self.assertTrue(all(
+            block.level == 0 for block in followup if block.kind == "list_item"
+        ))
 
     def test_catalogue_types_follow_native_pagination_without_forcing_category_breaks(self):
         """Repite tipo y cabecera una vez por pagina PDF y combina los grupos ODT."""

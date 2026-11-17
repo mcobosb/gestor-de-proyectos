@@ -37,19 +37,16 @@ if TYPE_CHECKING:
 _TEMPLATE_MEMBERS = {
     "project_data": "01_objeto_y_alcance.md",
     "memory": "02_memoria_general.md",
-    "work_units": "03_fichas_unidades_obra.md",
     "catalogues": "04_catalogos_preventivos.md",
     "emergencies": "05_gestion_emergencias.md",
+    "monitoring": "07_seguimiento_control.md",
     "specification": "06_pliego_condiciones.md",
-    "risk_matrix": "08_matriz_riesgos_por_unidad.md",
-    "budget_linking": "09_enlace_automatico_presupuesto.md",
     "index": "UNI/INDICE_FICHAS_ESS.md",
     "general_conditions": "UNI/CONDICIONES_GENERALES_ESS.md",
 }
 _REFERENCE_RE = re.compile(
     r"\b(?:R|MP|PC|EPI|EQ)-[^\W_]+(?:-[^\W_]+)*\b", re.IGNORECASE,
 )
-_UNIT_RE = re.compile(r"\bUO-[A-Z0-9]+(?:-[A-Z0-9]+)*\b")
 _PLACEHOLDER_RE = re.compile(r"\{\{([A-Za-z0-9_]+)\}\}")
 _LIST_ITEM_RE = re.compile(r"^([-+*•]|\d+[.)]|[a-zA-Z]\))\s+(.+)$")
 _AUXILIARY_MEANS_RE = re.compile(
@@ -71,6 +68,7 @@ _GENERAL_RISK_HEADERS = (
 )
 _CATALOGUE_HEADERS = ("Tipo", "Referencia", "Descripción")
 _PPE_HEADERS = ("EPI", "USOS PREVISIBLES", "OBSERVACIONES")
+_WORK_UNIT_HEADERS = ("Unidad de obra / ficha BCCA", "Riesgos detectados", "Medidas preventivas")
 
 
 @dataclass(frozen=True)
@@ -293,22 +291,6 @@ def _rows_from_markdown(text: str) -> list[list[str]]:
     return rows
 
 
-def _parse_work_units(text: str) -> dict[str, dict[str, str]]:
-    """Indexa las fichas generales de unidad de obra por su identificador UO."""
-    units: dict[str, dict[str, str]] = {}
-    current: str | None = None
-    for line in text.splitlines():
-        heading = re.match(r"^##\s+(UO-[A-Z0-9-]+)\s*(?:-\s*(.*))?$", line.strip())
-        if heading:
-            current = heading.group(1)
-            units[current] = {"Nombre": heading.group(2) or current}
-            continue
-        cells = _table_cells(line)
-        if current and cells and len(cells) >= 2:
-            units[current][_inline_text(cells[0])] = _inline_text(cells[1])
-    return units
-
-
 def _parse_catalogues(text: str) -> dict[str, str]:
     """Resuelve cada identificador preventivo contra el catalogo de la biblioteca."""
     result = {}
@@ -332,22 +314,6 @@ def _parse_index(text: str) -> list[tuple[str, str]]:
         if match:
             path = posixpath.normpath(posixpath.join("UNI", match.group(1)))
             result.append((prefix, path))
-    return result
-
-
-def _parse_fallbacks(text: str) -> list[tuple[tuple[str, ...], str]]:
-    """Lee las palabras clave y unidades provisionales definidas en la plantilla 09."""
-    result = []
-    for line in text.splitlines():
-        row = _table_cells(line)
-        if row is None or len(row) < 2:
-            continue
-        unit = _inline_text(row[1])
-        if not unit.startswith("UO-"):
-            continue
-        terms = tuple(re.findall(r"`([^`]+)`", row[0]))
-        if terms:
-            result.append((terms, unit))
     return result
 
 
@@ -429,25 +395,29 @@ def _read_member(archive: ZipFile, path: str) -> str:
 def _load_selected_fiches(
     archive: ZipFile, paths: list[str], pending: list[str],
 ) -> tuple[dict[str, dict[str, list[str]]], list[tuple[str, str]]]:
-    """Lee fichas unicas, acumula sus referencias y recoge sus validaciones."""
-    by_unit: dict[str, dict[str, list[str]]] = {}
+    """Lee fichas BCCA completas, indexa sus referencias y recoge sus validaciones."""
+    by_path: dict[str, dict[str, list[str]]] = {}
     contents = []
     for path in paths:
         text = _read_member(archive, path)
         contents.append((path, text))
-        units = list(dict.fromkeys(_UNIT_RE.findall(text)))
-        references = _reference_groups(text)
-        if not units:
-            pending.append(
-                f"[VALIDAR] La ficha ESS {PurePosixPath(path).name} no identifica unidades UO."
-            )
-        for unit in units:
-            by_unit[unit] = _merge_references(by_unit.get(unit, _reference_groups("")), references)
+        by_path[path] = _reference_groups(text)
+        headings = {
+            (_normalized_text(block.text), block.level)
+            for block in _markdown_blocks(text) if block.kind == "heading"
+        }
+        for title, level in (
+            ("Definición y alcance", 2), ("Riesgos detectados", 2), ("Medidas preventivas", 2),
+            ("Protecciones colectivas", 3), ("Equipos de protección individual", 3),
+            ("Equipos de trabajo", 3), ("Validación", 3),
+        ):
+            if (_normalized_text(title), level) not in headings:
+                raise ValueError(f"La ficha ESS {path} no contiene el apartado {title}.")
         lines = text.splitlines()
         in_validations = False
         for line in lines:
             stripped = line.strip()
-            if re.match(r"^##\s+", stripped):
+            if re.match(r"^#{1,3}\s+", stripped):
                 in_validations = "validacion" in _normalized_text(stripped)
                 continue
             if in_validations and stripped:
@@ -457,7 +427,7 @@ def _load_selected_fiches(
                 )
                 if message not in pending:
                     pending.append(message)
-    return by_unit, contents
+    return by_path, contents
 
 
 def _build_study_content(app) -> _StudyContent:
@@ -476,77 +446,48 @@ def _build_study_content(app) -> _StudyContent:
         raise ValueError("El presupuesto no contiene partidas de obra para clasificar en el ESS.")
 
     templates = _read_library()
-    work_units = _parse_work_units(templates["work_units"])
     catalogues = _parse_catalogues(templates["catalogues"])
     index = _parse_index(templates["index"])
-    fallbacks = _parse_fallbacks(templates["budget_linking"])
-    matrix: dict[str, list[str]] = {}
-    for row in _rows_from_markdown(templates["risk_matrix"]):
-        if len(row) >= 2 and row[0].startswith("UO-"):
-            matrix[row[0]] = list(dict.fromkeys(_REFERENCE_RE.findall(row[1])))
-
     pending: list[str] = []
-    unit_ids = ["UO-IMPLANTACION"]
     matched_codes: list[str] = []
     fiche_paths: list[str] = []
-
-    def add_unit(unit: str) -> None:
-        """Anade una unidad una sola vez y conserva el orden de las partidas."""
-        if unit not in unit_ids:
-            unit_ids.append(unit)
-
+    item_fiches: list[tuple[ProjectItem, list[str]]] = []
     for item in work_items:
         code = re.sub(r"\s+", "", item.code).upper()
         matches = [(prefix, path) for prefix, path in index if code.startswith(prefix)]
         if matches:
             longest = max(len(prefix) for prefix, _ in matches)
             selected = [(prefix, path) for prefix, path in matches if len(prefix) == longest]
+            paths = list(dict.fromkeys(path for _, path in selected))
             for _, path in selected:
                 if path not in fiche_paths:
                     fiche_paths.append(path)
                 matched_codes.append(item.code)
+                canonical_code = PurePosixPath(path).stem.split("-", 1)[0]
+                if not code.startswith(canonical_code):
+                    pending.append(
+                        f"[VALIDAR] Revisar la correspondencia del código anterior "
+                        f"{item.code} con la ficha BCCA {canonical_code}."
+                    )
         else:
-            description = _normalized_text(item.summary + " " + item.text)
-            selected_units = list(dict.fromkeys(
-                unit for terms, unit in fallbacks
-                if any(_normalized_text(term) in description for term in terms)
-            ))
-            for unit in selected_units:
-                add_unit(unit)
+            paths = []
             pending.append(
                 f"[VALIDAR] Partida sin ficha ESS BCCA: {item.code} - {item.summary}."
             )
+        item_fiches.append((item, paths))
 
-    fiche_paths = list(dict.fromkeys(fiche_paths))
+    fiche_paths.sort(key=lambda path: PurePosixPath(path).parts)
     if fiche_paths:
         try:
             with ZipFile(LIBRARY_PATH) as archive:
-                unit_fiche_refs, fiche_contents = _load_selected_fiches(
+                fiche_references, fiche_contents = _load_selected_fiches(
                     archive, fiche_paths, pending,
                 )
         except (OSError, BadZipFile, RuntimeError, NotImplementedError) as exc:
             raise ValueError(f"No se pudieron leer las fichas ESS seleccionadas: {exc}") from exc
     else:
-        unit_fiche_refs, fiche_contents = {}, []
-    for unit in unit_fiche_refs:
-        add_unit(unit)
-
-    for unit in unit_ids:
-        if unit not in work_units:
-            pending.append(f"[VALIDAR] No existe una ficha general para la unidad {unit}.")
-
-    unit_references: dict[str, dict[str, list[str]]] = {}
-    for unit in unit_ids:
-        fields = work_units.get(unit, {})
-        template_refs = _reference_groups("\n".join(
-            value for field_name, value in fields.items()
-            if field_name.casefold() != "nombre"
-        ))
-        matrix_refs = _reference_groups("\n".join(matrix.get(unit, [])))
-        fiche_refs = unit_fiche_refs.get(unit, _reference_groups(""))
-        unit_references[unit] = _merge_references(template_refs, matrix_refs, fiche_refs)
-
-    all_references = _merge_references(*unit_references.values())
+        fiche_references, fiche_contents = {}, []
+    all_references = _merge_references(*fiche_references.values())
     assessment = evaluate_study_criteria(app)
     state = app.safety_health_state if isinstance(app.safety_health_state, dict) else {}
     selected_criteria = _study_criteria_values(state.get("study_criteria"))
@@ -627,10 +568,7 @@ def _build_study_content(app) -> _StudyContent:
     )
     if chapter_titles:
         project_type += "\n\n" + "\n".join(f"• {chapter}" for chapter in chapter_titles)
-    unit_names = [
-        f"{unit} - {work_units[unit].get('Nombre', unit)}"
-        if unit in work_units else unit for unit in unit_ids
-    ]
+    unit_names = list(dict.fromkeys(f"{item.code} — {item.summary}" for item in work_items))
     bcca_codes = ", ".join(dict.fromkeys(matched_codes)) or missing(
         "los codigos BCCA identificados"
     )
@@ -813,65 +751,43 @@ def _build_study_content(app) -> _StudyContent:
 
     _add_heading(blocks, "Memoria descriptiva", 1)
     _add_markdown(blocks, templates["memory"], replacements)
-    _add_heading(blocks, "Gestión preventiva, emergencias y seguimiento", 2)
+    _add_heading(blocks, "Instalaciones provisionales y emergencias", 2)
     _add_markdown(blocks, templates["emergencies"], replacements, heading_offset=1)
 
     _add_heading(blocks, "Fichas de unidades de obra aplicables", 1)
     _add_markdown(blocks, templates["general_conditions"], replacements)
-    for unit in unit_ids:
-        details = work_units.get(unit, {})
-        _add_heading(
-            blocks, f"{unit} - {details.get('Nombre', unit)}", 2,
-        )
-        description_text = details.get("Descripcion")
-        if description_text:
-            blocks.append(_Block("paragraph", description_text))
-        elif unit not in work_units:
-            blocks.append(_Block(
-                "paragraph",
-                "[VALIDAR] La biblioteca no contiene una descripcion general para esta unidad.",
-            ))
-        references = unit_references[unit]
-        reference_rows = []
-        for category in _CATEGORY_ORDER:
-            if references[category]:
-                reference_rows.append((
-                    _CATEGORY_LABELS[category],
-                    ", ".join(references[category]),
-                ))
-        if reference_rows:
-            blocks.append(_Block(
-                "table", headers=("Contenido preventivo", "Referencias aplicables"),
-                rows=tuple(reference_rows),
-            ))
-
-    _add_heading(blocks, "Matriz detallada de riesgos por unidad", 1)
-    matrix_rows = []
-    for unit in unit_ids:
-        references = unit_references[unit]["R"]
-        if references:
-            matrix_rows.append((
-                unit,
-                work_units.get(unit, {}).get("Nombre", unit),
-                "; ".join(
-                    f"{reference}: {catalogues.get(reference, '[VALIDAR] Descripcion no disponible')}"
-                    for reference in references
-                ),
-            ))
-    if matrix_rows:
-        blocks.append(_Block(
-            "table", headers=("Unidad", "Descripción", "Riesgos identificados"),
-            rows=tuple(matrix_rows),
+    work_unit_rows = []
+    for item, paths in item_fiches:
+        references = _merge_references(*(fiche_references[path] for path in paths))
+        codes = ", ".join(PurePosixPath(path).stem.split("-", 1)[0] for path in paths)
+        work_unit_rows.append((
+            f"{item.code} — {item.summary}\nFicha BCCA: {codes}" if paths else (
+                f"{item.code} — {item.summary}\n[VALIDAR] Ficha específica pendiente."
+            ),
+            ", ".join(references["R"]) or "[VALIDAR] Identificación de riesgos pendiente.",
+            ", ".join(references["MP"]) or "[VALIDAR] Medidas preventivas pendientes.",
         ))
-    _add_heading(blocks, "Fichas ESS de la biblioteca BCCA", 1)
+    blocks.extend((
+        _Block("caption", "Tabla 5. Unidades de obra, riesgos detectados y medidas preventivas."),
+        _Block("table", headers=_WORK_UNIT_HEADERS, rows=tuple(work_unit_rows), blue_table=True),
+    ))
     for path, text in fiche_contents:
+        code = PurePosixPath(path).stem.split("-", 1)[0]
         heading = next(
             (_inline_text(line.lstrip("# ").strip()) for line in text.splitlines()
              if line.startswith("# ")),
             PurePosixPath(path).stem,
         )
-        _add_heading(blocks, f"{heading} ({PurePosixPath(path).name})", 2)
-        _add_markdown(blocks, text)
+        _add_heading(blocks, f"{code} — {heading}", 2)
+        blocks.append(_Block(
+            "paragraph", "Unidades de obra vinculadas: " + "; ".join(
+                f"{item.code} — {item.summary}" for item, paths in item_fiches if path in paths
+            ) + ".",
+        ))
+        _add_markdown(blocks, text, heading_offset=1)
+
+    _add_heading(blocks, "Seguimiento, control, coordinación, formación y documentación", 1)
+    _add_markdown(blocks, templates["monitoring"], replacements)
 
     _add_heading(blocks, "Pliego de condiciones", 1)
     _add_markdown(blocks, templates["specification"])
@@ -900,9 +816,12 @@ def _build_study_content(app) -> _StudyContent:
             for child in group if child not in described
         )
     for row_index, category in reference_summary_rows.items():
+        references = ", ".join(
+            row[1] for row in catalogue_rows if row[1].startswith(f"{category}-")
+        )
         project_data_rows[row_index] = (
             project_data_rows[row_index][0],
-            ", ".join(row[1] for row in catalogue_rows if row[1].startswith(f"{category}-")),
+            references or "[VALIDAR] Identificación pendiente; véase la Tabla 5.",
         )
     blocks[summary_index] = replace(blocks[summary_index], rows=tuple(project_data_rows))
     if catalogue_rows:
@@ -964,6 +883,8 @@ def _column_ratios(headers: tuple[str, ...]) -> tuple[float, ...]:
     """Define anchos de tabla legibles en PDF y ODT segun su numero de columnas."""
     if headers in (_GENERAL_RISK_HEADERS, _PPE_HEADERS):
         return (0.20, 0.36, 0.44)
+    if headers == _WORK_UNIT_HEADERS:
+        return (0.34, 0.33, 0.33)
     if headers == _CATALOGUE_HEADERS:
         return (0.18, 0.28, 0.54)
     if len(headers) == 2:
@@ -1233,6 +1154,8 @@ def _write_odt_blue_table(document, block: _Block) -> None:
         table.set(_tag("table:name"), "ESSPreventiveCatalogue")
     elif block.headers == _PPE_HEADERS:
         table.set(_tag("table:name"), "ESSPPE")
+    elif block.headers == _WORK_UNIT_HEADERS:
+        table.set(_tag("table:name"), "ESSWorkUnits")
     for cell in table.find(_tag("table:table-header-rows")).iter(_tag("table:table-cell")):
         cell.set(_tag("table:style-name"), "ESSSummaryHeaderCell")
         cell.find(_tag("text:p")).set(_tag("text:style-name"), "ESSSummaryHeader")

@@ -132,8 +132,8 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
   Los criterios comunes, comprobaciones previas y medidas de delimitación se
   reúnen sin repetir apartados, conservando las obligaciones específicas del
   pliego, las emergencias y las fichas de cada unidad.
-  Las condiciones generales y la gestión preventiva, emergencias y seguimiento
-  se integran en el capítulo 2, sin repetirse como capítulos independientes.
+  Las condiciones generales, las instalaciones provisionales y las emergencias
+  se integran en el capítulo 2, sin repetir sus procedimientos.
   La protección de terceros abarca cerramientos, accesos e itinerarios, señalización,
   vertidos, residuos, acopios, polvo, humos, ruido, vibraciones, deslumbramientos
   y barro en viales. Las medidas se adaptan a las afecciones y autorizaciones de
@@ -143,7 +143,7 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
   formato azul/blanco, señalización, orden y limpieza, equipos, acopios,
   iluminación y circulación interna. La gestión preventiva desarrolla los
   servicios higiénicos, la instalación eléctrica provisional si es necesaria,
-  botiquín, actuación ante accidentes, incendios y derrames y formación del personal,
+  botiquín y actuación ante accidentes, incendios y derrames,
   sin duplicar emergencias ni fijar dotaciones o dimensiones ajenas al proyecto.
 - A continuación se incluye el **Catálogo preventivo**, con introducción, leyenda
   superior, cabecera azul y filas alternas. Reúne las definiciones de riesgos,
@@ -164,8 +164,45 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
   En la tabla del capítulo 1, **Riesgos detectados** y **Medidas preventivas**
   muestran únicamente los códigos aplicables, separados por coma y espacio,
   sin viñetas ni definiciones y con enlaces a las filas del catálogo.
-- El informe y su índice no incluyen el anexo de trazabilidad, la relación de
-  partidas del presupuesto general ni el apartado de datos pendientes.
+- El **capítulo 3** comienza con una introducción y la **Tabla 5**, con leyenda
+  superior y formato azul/blanco: relaciona todas las unidades del presupuesto
+  con sus fichas BCCA, riesgos y medidas preventivas enlazadas al catálogo.
+  Después aparecen las fichas específicas disponibles, una sola vez por ficha,
+  con las partidas vinculadas y en el orden de clasificación de PPTP.
+  Las **11 fichas ESS** conservan su especialidad preventiva y se organizan en
+  las mismas carpetas y subcarpetas BCCA de PPTP, con nombres por código y título.
+  Las familias generales 15CP y 15CR se mantienen en sus carpetas respectivas;
+  no se amplía la biblioteca a las 1.661 fichas del PPTP.
+  Cada ficha desarrolla en texto **Definición y alcance**, **Riesgos detectados**
+  y **Medidas preventivas**, con subapartados de **Protecciones colectivas**,
+  **Equipos de protección individual**, **Equipos de trabajo** y **Validación**.
+  Las viñetas tienen sangría y las referencias conservan sus enlaces.
+  No se muestran códigos UO ni capítulos separados de matriz y fichas BCCA.
+  Las unidades sin ficha específica se marcan expresamente como pendientes,
+  sin asignarles una evaluación por similitud de su descripción. Se revisan las
+  correspondencias de residuos bituminosos y ensayos con la clasificación PPTP;
+  los códigos antiguos 17RRBN se vinculan a 17RB con revisión expresa, sin
+  modificar el presupuesto.
+- El **capítulo 4**, **Seguimiento, control, coordinación, formación y documentación**,
+  reúne el control preventivo, la coordinación empresarial, la formación e
+  información, los documentos disponibles, la vigilancia de la salud y los
+  primeros auxilios, los servicios ocultos, los recursos preventivos y las
+  previsiones para trabajos posteriores.
+  Estos apartados se trasladan desde la memoria cuando corresponde, evitando
+  repetir formación, coordinación, documentación y mantenimiento futuro.
+  Incluye controles diarios, correcciones con responsables y plazos, adaptación
+  del PSS y coordinación con suministradores, laboratorios y gestores.
+  La vigilancia de la salud respeta consentimiento, excepciones y confidencialidad,
+  sin imponer una periodicidad médica genérica. Los primeros auxilios remiten al
+  capítulo 2 y a la Tabla 1, con local adecuado cuando la obra lo requiera.
+  Los servicios desconocidos se consideran en servicio y se detiene la actividad
+  que pueda afectarlos hasta comprobarlos y coordinar la actuación con su titular;
+  no se presupone una línea de alta tensión detectada.
+  Los recursos preventivos se concretan cuando sean legalmente exigibles, con
+  capacitación, medios y vigilancia de la eficacia y corrección de las medidas.
+  El **Pliego de condiciones** se conserva como capítulo 5.
+- El informe y su índice no incluyen el anexo de trazabilidad con importes ni
+  un capítulo independiente de datos pendientes.
   Al guardar se muestra una confirmación informativa con la ruta del documento
   y el botón Aceptar, como en PPTP, sin incluir avisos de revisión.
 - Antes de los **Riesgos detectados** se incluyen filas separadas de
