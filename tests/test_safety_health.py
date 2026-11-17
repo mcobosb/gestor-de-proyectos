@@ -7,17 +7,84 @@ import unittest
 from bc3_gui import ProjectItem
 from pypdf import PdfReader
 from tools.safety_health import (
-    SAFETY_BUDGET_SOURCE, SafetyLine, proposed_lines, restore_state, serialize_state,
-    synchronize_budget, write_report,
+    SAFETY_BUDGET_SOURCE, SafetyLine, evaluate_study_criteria, proposed_lines, restore_state,
+    restore_project_state, serialize_state, synchronize_budget, write_study_report,
 )
 
 
 class SafetyHealthTests(unittest.TestCase):
+    def test_workforce_uses_whole_people_with_at_least_one_per_planned_team(self):
+        """No diluye una plantilla de una persona al redondear las jornadas hacia arriba."""
+        app = SimpleNamespace(
+            budget_items=[ProjectItem("P", "01#", "ud", "Obra", rendimiento=7.9)],
+            report_settings=SimpleNamespace(general_expenses=0, industrial_profit=0, vat=0),
+            planning_state={},
+            _chapter_title=lambda chapter: "OBRA",
+            _project_title=lambda: "Proyecto",
+        )
+        self.assertEqual(evaluate_study_criteria(app).peak_workers, Decimal(1))
+        app.planning_state = {"activities": [
+            {"chapter": "01#", "code": "P", "teams": 3, "manual_duration": 10},
+        ]}
+        self.assertEqual(evaluate_study_criteria(app).peak_workers, Decimal(3))
+
+    def test_study_criteria_use_strict_budget_and_workday_thresholds(self):
+        """Do not mark thresholds as met when the estimated values equal their limits."""
+        item = ProjectItem(
+            "01", "01#", "ud", "Partida de prueba",
+            unit_price=450759.08, rendimiento=4000,
+        )
+        app = SimpleNamespace(
+            budget_items=[item],
+            report_settings=SimpleNamespace(general_expenses=0, industrial_profit=0, vat=0),
+            planning_state={},
+            _chapter_title=lambda chapter: "OBRA",
+            _project_title=lambda: "Proyecto de prueba",
+        )
+
+        result = evaluate_study_criteria(app)
+
+        self.assertEqual(result.contract_budget, Decimal("450759.08"))
+        self.assertEqual(result.worker_days, Decimal("500"))
+        self.assertEqual(result.fulfilled, (False, False, False, False))
+        self.assertFalse(result.requires_full_study)
+
+    def test_study_criteria_calculate_schedule_workforce_and_special_work(self):
+        """Use the saved crew count, labor workload and work descriptions."""
+        item = ProjectItem(
+            "01", "01#", "ud", "Ejecución de túnel",
+            unit_price=1, rendimiento=5200,
+        )
+        app = SimpleNamespace(
+            budget_items=[item],
+            report_settings=SimpleNamespace(general_expenses=0, industrial_profit=0, vat=0),
+            planning_state={
+                "params": {"hours_per_day": 8},
+                "activities": [{"chapter": "01#", "code": "01", "teams": 21}],
+            },
+            _chapter_title=lambda chapter: "OBRA",
+            _project_title=lambda: "Proyecto de prueba",
+        )
+
+        result = evaluate_study_criteria(app)
+
+        self.assertEqual(result.duration_days, 31)
+        self.assertGreater(result.peak_workers, Decimal("20"))
+        self.assertEqual(result.worker_days, Decimal("650"))
+        self.assertEqual(result.fulfilled, (False, True, True, True))
+        self.assertTrue(result.requires_full_study)
+
     def test_saved_review_validation_and_roundtrip(self):
         """Validate saved selections and reject malformed or nonfinite project data."""
         lines = [SafetyLine("A", "ud", "Casco", Decimal("3.50"), Decimal("2"), False)]
         state = serialize_state(
             lines, Decimal("2.5"), centros_asistenciales="Hospital General\nCentro de Salud",
+            external_conditions={
+                "trafico_existente": {"description": "Un carril ocupado", "applicability": "yes"},
+            },
+        )
+        self.assertEqual(
+            restore_project_state(state)["external_conditions"], state["external_conditions"],
         )
         self.assertEqual(restore_state(state), (lines, Decimal("2.5")))
         self.assertEqual(
@@ -31,6 +98,13 @@ class SafetyHealthTests(unittest.TestCase):
             {**state, "lines": [state["lines"][0], state["lines"][0]]},
             {**state, "lines": [{**state["lines"][0], "price": "inf"}]},
             {**state, "lines": [{**state["lines"][0], "selected": "yes"}]},
+            {**state, "external_conditions": []},
+            {**state, "external_conditions": {
+                "trafico_existente": {"description": "Obra", "applicability": []},
+            }},
+            {**state, "external_conditions": {
+                "trafico_existente": {"description": "Obra", "applicability": True},
+            }},
         ):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 restore_state(invalid)
@@ -49,6 +123,8 @@ class SafetyHealthTests(unittest.TestCase):
             chapter_titles={},
             report_settings=SimpleNamespace(
                 indirect_costs=0, template_path="", currency="EUR", custom_currency="", author="",
+                general_expenses=0, industrial_profit=0, vat=0, expediente="",
+                output_format="pdf", organization="", contractor="", location="",
             ),
             _ensure_chapter=lambda chapter: None,
             refresh_budget_tree=lambda: None,
@@ -56,15 +132,25 @@ class SafetyHealthTests(unittest.TestCase):
             _project_title=lambda: "Proyecto de prueba",
             _chapter_title=lambda chapter: "SEGURIDAD Y SALUD",
             _report_components=lambda item: [],
+            _component_dataset=lambda item: None,
+            _budget_concept_type=lambda item, code=None: "0",
+            planning_state={},
+            safety_health_state={"external_conditions": {
+                "trafico_existente": {"description": "Un carril ocupado", "applicability": "yes"},
+            }},
         )
 
         synchronize_budget(app, lines, Decimal("2"))
 
         self.assertEqual(app.budget_items[0], source)
+        self.assertEqual(
+            app.safety_health_state["external_conditions"]["trafico_existente"],
+            {"description": "Un carril ocupado", "applicability": "yes"},
+        )
         generated = [item for item in app.budget_items if item.source.startswith(SAFETY_BUDGET_SOURCE)]
         self.assertTrue(generated)
-        self.assertEqual({item.chapter for item in generated}, {"SS#"})
-        self.assertEqual(app.chapter_titles["SS#"], "SEGURIDAD Y SALUD")
+        self.assertEqual({item.chapter for item in generated}, {"CAP.02#"})
+        self.assertEqual(app.chapter_titles["CAP.02#"], "SEGURIDAD Y SALUD")
         self.assertAlmostEqual(
             sum(item.measurement * item.unit_price for item in generated),
             source.measurement * source.unit_price * 0.02,
@@ -72,14 +158,19 @@ class SafetyHealthTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder) / "seguridad-salud.pdf"
-            write_report(app, target)
+            write_study_report(app, target)
             self.assertTrue(target.is_file())
             self.assertGreater(target.stat().st_size, 0)
             text = "\n".join(page.extract_text() or "" for page in PdfReader(target).pages)
-            self.assertIn("PRESUPUESTO DE SEGURIDAD Y SALUD", text)
+            self.assertIn("ESTUDIO BÁSICO DE SEGURIDAD Y SALUD", text)
+            self.assertIn("ÍNDICE", text)
+            self.assertIn("UO-DEMOLICION", text)
+            self.assertIn("DATOS DEL PROYECTO", text)
+            self.assertIn("PLIEGO DE CONDICIONES", text)
             self.assertNotIn("DESCOMPUESTOS", text)
             self.assertIn("3,11", text)
             self.assertNotIn("3.11", text)
+            self.assertNotIn("{{", text)
 
 
 if __name__ == "__main__":

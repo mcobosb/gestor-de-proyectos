@@ -67,6 +67,9 @@ New-Item -ItemType Directory -Force -Path $toolsOutput | Out-Null
 $compiledTools = @()
 $toolsSource = Join-Path $repositoryRoot "tools"
 foreach ($requiredResource in @(
+    "CMUN.csv",
+    "CPRO.csv",
+    "cpv_2008_xls.zip",
     "safety_health\datos\seguridad_salud_relaciones_bcca2023.csv",
     "safety_health\BIBLIOTECA.zip",
     "pptp\BIBLIOTECA.zip",
@@ -81,7 +84,7 @@ foreach ($requiredResource in @(
 if ($LASTEXITCODE -ne 0) {
     throw "La biblioteca comprimida PPTP no es válida."
 }
-& $python -c "from pathlib import Path; import sys; from zipfile import ZipFile; path = Path(sys.argv[1]) / 'safety_health' / 'BIBLIOTECA.zip'; names = ZipFile(path).namelist(); required = {'00_guia_integracion.md', '01_datos_proyecto.md'}; resources = {'RECURSOS/MATERIALES/', 'RECURSOS/MAQUINARIA/'}; sys.exit(1 if not required.issubset(names) or not all(any(name.startswith(prefix) for name in names) for prefix in resources) else 0)" $toolsSource
+& $python -c "from pathlib import Path; import sys; from zipfile import ZipFile; path = Path(sys.argv[1]) / 'safety_health' / 'BIBLIOTECA.zip'; names = ZipFile(path).namelist(); required = {'01_datos_proyecto.md', '02_memoria_general.md'}; resources = {'RECURSOS/MATERIALES/', 'RECURSOS/MAQUINARIA/'}; sys.exit(1 if not required.issubset(names) or not all(any(name.startswith(prefix) for name in names) for prefix in resources) else 0)" $toolsSource
 if ($LASTEXITCODE -ne 0) {
     throw "La biblioteca comprimida de Seguridad y Salud no contiene los documentos y recursos esperados."
 }

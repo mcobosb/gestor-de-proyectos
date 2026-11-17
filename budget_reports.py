@@ -10,12 +10,15 @@ alineadas a la derecha, descripciones sangradas y títulos y totales en negrita.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from math import isfinite
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from municipalities import Municipality, resolve_municipalities
+from cpv_catalog import CpvEntry, resolve_cpv_codes
 
 if TYPE_CHECKING:
     from bc3_gui import BudgetApp
@@ -60,6 +63,18 @@ class ReportSettings:
     indirect_costs: float = 0.0
     safety_health_percentage: float = 2.0
     guarantee_period: str = ""
+    municipality_codes: list[str] = field(default_factory=list)
+    cpv_codes: list[str] = field(default_factory=list)
+
+    @property
+    def municipalities(self) -> tuple[Municipality, ...]:
+        """Obtiene los municipios de la obra con su provincia y comunidad oficiales."""
+        return resolve_municipalities(self.municipality_codes)
+
+    @property
+    def cpv_entries(self) -> tuple[CpvEntry, ...]:
+        """Obtiene las descripciones espanolas de los CPV seleccionados para la obra."""
+        return resolve_cpv_codes(self.cpv_codes)
 
     @classmethod
     def from_dict(cls, data: object) -> ReportSettings:
@@ -71,7 +86,17 @@ class ReportSettings:
             if key not in data:
                 continue
             value = data[key]
-            if key in PERCENTAGE_FIELDS:
+            if key in {"municipality_codes", "cpv_codes"}:
+                if not isinstance(value, list) or any(
+                    not isinstance(code, str) for code in value
+                ):
+                    raise ValueError(f"El campo {key} debe ser una lista de codigos de texto.")
+                if key == "municipality_codes":
+                    resolve_municipalities(value)
+                else:
+                    resolve_cpv_codes(value)
+                values[key] = list(value)
+            elif key in PERCENTAGE_FIELDS:
                 if isinstance(value, bool):
                     raise ValueError(f"Porcentaje no válido: {key}.")
                 try:

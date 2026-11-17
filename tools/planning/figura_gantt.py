@@ -38,6 +38,7 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch, Patch, Polygon, Rectangle
 from openpyxl import load_workbook
+from .reports import GANTT_PALETTE
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 GG_RATE = 0.13
@@ -48,8 +49,7 @@ SOFFICE_CANDIDATES = [
     Path(r"C:\Program Files (x86)\LibreOffice\program\soffice.exe"),
 ]
 
-PALETTE = ["#1f77b4", "#e4572e", "#29a19c", "#f3a712", "#7b5ea7",
-           "#2e86ab", "#c03221", "#5c946e", "#a23b72", "#3d5a80"]
+PALETTE = list(GANTT_PALETTE)
 DARK = "#1b2a41"
 GRID = "#d9dee5"
 WEEKEND = "#f2f4f7"

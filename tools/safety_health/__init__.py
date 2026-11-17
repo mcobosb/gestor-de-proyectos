@@ -3,14 +3,19 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
 from pathlib import Path, PurePosixPath
+import re
 import tkinter as tk
 from tkinter import ttk
 from typing import TYPE_CHECKING
+import unicodedata
 
+from budget_reports import budget_totals
 from localization import filedialog, localize_widget_tree, messagebox, translate
+from tools._shared.scheduling import PlanParams, apply_saved_plan_state, build_activities, schedule
 from .care_centers import CareCentersEditor, restore_centers
+from .external_conditions import ExternalConditionsEditor, restore_external_conditions
 
 if TYPE_CHECKING:
     from bc3_gui import BudgetApp, ProjectItem
@@ -55,11 +60,107 @@ def restore_project_state(data: dict) -> dict:
             "centros_asistenciales_texto", data.get("centros_asistenciales", ""),
         ),
         centros_asistenciales_datos=restore_centers(data),
+        study_criteria=data.get("study_criteria"),
+        external_conditions=data.get("external_conditions"),
     )
 
 
 SAFETY_BUDGET_SOURCE = "SS:"
 RELATIONSHIP_PATH = Path(__file__).resolve().parent / "datos" / "seguridad_salud_relaciones_bcca2023.csv"
+_ESS_BUDGET_THRESHOLD = Decimal("450759.08")
+_ESS_WORKDAY_THRESHOLD = Decimal("500")
+_SPECIAL_WORK_RE = re.compile(
+    r"\b(?:tunel(?:es)?|galeria(?:s)?|conduccion(?:es)?\s+subterranea(?:s)?|presa(?:s)?)\b",
+)
+
+
+@dataclass(frozen=True)
+class StudyCriteria:
+    """Valores estimados y criterios cumplidos para clasificar el estudio preventivo."""
+
+    criterion_1_met: bool
+    criterion_2_met: bool
+    criterion_3_met: bool
+    criterion_4_met: bool
+    contract_budget: Decimal
+    duration_days: int
+    peak_workers: Decimal
+    worker_days: Decimal
+
+    @property
+    def fulfilled(self) -> tuple[bool, bool, bool, bool]:
+        """Devuelve los cuatro estados en el orden legal del artículo 4.1."""
+        return (
+            self.criterion_1_met, self.criterion_2_met,
+            self.criterion_3_met, self.criterion_4_met,
+        )
+
+    @property
+    def special_work(self) -> bool:
+        """Indica si el presupuesto describe uno de los tipos especiales de obra."""
+        return self.criterion_4_met
+
+    @property
+    def requires_full_study(self) -> bool:
+        """Indica si se cumple al menos uno de los criterios del artículo 4.1."""
+        return any(self.fulfilled)
+
+
+def _normalized_text(value: str) -> str:
+    """Normaliza tildes para detectar tipos de obra en sus descripciones."""
+    return unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii").casefold()
+
+
+def evaluate_study_criteria(app: BudgetApp) -> StudyCriteria:
+    """Evalúa los criterios automáticos del artículo 4.1 con el presupuesto y plan actuales."""
+    items = app.budget_items
+    pem = sum((Decimal(str(item.import_total)) for item in items), Decimal())
+    contract_budget = budget_totals(float(pem), app.report_settings)["total"]
+
+    params = PlanParams()
+    activities = build_activities(items, app._chapter_title)
+    apply_saved_plan_state(params, activities, app.planning_state)
+    schedule(activities, params)
+    hours_per_day = Decimal(str(params.hours_per_day))
+    if not hours_per_day.is_finite() or hours_per_day <= 0:
+        raise ValueError("La jornada de la planificación debe ser positiva para evaluar Seguridad y Salud.")
+
+    worker_days = Decimal()
+    daily_workers: dict[int, Decimal] = {}
+    for activity in activities:
+        labor_hours = Decimal(str(activity.quantity)) * Decimal(str(activity.rendimiento))
+        if not labor_hours.is_finite():
+            raise ValueError("El rendimiento de mano de obra contiene un valor no válido.")
+        labor_hours = max(Decimal(), labor_hours)
+        worker_days += labor_hours / hours_per_day
+        active_days = activity.finish_offset - activity.start_offset
+        if active_days > 0 and labor_hours:
+            workers_per_day = max(
+                Decimal(max(1, activity.teams)),
+                labor_hours / Decimal(active_days) / hours_per_day,
+            ).to_integral_value(rounding=ROUND_CEILING)
+            for day in range(activity.start_offset, activity.finish_offset):
+                daily_workers[day] = daily_workers.get(day, Decimal()) + workers_per_day
+
+    duration_days = max((activity.finish_offset for activity in activities), default=0)
+    peak_workers = max(daily_workers.values(), default=Decimal(1) if activities else Decimal())
+    project_text = " ".join(
+        [app._project_title()]
+        + [
+            " ".join((app._chapter_title(item.chapter), item.summary, item.text))
+            for item in items
+        ]
+    )
+    special_work = bool(_SPECIAL_WORK_RE.search(_normalized_text(project_text)))
+    fulfilled = (
+        contract_budget > _ESS_BUDGET_THRESHOLD,
+        duration_days > 30 and peak_workers > 20,
+        worker_days > _ESS_WORKDAY_THRESHOLD,
+        special_work,
+    )
+    return StudyCriteria(
+        *fulfilled, contract_budget, duration_days, peak_workers, worker_days,
+    )
 
 
 @dataclass
@@ -77,14 +178,44 @@ def _decimal(value: object) -> Decimal:
     return Decimal(str(value).replace(",", "."))
 
 
+def _format_decimal(value: Decimal) -> str:
+    """Formatea una magnitud con separadores decimales españoles."""
+    return f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _format_euros(value: Decimal) -> str:
+    """Formatea un importe en euros."""
+    return f"{_format_decimal(value)} €"
+
+
+def _study_criteria_values(value: object) -> tuple[bool, bool, bool, bool] | None:
+    """Valida la selección persistida de los cuatro criterios legales."""
+    if value is None:
+        return None
+    keys = ("criterion_1_met", "criterion_2_met", "criterion_3_met", "criterion_4_met")
+    if isinstance(value, dict):
+        if any(type(value.get(key)) is not bool for key in keys):
+            raise ValueError("La selección de criterios de Seguridad y Salud no es válida.")
+        values = tuple(value[key] for key in keys)
+    elif isinstance(value, (list, tuple)) and len(value) == 4 and all(
+        type(item) is bool for item in value
+    ):
+        values = tuple(value)
+    else:
+        raise ValueError("La selección de criterios de Seguridad y Salud no es válida.")
+    return values
+
+
 def serialize_state(
     lines: list[SafetyLine], percentage: Decimal, *, centros_asistenciales: str = "",
     centros_asistenciales_modo: str = "texto",
     centros_asistenciales_texto: str | None = None,
     centros_asistenciales_datos: list[dict[str, str]] | None = None,
+    study_criteria: tuple[bool, bool, bool, bool] | list[bool] | dict[str, bool] | None = None,
+    external_conditions: dict[str, dict[str, str]] | None = None,
 ) -> dict:
     """Conserva la revisión, sus partidas y la información de centros asistenciales."""
-    return {
+    state = {
         "percentage": str(percentage),
         "centros_asistenciales": centros_asistenciales,
         "centros_asistenciales_modo": centros_asistenciales_modo,
@@ -100,12 +231,22 @@ def serialize_state(
             for line in lines
         ],
     }
+    criteria = _study_criteria_values(study_criteria)
+    if external_conditions is not None:
+        state["external_conditions"] = restore_external_conditions(external_conditions)
+    if criteria is not None:
+        state["study_criteria"] = {
+            f"criterion_{index}_met": value for index, value in enumerate(criteria, start=1)
+        }
+    return state
 
 
 def restore_state(data: object) -> tuple[list[SafetyLine], Decimal]:
     """Valida la revisión JSON sin consultar la matriz ni recalcular el presupuesto."""
     if not isinstance(data, dict) or not isinstance(data.get("lines"), list):
         raise ValueError("Los datos de Seguridad y Salud no contienen una revisión válida.")
+    _study_criteria_values(data.get("study_criteria"))
+    restore_external_conditions(data.get("external_conditions"))
     if ("centros_asistenciales" in data
             and not isinstance(data["centros_asistenciales"], str)):
         raise ValueError("Los centros asistenciales deben ser texto.")
@@ -164,9 +305,15 @@ def synchronize_budget(
     centros_asistenciales_modo: str = "texto",
     centros_asistenciales_texto: str | None = None,
     centros_asistenciales_datos: list[dict[str, str]] | None = None,
+    study_criteria: tuple[bool, bool, bool, bool] | None = None,
+    external_conditions: dict[str, dict[str, str]] | None = None,
 ) -> None:
     """Sustituye exclusivamente las partidas SS generadas por la revisión aceptada."""
     from bc3_gui import MeasurementLine, ProjectItem
+    conditions = restore_external_conditions(
+        external_conditions if external_conditions is not None
+        else getattr(app, "safety_health_state", {}).get("external_conditions")
+    )
 
     if not lines:
         raise ValueError("Selecciona al menos una partida de Seguridad y Salud.")
@@ -184,14 +331,32 @@ def synchronize_budget(
     target = (base * percentage / 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     if total_weight <= 0:
         raise ValueError("La propuesta no contiene pesos válidos.")
-    chapter = next((item.chapter for item in app.budget_items if item.source.startswith(SAFETY_BUDGET_SOURCE)), "SS#")
-    if chapter == "SS#":
-        used = set(app.chapter_order) | {item.chapter for item in app.budget_items}
-        suffix = 2
-        while chapter in used:
-            chapter = f"SS{suffix}#"
-            suffix += 1
-    app.budget_items[:] = [item for item in app.budget_items if not item.source.startswith(SAFETY_BUDGET_SOURCE)]
+    previous_items = [
+        item for item in app.budget_items if item.source.startswith(SAFETY_BUDGET_SOURCE)
+    ]
+    chapter = next(
+        (item.chapter for item in previous_items if _chapter_number(item.chapter) is not None),
+        None,
+    )
+    if chapter is None:
+        used_chapters = set(app.chapter_order) | {
+            item.chapter for item in app.budget_items
+        } | set(app.chapter_titles)
+        next_number = max(
+            (_chapter_number(code) or 0 for code in used_chapters), default=0,
+        ) + 1
+        chapter = f"CAP.{next_number:02d}#"
+    previous_chapters = {item.chapter for item in previous_items}
+    remaining_items = [
+        item for item in app.budget_items if not item.source.startswith(SAFETY_BUDGET_SOURCE)
+    ]
+    app.budget_items[:] = remaining_items
+    for previous_chapter in previous_chapters - {chapter}:
+        if not any(item.chapter == previous_chapter for item in remaining_items):
+            app.chapter_order[:] = [
+                code for code in app.chapter_order if code != previous_chapter
+            ]
+            app.chapter_titles.pop(previous_chapter, None)
     for line in selected:
         amount = target * line.weight / total_weight
         quantity = (amount / line.price).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
@@ -214,69 +379,38 @@ def synchronize_budget(
         centros_asistenciales_modo=centros_asistenciales_modo,
         centros_asistenciales_texto=centros_asistenciales_texto,
         centros_asistenciales_datos=centros_asistenciales_datos,
+        study_criteria=study_criteria,
+        external_conditions=conditions or None,
     )
     app.refresh_budget_tree()
     app._mark_dirty()
 
 
-def write_report(app: BudgetApp, target: Path) -> None:
-    """Genera en PDF el presupuesto con mediciones del capítulo SS."""
-    from reportlab.lib.pagesizes import A4
-    from reportlab.platypus import SimpleDocTemplate
-    from bc3_gui import currency_label, fmt_number, format_chapter_code
-    from report_layout import CONTENT_WIDTH, LEFT_MARGIN, RIGHT_MARGIN, ReportLayout, report_project_label
+def _chapter_number(code: str) -> int | None:
+    """Extrae el numero de un codigo de capitulo para mantener la secuencia CAP."""
+    normalized = code.rstrip("#").replace(" ", "").strip()
+    match = re.fullmatch(r"(?:CAP\.?)?(\d+)[A-Z0-9]*", normalized, re.IGNORECASE)
+    return int(match.group(1)) if match else None
 
-    items = [item for item in app.budget_items if item.source.startswith(SAFETY_BUDGET_SOURCE)]
-    if not items:
-        raise ValueError("Crea primero el capítulo de Seguridad y Salud para generar su informe.")
-    chapter = items[0].chapter
-    layout = ReportLayout(
-        template_path=app.report_settings.template_path,
-        expediente=app.report_settings.expediente,
-        template_title=app._project_title(),
-    )
-    title = "PRESUPUESTO DE SEGURIDAD Y SALUD"
-    project = report_project_label(
-        app._project_title(), currency_label(app.report_settings.currency, app.report_settings.custom_currency)
-    )
-    budget_headers = ("CÓDIGO", "UD.", "RESUMEN", "CANTIDAD", "PRECIO", "IMPORTE")
-    budget_ratios = (50, 20, CONTENT_WIDTH - 250, 50, 60, 70)
-    money = lambda value: fmt_number(float(Decimal(str(value)).quantize(Decimal("0.01"))))
-    rows = [
-        (item.code, item.unit, item.summary, fmt_number(item.measurement, 3),
-         money(item.unit_price), money(item.import_total))
-        for item in items
-    ]
-    total = sum((Decimal(str(item.import_total)) for item in items), Decimal())
-    story = [
-        layout.chapter(format_chapter_code(chapter), app._chapter_title(chapter)),
-        layout.table(budget_headers, rows, budget_ratios),
-        layout.total("TOTAL SEGURIDAD Y SALUD", money(total)),
-    ]
-    document = SimpleDocTemplate(
-        str(target), pagesize=A4, leftMargin=LEFT_MARGIN, rightMargin=RIGHT_MARGIN,
-        topMargin=layout.top_margin(title, project, budget_headers, budget_ratios),
-        bottomMargin=layout.bottom_margin(), title=title, author=app.report_settings.author,
-    )
-    document.build(
-        story,
-        onFirstPage=lambda canvas, doc: layout.header(
-            canvas, doc, title, project, column_headers=budget_headers, ratios=budget_ratios
-        ),
-        onLaterPages=lambda canvas, doc: layout.header(canvas, doc, title, project),
-    )
+
+def write_study_report(app: BudgetApp, target: Path) -> None:
+    """Genera el Estudio de Seguridad y Salud completo en el formato configurado."""
+    from .study_report import write_study_report as write
+
+    write(app, target)
 
 
 class SafetyHealthWindow(tk.Toplevel):
-    """Permite revisar las partidas sugeridas antes de incorporarlas al presupuesto."""
+    """Muestra criterios del estudio, información básica y acceso a la propuesta de unidades."""
     def __init__(self, master: tk.Misc, app: BudgetApp):
-        """Carga las propuestas y construye los controles para revisar su inclusión."""
+        """Calcula estimaciones y permite guardar la selección de los criterios legales."""
         super().__init__(master)
         self.app = app
         self.title("Seguridad y salud")
-        self.geometry("1100x800")
-        self.minsize(950, 700)
-        self.library_editor: LibraryEditor | None = None
+        self.geometry("1100x760")
+        self.minsize(950, 650)
+        self._proposal_window: SafetyProposalWindow | None = None
+        self._conditions_window: tk.Toplevel | None = None
         try:
             if app.safety_health_state:
                 self.lines, percentage = restore_state(app.safety_health_state)
@@ -298,11 +432,20 @@ class SafetyHealthWindow(tk.Toplevel):
                 if not generated:
                     self.lines = proposed_lines(app.budget_items)
                 percentage = Decimal(str(app.report_settings.safety_health_percentage))
+            self.study_criteria = evaluate_study_criteria(app)
+            saved_criteria = _study_criteria_values(
+                app.safety_health_state.get("study_criteria")
+                if isinstance(app.safety_health_state, dict) else None
+            )
+            restore_external_conditions(app.safety_health_state.get("external_conditions"))
         except ValueError as exc:
             messagebox.showerror("Seguridad y salud", str(exc), parent=self)
             self.after_idle(self.destroy)
             return
+        self._stored_percentage = percentage
         self.percentage = tk.StringVar(value=str(percentage))
+        self.study_criteria_selection = saved_criteria or self.study_criteria.fulfilled
+        self._build_study_criteria()
         basics = ttk.LabelFrame(
             self, text="Información básica del Estudio de Seguridad y Salud", padding=8,
         )
@@ -327,6 +470,193 @@ class SafetyHealthWindow(tk.Toplevel):
         self.centers_editor = CareCentersEditor(basics, app.safety_health_state)
         self.centers_editor.pack(fill="x", pady=(4, 0))
         self.centers_text = self.centers_editor.text
+        actions = ttk.Frame(self, padding=12)
+        actions.pack(fill="x")
+        ttk.Button(
+            actions, text="Condicionantes externos...", command=self.open_external_conditions,
+        ).pack(side="left")
+        ttk.Button(
+            actions, text="Revisar propuesta de unidades de Seguridad y Salud...",
+            command=self.open_proposal,
+        ).pack(side="right")
+        localize_widget_tree(self)
+
+    def _build_study_criteria(self) -> None:
+        """Muestra los criterios legales evaluados con los datos del proyecto."""
+        assessment = self.study_criteria
+        criteria = (
+            (
+                assessment.fulfilled[0],
+                translate(
+                    "Presupuesto de ejecución por contrata con IVA > 450.759,08 €: {amount}."
+                ).format(amount=_format_euros(assessment.contract_budget)),
+            ),
+            (
+                assessment.fulfilled[1],
+                translate(
+                    "Duración > 30 días laborables y más de 20 trabajadores simultáneos: "
+                    "{days} días; máximo estimado {workers} trabajadores/día."
+                ).format(
+                    days=assessment.duration_days,
+                    workers=_format_decimal(assessment.peak_workers),
+                ),
+            ),
+            (
+                assessment.fulfilled[2],
+                translate("Volumen estimado de mano de obra > 500 jornadas: {days} jornadas.").format(
+                    days=_format_decimal(assessment.worker_days),
+                ),
+            ),
+            (
+                assessment.fulfilled[3],
+                translate(
+                    "Obra de túneles, galerías, conducciones subterráneas o presas: {detected}."
+                ).format(detected=translate("Sí" if assessment.special_work else "No")),
+            ),
+        )
+        criteria_frame = ttk.LabelFrame(
+            self, text=translate("Criterios del artículo 4.1 de la LPRL"), padding=8,
+        )
+        criteria_frame.pack(fill="x", padx=12, pady=(8, 4))
+        self.study_criteria_vars: list[tk.BooleanVar] = []
+        self.study_criteria_checkboxes: list[ttk.Checkbutton] = []
+        for index, (_, text) in enumerate(criteria):
+            fulfilled = self.study_criteria_selection[index]
+            variable = tk.BooleanVar(self, value=fulfilled)
+            self.study_criteria_vars.append(variable)
+            row = ttk.Frame(criteria_frame)
+            row.pack(fill="x", anchor="w", pady=1)
+            checkbox = ttk.Checkbutton(
+                row, variable=variable, command=self._criteria_changed,
+            )
+            self.study_criteria_checkboxes.append(checkbox)
+            checkbox.pack(
+                side="left", anchor="n",
+            )
+            label = ttk.Label(row, text=text, wraplength=1040, justify="left", cursor="hand2")
+            label.pack(
+                side="left", fill="x", expand=True,
+            )
+            label.bind(
+                "<Button-1>",
+                lambda event, value=variable: self._toggle_study_criterion(value),
+            )
+
+        self.study_result_var = tk.StringVar(self)
+        ttk.Label(criteria_frame, textvariable=self.study_result_var, font=("Segoe UI", 10, "bold")).pack(
+            anchor="w", pady=(5, 0),
+        )
+        self._update_study_result()
+        ttk.Label(
+            criteria_frame,
+            text=translate(
+                "Estimación automática basada en los rendimientos de mano de obra del presupuesto "
+                "y la planificación guardada. La detección del tipo de obra se basa en sus descripciones. "
+                "Comprueba especialmente la concurrencia real de trabajadores. La selección de casillas es editable."
+            ),
+            wraplength=1040, justify="left",
+        ).pack(anchor="w", pady=(2, 0))
+
+    @property
+    def selected_study_criteria(self) -> tuple[bool, bool, bool, bool]:
+        """Devuelve las cuatro selecciones editables en su orden legal."""
+        return tuple(variable.get() for variable in self.study_criteria_vars)
+
+    def _toggle_study_criterion(self, variable: tk.BooleanVar) -> str:
+        """Alterna el criterio al pulsar su descripción."""
+        variable.set(not variable.get())
+        self._criteria_changed()
+        return "break"
+
+    def _update_study_result(self) -> None:
+        """Actualiza el tipo de estudio derivado de las selecciones del usuario."""
+        self.study_result_var.set(translate(
+            "Según los criterios marcados, procede un Estudio de Seguridad y Salud."
+            if any(self.selected_study_criteria)
+            else "Según los criterios marcados, procede un Estudio Básico de Seguridad y Salud."
+        ))
+
+    def _criteria_changed(self) -> None:
+        """Persiste las selecciones editadas para usarlas en el texto preventivo posterior."""
+        self._update_study_result()
+        state = self.app.safety_health_state
+        if not state:
+            state = serialize_state(self.lines, self._stored_percentage)
+        else:
+            state = dict(state)
+        state["study_criteria"] = {
+            f"criterion_{index}_met": value
+            for index, value in enumerate(self.selected_study_criteria, start=1)
+        }
+        self.app.safety_health_state = state
+        self.app._mark_dirty()
+
+    def open_proposal(self) -> SafetyProposalWindow:
+        """Abre la ventana separada de propuesta y mediciones de unidades preventivas."""
+        if self._proposal_window is not None and self._proposal_window.winfo_exists():
+            self._proposal_window.lift()
+            return self._proposal_window
+        self._proposal_window = SafetyProposalWindow(self)
+        return self._proposal_window
+
+    def open_external_conditions(self) -> tk.Toplevel:
+        """Abre la revisión de condicionantes sin modificar el presupuesto."""
+        if self._conditions_window is not None and self._conditions_window.winfo_exists():
+            self._conditions_window.lift()
+            return self._conditions_window
+        window = tk.Toplevel(self)
+        self._conditions_window = window
+        window.title("Condicionantes externos")
+        window.transient(self)
+        editor = ExternalConditionsEditor(
+            window, self.app.safety_health_state.get("external_conditions"),
+        )
+        editor.pack(fill="both", expand=True)
+
+        def save_conditions() -> None:
+            """Guarda la revisión independiente de las partidas preventivas."""
+            try:
+                conditions = editor.collect_state()
+            except ValueError as exc:
+                messagebox.showerror("Seguridad y salud", str(exc), parent=window)
+                return
+            state = dict(self.app.safety_health_state) or serialize_state(
+                self.lines, self._stored_percentage,
+            )
+            state["external_conditions"] = conditions
+            self.app.safety_health_state = state
+            self.app._mark_dirty()
+            window.destroy()
+
+        ttk.Button(
+            window, text="Guardar condicionantes", command=save_conditions,
+        ).pack(anchor="e", padx=12, pady=(0, 12))
+        localize_widget_tree(window)
+        return window
+
+    def open_care_centers_registry(self, event=None) -> None:
+        """Abre el registro oficial andaluz de centros asistenciales."""
+        self.app._open_web_page(
+            CARE_CENTERS_URL,
+            translate("Centros Asistenciales"),
+            translate("Registro SICESS abierto en el navegador."),
+        )
+
+
+class SafetyProposalWindow(tk.Toplevel):
+    """Permite revisar unidades de Seguridad y Salud antes de incorporarlas al presupuesto."""
+
+    def __init__(self, owner: SafetyHealthWindow):
+        """Crea una ventana secundaria con la propuesta de unidades."""
+        super().__init__(owner)
+        self.owner = owner
+        self.app = owner.app
+        self.lines = owner.lines
+        self.percentage = owner.percentage
+        self.title("Propuesta de unidades de Seguridad y Salud")
+        self.geometry("1100x700")
+        self.minsize(950, 600)
+        self.library_editor: LibraryEditor | None = None
         header = ttk.Frame(self, padding=(12, 12, 12, 4))
         header.pack(fill="x")
         ttk.Label(header, text="Seguridad y salud — propuesta revisable",
@@ -364,21 +694,13 @@ class SafetyHealthWindow(tk.Toplevel):
         self.tree.bind("<space>", self._toggle)
         buttons = ttk.Frame(self, padding=12)
         buttons.pack(fill="x")
-        ttk.Button(buttons, text="Cancelar", command=self.destroy).pack(side="right")
+        ttk.Button(buttons, text="Cerrar", command=self.destroy).pack(side="right")
         ttk.Button(buttons, text="Aceptar y crear capítulo", command=self.accept,
                    style="Accent.TButton").pack(side="right", padx=8)
-        ttk.Button(buttons, text="Generar informe del capítulo", command=self.generate_report).pack(
+        ttk.Button(buttons, text="Generar estudio completo", command=self.generate_report).pack(
             side="left"
         )
         localize_widget_tree(self)
-
-    def open_care_centers_registry(self, event=None) -> None:
-        """Abre el registro oficial andaluz de centros asistenciales."""
-        self.app._open_web_page(
-            CARE_CENTERS_URL,
-            translate("Centros Asistenciales"),
-            translate("Registro SICESS abierto en el navegador."),
-        )
 
     def open_library_editor(self) -> None:
         """Abre el editor de fichas de Seguridad y Salud."""
@@ -436,27 +758,39 @@ class SafetyHealthWindow(tk.Toplevel):
                 raise ValueError("El porcentaje debe estar entre 0 y 100.")
             synchronize_budget(
                 self.app, self.lines, percentage,
-                **self.centers_editor.collect_state(),
+                **self.owner.centers_editor.collect_state(),
+                study_criteria=self.owner.selected_study_criteria,
             )
         except ValueError as exc:
             messagebox.showerror("Seguridad y salud", str(exc), parent=self)
             return False
+        self.owner._stored_percentage = percentage
         self.app._set_status("Capítulo Seguridad y Salud creado; revisa sus mediciones antes de guardar.")
         return True
 
     def generate_report(self) -> None:
-        """Crea el capítulo si es necesario y genera su presupuesto con mediciones."""
+        """Crea el capítulo integrado y genera el estudio completo desde las plantillas."""
         if not self._create_chapter():
             return
+        output_format = self.app.report_settings.output_format.lower()
+        extension = ".odt" if output_format == "odt" else ".pdf"
+        file_type = ("Documento ODT", "*.odt") if extension == ".odt" else ("Documento PDF", "*.pdf")
         target = filedialog.asksaveasfilename(
-            parent=self, title="Generar informe de Seguridad y Salud",
-            initialfile="Presupuesto Seguridad y Salud.pdf", defaultextension=".pdf",
-            filetypes=[("Documento PDF", "*.pdf")],
+            parent=self, title="Generar Estudio de Seguridad y Salud",
+            initialfile=f"Estudio de Seguridad y Salud{extension}",
+            defaultextension=extension, filetypes=[file_type],
         )
         if not target:
             return
         try:
-            write_report(self.app, Path(target).with_suffix(".pdf"))
+            report_path = Path(target).with_suffix(extension)
+            write_study_report(self.app, report_path)
         except (ImportError, OSError, ValueError) as exc:
             messagebox.showerror("No se pudo generar el informe", str(exc), parent=self)
             return
+        self.app._set_status(f"Estudio de Seguridad y Salud guardado en {report_path}")
+        messagebox.showinfo(
+            "Seguridad y salud",
+            f"Estudio completo generado:\n{report_path}",
+            parent=self,
+        )

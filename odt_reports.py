@@ -445,10 +445,11 @@ class _OdtReport:
         page_layout = ET.SubElement(automatic, _tag("style:page-layout"), {
             _tag("style:name"): "PageLayout",
         })
+        landscape = bool(self.layout and self.layout.landscape)
         ET.SubElement(page_layout, _tag("style:page-layout-properties"), {
-            _tag("fo:page-width"): "21cm",
-            _tag("fo:page-height"): "29.7cm",
-            _tag("style:print-orientation"): "portrait",
+            _tag("fo:page-width"): "29.7cm" if landscape else "21cm",
+            _tag("fo:page-height"): "21cm" if landscape else "29.7cm",
+            _tag("style:print-orientation"): "landscape" if landscape else "portrait",
             _tag("fo:margin-left"): f"{LEFT_MARGIN}pt",
             _tag("fo:margin-right"): f"{RIGHT_MARGIN}pt",
             _tag("fo:margin-top"): "2.5cm",
@@ -699,7 +700,8 @@ class _OdtReport:
 
 def _new_report(
     title: str, project_title: str, settings: ReportSettings, *, certification=False,
-    repeat_titles: bool = True, footer_title: str = "",
+    repeat_titles: bool = True, footer_title: str = "", landscape: bool = False,
+    template_title: str | None = None,
 ):
     """Crea un documento y prepara la identidad visual correspondiente al informe."""
     from report_layout import (
@@ -720,7 +722,9 @@ def _new_report(
         layout=ReportLayout(
             certification=certification, template_path=settings.template_path,
             repeat_titles=repeat_titles, footer_title=footer_title,
-            expediente=settings.expediente, template_title=project_title,
+            expediente=settings.expediente,
+            template_title=project_title if template_title is None else template_title,
+            landscape=landscape,
         ),
     )
     document.template_borders = _read_report_template_borders(settings.template_path)

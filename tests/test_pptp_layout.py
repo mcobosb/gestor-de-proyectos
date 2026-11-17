@@ -302,7 +302,7 @@ class PptpLayoutTests(unittest.TestCase):
         """El marcador de capitulo tambien admite la tilde del texto de plantilla."""
         footer = ET.fromstring(
             f'<s:footer xmlns:s="{STYLE}" xmlns:t="{TEXT}"><t:p>'
-            "{{capítulo}} / {{no_pagina}}</t:p></s:footer>",
+            "{{capítulo}} / {{no_página}}</t:p></s:footer>",
         )
         result = replace_footer_fields(footer, TITLE)
         self.assertEqual("".join(result.itertext()), f"{TITLE} / 1")

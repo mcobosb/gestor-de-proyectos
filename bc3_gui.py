@@ -29,6 +29,9 @@ from ui_theme import COLORS, apply_theme
 from budget_reports import REPORT_NAMES, ReportSettings, write_pdf
 from odt_reports import write_report_odt
 from tool_loader import discover_tools
+from municipalities import load_municipalities
+from cpv_catalog import load_cpv_codes
+from catalog_selection import CatalogOption, CatalogSelection
 
 
 APPLICATION_NAME = "Gestor de Proyectos"
@@ -3420,6 +3423,14 @@ class BudgetApp:
 
     def open_report_settings(self) -> None:
         """Abre la configuración del título del proyecto, informes e idioma."""
+        try:
+            municipality_catalog = load_municipalities()
+            municipality_codes = [item.code for item in self.report_settings.municipalities]
+            cpv_catalog = load_cpv_codes()
+            cpv_codes = [entry.code for entry in self.report_settings.cpv_entries]
+        except ValueError as exc:
+            messagebox.showerror("Configuración", str(exc), parent=self.root)
+            return
         window = tk.Toplevel(self.root)
         self._project_windows.append(window)
         window.title("Configuración de informes")
@@ -3429,8 +3440,46 @@ class BudgetApp:
         notebook.pack(fill="both", expand=True)
         reports_tab = ttk.Frame(notebook, padding=8)
         language_tab = ttk.Frame(notebook, padding=8)
+        location_tab = CatalogSelection(
+            notebook,
+            options=tuple(CatalogOption(
+                item.code, item.label, (item.name, item.province, item.autonomous_community),
+                item.name, (item.name,),
+            ) for item in municipality_catalog),
+            selected_codes=municipality_codes,
+            columns=(
+                ("municipality", "Municipio", 220),
+                ("province", "Provincia", 160),
+                ("community", "Comunidad autónoma", 220),
+            ),
+            title="Municipios de la obra",
+            add_label="Añadir municipio",
+            help_text="Escribe para filtrar el desplegable, selecciona un municipio y pulsa "
+            "Añadir municipio. Puedes añadir varios. La provincia y la comunidad autónoma "
+            "se completan automáticamente desde CMUN y CPRO.",
+            invalid_message="Selecciona un municipio del desplegable; si hay varios con el mismo "
+            "nombre, elige también su provincia.",
+        )
+        cpv_tab = CatalogSelection(
+            notebook,
+            options=tuple(CatalogOption(
+                entry.code, entry.label, (entry.code, entry.description),
+                f"{entry.code} {entry.description}", (entry.code, entry.code[:8]),
+            ) for entry in cpv_catalog),
+            selected_codes=cpv_codes,
+            columns=(("code", "Código CPV", 120), ("description", "Descripción", 480)),
+            title="Códigos CPV de la obra (capítulo 45)",
+            add_label="Añadir CPV",
+            help_text="Escribe un código o una descripción para filtrar el capítulo 45 "
+            "(Trabajos de construcción). Puedes añadir varios códigos CPV y quitar los "
+            "seleccionados antes de guardar.",
+            invalid_message="Selecciona un código CPV del capítulo 45 en el desplegable "
+            "o escribe su código completo.",
+        )
         notebook.add(reports_tab, text="Informes")
         notebook.add(language_tab, text="Idioma")
+        notebook.add(location_tab, text="Emplazamiento")
+        notebook.add(cpv_tab, text="CPV")
         project_section = ttk.LabelFrame(reports_tab, text="Proyecto", padding=8)
         project_section.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 8))
         project_section.columnconfigure(1, weight=1)
@@ -3565,7 +3614,13 @@ class BudgetApp:
 
         def save_reports():
             """Guarda los valores del formulario y cierra el diálogo si son válidos."""
-            data = {key: variable.get() for key, variable in variables.items()}
+            for selection_tab in (location_tab, cpv_tab):
+                if not selection_tab.confirm_pending():
+                    notebook.select(selection_tab)
+                    return
+            data: dict[str, object] = {key: variable.get() for key, variable in variables.items()}
+            data["municipality_codes"] = location_tab.codes
+            data["cpv_codes"] = cpv_tab.codes
             data["project_title"] = project_title_var.get()
             data["output_format"] = str(data["output_format"]).lower()
             data["currency"] = currency_options[currency_selector.get()]
@@ -3589,6 +3644,13 @@ class BudgetApp:
             language_tab, text="Guardar idioma", style="Accent.TButton",
             command=save_language,
         ).grid(row=2, column=1, sticky="e", pady=(8, 0))
+        ttk.Button(
+            location_tab, text="Guardar emplazamiento", style="Accent.TButton",
+            command=save_reports,
+        ).grid(row=5, column=1, sticky="e", pady=(8, 0))
+        ttk.Button(
+            cpv_tab, text="Guardar CPV", style="Accent.TButton", command=save_reports,
+        ).grid(row=5, column=1, sticky="e", pady=(8, 0))
         localize_widget_tree(window)
         window.grab_set()
 

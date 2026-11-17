@@ -155,7 +155,7 @@ class LibraryEditorTests(unittest.TestCase):
 
     def test_safety_highlights_matching_units_and_materials_but_not_personnel(self):
         """Resolve preventive sheets by work code and resources by budget components."""
-        from tools.safety_health import SafetyHealthWindow
+        from tools.safety_health import SafetyProposalWindow
 
         members = [
             "UNI/grupo/FICHA_ESS_01UPP.md", "UNI/otro/FICHA_ESS_15CP.md",
@@ -174,12 +174,12 @@ class LibraryEditorTests(unittest.TestCase):
             patch("tools._library_editor.library_members", return_value=members),
             patch("tools._library_editor.LibraryEditor") as editor,
         ):
-            SafetyHealthWindow.open_library_editor(window)
+            SafetyProposalWindow.open_library_editor(window)
             self.assertEqual(
                 editor.call_args.kwargs["used_members"], {members[0], members[2], members[3]},
             )
             app.budget_items = []
-            SafetyHealthWindow.open_library_editor(window)
+            SafetyProposalWindow.open_library_editor(window)
         editor.return_value.highlight_used.assert_called_once_with(set())
 
 

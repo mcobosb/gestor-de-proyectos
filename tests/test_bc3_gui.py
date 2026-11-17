@@ -1752,9 +1752,10 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.app.open_safety_health()
         window = self.app._safety_health_window
         self.assertEqual(self.app._project_payload(), before)
-        window.percentage.set("3")
+        proposal = window.open_proposal()
+        proposal.percentage.set("3")
         with patch("bc3_gui.messagebox.showwarning") as warning:
-            self.assertTrue(window._create_chapter())
+            self.assertTrue(proposal._create_chapter())
         warning.assert_not_called()
         generated = [item for item in self.app.budget_items if item.source.startswith("SS:")]
         self.assertEqual(len(generated), 1)
@@ -1816,9 +1817,18 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
             loaded = self.app._capture_project_state()
             self.app.open_safety_health()
             window = self.app._safety_health_window
-            self.assertEqual(window.percentage.get(), "3.5")
+            self.assertEqual(len(window.study_criteria_checkboxes), 4)
+            self.assertEqual(
+                tuple(variable.get() for variable in window.study_criteria_vars),
+                window.study_criteria.fulfilled,
+            )
+            self.assertTrue(all(
+                not checkbox.instate(["disabled"]) for checkbox in window.study_criteria_checkboxes
+            ))
+            proposal = window.open_proposal()
+            self.assertEqual(proposal.percentage.get(), "3.5")
             self.assertEqual(window.lines, lines)
-            self.assertEqual(window.tree.set("B", "selected"), "")
+            self.assertEqual(proposal.tree.set("B", "selected"), "")
             self.assertEqual(
                 window.centers_text.get("1.0", "end-1c"),
                 "Hospital General\nCentro de Salud",
@@ -1836,6 +1846,26 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.assertEqual(self.app._project_payload()["items"], before["items"])
         self.assertEqual(self.app._capture_project_state(), loaded)
         self.assertFalse(self.app.is_dirty)
+
+    def test_safety_criteria_can_be_overridden_and_saved_in_project(self):
+        """Persist checkbox overrides and restore them independently of estimates."""
+        self.app.budget_items = [ProjectItem("P", "01#", "ud", "Obra", unit_price=1000)]
+        self.app.chapter_order = ["01#"]
+        self.app.open_safety_health()
+        window = self.app._safety_health_window
+        self.assertEqual(window.study_criteria.fulfilled, (False, False, False, False))
+        window.study_criteria_checkboxes[0].invoke()
+        self.assertEqual(window.selected_study_criteria, (True, False, False, False))
+        self.assertIn("Estudio de Seguridad y Salud", window.study_result_var.get())
+        self.assertTrue(self.app.safety_health_state["study_criteria"]["criterion_1_met"])
+
+        path = self.directory / "study-criteria.json"
+        self.assertTrue(self.app._write_project_file(path))
+        self.assertTrue(self.app._load_project_file(path))
+        self.app.open_safety_health()
+        restored = self.app._safety_health_window
+        self.assertEqual(restored.study_criteria.fulfilled, (False, False, False, False))
+        self.assertEqual(restored.selected_study_criteria, (True, False, False, False))
 
     def test_sicess_centers_survive_safety_accept_and_project_reload(self):
         """Save structured centers and reopen the same mode without budget mutations."""
@@ -1856,7 +1886,8 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         editor.add_center()
         editor.variables["nombre"].set("Hospital General")
         editor.variables["telefono"].set("123456789")
-        self.assertTrue(self.app._safety_health_window._create_chapter())
+        proposal = self.app._safety_health_window.open_proposal()
+        self.assertTrue(proposal._create_chapter())
         saved = self.app.safety_health_state
         self.assertIn("Teléfono: 957514500", saved["centros_asistenciales"])
         path = self.directory / "sicess.json"
@@ -1868,6 +1899,61 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.assertEqual(self.app._safety_health_window.centers_editor.collect_state(), {
             key: value for key, value in saved.items() if key.startswith("centros_asistenciales")
         })
+
+    def test_external_conditions_are_editable_and_survive_budget_and_project_reload(self):
+        """Guarda texto y aplicabilidad sin asignar automaticamente condiciones pendientes."""
+        from decimal import Decimal
+        from tools.safety_health import SafetyLine
+        from tools.safety_health.external_conditions import ExternalConditionsEditor
+
+        self.app.budget_items = [ProjectItem("BASE", "01#", "ud", "Obra", unit_price=1000)]
+        self.app.chapter_order = ["01#"]
+        self.app.open_safety_health()
+        owner = self.app._safety_health_window
+        dialog = owner.open_external_conditions()
+        editor = next(
+            child for child in dialog.winfo_children() if isinstance(child, ExternalConditionsEditor)
+        )
+        self.assertTrue(all(
+            row["applicability"] == "pending" for row in editor.collect_state().values()
+        ))
+        initial = dict(self.app.safety_health_state)
+        editor.variables["trafico_existente"].set("Sí")
+        dialog.destroy()
+        self.assertEqual(self.app.safety_health_state, initial)
+        dialog = owner.open_external_conditions()
+        editor = next(
+            child for child in dialog.winfo_children() if isinstance(child, ExternalConditionsEditor)
+        )
+        editor.descriptions["trafico_existente"].delete("1.0", "end")
+        editor.descriptions["trafico_existente"].insert("1.0", "Corte de un carril")
+        editor.variables["trafico_existente"].set("Sí")
+        editor.variables["peatones_terceros"].set("No")
+        next(
+            child for child in dialog.winfo_children()
+            if isinstance(child, ttk.Button) and child.cget("text") == "Guardar condicionantes"
+        ).invoke()
+        expected = self.app.safety_health_state["external_conditions"]
+        self.assertEqual(expected["trafico_existente"], {
+            "description": "Corte de un carril", "applicability": "yes",
+        })
+        self.assertTrue(self.app.is_dirty)
+        owner.lines = [SafetyLine(
+            "A", "ud", "Protección", Decimal("12"), Decimal("3"),
+        )]
+        proposal = owner.open_proposal()
+        self.assertTrue(proposal._create_chapter())
+        self.assertEqual(self.app.safety_health_state["external_conditions"], expected)
+        path = self.directory / "condicionantes.json"
+        self.assertTrue(self.app._write_project_file(path))
+        self.assertTrue(self.app._load_project_file(path))
+        self.assertEqual(self.app.safety_health_state["external_conditions"], expected)
+        self.app.open_safety_health()
+        dialog = self.app._safety_health_window.open_external_conditions()
+        restored = next(
+            child for child in dialog.winfo_children() if isinstance(child, ExternalConditionsEditor)
+        )
+        self.assertEqual(restored.collect_state(), expected)
 
     def test_legacy_safety_json_uses_generated_items_without_new_proposal(self):
         """Older project JSON already contains the generated safety chapter and its prices."""
@@ -2642,6 +2728,89 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.assertTrue(self.app._load_project_file(self.app.project_path))
         self.assertEqual(self.app.project_title, "Proyecto editado")
 
+    def test_settings_municipalities_filter_add_remove_and_persist(self):
+        """Filtra al escribir y guarda varios municipios con su relacion territorial."""
+        self.app.project_path = self.directory / "municipios.json"
+        self.app.open_report_settings()
+        window = next(child for child in self.root.winfo_children() if isinstance(child, tk.Toplevel))
+        notebook = next(child for child in window.winfo_children() if isinstance(child, ttk.Notebook))
+        tab = window.nametowidget(notebook.tabs()[2])
+        selector = next(child for child in tab.winfo_children() if isinstance(child, ttk.Combobox))
+        tree = next(child for child in tab.winfo_children() if isinstance(child, ttk.Treeview))
+        buttons = {
+            child.cget("text"): child
+            for child in tab.winfo_children() if isinstance(child, ttk.Button)
+        }
+        selector.set("lUCÉna")
+        options = selector.cget("values")
+        self.assertIn("Lucena (Córdoba)", options)
+        self.assertNotIn("Madrid (Madrid)", options)
+        selector.set("Lucena (Córdoba)")
+        buttons["Añadir municipio"].invoke()
+        self.assertEqual(tree.item("140386", "values"), ("Lucena", "Córdoba", "Andalucía"))
+        selector.set("Lucena (Córdoba)")
+        buttons["Añadir municipio"].invoke()
+        self.assertEqual(len(tree.get_children()), 1)
+        selector.set("Madrid (Madrid)")
+        buttons["Añadir municipio"].invoke()
+        self.assertEqual(len(tree.get_children()), 2)
+        tree.selection_set("140386")
+        buttons["Quitar seleccionados"].invoke()
+        self.assertEqual(tree.get_children(), ("280796",))
+        selector.set("Lucena (Córdoba)")
+        buttons["Guardar emplazamiento"].invoke()
+        self.assertFalse(window.winfo_exists())
+        self.assertEqual(self.app.report_settings.municipality_codes, ["280796", "140386"])
+        payload = json.loads(self.app.project_path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["report_settings"]["municipality_codes"], ["280796", "140386"])
+        self.app.report_settings = ReportSettings()
+        self.assertTrue(self.app._load_project_file(self.app.project_path))
+        self.assertEqual(
+            [item.name for item in self.app.report_settings.municipalities], ["Madrid", "Lucena"],
+        )
+        self.app.open_report_settings()
+        window = next(
+            child for child in self.root.winfo_children()
+            if isinstance(child, tk.Toplevel) and child.winfo_exists()
+        )
+        notebook = next(child for child in window.winfo_children() if isinstance(child, ttk.Notebook))
+        tab = window.nametowidget(notebook.tabs()[2])
+        tree = next(child for child in tab.winfo_children() if isinstance(child, ttk.Treeview))
+        self.assertEqual(tree.get_children(), ("280796", "140386"))
+        window.destroy()
+
+    def test_settings_municipalities_disambiguate_and_do_not_apply_on_close(self):
+        """Exige la provincia de homonimos y permite cancelar la edicion territorial."""
+        self.app.report_settings.municipality_codes = ["140386"]
+        self.app._reset_history()
+        self.app.open_report_settings()
+        window = next(child for child in self.root.winfo_children() if isinstance(child, tk.Toplevel))
+        notebook = next(child for child in window.winfo_children() if isinstance(child, ttk.Notebook))
+        tab = window.nametowidget(notebook.tabs()[2])
+        selector = next(child for child in tab.winfo_children() if isinstance(child, ttk.Combobox))
+        tree = next(child for child in tab.winfo_children() if isinstance(child, ttk.Treeview))
+        buttons = {
+            child.cget("text"): child
+            for child in tab.winfo_children() if isinstance(child, ttk.Button)
+        }
+        selector.set("Cabanes")
+        with patch("bc3_gui.messagebox.showerror") as error:
+            buttons["Añadir municipio"].invoke()
+        error.assert_called_once()
+        selector.set("Municipio inexistente")
+        with patch("bc3_gui.messagebox.showerror") as error:
+            buttons["Guardar emplazamiento"].invoke()
+        error.assert_called_once()
+        self.assertTrue(window.winfo_exists())
+        self.assertFalse(self.app.report_settings_path.exists())
+        selector.set("Madrid (Madrid)")
+        buttons["Añadir municipio"].invoke()
+        tree.selection_set("140386")
+        buttons["Quitar seleccionados"].invoke()
+        window.destroy()
+        self.assertEqual(self.app.report_settings.municipality_codes, ["140386"])
+        self.assertFalse(self.app.is_dirty)
+
     def test_settings_project_title_validation_and_undo(self):
         """Un titulo invalido no cambia datos; una edicion sin JSON es reversible."""
         self.app.project_title = "Anterior"
@@ -2657,6 +2826,88 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
         self.app.undo_last_action()
         self.assertEqual(self.app.project_title, "Anterior")
         self.assertEqual(self.app.project_panel_title.get(), "Proyecto: Anterior")
+        self.assertFalse(self.app.is_dirty)
+
+    def test_settings_cpv_filter_add_remove_and_persist_with_other_settings(self):
+        """Selecciona varios CPV por codigo o descripcion y los restaura desde el proyecto."""
+        self.app.report_settings.municipality_codes = ["140386"]
+        self.app.report_settings.author = "Autor conservado"
+        self.app.project_path = self.directory / "cpv.json"
+        self.app.open_report_settings()
+        window = next(child for child in self.root.winfo_children() if isinstance(child, tk.Toplevel))
+        notebook = next(child for child in window.winfo_children() if isinstance(child, ttk.Notebook))
+        tab = window.nametowidget(notebook.tabs()[3])
+        selector = next(child for child in tab.winfo_children() if isinstance(child, ttk.Combobox))
+        tree = next(child for child in tab.winfo_children() if isinstance(child, ttk.Treeview))
+        buttons = {
+            child.cget("text"): child
+            for child in tab.winfo_children() if isinstance(child, ttk.Button)
+        }
+        selector.set("demOLIcion")
+        options = selector.cget("values")
+        self.assertTrue(any("45111100-9" in option for option in options))
+        self.assertTrue(all(option.startswith("45") for option in options))
+        self.assertFalse(any(option.startswith("45000000-7") for option in options))
+        selector.set("45111100")
+        buttons["Añadir CPV"].invoke()
+        self.assertEqual(
+            tree.item("45111100-9", "values"), ("45111100-9", "Trabajos de demolición"),
+        )
+        selector.set("45111100-9")
+        buttons["Añadir CPV"].invoke()
+        self.assertEqual(tree.get_children(), ("45111100-9",))
+        selector.set("45000000-7")
+        buttons["Añadir CPV"].invoke()
+        tree.selection_set("45111100-9")
+        buttons["Quitar seleccionados"].invoke()
+        self.assertEqual(tree.get_children(), ("45000000-7",))
+        selector.set("45111100-9")
+        buttons["Guardar CPV"].invoke()
+        self.assertFalse(window.winfo_exists())
+        self.assertEqual(self.app.report_settings.cpv_codes, ["45000000-7", "45111100-9"])
+        self.assertEqual(self.app.report_settings.municipality_codes, ["140386"])
+        self.assertEqual(self.app.report_settings.author, "Autor conservado")
+        self.assertEqual(
+            self.app._read_report_settings().cpv_codes, ["45000000-7", "45111100-9"],
+        )
+        self.app.report_settings = ReportSettings()
+        self.assertTrue(self.app._load_project_file(self.app.project_path))
+        self.assertEqual(self.app.report_settings.cpv_codes, ["45000000-7", "45111100-9"])
+        self.app.open_report_settings()
+        window = next(child for child in self.root.winfo_children() if isinstance(child, tk.Toplevel))
+        notebook = next(child for child in window.winfo_children() if isinstance(child, ttk.Notebook))
+        tab = window.nametowidget(notebook.tabs()[3])
+        tree = next(child for child in tab.winfo_children() if isinstance(child, ttk.Treeview))
+        self.assertEqual(tree.get_children(), ("45000000-7", "45111100-9"))
+        window.destroy()
+
+    def test_settings_cpv_reject_other_divisions_and_allow_cancelling(self):
+        """No guarda busquedas invalidas ni aplica cambios al cerrar sin guardar."""
+        self.app.report_settings.cpv_codes = ["45000000-7"]
+        self.app._reset_history()
+        self.app.open_report_settings()
+        window = next(child for child in self.root.winfo_children() if isinstance(child, tk.Toplevel))
+        notebook = next(child for child in window.winfo_children() if isinstance(child, ttk.Notebook))
+        tab = window.nametowidget(notebook.tabs()[3])
+        selector = next(child for child in tab.winfo_children() if isinstance(child, ttk.Combobox))
+        tree = next(child for child in tab.winfo_children() if isinstance(child, ttk.Treeview))
+        buttons = {
+            child.cget("text"): child
+            for child in tab.winfo_children() if isinstance(child, ttk.Button)
+        }
+        selector.set("03000000-1")
+        self.assertEqual(selector.cget("values"), "")
+        with patch("bc3_gui.messagebox.showerror") as error:
+            buttons["Guardar CPV"].invoke()
+        error.assert_called_once()
+        self.assertFalse(self.app.report_settings_path.exists())
+        self.assertTrue(window.winfo_exists())
+        selector.set("45111100-9")
+        buttons["Añadir CPV"].invoke()
+        tree.selection_set("45000000-7")
+        buttons["Quitar seleccionados"].invoke()
+        window.destroy()
+        self.assertEqual(self.app.report_settings.cpv_codes, ["45000000-7"])
         self.assertFalse(self.app.is_dirty)
 
     def test_settings_close_without_saving_keeps_project_title(self):

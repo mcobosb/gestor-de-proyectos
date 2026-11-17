@@ -17,6 +17,9 @@ from .sheet_index import (
     write_odt_index,
 )
 from tools._library_markdown import document_markdown
+from tools._shared.document_layout import (
+    DEFAULT_TOC_DEPTH, number_headings, template_paragraph_styles,
+)
 
 if TYPE_CHECKING:
     from bc3_gui import BudgetApp, ProjectItem
@@ -65,7 +68,6 @@ def duration_price_revision(
         reason = reason + "; además, " + SHORT_DURATION_REASON if reason else SHORT_DURATION_REASON
     return applies, reason
 PENDING_DURATION = "Pendiente de planificación"
-DEFAULT_TOC_DEPTH = 2
 REGULATION_PATTERN = re.compile(
     r"<!--\s*NORMATIVA_UNI\s+(\{[^\n]*\})\s*-->\s*\n([*+-] [^\n]+)",
 )
@@ -689,25 +691,6 @@ def compose(
     return result
 
 
-def number_headings(source: str) -> str:
-    """Numera la jerarquia Markdown sin duplicar la numeracion del texto original."""
-    counters = [0] * 6
-    result = []
-    for line in source.splitlines():
-        match = re.match(r"^(#{1,6})\s+(.+)$", line)
-        if match:
-            level = len(match[1])
-            counters[level - 1] += 1
-            counters[level:] = [0] * (6 - level)
-            for parent in range(level - 1):
-                counters[parent] = max(1, counters[parent])
-            title = re.sub(r"^\d+(?:\.\d+)*\.?\s+", "", match[2]).strip().upper()
-            number = ".".join(str(value) for value in counters[:level])
-            line = f"{match[1]} {number} {title}"
-        result.append(line)
-    return "\n".join(result)
-
-
 def text_blocks(source: str, *, preserve_bold: bool = False) -> list[tuple[int, str]]:
     """Transforma Markdown y conserva niveles de lista junto a titulos y avisos."""
     source = document_markdown(source)
@@ -762,37 +745,6 @@ def bold_runs(text: str) -> list[tuple[str, bool]]:
     if previous < len(text):
         runs.append((text[previous:], False))
     return runs
-
-
-def template_paragraph_styles(template: dict) -> dict[str, str]:
-    """Localiza estilos de cuerpo y títulos por nombres ODF o su nivel semántico."""
-    styles = [
-        style for style in template["styles"]
-        if style.get("{urn:oasis:names:tc:opendocument:xmlns:style:1.0}family") == "paragraph"
-    ]
-    namespace = "{urn:oasis:names:tc:opendocument:xmlns:style:1.0}"
-    result = {}
-    for style in styles:
-        name = style.get(namespace + "name", "")
-        label = style.get(namespace + "display-name", name.removeprefix("Template"))
-        label = re.sub(r"_([0-9A-Fa-f]{2})_", lambda match: chr(int(match[1], 16)), label)
-        label = "".join(
-            char for char in unicodedata.normalize("NFKD", label.casefold())
-            if not unicodedata.combining(char)
-        )
-        if label in {"text body", "body text", "cuerpo", "cuerpo de texto", "texto del cuerpo"}:
-            result["body"] = name
-        level = style.get(namespace + "default-outline-level")
-        match = re.fullmatch(r"(?:heading|titulo)\s*([1-6])", label)
-        if match:
-            result[f"heading{match[1]}"] = name
-        elif level in {"1", "2", "3", "4", "5", "6"}:
-            result.setdefault(f"heading{level}", name)
-        if label in {"heading", "encabezado", "titulo"}:
-            result.setdefault("heading", name)
-        if label in {"standard", "normal", "predeterminado"}:
-            result.setdefault("body", name)
-    return result
 
 
 def write_document(

@@ -28,5 +28,6 @@ def open_tool(app: BudgetApp) -> None:
         on_save=app.save_project,
         on_dirty_change=lambda dirty: app._mark_dirty() if dirty else None,
         currency_formatter=app._format_currency,
+        report_settings=lambda: app.report_settings,
     )
     app._project_windows.append(window)

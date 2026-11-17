@@ -16,6 +16,50 @@ LANGUAGES = {
 }
 
 _TEXT = {
+    "CPV": ("CPV", "CPV"),
+    "Código CPV": ("CPV code", "Code CPV"),
+    "Códigos CPV de la obra (capítulo 45)": (
+        "Work CPV codes (division 45)", "Codes CPV des travaux (division 45)",
+    ),
+    "Añadir CPV": ("Add CPV", "Ajouter un CPV"),
+    "Guardar CPV": ("Save CPV", "Enregistrer les CPV"),
+    "Escribe un código o una descripción para filtrar el capítulo 45 "
+    "(Trabajos de construcción). Puedes añadir varios códigos CPV y quitar los "
+    "seleccionados antes de guardar.": (
+        "Type a code or description to filter division 45 (Construction work). "
+        "You can add several CPV codes and remove selected ones before saving.",
+        "Saisissez un code ou une description pour filtrer la division 45 "
+        "(Travaux de construction). Vous pouvez ajouter plusieurs codes CPV "
+        "et retirer les codes sélectionnés avant d’enregistrer.",
+    ),
+    "Selecciona un código CPV del capítulo 45 en el desplegable "
+    "o escribe su código completo.": (
+        "Select a CPV code from division 45 in the list or enter its complete code.",
+        "Sélectionnez un code CPV de la division 45 dans la liste ou saisissez son code complet.",
+    ),
+    "Emplazamiento": ("Work location", "Emplacement des travaux"),
+    "Municipios de la obra": ("Work municipalities", "Communes des travaux"),
+    "Comunidad autónoma": ("Autonomous community", "Communauté autonome"),
+    "Añadir municipio": ("Add municipality", "Ajouter une commune"),
+    "Quitar seleccionados": ("Remove selected", "Retirer la sélection"),
+    "Guardar emplazamiento": ("Save work location", "Enregistrer l’emplacement"),
+    "Selecciona un municipio del desplegable; si hay varios con el mismo "
+    "nombre, elige también su provincia.": (
+        "Select a municipality from the list; if several share its name, "
+        "also choose its province.",
+        "Sélectionnez une commune dans la liste ; si plusieurs portent le même nom, "
+        "choisissez aussi sa province.",
+    ),
+    "Escribe para filtrar el desplegable, selecciona un municipio y pulsa "
+    "Añadir municipio. Puedes añadir varios. La provincia y la comunidad autónoma "
+    "se completan automáticamente desde CMUN y CPRO.": (
+        "Type to filter the list, select a municipality and click Add municipality. "
+        "You can add several. Province and autonomous community are filled in "
+        "automatically from CMUN and CPRO.",
+        "Saisissez du texte pour filtrer la liste, sélectionnez une commune et cliquez "
+        "sur Ajouter une commune. Vous pouvez en ajouter plusieurs. La province et "
+        "la communauté autonome sont renseignées automatiquement depuis CMUN et CPRO.",
+    ),
     "Deshacer": ("Undo", "Annuler"),
     "Sin cambios pendientes": ("No pending changes", "Aucune modification en attente"),
     "Cambios sin guardar": ("Unsaved changes", "Modifications non enregistrées"),
@@ -72,6 +116,106 @@ _TEXT = {
     "Seguridad y salud (BCCA · Junta de Andalucía)": (
         "Health and safety (BCCA · Junta de Andalucía)",
         "Sécurité et santé (BCCA · Junta de Andalucía)",
+    ),
+    "Criterios del artículo 4.1 de la LPRL": (
+        "Criteria under section 4.1 of the Spanish Occupational Risk Prevention Act",
+        "Critères de l’article 4.1 de la loi espagnole sur la prévention des risques professionnels",
+    ),
+    "Revisar propuesta de unidades de Seguridad y Salud...": (
+        "Review Health and Safety item proposal...",
+        "Examiner la proposition d’unités de sécurité et de santé...",
+    ),
+    "Propuesta de unidades de Seguridad y Salud": (
+        "Health and Safety item proposal", "Proposition d’unités de sécurité et de santé",
+    ),
+    "Condicionantes externos...": ("External conditions...", "Contraintes externes..."),
+    "Condicionantes externos": ("External conditions", "Contraintes externes"),
+    "Guardar condicionantes": ("Save conditions", "Enregistrer les contraintes"),
+    "Condicionante": ("Condition", "Contrainte"),
+    "Descripción / observaciones": ("Description / remarks", "Description / observations"),
+    "Aplicabilidad": ("Applicability", "Applicabilité"),
+    "Pendiente": ("Pending", "À examiner"),
+    "Tráfico": ("Traffic", "Circulation"),
+    "Peatones y terceros": ("Pedestrians and third parties", "Piétons et tiers"),
+    "Servicios afectados": ("Affected utilities", "Réseaux affectés"),
+    "Terreno": ("Ground", "Terrain"),
+    "Condiciones ambientales": ("Environmental conditions", "Conditions environnementales"),
+    "Instalaciones provisionales": ("Temporary facilities", "Installations provisoires"),
+    "Centro asistencial": ("Care center", "Centre de soins"),
+    "Coordinación de seguridad y salud": (
+        "Health and safety coordination", "Coordination de sécurité et de santé",
+    ),
+    "Tipo de tráfico, cortes, desvíos y restricciones.": (
+        "Traffic type, closures, diversions and restrictions.",
+        "Type de circulation, fermetures, déviations et restrictions.",
+    ),
+    "Afección a peatones, residentes, comercios y accesibilidad.": (
+        "Effects on pedestrians, residents, businesses and accessibility.",
+        "Incidences sur les piétons, les riverains, les commerces et l’accessibilité.",
+    ),
+    "Redes, instalaciones y verificaciones necesarias.": (
+        "Networks, utilities and required checks.", "Réseaux, installations et contrôles nécessaires.",
+    ),
+    "Terreno, pendientes, huecos, excavaciones o estabilidad.": (
+        "Ground, slopes, openings, excavations or stability.",
+        "Terrain, pentes, ouvertures, excavations ou stabilité.",
+    ),
+    "Calor, lluvia, viento, polvo, ruido u otras exposiciones.": (
+        "Heat, rain, wind, dust, noise or other exposures.",
+        "Chaleur, pluie, vent, poussière, bruit ou autres expositions.",
+    ),
+    "Casetas, aseos, electricidad, acopios y accesos.": (
+        "Site cabins, toilets, electricity, storage and access.",
+        "Bungalows, sanitaires, électricité, stockages et accès.",
+    ),
+    "Centro de referencia y teléfono de emergencia.": (
+        "Referral care center and emergency telephone.", "Centre de référence et téléphone d’urgence.",
+    ),
+    "CSS durante la ejecución, si procede.": (
+        "Health and safety coordinator during construction, if applicable.",
+        "Coordonnateur de sécurité et de santé pendant les travaux, le cas échéant.",
+    ),
+    "Generar estudio completo": (
+        "Generate full study", "Générer l’étude complète",
+    ),
+    "Presupuesto de ejecución por contrata con IVA > 450.759,08 €: {amount}.": (
+        "Contract execution budget including VAT > €450,759.08: {amount}.",
+        "Budget d’exécution du contrat TTC > 450 759,08 € : {amount}.",
+    ),
+    "Duración > 30 días laborables y más de 20 trabajadores simultáneos: "
+    "{days} días; máximo estimado {workers} trabajadores/día.": (
+        "Duration > 30 working days and more than 20 workers at the same time: "
+        "{days} days; estimated peak {workers} workers/day.",
+        "Durée > 30 jours ouvrables et plus de 20 travailleurs simultanément : "
+        "{days} jours ; pic estimé {workers} travailleurs/jour.",
+    ),
+    "Volumen estimado de mano de obra > 500 jornadas: {days} jornadas.": (
+        "Estimated labor volume > 500 workdays: {days} workdays.",
+        "Volume estimé de main-d’œuvre > 500 journées : {days} journées.",
+    ),
+    "Obra de túneles, galerías, conducciones subterráneas o presas: {detected}.": (
+        "Tunnel, gallery, underground pipeline or dam works: {detected}.",
+        "Travaux de tunnels, galeries, conduites souterraines ou barrages : {detected}.",
+    ),
+    "Sí": ("Yes", "Oui"),
+    "No": ("No", "Non"),
+    "Según los criterios marcados, procede un Estudio de Seguridad y Salud.": (
+        "The marked criteria indicate that a Health and Safety Study is required.",
+        "Les critères cochés indiquent qu’une étude de sécurité et de santé est requise.",
+    ),
+    "Según los criterios marcados, procede un Estudio Básico de Seguridad y Salud.": (
+        "None of the criteria are met; a Basic Health and Safety Study is required.",
+        "Aucun critère n’est rempli ; une étude de base de sécurité et de santé est requise.",
+    ),
+    "Estimación automática basada en los rendimientos de mano de obra del presupuesto "
+    "y la planificación guardada. La detección del tipo de obra se basa en sus descripciones. "
+    "Comprueba especialmente la concurrencia real de trabajadores. La selección de casillas es editable.": (
+        "Automatic estimate based on budget labor outputs and the saved schedule. "
+        "Work type is detected from the budget descriptions. In particular, verify the actual number "
+        "of workers present at the same time. Checkbox selections can be changed.",
+        "Estimation automatique basée sur les rendements de main-d’œuvre du budget et le planning "
+        "enregistré. Le type d’ouvrage est détecté à partir de ses descriptions. Vérifiez en particulier "
+        "le nombre réel de travailleurs présents simultanément. Les cases peuvent être modifiées.",
     ),
     "Verde: fichas utilizadas y carpetas que las contienen.": (
         "Green: used sheets and their containing folders.",

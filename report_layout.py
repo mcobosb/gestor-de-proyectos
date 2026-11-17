@@ -613,7 +613,9 @@ def replace_footer_fields(section, title: str):
 
         collect(paragraph)
         source = "".join(value for _, _, value in slots)
-        matches = list(re.finditer(r"\{\{cap[ií]tulo\}\}|\{\{no_pagina\}\}|\{no_pagina\}", source))
+        matches = list(re.finditer(
+            r"\{\{cap[ií]tulo\}\}|\{\{no_p[aá]gina\}\}|\{no_p[aá]gina\}", source,
+        ))
         for match in reversed(matches):
             offset = 0
             start_slot = None
@@ -652,10 +654,11 @@ class ReportLayout:
     def __init__(
         self, *, certification: bool = False, template_path: str = "",
         repeat_titles: bool = True, footer_title: str = "", expediente: str = "",
-        template_title: str = "",
+        template_title: str = "", landscape: bool = False,
     ):
         """Carga el logo y configura fuentes, sangrías y estilos del modelo elegido."""
         from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+        from reportlab.lib.pagesizes import A4, landscape as landscape_page
         from reportlab.lib.styles import ParagraphStyle
         from reportlab.pdfbase import pdfmetrics
         from reportlab.pdfbase.ttfonts import TTFont
@@ -707,6 +710,10 @@ class ReportLayout:
         self.certification = certification
         self.repeat_titles = repeat_titles
         self.footer_title = footer_title
+        self.landscape = landscape
+        self.page_size = landscape_page(A4) if landscape else A4
+        self.page_width, self.page_height = self.page_size
+        self.content_width = self.page_width - LEFT_MARGIN - RIGHT_MARGIN
         self.template_fields = {
             "{{expediente}}": expediente,
             "{{título}}": template_title,
@@ -825,19 +832,17 @@ class ReportLayout:
 
     def _draw_template_tables(self, canvas, section, *, top=None, bottom=None):
         """Draw source template tables and return their PDF origins for anchored frames."""
-        from reportlab.lib.pagesizes import A4
-
         origins = {}
         cursor = top if top is not None else bottom
         for index, template_table in enumerate(self.template_tables[section]):
             block = self._template_table_flowable(template_table, section, index)
             width, height = block.wrap(template_table["width"], 1000)
             if template_table["align"] == "margins":
-                x = LEFT_MARGIN + (CONTENT_WIDTH - width) / 2
+                x = LEFT_MARGIN + (self.content_width - width) / 2
             elif template_table["align"] == "center":
-                x = (PAGE_WIDTH - width) / 2
+                x = (self.page_width - width) / 2
             elif template_table["align"] == "right":
-                x = PAGE_WIDTH - RIGHT_MARGIN - width
+                x = self.page_width - RIGHT_MARGIN - width
             else:
                 x = LEFT_MARGIN
             if top is not None:
@@ -908,7 +913,7 @@ class ReportLayout:
                 cells.append(render(fmt_number(float(value)) if isinstance(value, Decimal) else value, style))
             data.append(cells)
         block = Table(
-            data, colWidths=[CONTENT_WIDTH * r / sum(ratios) for r in ratios],
+            data, colWidths=[self.content_width * r / sum(ratios) for r in ratios],
             repeatRows=1 if headers else 0, splitInRow=1, hAlign="LEFT",
         )
         style = [
@@ -942,7 +947,8 @@ class ReportLayout:
             "report-chapter", parent=self.bold, fontSize=10 if self.certification else 12, leading=14,
         )
         block = self.table(
-            [], [[self.text(code, chapter_style), self.text(title, chapter_style)]], [65, CONTENT_WIDTH - 65],
+            [], [[self.text(code, chapter_style), self.text(title, chapter_style)]],
+            [65, self.content_width - 65],
             background="#00EEEE" if self.certification else "#C7D0DF",
         )
         block.keepWithNext = True
@@ -957,19 +963,17 @@ class ReportLayout:
 
     def top_margin(self, title, project_title, column_headers=(), ratios=()):
         """Reserva altura suficiente para títulos largos y cabeceras sin invadir el cuerpo."""
-        from reportlab.lib.pagesizes import A4
-
         if not self.repeat_titles:
             return PAGE_MARGIN + self.header_logo_height + 12
         heading = self.text(title, self.title_style)
-        _, height = heading.wrap(CONTENT_WIDTH, 1000)
+        _, height = heading.wrap(self.content_width, 1000)
         project = self.text(project_title, self.project_style)
-        _, project_height = project.wrap(CONTENT_WIDTH, 1000)
-        project_y = A4[1] - PAGE_MARGIN - self.header_logo_height - height - project_height - 2
+        _, project_height = project.wrap(self.content_width, 1000)
+        project_y = self.page_height - PAGE_MARGIN - self.header_logo_height - height - project_height - 2
         columns_height = 0
         if column_headers:
-            _, columns_height = self.table(column_headers, [], ratios).wrap(CONTENT_WIDTH, 1000)
-        return A4[1] - project_y + columns_height + 12
+            _, columns_height = self.table(column_headers, [], ratios).wrap(self.content_width, 1000)
+        return self.page_height - project_y + columns_height + 12
 
     @property
     def header_logo_height(self) -> float:
@@ -977,7 +981,7 @@ class ReportLayout:
         text_height = 0
         if self.template_header_text:
             text_width = max(1, self.template_frame_x - 8) if self.template_frame_x else (
-                CONTENT_WIDTH - self.logo_width - 8
+                self.content_width - self.logo_width - 8
             )
             _, text_height = self.text(self._template_value(self.template_header_text), self.normal).wrap(
                 text_width, 1000,
@@ -995,7 +999,9 @@ class ReportLayout:
 
     def bottom_margin(self) -> float:
         """Reserva el pie dentro del margen exterior de 2,5 cm y separa el cuerpo."""
-        _, height = self.text(self._footer_value(self.template_footer), self.normal).wrap(CONTENT_WIDTH - 20, 1000)
+        _, height = self.text(self._footer_value(self.template_footer), self.normal).wrap(
+            self.content_width - 20, 1000,
+        )
         table_height = max((
             sum(template_table["row_heights"])
             for template_table in self.template_tables["footer"]
@@ -1004,18 +1010,17 @@ class ReportLayout:
 
     def header(self, canvas, document, title, project_title, *, footer="", column_headers=(), ratios=()):
         """Dibuja el logo institucional, títulos, columnas y pie numerado de una página."""
-        from reportlab.lib.pagesizes import A4
         from reportlab.lib.utils import ImageReader
 
         canvas.saveState()
-        top = A4[1]
+        top = self.page_height
         heading_y = top - PAGE_MARGIN - self.header_logo_height
         header_tables = self._draw_template_tables(
             canvas, "header", top=top - PAGE_MARGIN,
         )
         if self.template_header_text:
             text_width = max(1, self.template_frame_x - 8) if self.template_frame_x else (
-                CONTENT_WIDTH - self.logo_width - 8
+                self.content_width - self.logo_width - 8
             )
             template_text = self.text(self._template_value(self.template_header_text), self.normal)
             _, text_height = template_text.wrap(text_width, 1000)
@@ -1050,19 +1055,19 @@ class ReportLayout:
         project_y = heading_y
         if self.repeat_titles:
             heading = self.text(title, self.title_style)
-            _, height = heading.wrap(CONTENT_WIDTH, 100)
+            _, height = heading.wrap(self.content_width, 100)
             heading.drawOn(canvas, LEFT_MARGIN, heading_y - height)
             project = self.text(project_title, self.project_style)
-            _, project_height = project.wrap(CONTENT_WIDTH, 100)
+            _, project_height = project.wrap(self.content_width, 100)
             project_y = heading_y - height - project_height - 2
             project.drawOn(canvas, LEFT_MARGIN, project_y)
         if column_headers:
             block = self.table(column_headers, [], ratios)
-            _, h = block.wrap(CONTENT_WIDTH, 100)
+            _, h = block.wrap(self.content_width, 100)
             block.drawOn(canvas, LEFT_MARGIN, project_y - h - 4)
         elif self.repeat_titles:
             canvas.setLineWidth(0.5)
-            canvas.line(LEFT_MARGIN, project_y - 4, PAGE_WIDTH - RIGHT_MARGIN, project_y - 4)
+            canvas.line(LEFT_MARGIN, project_y - 4, self.page_width - RIGHT_MARGIN, project_y - 4)
         from reportlab.lib.styles import ParagraphStyle
 
         footer_style = ParagraphStyle(
@@ -1070,7 +1075,7 @@ class ReportLayout:
         )
         self.footer_page = document.page if self.footer_title else None
         footer_block = self.text(self._footer_value(self.template_footer), footer_style)
-        _, footer_height = footer_block.wrap(CONTENT_WIDTH - 20, 1000)
+        _, footer_height = footer_block.wrap(self.content_width - 20, 1000)
         footer_block.drawOn(canvas, LEFT_MARGIN, PAGE_MARGIN)
         footer_tables = self._draw_template_tables(
             canvas, "footer", bottom=PAGE_MARGIN + footer_height + 4,
@@ -1104,7 +1109,7 @@ class ReportLayout:
             )
         if not self.footer_title:
             canvas.setFont(self.regular_font, 6)
-            canvas.drawRightString(PAGE_WIDTH - RIGHT_MARGIN, PAGE_MARGIN + 1, str(document.page))
+            canvas.drawRightString(self.page_width - RIGHT_MARGIN, PAGE_MARGIN + 1, str(document.page))
         self.footer_page = None
         for section, borders in self.template_borders.items():
             for edge, border in borders.items():
@@ -1132,9 +1137,9 @@ class ReportLayout:
                 if pattern == "double":
                     canvas.setLineWidth(line_width / 3)
                     for offset in (-line_width / 3, line_width / 3):
-                        canvas.line(LEFT_MARGIN, y + offset, PAGE_WIDTH - RIGHT_MARGIN, y + offset)
+                        canvas.line(LEFT_MARGIN, y + offset, self.page_width - RIGHT_MARGIN, y + offset)
                 else:
-                    canvas.line(LEFT_MARGIN, y, PAGE_WIDTH - RIGHT_MARGIN, y)
+                    canvas.line(LEFT_MARGIN, y, self.page_width - RIGHT_MARGIN, y)
         canvas.restoreState()
 
     def _footer_value(self, value: str) -> str:
@@ -1146,7 +1151,11 @@ class ReportLayout:
             "{{capítulo}}", self.footer_title,
         ).replace(
             "{{no_pagina}}", str(self.footer_page or 1),
-        ).replace("{no_pagina}", str(self.footer_page or 1))
+        ).replace(
+            "{{no_página}}", str(self.footer_page or 1),
+        ).replace(
+            "{no_pagina}", str(self.footer_page or 1),
+        ).replace("{no_página}", str(self.footer_page or 1))
 
     def _template_value(self, value: str) -> str:
         """Resuelve los campos configurables de cabecera y pie."""

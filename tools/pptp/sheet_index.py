@@ -5,6 +5,10 @@ from dataclasses import dataclass
 from html import escape, unescape
 import re
 from typing import TYPE_CHECKING
+from tools._shared.document_layout import (
+    TABLE_ALTERNATE_BACKGROUND as ALTERNATE_BACKGROUND,
+    TABLE_HEADER_BACKGROUND as HEADER_BACKGROUND,
+)
 
 if TYPE_CHECKING:
     from odt_reports import _OdtReport
@@ -15,8 +19,6 @@ if TYPE_CHECKING:
 INDEX_MARKER = "<!-- TABLA_FICHAS_CAPITULOS -->"
 INDEX_TOKEN = "[[PPTP_SHEET_INDEX]]"
 HEADERS = ("Capítulo del proyecto", "Ficha")
-HEADER_BACKGROUND = "#4472C4"
-ALTERNATE_BACKGROUND = "#D9E5F5"
 COLUMN_RATIOS = (0.35, 0.65)
 TABLE_HEADER = "| " + " | ".join(HEADERS) + " |\n| --- | --- |"
 

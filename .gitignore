@@ -35,6 +35,8 @@ plantillas/*
 *.xlsx
 *.xls
 *.csv
+!tools/CMUN.csv
+!tools/CPRO.csv
 /plantilla.odt
 !tools/safety_health/datos/seguridad_salud_relaciones_bcca2023.csv
 

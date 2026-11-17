@@ -16,12 +16,75 @@ certificaciones mensuales.
 - Resumen y descripción en mayúsculas al crear, duplicar o incorporar partidas;
   las bases originales y los proyectos existentes no se modifican al abrirlos.
 
+### Municipios de la obra
+
+- **Archivo → Configuración… → Emplazamiento** permite añadir uno o varios
+  municipios y quitar los seleccionados antes de guardar.
+- El desplegable está ordenado alfabéticamente y se filtra al escribir, sin
+  distinguir mayúsculas ni tildes. La provincia distingue municipios homónimos.
+- Provincia y comunidad autónoma se obtienen automáticamente al enlazar
+  `tools/CMUN.csv` y `tools/CPRO.csv` por su código de provincia. Se utiliza
+  la relación suministrada (CMUN: 1 de enero de 2008), sin consultas externas.
+- La selección se guarda con el proyecto y en la configuración inicial de
+  nuevos proyectos, y rellena los datos territoriales del estudio de Seguridad
+  y Salud. El campo «Localidad» existente se conserva por separado.
+
+### Códigos CPV de la obra
+
+- **Archivo → Configuración… → CPV** permite seleccionar varios códigos del
+  capítulo 45 (Trabajos de construcción), ordenados por código.
+- El desplegable filtra al escribir por código o descripción, sin distinguir
+  mayúsculas ni tildes. Permite añadir códigos y quitar los seleccionados.
+- Se utiliza la columna española del vocabulario principal incluido en
+  `tools/cpv_2008_xls.zip`, sin extraer ni modificar el libro original ni incluir
+  códigos de otros capítulos o del vocabulario suplementario.
+- La selección conserva el dígito de control y se guarda con el proyecto y
+  como configuración inicial de nuevos proyectos, igual que los municipios.
+
 ### Seguridad y salud
 
 - **Herramientas → Seguridad y salud** propone partidas según los riesgos de
   las UO BCCA y permite revisarlas antes de crear el capítulo correspondiente.
 - Porcentaje orientativo configurable y matriz CSV incluida en la aplicación.
-- Informe PDF del capítulo con presupuesto y mediciones.
+- Estudio completo en PDF u ODT editable, con el presupuesto preventivo integrado
+  en el presupuesto general, sin emitirlo como informe independiente.
+- Formato como el PPTP: sin portada ni títulos repetidos del documento y proyecto,
+  epígrafes numerados jerárquicamente en mayúsculas y párrafos justificados.
+  Comienza con un índice enlazado de dos niveles: el PDF calcula las páginas reales
+  en varias pasadas; el ODT usa un índice nativo y campos de página que Writer
+  resuelve al paginar y permite actualizar. Se conservan la cabecera institucional
+  y la numeración de página en el pie de la plantilla, donde figura
+  «ESTUDIO DE SEGURIDAD Y SALUD» o «ESTUDIO BÁSICO DE SEGURIDAD Y SALUD»
+  según los criterios seleccionados.
+- La primera ficha reúne objeto y alcance, los criterios seleccionados del artículo
+  4.1 del RD 1627/1997 que justifican el tipo de estudio y los datos del proyecto.
+  Su tabla tiene una leyenda superior, cabecera azul y filas alternas azul claro/blanco,
+  sin contratista, con PEM y PEC con IVA. Mantiene el mismo ancho y margen al
+  continuar en otra página, incluso al dividir una fila larga. La tipología recoge
+  los CPV seleccionados en la configuración y, debajo, los capítulos con viñetas;
+  no repite resúmenes de unidades ni partidas importadas. La duración procede de
+  la planificación y el máximo simultáneo se expresa en personas enteras, con al
+  menos una por equipo de trabajo. La superficie es la mayor medición de las partidas en m²
+  (no su suma); si no hay partidas de superficie, queda pendiente de validar.
+  Los valores insertados en las plantillas aparecen en mayúsculas y la biblioteca
+  ya no incluye la ficha 0 de integración; la unidad m² conserva su grafía.
+- **Condicionantes externos...** permite editar la descripción de tráfico,
+  peatones, servicios, terreno, ambiente, instalaciones provisionales, centro
+  asistencial y coordinación de seguridad y salud, indicando **Sí / No / Pendiente**.
+  Se guardan con el proyecto sin modificar el presupuesto y se muestran agrupados
+  en el resumen. **Servicios afectados** aparece una sola vez en este grupo.
+- Antes de los **Riesgos detectados** se incluyen filas separadas de
+  **Medios auxiliares** y **Maquinaria empleada**, extraídas de las partidas y
+  sus descompuestos, también anidados. Los medios físicos reconocibles, como
+  andamios, escaleras portátiles o plataformas, se separan del resto de recursos
+  clasificados como maquinaria en el presupuesto. Se eliminan duplicados y se
+  excluyen mano de obra, materiales ordinarios y porcentajes genéricos de medios
+  auxiliares; si faltan descripciones o descompuestos necesarios, se advierte.
+  La última fila reúne los **Centros asistenciales, dirección y teléfonos de interés**:
+  respeta el modo de entrada seleccionado (texto libre o tabla SICESS), incluye
+  la dirección postal completa, los teléfonos y las observaciones revisadas,
+  además del teléfono general de emergencias 112. Otros contactos pueden añadirse
+  en el texto libre o en la descripción del condicionante de centro asistencial.
 - La selección y el porcentaje aceptados se guardan en JSON; al reabrir la
   herramienta se recuperan sin consultar de nuevo la matriz ni recalcular el capítulo.
 

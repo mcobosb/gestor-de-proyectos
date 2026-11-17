@@ -11,6 +11,7 @@ import tkinter as tk
 import webbrowser
 from pathlib import Path
 from tkinter import ttk
+from typing import TYPE_CHECKING, Callable
 
 from bc3_gui import APPLICATION_NAME, ToolTip, fmt_eur, fmt_number, format_chapter_code
 from localization import filedialog, localize_widget_tree, messagebox, translate
@@ -20,6 +21,10 @@ from .._shared.scheduling import (
     RELATIONS, PlanActivity, PlanParams, apply_saved_plan_state, build_activities,
     chain_sequence, parse_date, schedule,
 )
+from .reports import write_planning_report
+
+if TYPE_CHECKING:
+    from budget_reports import ReportSettings
 
 
 class PlanningWindow(tk.Toplevel):
@@ -45,6 +50,7 @@ class PlanningWindow(tk.Toplevel):
         on_save=None,
         on_dirty_change=None,
         currency_formatter=None,
+        report_settings: Callable[[], ReportSettings] | None = None,
     ):
         """Crea la ventana, restaura la planificación guardada y calcula las fechas."""
         super().__init__(master)
@@ -60,6 +66,7 @@ class PlanningWindow(tk.Toplevel):
         self._on_save = on_save
         self._on_dirty_change = on_dirty_change
         self._currency_formatter = currency_formatter or fmt_eur
+        self._report_settings = report_settings
         self._is_dirty = False
         self._ready = False
         self._editor: ttk.Entry | ttk.Combobox | None = None
@@ -225,7 +232,13 @@ class PlanningWindow(tk.Toplevel):
         toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         ttk.Button(toolbar, text="Secuenciar una tras otra", command=self.sequence_chain).pack(side="left")
         ttk.Button(toolbar, text="Recalcular fechas", command=self._recalculate).pack(side="left", padx=(6, 0))
-        ttk.Button(toolbar, text="Dibujar plan de trabajo", command=self.draw_plan, style="Accent.TButton").pack(side="left", padx=(6, 0))
+        ttk.Button(
+            toolbar, text="Guardar planificación en plantilla",
+            command=self.save_plan_report, style="Accent.TButton",
+        ).pack(side="left", padx=(6, 0))
+        ttk.Button(
+            toolbar, text="Ver detalle completo", command=self.draw_plan,
+        ).pack(side="left", padx=(6, 0))
         ttk.Label(
             toolbar,
             text="Doble clic sobre equipos, duración, continuidad, predecesora, tipo o desfase para editarlos.",
@@ -423,15 +436,21 @@ class PlanningWindow(tk.Toplevel):
     # ---------------------------------------------------------------- Gantt
     def draw_plan(self) -> None:
         """Transforma actividades programadas y genera las vistas PNG y PDF del Gantt."""
+        result = self._generate_figure()
+        if result is not None:
+            self._show_result(*result)
+
+    def _generate_figure(self) -> tuple[Path, Path] | None:
+        """Genera los archivos detallados del Gantt y devuelve sus rutas."""
         self._recalculate()
         if not self.activities:
             messagebox.showinfo("Plan de trabajo", "No hay actividades que dibujar.", parent=self)
-            return
+            return None
         try:
             from . import figura_gantt
         except ImportError as exc:
             messagebox.showerror("Plan de trabajo", f"No se pudo cargar figura_gantt: {exc}", parent=self)
-            return
+            return None
 
         acts = [
             figura_gantt.Activity(
@@ -457,10 +476,60 @@ class PlanningWindow(tk.Toplevel):
             )
         except Exception as exc:  # pragma: no cover - depende de matplotlib
             messagebox.showerror("Plan de trabajo", f"No se pudo dibujar el plan:\n{exc}", parent=self)
-            return
+            return None
 
         self._set_status(f"Plan de trabajo generado: {png.name} y {pdf.name}")
-        self._show_result(png, pdf)
+        return png, pdf
+
+    def save_plan_report(self) -> None:
+        """Guarda la figura Gantt en ODT o PDF según la plantilla configurada."""
+        if not self.activities:
+            messagebox.showinfo("Plan de trabajo", "No hay actividades que dibujar.", parent=self)
+            return
+        settings = self._report_settings() if self._report_settings is not None else None
+        if settings is None:
+            messagebox.showerror(
+                "Plan de trabajo", "No está disponible la configuración de informes.", parent=self,
+            )
+            return
+        extension = ".odt" if settings.output_format == "odt" else ".pdf"
+        filetype = ("Documento ODT", "*.odt") if extension == ".odt" else ("Documento PDF", "*.pdf")
+        file_path = filedialog.asksaveasfilename(
+            parent=self,
+            title="Guardar planificación",
+            defaultextension=extension,
+            initialfile=f"Plan de trabajo{extension}",
+            filetypes=[filetype],
+        )
+        if not file_path:
+            return
+        target = Path(file_path)
+        if target.suffix.lower() != extension:
+            target = target.with_suffix(extension)
+        temporary_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=extension, dir=target.parent, delete=False) as handle:
+                temporary_path = Path(handle.name)
+            self._recalculate()
+            write_planning_report(
+                self.activities, self.params, temporary_path, settings, self.project_title,
+                self._currency_formatter,
+            )
+            temporary_path.replace(target)
+        except ImportError as exc:
+            messagebox.showerror(
+                "Dependencia de informes",
+                f"Instala las dependencias con:\npython -m pip install -r requirements.txt\n\n{exc}",
+                parent=self,
+            )
+            return
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("No se pudo guardar la planificación", str(exc), parent=self)
+            return
+        finally:
+            if temporary_path is not None and temporary_path.exists():
+                temporary_path.unlink()
+        self._set_status(f"Planificación guardada: {target}")
 
     def _show_result(self, png: Path, pdf: Path) -> None:
         """Abre una ventana con la imagen del plan y acciones para guardar o abrirla."""
