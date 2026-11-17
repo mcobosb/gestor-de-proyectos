@@ -1592,6 +1592,35 @@ class ReportsAndRecentProjectsTests(unittest.TestCase):
             menu.invoke(index)
         browser.assert_called_once_with("https://github.com/mcobosb/gestor-de-proyectos")
 
+    def test_reference_menu_between_tools_and_information_opens_separate_reusable_searches(self):
+        """Consulta ambos catalogos sin presupuesto ni cambios en el estado del proyecto."""
+        from test_reference_search import NTP_ENTRIES, UNE_ENTRIES
+
+        toolbar = self.root.grid_slaves(row=0, column=0)[0]
+        buttons = [child for child in toolbar.winfo_children() if isinstance(child, ttk.Menubutton)]
+        labels = [str(button.cget("text")) for button in buttons]
+        index = labels.index("Consultas")
+        self.assertEqual(labels[index - 1:index + 2], ["Herramientas", "Consultas", "Información"])
+        menu = self.root.nametowidget(buttons[index].cget("menu"))
+        self.assertEqual([menu.entrycget(i, "label") for i in range(2)], ["NTP", "UNE"])
+        with patch("reference_search.load_reference_entries", side_effect=[NTP_ENTRIES, UNE_ENTRIES]):
+            menu.invoke(0)
+            ntp = self.app._reference_search_windows["NTP"]
+            ntp.query.set("495")
+            self.assertIs(self.app.open_reference_search("NTP"), ntp)
+            menu.invoke(1)
+            self.assertIsNot(self.app._reference_search_windows["UNE"], ntp)
+            self.assertEqual(ntp.query.get(), "495")
+        self.assertFalse(self.app.is_dirty)
+        self.assertEqual(self.app.budget_items, [])
+        ntp.destroy()
+        with (
+            patch("reference_search.load_reference_entries", side_effect=ValueError("Catálogo no disponible")),
+            patch("bc3_gui.messagebox.showerror") as error,
+        ):
+            self.assertIsNone(self.app.open_reference_search("NTP"))
+        error.assert_called_once()
+
     def test_information_menu_reference_price_database_links(self):
         """Expose a native cascade and open each official README link."""
         toolbar = self.root.grid_slaves(row=0, column=0)[0]

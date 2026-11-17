@@ -19,6 +19,7 @@ from functools import partial
 from math import isfinite
 from pathlib import Path
 from tkinter import ttk
+from typing import TYPE_CHECKING
 
 from app_paths import application_directory, user_data_directory
 from localization import (
@@ -32,6 +33,9 @@ from tool_loader import discover_tools
 from municipalities import load_municipalities
 from cpv_catalog import load_cpv_codes
 from catalog_selection import CatalogOption, CatalogSelection
+
+if TYPE_CHECKING:
+    from reference_search import ReferenceKind, ReferenceSearchWindow
 
 
 APPLICATION_NAME = "Gestor de Proyectos"
@@ -684,6 +688,7 @@ class BudgetApp:
         self.pptp_state: dict = {}
         self._rcd_window: tk.Toplevel | None = None
         self._safety_health_window: tk.Toplevel | None = None
+        self._reference_search_windows: dict[ReferenceKind, ReferenceSearchWindow] = {}
         self._project_windows: list[tk.Toplevel] = []
         self.project_title: str | None = None
         self.project_path: Path | None = None
@@ -801,6 +806,16 @@ class BudgetApp:
             tools_menu.add_command(label="No hay herramientas disponibles", state="disabled")
         tools_menubutton["menu"] = tools_menu
         tools_menubutton.pack(side="left", padx=(0, 8))
+        references_menubutton = ttk.Menubutton(
+            toolbar, text="Consultas", style="Toolbar.TMenubutton",
+        )
+        references_menu = tk.Menu(references_menubutton, tearoff=False)
+        for kind in ("NTP", "UNE"):
+            references_menu.add_command(
+                label=kind, command=partial(self.open_reference_search, kind),
+            )
+        references_menubutton["menu"] = references_menu
+        references_menubutton.pack(side="left", padx=(0, 8))
         info_menubutton = ttk.Menubutton(toolbar, text="Información", style="Toolbar.TMenubutton")
         info_menu = tk.Menu(info_menubutton, tearoff=False)
         info_menu.add_command(label=APPLICATION_NAME, state="disabled")
@@ -4640,6 +4655,23 @@ th {{ background: #1f4e78; color: white; }}
             REPOSITORY_URL, "Repositorio en GitHub",
             "Repositorio abierto en el navegador.",
         )
+
+    def open_reference_search(self, kind: ReferenceKind) -> ReferenceSearchWindow | None:
+        """Abre o recupera el buscador NTP o UNE sin depender de un presupuesto."""
+        from reference_search import ReferenceSearchWindow, load_reference_entries
+
+        previous = self._reference_search_windows.get(kind)
+        if previous is not None and previous.winfo_exists():
+            previous.lift()
+            return previous
+        try:
+            entries = load_reference_entries(kind)
+        except ValueError as exc:
+            messagebox.showerror("Consultas", str(exc), parent=self.root)
+            return None
+        window = ReferenceSearchWindow(self, kind, entries)
+        self._reference_search_windows[kind] = window
+        return window
 
     def _open_web_page(self, url: str, title: str, success_status: str) -> None:
         """Abre una web e informa si no se puede iniciar el navegador."""

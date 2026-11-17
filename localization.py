@@ -16,6 +16,23 @@ LANGUAGES = {
 }
 
 _TEXT = {
+    "Consultas": ("References", "Références"),
+    "Buscador de {kind}": ("{kind} search", "Recherche {kind}"),
+    "Buscar por código o texto:": ("Search by code or text:", "Rechercher par code ou texte :"),
+    "Ver ficha oficial": ("Open official entry", "Ouvrir la fiche officielle"),
+    "Abrir PDF": ("Open PDF", "Ouvrir le PDF"),
+    "{count} de {total} referencias": ("{count} of {total} references", "{count} références sur {total}"),
+    "Referencia abierta en el navegador.": (
+        "Reference opened in the browser.", "Référence ouverte dans le navigateur.",
+    ),
+    "Catálogo local. Comprueba en la fuente oficial la vigencia y aplicabilidad.": (
+        "Local catalogue. Check validity and applicability with the official source.",
+        "Catalogue local. Vérifiez la validité et l’applicabilité auprès de la source officielle.",
+    ),
+    "Comité": ("Committee", "Comité"),
+    "Año": ("Year", "Année"),
+    "Estado": ("Status", "État"),
+    "Título": ("Title", "Titre"),
     "CPV": ("CPV", "CPV"),
     "Código CPV": ("CPV code", "Code CPV"),
     "Códigos CPV de la obra (capítulo 45)": (

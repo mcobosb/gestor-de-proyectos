@@ -70,6 +70,8 @@ foreach ($requiredResource in @(
     "CMUN.csv",
     "CPRO.csv",
     "cpv_2008_xls.zip",
+    "safety_health\datos\ntps.csv",
+    "pptp\docs\unes.csv",
     "safety_health\datos\seguridad_salud_relaciones_bcca2023.csv",
     "safety_health\BIBLIOTECA.zip",
     "pptp\BIBLIOTECA.zip",

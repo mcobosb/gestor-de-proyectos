@@ -286,6 +286,11 @@ class DistributionTests(unittest.TestCase):
         for resource in ("CMUN.csv", "CPRO.csv", "cpv_2008_xls.zip"):
             self.assertTrue((ROOT / "tools" / resource).is_file())
             self.assertIn(f'"{resource.lower()}"', build_script)
+        for resource in (
+            r"safety_health\datos\ntps.csv", r"pptp\docs\unes.csv",
+        ):
+            self.assertTrue((ROOT / "tools" / resource).is_file())
+            self.assertIn(f'"{resource}"', build_script)
         self.assertTrue(safety_library.is_file())
         with ZipFile(safety_library) as archive:
             names = archive.namelist()

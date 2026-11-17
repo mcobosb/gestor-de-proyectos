@@ -88,6 +88,19 @@ certificaciones mensuales.
 - La selección y el porcentaje aceptados se guardan en JSON; al reabrir la
   herramienta se recuperan sin consultar de nuevo la matriz ni recalcular el capítulo.
 
+### Consulta de NTP y UNE
+
+- **Consultas**, entre **Herramientas** e **Información**, abre buscadores
+  independientes de NTP y UNE, incluso sin presupuesto abierto.
+- El listado se filtra al escribir por código o palabras del título, sin distinguir
+  tildes ni mayúsculas. También busca año/fecha, estado y comité cuando constan.
+- La selección muestra el título completo y sus datos. Doble clic, Intro o
+  **Ver ficha oficial** abre la referencia en INSST o UNE.
+- Se consultan los catálogos locales completos, sin limitarse a las referencias del
+  presupuesto ni modificar el proyecto. El catálogo UNE conserva normas anuladas,
+  proyectos y fichas con la misma designación: comprueba vigencia y aplicabilidad
+  en la fuente oficial. No se incluye ni reproduce el texto de las normas UNE.
+
 ### Gestión de RCDs
 
 - **Herramientas → RCDs**, como primera opción: datos de cálculo editables y
