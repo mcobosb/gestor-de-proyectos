@@ -4,7 +4,31 @@ Aplicación de escritorio para Windows que permite trabajar con presupuestos
 FIEBDC-3 (BC3), editar mediciones y descomposiciones, planificar obras y gestionar
 certificaciones mensuales.
 
-## Versión 1.6.0 — Bibliotecas y Seguridad y Salud
+## Versión 1.7.0 — 17/11/2026
+
+### Novedades de esta versión
+
+- **Consultas NTP y UNE:** buscadores separados con filtrado al escribir,
+  detalle y acceso a la ficha oficial; NTP sin botón adicional de PDF.
+- **Configuración de obra:** selección de varios municipios y códigos CPV
+  del capítulo 45, con búsquedas filtrables y persistencia en el proyecto.
+- **Planificación en plantilla:** cronograma horizontal en PDF u ODT, sin
+  convertirlo en una imagen, con resumen del plazo y de la actividad más larga.
+- **ESS/EBSS completo:** criterios legales estimados pero editables, propuesta
+  preventiva separada, capítulo presupuestario correlativo, índice enlazado
+  y tabla resumen revisada con condicionantes, medios, maquinaria y contactos.
+- **PPTP:** fichas agrupadas por capítulo, tabla enlazada, normativa por ámbitos,
+  revisión de precios y decisiones UNE conservadas tras la revisión manual.
+- **Bibliotecas y formato:** fichas BCCA reorganizadas, editor con referencias
+  internas y prescripciones separadas, historial de revisiones y estilos Writer.
+- Correcciones de personas estimadas, direcciones asistenciales, tildes y
+  alineación de tablas entre páginas. Ejecutable e instalador Windows 1.7.0.
+
+El detalle de las novedades desde la versión 1.6.0 está en el
+[changelog](CHANGELOG.md#170--2026-11-17). Las marcas históricas de inclusión
+inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la aplicación.
+
+### Funciones generales
 
 - Facturación por recurso con filtros de materiales, maquinaria y RCDs.
 - Asignación de importes en tabla y comparación global o acumulada por mes.
@@ -41,10 +65,31 @@ certificaciones mensuales.
 - La selección conserva el dígito de control y se guarda con el proyecto y
   como configuración inicial de nuevos proyectos, igual que los municipios.
 
+### Planificación en plantilla
+
+- En **Herramientas → Planificación**, **Guardar planificación en plantilla**
+  utiliza el formato PDF u ODT y la plantilla elegidos en la configuración.
+- Se exporta solo el cronograma central con sus datos y barras tabuladas, no
+  una captura de imagen; el ODT permite editarlo. La página es horizontal para
+  mejorar la lectura y después se describe la duración total calculada y la
+  actividad de mayor duración.
+- El pie rellena el marcador de capítulo con **Planificación** y el de página
+  con la numeración correspondiente. No se anteponen el nombre del proyecto
+  ni el título Plan de trabajo.
+- **Detalle de la figura** conserva la salida detallada anterior en PNG/PDF
+  como opción secundaria, sin sustituir el guardado estándar en plantilla.
+
 ### Seguridad y salud
 
 - **Herramientas → Seguridad y salud** propone partidas según los riesgos de
   las UO BCCA y permite revisarlas antes de crear el capítulo correspondiente.
+- La primera ventana estima los cuatro criterios del artículo 4.1 del
+  RD 1627/1997: PEC con IVA, duración y concurrencia de trabajadores, jornadas
+  acumuladas y tipología especial de obra. Muestra los datos de la estimación
+  junto a casillas editables, admite varios criterios y conserva la decisión.
+  Si no se marca ninguno, corresponde un Estudio Básico de Seguridad y Salud.
+- La propuesta preventiva se abre en una ventana separada. Al aceptarla,
+  se integra en el siguiente capítulo de la secuencia **CAP. XX**.
 - Porcentaje orientativo configurable y matriz CSV incluida en la aplicación.
 - Estudio completo en PDF u ODT editable, con el presupuesto preventivo integrado
   en el presupuesto general, sin emitirlo como informe independiente.
@@ -258,7 +303,7 @@ Esperamos que os sea muy útil. ¡Esto es solo el comienzo!
 ## Instalación y arranque
 
 En Windows se puede crear e instalar una versión compilada con Nuitka. Una vez
-generado, el instalador `GestorDeProyectos-Setup-1.6.0.exe` no requiere Python.
+generado, el instalador `GestorDeProyectos-Setup-1.7.0.exe` no requiere Python.
 Incluye los componentes necesarios, pero no los archivos fuente `.py`. La
 compilación Nuitka dificulta recuperar el código, aunque no puede impedir
 completamente la ingeniería inversa.
@@ -578,7 +623,7 @@ Después, desde PowerShell en la carpeta del proyecto:
 .\build_installer.ps1
 ```
 
-El instalador generado aparece en `dist\GestorDeProyectos-Setup-1.6.0.exe`.
+El instalador generado aparece en `dist\GestorDeProyectos-Setup-1.7.0.exe`.
 El script usa automáticamente `.\.venv\Scripts\python.exe` si existe; en caso
 contrario, utiliza el comando `python` disponible en el sistema.
 La distribución incluye la licencia y el manual, pero no los presupuestos ni
