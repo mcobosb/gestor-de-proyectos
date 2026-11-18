@@ -56,6 +56,43 @@ def before_project_save(app: BudgetApp) -> None:
         synchronize_budget(app, RcdState.from_dict(app.rcd_state))
 
 
+def open_tool_qt(app) -> None:
+    """Abre o enfoca la ventana RCDs de PySide6."""
+    from PySide6.QtWidgets import QMessageBox
+    from .qt_window import RcdWindowQt
+
+    if not app.budget_items:
+        QMessageBox.information(
+            app, "RCDs", "Carga o crea un presupuesto antes de estimar residuos.",
+        )
+        return
+    for window in app._project_windows:
+        if isinstance(window, RcdWindowQt) and window.isVisible():
+            window.raise_()
+            window.activateWindow()
+            return
+    try:
+        window = RcdWindowQt(app)
+    except ValueError as exc:
+        QMessageBox.critical(app, "RCDs", str(exc))
+        return
+    app._project_windows.append(window)
+    window.show()
+
+
+def before_project_save_qt(app) -> None:
+    """Sincroniza un presupuesto RCDs ya generado antes de guardar."""
+    if (
+        app.rcd_state
+        and not app._has_external_tool_chapter("rcd")
+        and any(
+            item.source.startswith(RCD_BUDGET_SOURCE)
+            for item in app.budget_items
+        )
+    ):
+        synchronize_budget(app, RcdState.from_dict(app.rcd_state))
+
+
 # Porcentajes y densidades del modelo, no tasas de generación medidas en la obra.
 GROUPS = (
     ("earth", "Tierras y pétreos de excavación", "earth", 0, 1.5),
@@ -335,7 +372,7 @@ def demolition_volumes(rows: list[DemolitionMeasurement]) -> dict[str, Decimal]:
 
 def demolition_measurements(app: BudgetApp, state: RcdState) -> list[DemolitionMeasurement]:
     """Recoge mediciones originales de demolición sin incluir transportes ni subtotales."""
-    from bc3_gui import MeasurementLine
+    from budget_core import MeasurementLine
 
     previous = {row.key: row for row in state.demolition}
     rows = []
@@ -545,7 +582,7 @@ class RcdBudgetLine:
 
 def budget_calculation(state: RcdState) -> tuple[list[RcdBudgetLine], list[list[str]]]:
     """Calcula magnitudes económicas sin convertir los números en texto de presentación."""
-    from bc3_gui import fmt_number
+    from budget_core import fmt_number
 
     state = RcdState.from_dict(state.to_dict())
     values = {}
@@ -609,7 +646,7 @@ def budget_calculation(state: RcdState) -> tuple[list[RcdBudgetLine], list[list[
 
 def calculate(state: RcdState) -> tuple[list[tuple[str, list[list[str]]]], list[list[str]]]:
     """Presenta los mismos importes del presupuesto en la vista previa y los informes."""
-    from bc3_gui import fmt_number
+    from budget_core import fmt_number
 
     state = RcdState.from_dict(state.to_dict())
     lines, details = budget_calculation(state)
@@ -637,7 +674,7 @@ def calculate(state: RcdState) -> tuple[list[tuple[str, list[list[str]]]], list[
 
 def synchronize_budget(app: BudgetApp, state: RcdState) -> None:
     """Crea o actualiza solo las siete partidas económicas generadas por RCDs."""
-    from bc3_gui import MeasurementLine, ProjectItem
+    from budget_core import MeasurementLine, ProjectItem
 
     lines, _ = budget_calculation(state)
     generated = {line.key: next((item for item in app.budget_items

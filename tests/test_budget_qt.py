@@ -12,6 +12,7 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication, QDialogButtonBox, QMessageBox
+from PySide6.QtCore import Qt
 
 from budget_core import Bc3Dataset
 from budget_core import ProjectItem
@@ -19,6 +20,8 @@ from budget_qt_settings import SettingsDialog
 from budget_qt_window import BudgetMainWindow
 from budget_reports import ReportSettings
 from tools.price_justification.qt_window import PriceJustificationWindowQt
+from tools.rcd import RCD_BUDGET_SOURCE
+from tools.rcd.qt_window import RcdWindowQt
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -216,6 +219,73 @@ class BudgetQtWindowTests(unittest.TestCase):
             error.assert_called_once()
             tool.reject()
             window.is_dirty = False
+            window.close()
+            self.application.processEvents()
+
+    def test_rcd_qt_reuses_window_reviews_wastes_and_synchronizes_budget(self) -> None:
+        """Migra los dos pasos RCDs y la sincronización del capítulo."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            window.budget_items = [
+                ProjectItem("EXC", "01#", "m3", "Excavación de tierras", 10, 20),
+                ProjectItem("DEM", "02#", "m2", "Demolición de hormigón", 50, 10),
+            ]
+            window.chapter_order = ["01#", "02#"]
+            window._open_tool("rcd")
+            tool = window._project_windows[-1]
+            self.assertIsInstance(tool, RcdWindowQt)
+            window._open_tool("rcd")
+            self.assertEqual(len(window._project_windows), 1)
+            self.assertEqual(tool.waste_table.rowCount(), 0)
+            tool.variables["surface"].setText("100")
+            tool.accept_inputs()
+            self.assertEqual(tool.waste_table.rowCount(), 57)
+            self.assertEqual(tool.preview_table.rowCount(), 8)
+            selected = tool.data.selected["40"]
+            waste_item = next(
+                tool.waste_table.item(row, 0)
+                for row in range(tool.waste_table.rowCount())
+                if tool.waste_table.item(row, 0).data(Qt.ItemDataRole.UserRole) == "40"
+            )
+            waste_item.setCheckState(
+                Qt.CheckState.Unchecked if selected else Qt.CheckState.Checked
+            )
+            self.assertNotEqual(tool.data.selected["40"], selected)
+            with patch.object(window, "save_project", return_value=False):
+                tool.save()
+            generated = [
+                item
+                for item in window.budget_items
+                if item.source.startswith(RCD_BUDGET_SOURCE)
+            ]
+            self.assertEqual(len(generated), 7)
+            tool.reject()
+            window.is_dirty = False
+            window.close()
+            self.application.processEvents()
+
+    def test_rcd_qt_restores_valid_state_and_rejects_invalid_json(self) -> None:
+        """Usa el mismo validador RCDs al abrir proyectos Qt."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            path = Path(directory) / "project.json"
+            path.write_text(
+                json.dumps({"items": [], "rcds": {"selected": {"5": "X"}}}),
+                encoding="utf-8",
+            )
+            window = BudgetMainWindow()
+            with patch.object(QMessageBox, "critical") as error:
+                self.assertFalse(window._load_project_file(path))
+            error.assert_called_once()
+            path.write_text(
+                json.dumps({"items": [], "rcds": {"documentation": {"reuse": "Texto"}}}),
+                encoding="utf-8",
+            )
+            self.assertTrue(window._load_project_file(path))
+            self.assertEqual(window.rcd_state["documentation"]["reuse"], "Texto")
             window.close()
             self.application.processEvents()
 

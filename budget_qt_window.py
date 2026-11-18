@@ -6,8 +6,10 @@ from decimal import Decimal
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
+import unicodedata
 import webbrowser
 
 from PySide6.QtCore import Qt
@@ -1157,6 +1159,7 @@ class BudgetMainWindow(QMainWindow):
     ) -> bool:
         """Valida y restaura un proyecto JSON."""
         from tools.price_justification import restore_project_state
+        from tools.rcd import restore_project_state as restore_rcd_state
 
         try:
             document = read_project(
@@ -1168,6 +1171,7 @@ class BudgetMainWindow(QMainWindow):
             price_justification_state = restore_project_state(
                 document.price_justification
             )
+            rcd_state = restore_rcd_state(document.rcds)
         except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
             QMessageBox.critical(
                 self, "No se pudo abrir el proyecto", f"El archivo no es válido:\n{exc}"
@@ -1185,7 +1189,7 @@ class BudgetMainWindow(QMainWindow):
         self.project_title = document.title
         self.planning_state = document.planning
         self.invoicing_state = document.invoicing
-        self.rcd_state = document.rcds
+        self.rcd_state = rcd_state
         self.safety_health_state = document.safety_health
         self.pptp_state = document.pptp
         self.price_justification_state = price_justification_state
@@ -1252,6 +1256,50 @@ class BudgetMainWindow(QMainWindow):
                 )
                 return False
         return True
+
+    def _has_external_tool_chapter(self, tool: str) -> bool:
+        """Detecta capítulos externos que la herramienta no debe sustituir."""
+        prefix = "RCD:" if tool == "rcd" else "SS:"
+        chapters = set(self.chapter_order) | set(self.chapter_titles)
+        chapters.update(item.chapter for item in self.budget_items)
+        for chapter in chapters:
+            title = self._chapter_title(chapter)
+            normalized = unicodedata.normalize(
+                "NFKD", f"{chapter} {title}".casefold()
+            )
+            text = re.sub(
+                r"[^a-z0-9]+",
+                " ",
+                "".join(
+                    char for char in normalized if not unicodedata.combining(char)
+                ),
+            ).strip()
+            code = re.sub(r"[^a-z0-9]", "", chapter.casefold())
+            if tool == "rcd":
+                matches = (
+                    re.search(r"\b(?:rcds?|residuos?|escombros?)\b", text)
+                    or re.search(r"\br\s+c\s+d\s*s?\b", text)
+                    or re.fullmatch(r"rcds?\d*", code)
+                )
+            else:
+                matches = (
+                    re.search(
+                        r"\b(?:seguridad|salud)\b|\bprevencion\b.*\briesgos\b|"
+                        r"\bs\s+(?:y\s+)?s\b",
+                        text,
+                    )
+                    or re.fullmatch(r"(?:ss|sys)\d*", code)
+                )
+            members = [
+                item for item in self.budget_items if item.chapter == chapter
+            ]
+            if (
+                matches
+                and members
+                and not any(item.source.startswith(prefix) for item in members)
+            ):
+                return True
+        return False
 
     def _dismiss_project_windows(self) -> bool:
         """Cierra herramientas vinculadas al proyecto antes de sustituirlo."""

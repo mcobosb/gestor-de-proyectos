@@ -81,7 +81,7 @@ def load_documents(archive_path: Path) -> list[tuple[str, str]]:
 
 def study_variables(state: RcdState, title: str, settings: ReportSettings) -> dict[str, str]:
     """Enlaza los datos generales actuales y las decisiones particulares sin inventar destinos."""
-    from bc3_gui import fmt_number
+    from budget_core import fmt_number
     from . import MEASURED_NOTE, NOTE, normalize
 
     values = {
@@ -138,7 +138,7 @@ def study_tables(
     state: RcdState, title: str, settings: ReportSettings, project_pem: float | None,
 ) -> dict[str, list[StudyTable]]:
     """Reutiliza las filas del cálculo existente sin distribuir artificialmente cantidades por LER."""
-    from bc3_gui import currency_label, fmt_number
+    from budget_core import currency_label, fmt_number
     from . import GROUPS, HEADERS, INPUTS, WASTES, calculate, number
 
     sections, details = calculate(state)
