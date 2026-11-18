@@ -30,6 +30,7 @@ from tools.safety_health.qt_window import (
 )
 from tools.pptp.qt_window import PptpWindowQt
 from tools.certifications.qt_window import CertificationWindowQt
+from tools.planning.qt_window import PlanningWindowQt
 from decimal import Decimal
 
 
@@ -457,6 +458,52 @@ class BudgetQtWindowTests(unittest.TestCase):
             with patch.object(QMessageBox, "critical") as error:
                 tool.commit_certification(0, 0, "-1")
             error.assert_called_once()
+            tool.reject()
+            window.is_dirty = False
+            window.close()
+            self.application.processEvents()
+
+    def test_planning_qt_roundtrips_parameters_sequence_and_shared_state(self) -> None:
+        """Migra calendario, edición de actividades y estado compartido."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            window.budget_items = [
+                ProjectItem(
+                    "P1", "01#", "m2", "Primera", 16, 10, rendimiento=1
+                ),
+                ProjectItem(
+                    "P2", "01#", "m2", "Segunda", 8, 10, rendimiento=1
+                ),
+            ]
+            window.chapter_order = ["01#"]
+            window._open_tool("planning")
+            tool = window._project_windows[-1]
+            self.assertIsInstance(tool, PlanningWindowQt)
+            window._open_tool("planning")
+            self.assertEqual(len(window._project_windows), 1)
+            self.assertEqual(tool.table.rowCount(), 2)
+            tool.commit_cell(tool.activities[0], "teams", "2")
+            self.assertEqual(tool.activities[0].duration, 1)
+            self.assertEqual(
+                window.planning_state["activities"][0]["teams"], 2
+            )
+            tool.sequence_chain()
+            self.assertEqual(
+                [activity.pred for activity in tool.activities],
+                [None, 1],
+            )
+            tool.new_holiday_date.setText("10/12/2026")
+            tool.new_holiday_description.setText("Festivo Qt")
+            tool.add_holiday()
+            self.assertIn(
+                "2026-12-10",
+                [entry["date"] for entry in tool.to_state()["params"]["holidays"]],
+            )
+            with patch.object(window, "save_project", return_value=True):
+                tool.save_changes()
+            self.assertFalse(tool.dirty)
             tool.reject()
             window.is_dirty = False
             window.close()

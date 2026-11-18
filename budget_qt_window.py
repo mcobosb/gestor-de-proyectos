@@ -1261,6 +1261,11 @@ class BudgetMainWindow(QMainWindow):
                 return False
         return True
 
+    def _store_planning_state(self, state: dict) -> None:
+        """Actualiza la planificación compartida con otras herramientas."""
+        self.planning_state = state
+        self._mark_dirty()
+
     def _has_external_tool_chapter(self, tool: str) -> bool:
         """Detecta capítulos externos que la herramienta no debe sustituir."""
         prefix = "RCD:" if tool == "rcd" else "SS:"
