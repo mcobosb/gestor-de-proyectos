@@ -10,6 +10,26 @@ TABLE_HEADER_BACKGROUND = "#4472C4"
 TABLE_ALTERNATE_BACKGROUND = "#D9E5F5"
 
 
+def project_document_variables(title: str, settings) -> dict[str, str]:
+    """Obtiene los datos comunes actuales sin mantener copias en cada herramienta."""
+    municipalities = settings.municipalities
+    places = ", ".join(municipality.label for municipality in municipalities)
+    return {
+        "titulo_proyecto": title,
+        "entidad": settings.organization,
+        "autor": settings.author,
+        "cargo": settings.role,
+        "expediente": settings.expediente,
+        "localidad": settings.location,
+        "municipios": places,
+        "emplazamiento": places or settings.location,
+        "provincias": ", ".join(dict.fromkeys(municipality.province for municipality in municipalities)),
+        "comunidades_autonomas": ", ".join(dict.fromkeys(
+            municipality.autonomous_community for municipality in municipalities
+        )),
+    }
+
+
 def number_headings(source: str) -> str:
     """Numera la jerarquia Markdown sin duplicar la numeracion del texto original."""
     counters = [0] * 6

@@ -361,17 +361,40 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
 
 ### Gestión de RCDs
 
-- **Herramientas → RCDs**, como primera opción: datos de cálculo editables y
+- **Herramientas → RCDs**: datos de cálculo editables y
   revisión de residuos detectados en las partidas.
 - Marcas X manuales y evidencias de detección, guardadas con el proyecto.
+- **Vínculos LER–BCCA…** cruza el código exacto de cada partida con la tabla BCCA2023
+  y muestra los candidatos, su procedencia y la indicación de peligrosidad del catálogo.
+  Los vínculos únicos no peligrosos compatibles con el modelo y con la detección por texto
+  se usan como preselección revisable en un análisis nuevo; los vínculos múltiples quedan
+  como indicios. El estudio incluye la trazabilidad; no deduce cantidades de ese cruce
+  ni cambia marcas ya guardadas al reabrir el proyecto.
 - Al guardar RCDs, capítulo Gestión de residuos incorporado al presupuesto
   con niveles, tipologías, mediciones, precios e importes, sin duplicados.
-- Presupuesto de gestión tabulado en PDF u ODT, con el formato y la plantilla
-  configurados. Modelo revisado a partir de las tres hojas del ODS aportado;
-  coeficientes, precios, mínimos y complemento Nivel I editables.
+- Estudio completo PDF/ODT con índice, memoria, pliego, firma y las tablas
+  existentes de identificación, estimación, trazabilidad y presupuesto, con
+  el formato y la plantilla configurados. Texto y tablas nativos, editables en ODT.
+- **Documentación del estudio…** permite revisar los ocho documentos base y
+  editar su biblioteca con el mismo editor e historial del PPTP. Conserva los
+  marcadores de tablas: si faltan o se duplican, la exportación informa del error.
+- Las decisiones de prevención, separación, reutilización, valorización,
+  destinos, peligrosos, instalaciones/planos y condiciones territoriales se
+  guardan con el proyecto. Los campos sin completar figuran como pendientes.
+- Los datos comunes se toman de la configuración general y el PEM del presupuesto
+  actual, diferenciándolo de la base sin gestión. La normativa andaluza se incluye
+  automáticamente solo si los municipios configurados sitúan la obra en Andalucía.
+  Se reutiliza el resumen de la actuación de Seguridad y Salud o, si no está
+  cumplimentado, el del PPTP, indicando su procedencia.
+- Se mantiene el modelo revisado de las tres hojas del ODS aportado, sin cambiar
+  sus cálculos: coeficientes, precios, mínimos y complemento Nivel I editables.
+  Las tarifas del modelo están expresadas en euros; no se convierten divisas.
 
 La estimación debe revisarse por el técnico responsable; no acredita cumplimiento
-normativo ni sustituye la identificación de residuos peligrosos. El ODS de trabajo
+normativo ni sustituye el desglose por código LER, la identificación de residuos
+peligrosos, la concreción de destinos ni los planos que deben incorporarse al proyecto.
+Los umbrales del RD 105/2008 no eximen de la clasificación de la Ley 7/2022.
+El ODS de trabajo
 no es necesario para ejecutar la herramienta y no se incluye en el instalador.
 
 Si un presupuesto BC3 ya incluye capítulos de RCDs o de Seguridad y Salud, su

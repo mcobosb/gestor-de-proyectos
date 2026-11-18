@@ -6,6 +6,7 @@ import re
 
 from tools._library_editor import library_members, read_markdown
 from tools._library_markdown import document_markdown, text_blocks
+from tools._shared.document_layout import project_document_variables
 
 
 LIBRARY_PATH = Path(__file__).resolve().parent / "BIBLIOTECA.zip"
@@ -33,22 +34,7 @@ def load_documents(archive_path: Path) -> list[tuple[str, str]]:
 
 def general_variables(app) -> dict[str, str]:
     """Obtiene los datos comunes actuales sin utilizar copias guardadas en la herramienta."""
-    settings = app.report_settings
-    municipalities = settings.municipalities
-    return {
-        "titulo_proyecto": app._project_title(),
-        "entidad": settings.organization,
-        "autor": settings.author,
-        "cargo": settings.role,
-        "expediente": settings.expediente,
-        "localidad": settings.location,
-        "municipios": ", ".join(municipality.label for municipality in municipalities),
-        "emplazamiento": ", ".join(municipality.label for municipality in municipalities) or settings.location,
-        "provincias": ", ".join(dict.fromkeys(municipality.province for municipality in municipalities)),
-        "comunidades_autonomas": ", ".join(dict.fromkeys(
-            municipality.autonomous_community for municipality in municipalities
-        )),
-    }
+    return project_document_variables(app._project_title(), app.report_settings)
 
 
 def template_variables(app, state: dict) -> dict[str, str]:

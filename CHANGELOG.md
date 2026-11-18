@@ -3,6 +3,15 @@
 ## 1.7.0 — 2026-11-17
 
 ### Añadido
+- Cruce por código exacto de UO con la tabla LER–BCCA2023 en RCDs, con indicios
+  revisables, trazabilidad en PDF/ODT y reutilización del resumen de Seguridad y
+  Salud o del PPTP en la memoria.
+- Estudio completo de RCDs en PDF/ODT con memoria, pliego, índice y presupuesto,
+  biblioteca de ocho documentos editables con historial y decisiones particulares
+  guardadas en el proyecto. Reutiliza las tablas y cálculos existentes, obtiene los
+  datos comunes de la configuración y diferencia el PEM de la base de estimación.
+  Incluye prevención, planos y trazabilidad, con referencias normativas actualizadas
+  y avisos explícitos de los datos pendientes de concretar para cada obra.
 - Herramienta «Justificación de precios» como primera opción del menú, con
   biblioteca de ocho documentos base Markdown y editor con historial como el
   del PPTP. Incluye el texto técnico y las fórmulas de composición, indirectos,

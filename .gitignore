@@ -35,6 +35,7 @@ plantillas/*
 *.xlsx
 *.xls
 *.csv
+!tools/rcd/Codigos_LER_BCCA2023.csv
 !tools/CMUN.csv
 !tools/CPRO.csv
 /plantilla.odt

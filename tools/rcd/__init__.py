@@ -15,6 +15,7 @@ import unicodedata
 
 from localization import filedialog, localize_widget_tree, messagebox
 from .._shared.budget_sources import RCD_BUDGET_SOURCE, TRANSPORT_PREFIX
+from . import ler_catalog
 
 if TYPE_CHECKING:
     from bc3_gui import BudgetApp, ProjectItem
@@ -37,7 +38,10 @@ def open_tool(app: BudgetApp) -> None:
     if app._rcd_window is not None and app._rcd_window.winfo_exists():
         app._rcd_window.lift()
         return
-    app._rcd_window = RcdWindow(app.root, app)
+    try:
+        app._rcd_window = RcdWindow(app.root, app)
+    except ValueError as exc:
+        messagebox.showerror("RCDs", str(exc), parent=app.root)
 
 
 def restore_project_state(data: dict) -> dict:
@@ -252,6 +256,7 @@ class RcdState:
     evidence: dict[str, list[str]] = field(default_factory=dict)
     sources: dict[str, str] = field(default_factory=dict)
     demolition: list[DemolitionMeasurement] = field(default_factory=list)
+    documentation: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         """Serializa las estimaciones, las marcas manuales y su procedencia."""
@@ -263,6 +268,12 @@ class RcdState:
         if not isinstance(data, dict):
             raise ValueError("Los datos RCDs deben ser un objeto JSON.")
         state = cls()
+        documentation = data.get("documentation", {})
+        if (not isinstance(documentation, dict)
+                or any(not isinstance(key, str) or not isinstance(value, str)
+                       for key, value in documentation.items())):
+            raise ValueError("Los datos del estudio RCDs deben contener textos.")
+        state.documentation = dict(documentation)
         for section in ("inputs", "groups", "selected", "evidence", "sources"):
             if not isinstance(data.get(section, {}), dict):
                 raise ValueError(f"Sección RCDs no válida: {section}.")
@@ -487,10 +498,12 @@ def detect_wastes(state: RcdState, app: BudgetApp) -> None:
 
 def detect_waste_items(state: RcdState, items: list[ProjectItem]) -> None:
     """Conserva coincidencias por residuo para un conjunto concreto de partidas."""
+    index = ler_catalog.by_work_unit(ler_catalog.CATALOG_PATH)
+    by_item: list[set[str]] = [set() for _ in items]
     for key, group, code, _, pattern in WASTES:
         matches = []
         code_pattern = r"(?<!\d)" + r"[\s.\-]*".join(re.findall(r"\d{2}", code)) + r"(?!\d)"
-        for item in items:
+        for item, found in zip(items, by_item):
             text = normalize(f"{item.summary} {item.text}")
             code_text = re.sub(r"(?:distint[oa]s?|excepto|excluid[oa]s?).*?(?:[;]|$)", "", text)
             material_text = re.sub(
@@ -505,8 +518,20 @@ def detect_waste_items(state: RcdState, items: list[ProjectItem]) -> None:
                 material = False
             if explicit or material:
                 matches.append(f"{item.code}: {item.summary}" + (" [LER]" if explicit else " [texto, revisar]"))
+                found.add(key)
         state.evidence[key] = matches
         state.selected[key] = bool(matches)
+    model_keys = {code: key for key, _, code, *_ in WASTES if key not in {"23", "85"}}
+    for item, found in zip(items, by_item):
+        entries = index.get(item.code.strip().upper(), ())
+        if len(entries) != 1 or entries[0].hazardous:
+            continue
+        if re.match(r"\s*(?:transporte|gestion|tratamiento|canon)\b", normalize(item.summary)):
+            continue
+        key = model_keys.get(entries[0].code)
+        if key is not None and (not found or found == {key}):
+            state.evidence[key].append(f"{item.code}: {item.summary} [BCCA2023 → {entries[0].code}, revisar]")
+            state.selected[key] = True
 
 
 @dataclass(frozen=True)
@@ -665,126 +690,28 @@ def synchronize_budget(app: BudgetApp, state: RcdState) -> None:
     app._mark_dirty()
 
 
-def write_report(state: RcdState, title: str, settings, target: Path) -> None:
-    """Genera el mismo presupuesto tabulado en PDF u ODT con la plantilla elegida."""
-    from bc3_gui import fmt_number
+def write_report(
+    state: RcdState, title: str, settings, target: Path, *, project_pem: float | None = None,
+    app: BudgetApp | None = None,
+) -> None:
+    """Genera el estudio completo reutilizando exactamente el análisis y las tablas RCDs."""
+    from .study import write_study
 
-    state = RcdState.from_dict(state.to_dict())
-    sections, details = calculate(state)
-    inputs = [[label, fmt_number(value, 4 if key == "volume_factor" else 2)]
-              for key, label, _ in INPUTS if (value := state.inputs[key]) is not None]
-    waste_rows = [[code, description, "; ".join(state.evidence.get(key, [])) or "Selección manual"]
-                  for key, _, code, description, _ in WASTES if state.selected[key]]
-    group_names = {key: label for key, label, *_ in GROUPS}
-    demolition_rows = [
-        [
-            row.source,
-            f"{fmt_number(float(row.quantity), 3)} {row.unit}",
-            fmt_number(float(row.factor), 3),
-            group_names[row.group],
-            fmt_number(float(row.volume)),
-        ]
-        for row in state.demolition if row.included
-    ]
-    demolition_headers = ["Procedencia", "Medición original", "Factor a m³", "Material", "Volumen (m³)"]
-    heading = "PRESUPUESTO DE GESTIÓN DE RCDs"
-    if settings.output_format == "odt":
-        from odt_reports import _new_report
-
-        document = _new_report(heading, title, settings)
-        document.paragraph(NOTE)
-        document.space(12)
-        if state.demolition:
-            document.paragraph(MEASURED_NOTE)
-            document.heading("Mediciones de demolición copiadas al transporte")
-            document.table(demolition_headers, demolition_rows, ratios=[3, 1, 1, 1.5, 1])
-            document.space(12)
-        for label, rows in sections:
-            document.heading(label)
-            document.table(
-                HEADERS, rows, bold_rows=(0,) if label.startswith("TOTAL") else (),
-                ratios=[40, 15, 17, 14, 14],
-            )
-            document.space(12)
-        document.heading("Datos de cálculo y revisión")
-        document.table(["Dato", "Valor"], inputs, ratios=[4, 1])
-        document.space(12)
-        document.table(
-            ["Grupo", "X", "Peso (t)", "Densidad (t/m³)", "Volumen (m³)"], details,
-            ratios=[4, 0.5, 1, 1, 1],
-        )
-        document.space(12)
-        document.heading("Residuos seleccionados (revisión manual)")
-        document.table(
-            ["LER (modelo ODS)", "Residuo", "Procedencia"], waste_rows,
-            ratios=[1.2, 2.5, 4],
-        )
-        document.paragraph("Los códigos repetidos y la clasificación del grupo otros proceden del modelo.")
-        document.space(24)
-        for value in (settings.location, settings.role, settings.author, settings.organization, settings.signature):
-            if value:
-                document.paragraph(value, style="Signature")
-        document.write(target)
-        return
-    from reportlab.lib.pagesizes import A4
-    from reportlab.platypus import KeepTogether, SimpleDocTemplate, Spacer
-    from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout, report_project_label
-
-    layout = ReportLayout(
-        template_path=settings.template_path,
-        expediente=settings.expediente,
-        template_title=title,
-    )
-    project_label = report_project_label(title)
-    story = [layout.text(NOTE), Spacer(1, 12)]
-    if state.demolition:
-        story.extend([layout.text(MEASURED_NOTE),
-                      layout.text("Mediciones de demolición copiadas al transporte", layout.bold),
-                      layout.table(demolition_headers, demolition_rows, [3, 1, 1, 1.5, 1]),
-                      Spacer(1, 12)])
-    for label, rows in sections:
-        story.extend([layout.text(label, layout.bold), layout.table(
-            HEADERS, rows, [40, 15, 17, 14, 14],
-            bold_rows=(0,) if label.startswith("TOTAL") else (),
-        ), Spacer(1, 12)])
-    story.extend([layout.text("Datos de cálculo y revisión", layout.bold),
-                  layout.table(["Dato", "Valor"], inputs, [4, 1]),
-                  Spacer(1, 12),
-                  layout.table(["Grupo", "X", "Peso (t)", "Densidad (t/m³)", "Volumen (m³)"],
-                               details, [4, 0.5, 1, 1, 1]),
-                  Spacer(1, 12),
-                  layout.text("Residuos seleccionados (revisión manual)", layout.bold)])
-    if waste_rows:
-        story.append(layout.table(["LER (modelo ODS)", "Residuo", "Procedencia"], waste_rows, [1.2, 2.5, 4]))
-    signatures = [
-        layout.text(value, layout.center)
-        for value in (settings.location, settings.role, settings.author, settings.organization, settings.signature)
-        if value
-    ]
-    if signatures:
-        story.append(KeepTogether([Spacer(1, 24), *signatures]))
-
-    def header(canvas, document):
-        """Dibuja cabecera y pie con el mismo diseño que los demás informes."""
-        layout.header(canvas, document, heading, project_label)
-
-    document = SimpleDocTemplate(str(target), pagesize=A4, leftMargin=LEFT_MARGIN - 6,
-                                 rightMargin=RIGHT_MARGIN - 6, bottomMargin=layout.bottom_margin(),
-                                 topMargin=layout.top_margin(heading, project_label),
-                                 title=f"{heading} - {title}", author=settings.author)
-    document.build(story, onFirstPage=header, onLaterPages=header)
+    write_study(state, title, settings, target, project_pem=project_pem, app=app)
 
 
 class RcdWindow(tk.Toplevel):
     def __init__(self, master: tk.Misc, app: BudgetApp):
         """Abre el primer paso con los datos recuperados o las últimas ediciones."""
+        data = RcdState.from_dict(app.rcd_state) if app.rcd_state else initial_state(app)
         super().__init__(master)
         self.app = app
         self.title("RCDs")
         self.geometry("1250x800")
         self.minsize(1000, 600)
-        self.data = RcdState.from_dict(app.rcd_state) if app.rcd_state else initial_state(app)
+        self.data = data
         self._dirty = False
+        self.documentation_window = None
         self.content = ttk.Frame(self, padding=12)
         self.content.pack(fill="both", expand=True)
         self.protocol("WM_DELETE_WINDOW", self.close)
@@ -798,6 +725,8 @@ class RcdWindow(tk.Toplevel):
         ttk.Label(self.content, text="RCDs — Datos de cálculo (revisa también los valores recuperados)",
                   style="Total.TLabel").pack(anchor="w", pady=6)
         ttk.Label(self.content, text=NOTE, wraplength=1100).pack(fill="x", pady=6)
+        ttk.Button(self.content, text="Documentación del estudio…",
+                   command=self.open_documentation).pack(anchor="w", pady=6)
         ttk.Button(self.content, text="Llevar mediciones de demolición a transporte a vertedero",
                    command=self.review_demolition).pack(anchor="w", pady=6)
         self.measured_label = ttk.Label(self.content, text=MEASURED_NOTE if self.data.demolition else "",
@@ -844,7 +773,11 @@ class RcdWindow(tk.Toplevel):
 
     def review_demolition(self):
         """Revisa materiales y conversiones antes de modificar el presupuesto."""
-        rows = demolition_measurements(self.app, self.data)
+        try:
+            rows = demolition_measurements(self.app, self.data)
+        except ValueError as exc:
+            messagebox.showerror("RCDs", str(exc), parent=self)
+            return
         if not rows:
             messagebox.showinfo("RCDs", "No se han encontrado partidas de demolición, retirada "
                                 "o desmontaje. Revisa sus descripciones y capítulos.", parent=self)
@@ -889,7 +822,11 @@ class RcdWindow(tk.Toplevel):
         toolbar = ttk.Frame(self.content)
         toolbar.pack(fill="x", pady=6)
         ttk.Button(toolbar, text="Datos de cálculo", command=self.show_inputs).pack(side="left")
-        ttk.Button(toolbar, text="Generar informe RCDs", command=self.generate_report).pack(side="left", padx=8)
+        ttk.Button(toolbar, text="Documentación del estudio…",
+                   command=self.open_documentation).pack(side="left", padx=8)
+        ttk.Button(toolbar, text="Vínculos LER–BCCA…",
+                   command=self.show_ler_links).pack(side="left")
+        ttk.Button(toolbar, text="Generar estudio RCDs", command=self.generate_report).pack(side="left", padx=8)
         self.save_button = tk.Button(toolbar, text="💾", width=3, command=self.save)
         self._save_background = self.save_button.cget("background")
         self._save_foreground = self.save_button.cget("foreground")
@@ -982,13 +919,73 @@ class RcdWindow(tk.Toplevel):
             self.save_button.configure(background=self._save_background, foreground=self._save_foreground)
             self.status.configure(text="RCDs y capítulo Gestión de residuos guardados con el proyecto.")
 
+    def open_documentation(self):
+        """Abre los documentos base y decisiones particulares sin exigir cálculos completos."""
+        from .documentation import RcdDocumentationWindow
+        from .study import LIBRARY_PATH, load_documents
+
+        if self.documentation_window is not None and self.documentation_window.winfo_exists():
+            self.documentation_window.lift()
+            return
+        try:
+            documents = dict(load_documents(LIBRARY_PATH))
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Documentación RCDs", str(exc), parent=self)
+            return
+        self.documentation_window = RcdDocumentationWindow(self, documents)
+
+    def show_ler_links(self):
+        """Muestra todos los indicios BCCA de las partidas actuales sin tocar marcas revisadas."""
+        try:
+            rows = ler_catalog.match_rows(self.app.budget_items)
+        except ValueError as exc:
+            messagebox.showerror("Vínculos LER–BCCA", str(exc), parent=self)
+            return
+        if not rows:
+            messagebox.showinfo("Vínculos LER–BCCA",
+                                "Ninguna partida del presupuesto coincide por código exacto con la tabla BCCA2023.",
+                                parent=self)
+            return
+        dialog = tk.Toplevel(self)
+        dialog.title("Vínculos LER–BCCA")
+        dialog.transient(self)
+        dialog.geometry("1050x500")
+        frame = ttk.Frame(dialog, padding=12)
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, wraplength=990, text=ler_catalog.MATCH_NOTE).pack(fill="x", pady=(0, 8))
+        grid = ttk.Frame(frame)
+        grid.pack(fill="both", expand=True)
+        grid.rowconfigure(0, weight=1)
+        grid.columnconfigure(0, weight=1)
+        columns = ("unit", "ler", "description", "review")
+        tree = ttk.Treeview(grid, columns=columns, show="headings")
+        for column, label, width in zip(columns, ler_catalog.MATCH_HEADERS, (330, 90, 375, 210)):
+            tree.heading(column, text=label)
+            tree.column(column, width=width, stretch=False)
+        for row in rows:
+            tree.insert("", "end", values=row)
+        tree.grid(row=0, column=0, sticky="nsew")
+        scroll = ttk.Scrollbar(grid, command=tree.yview)
+        scroll.grid(row=0, column=1, sticky="ns")
+        horizontal = ttk.Scrollbar(grid, orient="horizontal", command=tree.xview)
+        horizontal.grid(row=1, column=0, sticky="ew")
+        tree.configure(yscrollcommand=scroll.set, xscrollcommand=horizontal.set)
+        localize_widget_tree(dialog)
+
     def generate_report(self):
         """Genera atómicamente el formato configurado y abre el archivo resultante."""
         settings = self.app.report_settings
+        if (self.documentation_window is not None and self.documentation_window.winfo_exists()
+                and self.documentation_window.has_unsaved_library()):
+            messagebox.showerror(
+                "Documentación RCDs",
+                "Guarda o descarta los cambios de la biblioteca antes de generar el estudio.", parent=self,
+            )
+            return
         extension = ".odt" if settings.output_format == "odt" else ".pdf"
         raw = filedialog.asksaveasfilename(
-            parent=self, title="Generar informe RCDs", initialfile=f"Presupuesto RCDs{extension}",
-            defaultextension=extension, filetypes=[("Informe RCDs", f"*{extension}")],
+            parent=self, title="Generar estudio RCDs", initialfile=f"Estudio de gestión de RCDs{extension}",
+            defaultextension=extension, filetypes=[("Estudio RCDs", f"*{extension}")],
         )
         if not raw:
             return
@@ -997,7 +994,10 @@ class RcdWindow(tk.Toplevel):
         try:
             with tempfile.NamedTemporaryFile(dir=target.parent, suffix=extension, delete=False) as handle:
                 temporary = Path(handle.name)
-            write_report(self.data, self.app._project_title(), settings, temporary)
+            write_report(
+                self.data, self.app._project_title(), settings, temporary,
+                project_pem=sum(item.import_total for item in self.app.budget_items), app=self.app,
+            )
             temporary.replace(target)
         except (OSError, ValueError, ImportError) as exc:
             messagebox.showerror("No se pudo generar el informe", str(exc), parent=self)
@@ -1013,6 +1013,10 @@ class RcdWindow(tk.Toplevel):
 
     def close(self):
         """Cierra conservando las ediciones aceptadas en memoria del proyecto."""
+        if self.documentation_window is not None and self.documentation_window.winfo_exists():
+            self.documentation_window.close()
+            if self.documentation_window.winfo_exists():
+                return
         self.destroy()
 
 

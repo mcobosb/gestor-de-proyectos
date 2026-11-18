@@ -1,6 +1,7 @@
 import gc
 import json
 from pathlib import Path
+import shutil
 import tempfile
 import tkinter as tk
 from tkinter import ttk
@@ -17,7 +18,7 @@ from budget_reports import ReportSettings
 from tools.rcd import (
     GROUPS, HEADERS, INPUTS, WASTES, DemolitionDialog, DemolitionMeasurement,
     RCD_BUDGET_SOURCE, RcdState, RcdWindow, TRANSPORT_PREFIX, TRANSPORT_REVIEW, calculate,
-    demolition_measurements, detect_wastes, initial_state, number, synchronize_budget,
+    demolition_measurements, detect_waste_items, detect_wastes, initial_state, number, synchronize_budget,
     transfer_demolition, write_report,
 )
 from report_layout import DEFAULT_TEMPLATE_PATH, _read_report_template
@@ -47,6 +48,39 @@ def set_items(app):
 
 
 class RcdCalculationTests(unittest.TestCase):
+    def test_bcca_links_preselect_only_exact_unambiguous_non_conflicting_residues(self):
+        from tools.rcd.ler_catalog import match_rows
+
+        unique = ProjectItem("01upp00030", "01#", "m²", "Retirada de pavimento existente")
+        ambiguous = ProjectItem("01QIF00001N", "01#", "m²", "Desmontaje de cubierta existente")
+        prefix = ProjectItem("01UPP00030A", "01#", "m²", "Retirada de pavimento existente")
+        conflicting = ProjectItem("01UPP00030", "01#", "m²", "Demolición de pavimento de hormigón")
+        transport = ProjectItem("01UPP00030", "01#", "m³", "Transporte a gestor")
+        for item, expected in ((unique, ["13"]), (ambiguous, []), (prefix, []),
+                               (conflicting, ["40"]), (transport, [])):
+            with self.subTest(item=item.summary, code=item.code):
+                state = RcdState()
+                detect_waste_items(state, [item])
+                self.assertEqual([key for key, selected in state.selected.items() if selected], expected)
+                if item is unique:
+                    self.assertIn("BCCA2023 → 17 03 02", state.evidence["13"][0])
+        rows = match_rows([ambiguous, prefix])
+        self.assertEqual({row[1] for row in rows}, {"17 01 01", "17 01 03", "17 06 05*"})
+        self.assertTrue(all(row[3].startswith("Vínculo múltiple") for row in rows))
+        self.assertIn("peligroso, comprobar", next(row[3] for row in rows if row[1].endswith("*")))
+
+    def test_documentation_roundtrip_legacy_and_invalid_values(self):
+        state = example_state()
+        state.documentation = {"destinations": "Gestor pendiente de aceptación", "future_field": "Conservar"}
+        restored = RcdState.from_dict(state.to_dict())
+        self.assertEqual(restored.documentation, state.documentation)
+        legacy = state.to_dict()
+        del legacy["documentation"]
+        self.assertEqual(RcdState.from_dict(legacy).documentation, {})
+        for value in (None, [], {"reuse": False}, {1: "texto"}):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                RcdState.from_dict({"documentation": value})
+
     def test_numeric_validation(self):
         self.assertEqual(number("1.234,56", "Valor"), 1234.56)
         self.assertEqual(number("1,234.56", "Valor"), 1234.56)
@@ -241,7 +275,7 @@ class RcdReportTests(unittest.TestCase):
         signature = styles.index("Signature")
         self.assertEqual(styles[signature - 1], "Space24.0000")
         settings.output_format = "pdf"
-        with patch("reportlab.platypus.SimpleDocTemplate.build") as build:
+        with patch("reportlab.platypus.SimpleDocTemplate.multiBuild") as build:
             write_report(example_state(), "Proyecto RCD", settings, self.folder / "spaced.pdf")
         story = build.call_args.args[0]
         self.assertGreaterEqual(sum(isinstance(item, Spacer) and item.height == 12 for item in story), 7)
@@ -289,7 +323,7 @@ class RcdReportTests(unittest.TestCase):
             image = next(name for name in archive.namelist() if name.startswith("Pictures/"))
             self.assertEqual(archive.read(image), _read_report_template(str(template))[0])
             tables = content.findall(".//{urn:oasis:names:tc:opendocument:xmlns:table:1.0}table")
-            self.assertEqual(len(tables), 7)
+            self.assertEqual(len(tables), 9)
             self.assertIn(HEADERS[0], text)
             self.assertIn("modelo revisado", text.lower())
 
@@ -317,6 +351,92 @@ class RcdReportTests(unittest.TestCase):
             for value in ("DEM: Pavimento zona norte", "50,000 m", "10,00", "0,200",
                           "no de porcentajes del ODS"):
                 self.assertIn(value, text)
+
+    def test_complete_study_uses_current_project_data_and_native_index(self):
+        state = example_state()
+        state.documentation["reuse"] = "Se conservarán los elementos desmontables aptos."
+        original = state.to_dict()
+        settings = ReportSettings(
+            author="Autor configurado", organization="Entidad configurada", expediente="EXP-RCD",
+            municipality_codes=["140386"], signature="Firma única del estudio",
+        )
+        ns = {
+            "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
+            "table": "urn:oasis:names:tc:opendocument:xmlns:table:1.0",
+        }
+        for output in ("pdf", "odt"):
+            settings.output_format = output
+            target = self.folder / f"complete.{output}"
+            write_report(state, "Proyecto documental", settings, target, project_pem=500000.25)
+            if output == "pdf":
+                reader = PdfReader(target)
+                text = "\n".join(page.extract_text() for page in reader.pages)
+                self.assertGreater(len(reader.pages), 3)
+                self.assertIn("1. MEMORIA", reader.pages[0].extract_text())
+                self.assertNotIn("Placeholder", text)
+            else:
+                with ZipFile(target) as archive:
+                    root = ElementTree.fromstring(archive.read("content.xml"))
+                text = " ".join(root.itertext())
+                self.assertIsNotNone(root.find(".//text:table-of-content", ns))
+                bookmarks = {node.get(f"{{{ns['text']}}}name")
+                             for node in root.findall(".//text:bookmark", ns)}
+                for node in root.findall(".//text:bookmark-ref", ns):
+                    self.assertIn(node.get(f"{{{ns['text']}}}ref-name"), bookmarks)
+                tables = root.findall(".//table:table", ns)
+                self.assertIn("Proyecto documental", " ".join(tables[0].itertext()))
+                self.assertIn("LER (modelo ODS)", " ".join(tables[1].itertext()))
+                self.assertIn("TOTAL (sin fianza)", " ".join(tables[-1].itertext()))
+            text = " ".join(text.split())
+            for value in (
+                "1. MEMORIA", "2. PLIEGO DE CONDICIONES", "3. PRESUPUESTO DE GESTIÓN",
+                "1.8. INSTALACIONES Y PLANOS", "500.000,25", "421.392,81",
+                "Entidad configurada", "Autor configurado", "EXP-RCD", "Lucena", "Córdoba",
+                "Decreto 73/2012", "Se conservarán los elementos desmontables aptos.",
+                "PENDIENTE DE CONCRETAR: Destinos", "no genera automáticamente esos planos",
+                "Ley 7/2022", "RD 553/2020", "13.044,62",
+            ):
+                self.assertIn(value, text)
+            self.assertEqual(text.count("Firma única del estudio"), 1)
+            self.assertNotIn("{{", text)
+        self.assertEqual(state.to_dict(), original)
+
+    def test_edited_library_is_used_and_missing_tables_cannot_be_silently_removed(self):
+        from tools._library_editor import _signature, read_markdown, write_markdown
+        from tools.rcd import study
+
+        library = self.folder / "library.zip"
+        shutil.copyfile(study.LIBRARY_PATH, library)
+        member = study.DOCUMENTS[0][0]
+        source = read_markdown(library, member)
+        write_markdown(library, member, source + "\n\nTexto revisado singular.\n", _signature(library))
+        with patch.object(study, "LIBRARY_PATH", library):
+            blocks = study.study_blocks(example_state(), "Proyecto", ReportSettings())
+            self.assertIn((0, "Texto revisado singular."), blocks)
+            for changed in (
+                source.replace("{{tabla_proyecto}}", ""),
+                source + "\n\n{{tabla_proyecto}}\n",
+                source + "\n\n{{dato_inexistente}}\n",
+            ):
+                write_markdown(library, member, changed, _signature(library))
+                for output in ("pdf", "odt"):
+                    target = self.folder / f"invalid.{output}"
+                    with self.subTest(output=output), self.assertRaises(ValueError):
+                        write_report(example_state(), "Proyecto", ReportSettings(output_format=output), target)
+                    self.assertFalse(target.exists())
+
+    def test_territory_follows_configured_municipalities_not_location_text(self):
+        from tools.rcd.study import study_blocks
+
+        settings = ReportSettings(location="Lucena", municipality_codes=["280796"], currency="USD")
+        blocks = study_blocks(example_state(), "Proyecto", settings)
+        text = " ".join(block[1] for block in blocks if isinstance(block, tuple))
+        self.assertNotIn("Decreto 73/2012", text)
+        self.assertIn("No se realiza conversión de divisas", text)
+        settings.municipality_codes = ["140386"]
+        blocks = study_blocks(example_state(), "Proyecto", settings)
+        text = " ".join(block[1] for block in blocks if isinstance(block, tuple))
+        self.assertIn("Decreto 73/2012", text)
 
 
 class RcdWindowTests(unittest.TestCase):
@@ -347,12 +467,13 @@ class RcdWindowTests(unittest.TestCase):
         window.variables["surface"].set("100")
         window.accept_inputs()
 
-    def test_first_tools_entry_and_empty_project_guard(self):
+    def test_tools_entry_and_empty_project_guard(self):
         button = next(child for child in self.root.grid_slaves(row=0, column=0)[0].winfo_children()
                       if isinstance(child, ttk.Menubutton) and child.cget("text") == "Herramientas")
         menu = self.root.nametowidget(button.cget("menu"))
-        self.assertEqual(menu.entrycget(0, "label"), "RCDs")
-        menu.invoke(0)
+        rcd_index = next(index for index in range(menu.index("end") + 1)
+                         if menu.type(index) == "command" and menu.entrycget(index, "label") == "RCDs")
+        menu.invoke(rcd_index)
         first = self.app._rcd_window
         self.app.open_rcds()
         self.assertIs(self.app._rcd_window, first)
@@ -400,6 +521,8 @@ class RcdWindowTests(unittest.TestCase):
         window.toggle_selected()
         window.tree.selection_set("40")
         window.toggle_selected()
+        window.data.documentation["destinations"] = "Instalación pendiente de aceptación"
+        window.changed()
         project = self.folder / "project.json"
         with patch("bc3_gui.filedialog.asksaveasfilename", return_value=str(project)):
             window.save_button.invoke()
@@ -408,6 +531,7 @@ class RcdWindowTests(unittest.TestCase):
         self.assertTrue(self.app._load_project_file(project))
         self.assertFalse(window.winfo_exists())
         reopened = self.open()
+        self.assertEqual(reopened.data.documentation["destinations"], "Instalación pendiente de aceptación")
         self.assertEqual(reopened.variables["surface"].get(), "100.0")
         reopened.accept_inputs()
         self.assertTrue(reopened.data.selected["15"])
@@ -557,6 +681,14 @@ class RcdWindowTests(unittest.TestCase):
     def test_generate_both_configured_formats_and_atomic_failure(self):
         window = self.open()
         self.accept(window)
+        # A saved/reviewed analysis must not be changed by reading current-project links.
+        self.app.budget_items.append(ProjectItem("01QIF00001N", "02#", "m²", "Cubierta para revisar"))
+        self.app.pptp_state["variables"] = {"bullet_capitulos_obra": "Descripción guardada en el PPTP."}
+        self.app.safety_health_state["resumen_actuacion"] = "Resumen revisado de la cubierta."
+        original = window.data.to_dict()
+        window.show_ler_links()
+        self.assertTrue(any(isinstance(child, tk.Toplevel) and child.title() == "Vínculos LER–BCCA"
+                            for child in window.winfo_children()))
         for output in ("pdf", "odt"):
             self.app.report_settings.output_format = output
             path = self.folder / f"report.{output}"
@@ -567,6 +699,18 @@ class RcdWindowTests(unittest.TestCase):
                 window.generate_report()
                 open_file.assert_called_once_with(str(path))
             self.assertTrue(path.is_file())
+            if output == "pdf":
+                text = " ".join(page.extract_text() for page in PdfReader(path).pages)
+                self.assertIn("Resumen revisado de la cubierta.", " ".join(text.split()))
+                self.assertNotIn("Descripción guardada en el PPTP.", text)
+                self.app.safety_health_state["resumen_actuacion"] = ""
+            else:
+                with ZipFile(path) as archive:
+                    text = " ".join(ElementTree.fromstring(archive.read("content.xml")).itertext())
+                self.assertIn("Descripción guardada en el PPTP.", text)
+            for value in ("Cubierta para revisar", "17 06 05*", "Vínculo múltiple"):
+                self.assertIn(value, " ".join(text.split()))
+            self.assertEqual(window.data.to_dict(), original)
             old = path.read_bytes()
             with (
                 patch("tools.rcd.filedialog.asksaveasfilename", return_value=str(path)),
@@ -577,6 +721,45 @@ class RcdWindowTests(unittest.TestCase):
                 error.assert_called_once()
             self.assertEqual(path.read_bytes(), old)
         self.assertFalse(any(path.name.startswith("tmp") for path in self.folder.iterdir()))
+
+    def test_documentation_before_calculation_and_library_editor_export_close_guards(self):
+        from tools._library_editor import _signature, read_markdown, write_markdown
+        from tools.rcd import study
+
+        library = self.folder / "library.zip"
+        shutil.copyfile(study.LIBRARY_PATH, library)
+        window = self.open()
+        with patch.object(study, "LIBRARY_PATH", library):
+            window.open_documentation()
+            documents = window.documentation_window
+            self.assertIn("MEMORIA", documents.preview.get("1.0", "end"))
+            documents.texts["facilities"].insert("1.0", "Véase plano de implantación RCD-01.")
+            self.root.update()
+            self.assertEqual(self.app.rcd_state["documentation"]["facilities"],
+                             "Véase plano de implantación RCD-01.")
+            self.accept(window)
+            documents.open_library_editor()
+            self.assertTrue(documents.library_editor.track_changes)
+            self.assertEqual(documents.library_editor.archive_path, library)
+            member = study.DOCUMENTS[0][0]
+            source = read_markdown(library, member)
+            write_markdown(library, member, source + "\n\nRevisión RCD visible.\n", _signature(library))
+            documents.reload_library()
+            self.assertIn("Revisión RCD visible", documents.preview.get("1.0", "end"))
+            documents.library_editor.dirty = True
+            with (
+                patch("tools.rcd.messagebox.showerror") as error,
+                patch("tools.rcd.filedialog.asksaveasfilename") as choose,
+            ):
+                window.generate_report()
+            error.assert_called_once()
+            choose.assert_not_called()
+            with patch.object(documents.library_editor, "close"):
+                window.close()
+                self.assertTrue(window.winfo_exists())
+            documents.library_editor.dirty = False
+            window.close()
+            self.assertFalse(window.winfo_exists())
 
     def test_demolition_detection_preserves_lines_and_ignores_subtotals_transport_and_supplies(self):
         item = self.app.budget_items[1]
