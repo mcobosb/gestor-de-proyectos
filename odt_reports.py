@@ -749,35 +749,26 @@ def _new_report(
     return document
 
 
-def write_report_odt(app, report: str, target: Path) -> None:
-    """Genera en ODT editable cualquiera de los informes de presupuesto."""
+def append_report_odt(app, report: str, document, *, embedded: bool = False) -> None:
+    """Añade un listado reutilizable, con cabeceras de tabla si forma parte de un anejo."""
     from bc3_gui import currency_label, fmt_number, format_chapter_code
+    from budget_reports import REPORT_TITLES
 
-    if report not in REPORT_NAMES:
+    if report not in REPORT_TITLES:
         raise ValueError(f"Tipo de informe desconocido: {report}")
     settings = app.report_settings
     project_title = app._project_title()
-    report_title = {
-        "Cuadro de precios 1 y 2 por capitulos": "CUADRO DE PRECIOS 1",
-        "Mediciones": "MEDICIONES",
-        "Descompuestos": "CUADRO DE PRECIOS DESCOMPUESTOS",
-        "Materiales": "LISTADO ELEMENTALES VALORADOS\n(PRESUPUESTO)",
-        "Precios Auxiliares": "CUADRO DE PRECIOS AUXILIARES",
-        "Presupuesto mediciones": "PRESUPUESTO",
-        "Presupuesto resumen": "RESUMEN DE PRESUPUESTO",
-    }[report]
-    document = _new_report(
-        report_title,
-        project_title,
-        settings,
-    )
     document.project_title = report_project_label(
         project_title, "" if report == "Mediciones" else
         currency_label(settings.currency, settings.custom_currency),
     )
     _, component_widths = budget_report_columns("Descompuestos")
     _, auxiliary_widths = budget_report_columns("Precios Auxiliares")
-    document.header_columns, document.header_ratios = budget_report_columns(report)
+    column_headers, column_ratios = budget_report_columns(
+        "Materiales" if report == "Precios elementales" else report,
+    )
+    if not embedded:
+        document.header_columns, document.header_ratios = column_headers, column_ratios
     codes = list(dict.fromkeys([*app.chapter_order, *(item.chapter for item in app.budget_items)]))
     groups = [
         (code, [item for item in app.budget_items if item.chapter == code])
@@ -848,9 +839,9 @@ def write_report_odt(app, report: str, target: Path) -> None:
             ),
             style="AmountInWords",
         )
-    elif report in {"Materiales", "Precios Auxiliares"}:
-        auxiliaries, materials = _collect_report_resources(app)
-        if report == "Materiales":
+    elif report in {"Materiales", "Precios elementales", "Precios Auxiliares"}:
+        auxiliaries, materials = _collect_report_resources(app, elementary=report == "Precios elementales")
+        if report in {"Materiales", "Precios elementales"}:
             rows = []
             group = None
             subtotal = money(0)
@@ -879,7 +870,9 @@ def write_report_odt(app, report: str, target: Path) -> None:
                 )
             else:
                 document.paragraph(
-                    "No hay materiales en las descomposiciones del proyecto.",
+                    "No hay precios elementales identificados en el proyecto."
+                    if report == "Precios elementales"
+                    else "No hay materiales en las descomposiciones del proyecto.",
                     style="ReportNote",
                 )
             total("TOTAL", grand_total)
@@ -902,7 +895,8 @@ def write_report_odt(app, report: str, target: Path) -> None:
                     fmt_number(child_price), fmt_number(float(money(quantity * child_price))), "",
                 ] for child, quantity, child_price in children]
                 document.table(
-                    [], rows, ratios=auxiliary_widths, right_columns=(2, 4, 5, 6),
+                    column_headers if embedded else [], rows,
+                    ratios=auxiliary_widths, right_columns=(2, 4, 5, 6),
                 )
                 total("COSTE UNITARIO TOTAL", price)
                 difference = money(price) - sum(
@@ -972,7 +966,7 @@ def write_report_odt(app, report: str, target: Path) -> None:
                         components = app._report_components(item)
                         if components:
                             document.table(
-                                [],
+                                column_headers if embedded else [],
                                 [[
                                     concept.code, concept.unit, concept.summary,
                                     fmt_number(quantity, 3), fmt_number(price),
@@ -1039,12 +1033,22 @@ def write_report_odt(app, report: str, target: Path) -> None:
             settings.signature,
         ) if value
     ]
-    if signature:
+    if signature and not embedded:
         document.space(8 * 72 / 25.4)
         for value in signature:
             document.paragraph(
                 value, style="SignatureNote" if value == settings.signature else "Signature",
             )
+
+
+def write_report_odt(app, report: str, target: Path) -> None:
+    """Genera un informe independiente con el mismo contenido y formato previos."""
+    from budget_reports import REPORT_TITLES
+
+    if report not in REPORT_NAMES:
+        raise ValueError(f"Tipo de informe desconocido: {report}")
+    document = _new_report(REPORT_TITLES[report], app._project_title(), app.report_settings)
+    append_report_odt(app, report, document)
     document.write(target)
 
 

@@ -15,8 +15,13 @@ from budget_reports import budget_totals
 from localization import filedialog, localize_widget_tree, messagebox, translate
 from tools._shared.scheduling import PlanParams, apply_saved_plan_state, build_activities, schedule
 from .care_centers import CareCentersEditor, restore_centers
+from .chapter_selection import (
+    SAFETY_BUDGET_SOURCE, ChapterSelectionWindow, restore_chapter_selection,
+    study_chapters, study_items,
+)
 from .external_conditions import ExternalConditionsEditor, restore_external_conditions
 from .regulations import restore_review, review_context
+from .technical_conditions import restore_technical_review, technical_review_confirmed
 
 if TYPE_CHECKING:
     from bc3_gui import BudgetApp, ProjectItem
@@ -47,7 +52,33 @@ def open_tool(app: BudgetApp) -> None:
     if app._safety_health_window is not None and app._safety_health_window.winfo_exists():
         app._safety_health_window.lift()
         return
-    app._safety_health_window = SafetyHealthWindow(app.root, app)
+    def start_analysis(choices: dict[str, bool]) -> None:
+        """Guarda el ambito y descarta propuestas y criterios de un ambito anterior."""
+        state = dict(app.safety_health_state)
+        previous = {
+            chapter.code for chapter in study_chapters(app)
+            if chapter.selected or "chapter_selection" not in state
+        }
+        selected = {code for code, included in choices.items() if included}
+        if not state:
+            state = serialize_state(
+                _budget_safety_lines(app), Decimal(str(app.report_settings.safety_health_percentage)),
+            )
+        if selected != previous:
+            state["lines"] = []
+            state.pop("study_criteria", None)
+        state["chapter_selection"] = restore_chapter_selection(choices)
+        app.safety_health_state = state
+        app._mark_dirty()
+        selector.destroy()
+        app._safety_health_window = SafetyHealthWindow(app.root, app)
+
+    try:
+        selector = ChapterSelectionWindow(app, start_analysis)
+    except ValueError as exc:
+        messagebox.showerror("Seguridad y salud", str(exc), parent=app.root)
+        return
+    app._safety_health_window = selector
 
 
 def restore_project_state(data: dict) -> dict:
@@ -65,6 +96,8 @@ def restore_project_state(data: dict) -> dict:
         external_conditions=data.get("external_conditions"),
         resumen_actuacion=data.get("resumen_actuacion"),
         regulatory_review=data.get("regulatory_review"),
+        chapter_selection=data.get("chapter_selection"),
+        technical_review=data.get("technical_review"),
     )
 
 
@@ -84,7 +117,6 @@ def study_work_summary(app: BudgetApp) -> str:
     )
 
 
-SAFETY_BUDGET_SOURCE = "SS:"
 RELATIONSHIP_PATH = Path(__file__).resolve().parent / "datos" / "seguridad_salud_relaciones_bcca2023.csv"
 _ESS_BUDGET_THRESHOLD = Decimal("450759.08")
 _ESS_WORKDAY_THRESHOLD = Decimal("500")
@@ -132,13 +164,19 @@ def _normalized_text(value: str) -> str:
 
 def evaluate_study_criteria(app: BudgetApp) -> StudyCriteria:
     """Evalúa los criterios automáticos del artículo 4.1 con el presupuesto y plan actuales."""
-    items = app.budget_items
-    pem = sum((Decimal(str(item.import_total)) for item in items), Decimal())
+    items = study_items(app)
+    pem = sum((Decimal(str(item.import_total)) for item in app.budget_items), Decimal())
     contract_budget = budget_totals(float(pem), app.report_settings)["total"]
 
     params = PlanParams()
-    activities = build_activities(items, app._chapter_title)
+    activities = build_activities(app.budget_items, app._chapter_title)
     apply_saved_plan_state(params, activities, app.planning_state)
+    included = {id(item) for item in items}
+    # Conserva los identificadores originales para no reasignar las predecesoras guardadas.
+    activities = [
+        activity for activity, item in zip(activities, app.budget_items)
+        if id(item) in included
+    ]
     schedule(activities, params)
     hours_per_day = Decimal(str(params.hours_per_day))
     if not hours_per_day.is_finite() or hours_per_day <= 0:
@@ -192,6 +230,21 @@ class SafetyLine:
     selected: bool = True
 
 
+def _budget_safety_lines(app: BudgetApp) -> list[SafetyLine]:
+    """Recupera las partidas preventivas existentes en proyectos sin revision guardada."""
+    lines = []
+    for item in app.budget_items:
+        if item.source.startswith(SAFETY_BUDGET_SOURCE):
+            price = Decimal(str(
+                item.unit_price if item.direct_unit_price is None else item.direct_unit_price
+            ))
+            lines.append(SafetyLine(
+                item.source.removeprefix(SAFETY_BUDGET_SOURCE),
+                item.unit, item.summary, price, Decimal(str(item.measurement)) * price,
+            ))
+    return lines
+
+
 def _decimal(value: object) -> Decimal:
     """Convierte un valor a decimal admitiendo la coma como separador."""
     return Decimal(str(value).replace(",", "."))
@@ -234,6 +287,8 @@ def serialize_state(
     external_conditions: dict[str, dict[str, str]] | None = None,
     resumen_actuacion: str | None = None,
     regulatory_review: dict | None = None,
+    chapter_selection: dict[str, bool] | None = None,
+    technical_review: dict | None = None,
 ) -> dict:
     """Conserva la revisión, sus partidas y la información de centros asistenciales."""
     state = {
@@ -253,8 +308,12 @@ def serialize_state(
         ],
     }
     criteria = _study_criteria_values(study_criteria)
+    if chapter_selection is not None:
+        state["chapter_selection"] = restore_chapter_selection(chapter_selection)
     if regulatory_review is not None:
         state["regulatory_review"] = restore_review(regulatory_review)
+    if technical_review is not None:
+        state["technical_review"] = restore_technical_review(technical_review)
     if resumen_actuacion is not None:
         state["resumen_actuacion"] = _checked_work_summary(resumen_actuacion)
     if external_conditions is not None:
@@ -275,6 +334,8 @@ def restore_state(data: object) -> tuple[list[SafetyLine], Decimal]:
     if "resumen_actuacion" in data:
         _checked_work_summary(data["resumen_actuacion"])
     restore_review(data.get("regulatory_review"))
+    restore_technical_review(data.get("technical_review"))
+    restore_chapter_selection(data.get("chapter_selection"))
     if ("centros_asistenciales" in data
             and not isinstance(data["centros_asistenciales"], str)):
         raise ValueError("Los centros asistenciales deben ser texto.")
@@ -355,7 +416,7 @@ def synchronize_budget(
         raise ValueError("Selecciona al menos una partida de Seguridad y Salud.")
     base = sum(
         (Decimal(str(item.measurement)) * Decimal(str(item.unit_price))
-         for item in app.budget_items if not item.source.startswith(SAFETY_BUDGET_SOURCE)),
+         for item in study_items(app)),
         Decimal(),
     )
     if base <= 0:
@@ -419,6 +480,8 @@ def synchronize_budget(
         external_conditions=conditions or None,
         resumen_actuacion=work_summary,
         regulatory_review=saved_review,
+        chapter_selection=app.safety_health_state.get("chapter_selection"),
+        technical_review=app.safety_health_state.get("technical_review"),
     )
     app.refresh_budget_tree()
     app._mark_dirty()
@@ -450,27 +513,15 @@ class SafetyHealthWindow(tk.Toplevel):
         self._proposal_window: SafetyProposalWindow | None = None
         self._conditions_window: tk.Toplevel | None = None
         self._regulatory_window: tk.Toplevel | None = None
+        self._technical_window: tk.Toplevel | None = None
         try:
             if app.safety_health_state:
                 self.lines, percentage = restore_state(app.safety_health_state)
             else:
-                generated = [
-                    item for item in app.budget_items
-                    if item.source.startswith(SAFETY_BUDGET_SOURCE)
-                ]
-                self.lines = []
-                for item in generated:
-                    price = Decimal(str(
-                        item.unit_price if item.direct_unit_price is None else item.direct_unit_price
-                    ))
-                    self.lines.append(SafetyLine(
-                        item.source.removeprefix(SAFETY_BUDGET_SOURCE),
-                        item.unit, item.summary, price,
-                        Decimal(str(item.measurement)) * price,
-                    ))
-                if not generated:
-                    self.lines = proposed_lines(app.budget_items)
+                self.lines = _budget_safety_lines(app)
                 percentage = Decimal(str(app.report_settings.safety_health_percentage))
+            if not self.lines:
+                self.lines = proposed_lines(study_items(app))
             self.study_criteria = evaluate_study_criteria(app)
             saved_criteria = _study_criteria_values(
                 app.safety_health_state.get("study_criteria")
@@ -533,6 +584,9 @@ class SafetyHealthWindow(tk.Toplevel):
             actions, text="Normativa y NTP...", command=self.open_regulatory_review,
         ).pack(side="left", padx=8)
         ttk.Button(
+            actions, text="Condiciones técnicas...", command=self.open_technical_review,
+        ).pack(side="left")
+        ttk.Button(
             actions, text="Revisar propuesta de unidades de Seguridad y Salud...",
             command=self.open_proposal,
         ).pack(side="right")
@@ -558,6 +612,25 @@ class SafetyHealthWindow(tk.Toplevel):
             messagebox.showerror("Normativa y NTP", str(exc), parent=self)
             return None
         return self._regulatory_window
+
+    def open_technical_review(self) -> tk.Toplevel | None:
+        """Permite confirmar propuestas o incluir bloques técnicos no detectados."""
+        from .study_report import study_technical_review
+        from .technical_conditions import TechnicalReviewWindow
+
+        if self._technical_window is not None and self._technical_window.winfo_exists():
+            self._technical_window.lift()
+            return self._technical_window
+        try:
+            context, proposals, pending = study_technical_review(self.app)
+            self._technical_window = TechnicalReviewWindow(
+                self, self.app, context, proposals, pending,
+                serialize_state(self.lines, self._stored_percentage),
+            )
+        except ValueError as exc:
+            messagebox.showerror("Condiciones técnicas", str(exc), parent=self)
+            return None
+        return self._technical_window
 
     def _summary_changed(self, _event=None) -> None:
         """Conserva el resumen editado sin recalcular el capitulo preventivo."""
@@ -882,6 +955,25 @@ class SafetyProposalWindow(tk.Toplevel):
                     return
         except ValueError as exc:
             messagebox.showerror("Normativa y NTP", str(exc), parent=self)
+            return
+        from .study_report import study_technical_review
+
+        try:
+            context, _proposals, _pending = study_technical_review(self.app)
+            if not technical_review_confirmed(
+                self.app.safety_health_state.get("technical_review"), context,
+            ):
+                technical_window = self.owner.open_technical_review()
+                if technical_window is None:
+                    return
+                self.wait_window(technical_window)
+                context, _proposals, _pending = study_technical_review(self.app)
+                if not technical_review_confirmed(
+                    self.app.safety_health_state.get("technical_review"), context,
+                ):
+                    return
+        except ValueError as exc:
+            messagebox.showerror("Condiciones técnicas", str(exc), parent=self)
             return
         output_format = self.app.report_settings.output_format.lower()
         extension = ".odt" if output_format == "odt" else ".pdf"

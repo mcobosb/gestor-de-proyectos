@@ -87,6 +87,7 @@ class SafetyHealthTests(unittest.TestCase):
                 "context": "contexto revisado", "laws": {"RD614-2001": False},
                 "ntps": {"01AAB00001": {"NTP 278": True}},
             },
+            chapter_selection={"01#": True, "17#": False},
         )
         self.assertEqual(
             restore_project_state(state)["external_conditions"], state["external_conditions"],
@@ -97,6 +98,9 @@ class SafetyHealthTests(unittest.TestCase):
         )
         self.assertEqual(
             restore_project_state(state)["regulatory_review"], state["regulatory_review"],
+        )
+        self.assertEqual(
+            restore_project_state(state)["chapter_selection"], state["chapter_selection"],
         )
         self.assertEqual(
             restore_state({key: value for key, value in state.items() if key != "centros_asistenciales"}),
@@ -113,6 +117,8 @@ class SafetyHealthTests(unittest.TestCase):
             {**state, "resumen_actuacion": None},
             {**state, "resumen_actuacion": []},
             {**state, "regulatory_review": []},
+            {**state, "chapter_selection": []},
+            {**state, "chapter_selection": {"01#": "yes"}},
             {**state, "regulatory_review": {
                 "context": "x", "laws": {"RD614-2001": "yes"}, "ntps": {},
             }},
@@ -192,7 +198,7 @@ class SafetyHealthTests(unittest.TestCase):
             self.assertIn("PLIEGO DE CONDICIONES", text)
             self.assertNotIn("DESCOMPUESTOS", text)
             self.assertNotIn("PARTIDAS DEL PRESUPUESTO GENERAL", text)
-            self.assertNotIn("3.11", text)
+            self.assertNotRegex(text, r"\b3\.11\b(?!\s+OBLIGACIONES\b)")
             self.assertNotIn("{{", text)
 
 

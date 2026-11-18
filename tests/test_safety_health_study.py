@@ -1,3 +1,4 @@
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from types import MethodType, SimpleNamespace
@@ -18,15 +19,22 @@ from pypdf.generic import ContentStream
 from bc3_gui import BudgetApp, Concept, ProjectItem
 from budget_reports import ReportSettings
 from report_layout import DEFAULT_TEMPLATE_PATH, ReportLayout
+from reference_search import load_reference_entries
 from tools.safety_health import (
     SafetyLine, SafetyProposalWindow, restore_project_state, synchronize_budget, write_study_report,
 )
 from tools.safety_health.study_report import (
     _Block, _StudyContent, _build_study_content, _markdown_blocks, _numbered_blocks,
-    _pdf_blue_table, study_work_units,
+    _pdf_blue_table, study_technical_review, study_work_units,
 )
 from tools.safety_health.regulations import (
-    WorkUnit, initially_selected, law_proposals, load_ntps, ntp_proposals, review_context,
+    WorkUnit, general_une_references, initially_selected, law_proposals, load_ntps,
+    ntp_proposals, review_context,
+)
+from tools.safety_health.chapter_selection import ChapterSelectionWindow, study_chapters, study_items
+from tools.safety_health.technical_conditions import (
+    TECHNICAL_BLOCKS, TechnicalReviewWindow, restore_technical_review,
+    selected_technical_template, technical_review_confirmed, technical_review_data,
 )
 
 
@@ -131,12 +139,39 @@ class SafetyHealthStudyTests(unittest.TestCase):
                         self.assertEqual(
                             set(linked_rows), {"Riesgos detectados", "Medidas preventivas"},
                         )
+                        text_ns = ns["text"]
+                        office_ns = "urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                        body = content.find(
+                            f"{{{office_ns}}}body/{{{office_ns}}}text",
+                        )
+                        children = list(body)
+                        risk_heading = next(
+                            index for index, child in enumerate(children)
+                            if child.tag == f"{{{text_ns}}}h"
+                            and "".join(child.itertext()) == "3.1.2 RIESGOS DETECTADOS"
+                        )
+                        risk_codes = children[risk_heading + 2]
+                        risk_links = risk_codes.findall(".//text:a", ns)
+                        self.assertEqual(
+                            [link.text for link in risk_links], list(study_work_units(app)[0].risks),
+                        )
+                        self.assertEqual(
+                            "".join(risk_codes.itertext()),
+                            ", ".join(link.text for link in risk_links) + ".",
+                        )
+                        for link in risk_links:
+                            self.assertEqual(
+                                link.get(f"{{{ns['xlink']}}}href"), f"#ESSRef-{link.text}",
+                            )
                     text = " ".join(text.split())
                     self.assertIn("ESTUDIO BÁSICO DE SEGURIDAD Y SALUD", text)
                     self.assertIn("ÍNDICE", text)
                     self.assertIn("LUCENA (CÓRDOBA); MADRID (MADRID)", text)
                     self.assertIn("ANDALUCÍA; MADRID, COMUNIDAD DE", text)
-                    self.assertIn("15APA — IMBORNALES Y ARQUETAS DE SANEAMIENTO", text)
+                    self.assertIn("3.1 IMBORNALES Y ARQUETAS DE SANEAMIENTO", text)
+                    self.assertNotIn("15APA — IMBORNALES", text)
+                    self.assertNotIn("Unidades de obra vinculadas:", text)
+                    self.assertNotIn("Clasificación BCCA:", text)
                     self.assertIn("OBRA001", text)
                     self.assertIn("Ficha específica pendiente.", text)
                     self.assertNotIn("UO-", text)
@@ -147,12 +182,36 @@ class SafetyHealthStudyTests(unittest.TestCase):
                         "3.1.3 MEDIDAS PREVENTIVAS",
                         "3.1.3.1 PROTECCIONES COLECTIVAS",
                         "3.1.3.2 EQUIPOS DE PROTECCIÓN INDIVIDUAL",
-                        "3.1.3.3 EQUIPOS DE TRABAJO", "3.1.3.4 VALIDACIÓN",
+                        "3.1.3.3 EQUIPOS DE TRABAJO", "3.1.4 VALIDACIÓN",
                         "4 SEGUIMIENTO, CONTROL, COORDINACIÓN, FORMACIÓN Y DOCUMENTACIÓN",
                         "DOCUMENTO I. MEMORIA", "DOCUMENTO II. PLIEGO DE CONDICIONES",
-                        "1 NORMATIVA Y DISPOSICIONES GENERALES",
-                        "2 ORGANIZACIÓN PREVENTIVA, COORDINACIÓN Y OBLIGACIONES",
-                        "3 PLAN DE SEGURIDAD Y SALUD, CONTROL Y CERTIFICACIÓN",
+                        "1 OBJETO DEL PRESENTE PLIEGO",
+                        "2 CONDICIONES DE NATURALEZA LEGAL",
+                        "2.4 NORMAS UNE DE APLICACIÓN",
+                        "2.5 NOTAS TÉCNICAS DE PREVENCIÓN POR CAPÍTULOS DEL PRESUPUESTO",
+                        "Se diferenciarán los filtros contra partículas",
+                        "Los cinturones de retención o posicionamiento no sustituyen",
+                        "3 CONDICIONES DE NATURALEZA FACULTATIVA",
+                        "3.7.1 ACTA O RESOLUCIÓN DE APROBACIÓN DEL PLAN",
+                        "3.9 CONTROL DE LA EFECTIVIDAD",
+                        "3.9.2 ÍNDICES DE CONTROL",
+                        "I.I. = (A / T) x 100.",
+                        "I.F. = (A / H) x 1.000.000.",
+                        "No se exigirá adquirir ni habilitar un nuevo Libro de Visitas.",
+                        "3.10 CONSULTA Y PARTICIPACIÓN DE LOS TRABAJADORES",
+                        "3.11 OBLIGACIONES DE LOS TRABAJADORES",
+                        "cincuenta o más trabajadores",
+                        "4 CONDICIONES DE NATURALEZA TÉCNICA",
+                        "4.1.1 MEDIOS DE PROTECCIÓN COLECTIVA",
+                        "4.4 INSTALACIONES PROVISIONALES DE SALUD Y CONFORT",
+                        "4.4.4 COMEDORES, COCINA Y LOCALES DE DESCANSO",
+                        "marcado CE en el soporte que legalmente corresponda",
+                        "5 CONDICIONES DE NATURALEZA ECONÓMICA",
+                        "Salvo pacto en contrario, una vez al mes",
+                        "no podrá ser abonada por el Promotor",
+                        "conforme se estipule en el contrato de obra",
+                        "se definirán total y correctamente las mismas",
+                        "el Contratista comunicará esta proposición al Promotor, por escrito",
                     ):
                         self.assertIn(label, text)
                     self.assertIn("Partida sin ficha ESS BCCA: OBRA001", "\n".join(warnings))
@@ -740,19 +799,26 @@ class SafetyHealthStudyTests(unittest.TestCase):
             if block.kind == "heading" and block.level == 2
         ]
         self.assertEqual(
-            [chapter[index].text.split(" — ", 1)[0] for index in fiche_starts],
-            ["01UPP", "15APA", "15APP", "15ASW", "15CP", "17RB"],
+            [chapter[index].text for index in fiche_starts],
+            ["Retirada de pavimentos", "Imbornales y arquetas de saneamiento",
+             "Pozos de registro de saneamiento", "Sumideros - Varios",
+             "Pinturas y marcas viales", "Residuos bituminosos"],
         )
         for index, finish in zip(fiche_starts, [*fiche_starts[1:], len(chapter)]):
             fiche = chapter[index:finish]
             self.assertEqual([block.text for block in fiche if block.level == 3 and block.kind == "heading"], [
-                "Definición y alcance", "Riesgos detectados", "Medidas preventivas",
+                "Definición y alcance", "Riesgos detectados", "Medidas preventivas", "Validación",
             ])
             self.assertEqual([block.text for block in fiche if block.level == 4 and block.kind == "heading"], [
                 "Protecciones colectivas", "Equipos de protección individual",
-                "Equipos de trabajo", "Validación",
+                "Equipos de trabajo",
             ])
-            self.assertTrue(fiche[1].text.startswith("Unidades de obra vinculadas:"))
+            self.assertEqual(fiche[1].text, "Definición y alcance")
+            risk_start = next(i for i, block in enumerate(fiche) if block.text == "Riesgos detectados")
+            measure_start = next(i for i, block in enumerate(fiche) if block.text == "Medidas preventivas")
+            risk_blocks = fiche[risk_start + 1:measure_start]
+            self.assertTrue(all(block.kind == "paragraph" for block in risk_blocks))
+            self.assertRegex(risk_blocks[-1].text, r"^R-[A-Z0-9-]+(?:, R-[A-Z0-9-]+)*\.$")
             self.assertTrue(any(block.kind == "list_item" for block in fiche))
         text = "\n".join(
             value for block in content.blocks for value in (block.text, *(cell for row in block.rows for cell in row))
@@ -829,9 +895,11 @@ class SafetyHealthStudyTests(unittest.TestCase):
                 "1 OBJETO Y ALCANCE", "2 MEMORIA DESCRIPTIVA",
                 "3 FICHAS DE UNIDADES DE OBRA APLICABLES",
                 "4 SEGUIMIENTO, CONTROL, COORDINACIÓN, FORMACIÓN Y DOCUMENTACIÓN",
-                "1 NORMATIVA Y DISPOSICIONES GENERALES",
-                "2 ORGANIZACIÓN PREVENTIVA, COORDINACIÓN Y OBLIGACIONES",
-                "3 PLAN DE SEGURIDAD Y SALUD, CONTROL Y CERTIFICACIÓN",
+                "1 OBJETO DEL PRESENTE PLIEGO",
+                "2 CONDICIONES DE NATURALEZA LEGAL",
+                "3 CONDICIONES DE NATURALEZA FACULTATIVA",
+                "4 CONDICIONES DE NATURALEZA TÉCNICA",
+                "5 CONDICIONES DE NATURALEZA ECONÓMICA",
             ],
         )
         self.assertTrue(all(
@@ -853,26 +921,51 @@ class SafetyHealthStudyTests(unittest.TestCase):
         self.assertEqual(
             [block.text for block in specification if block.kind == "heading" and block.level == 1],
             [
-                "1 NORMATIVA Y DISPOSICIONES GENERALES",
-                "2 ORGANIZACIÓN PREVENTIVA, COORDINACIÓN Y OBLIGACIONES",
-                "3 PLAN DE SEGURIDAD Y SALUD, CONTROL Y CERTIFICACIÓN",
+                "1 OBJETO DEL PRESENTE PLIEGO",
+                "2 CONDICIONES DE NATURALEZA LEGAL",
+                "3 CONDICIONES DE NATURALEZA FACULTATIVA",
+                "4 CONDICIONES DE NATURALEZA TÉCNICA",
+                "5 CONDICIONES DE NATURALEZA ECONÓMICA",
             ],
         )
         self.assertEqual(
             [block.text for block in specification if block.kind == "heading" and block.level == 2],
             [
-                "1.1 NORMATIVA DE APLICACIÓN", "1.2 CONDICIONES GENERALES DE EJECUCIÓN",
-                "1.3 PRIORIDAD DE LA PROTECCIÓN COLECTIVA",
-                "1.4 NOTAS TÉCNICAS DE PREVENCIÓN RELACIONADAS CON LAS UNIDADES DE OBRA",
-                "2.1 PROMOTOR", "2.2 CONTRATISTA", "2.3 SUBCONTRATISTAS Y TRABAJADORES AUTÓNOMOS",
-                "2.4 COORDINADOR DE SEGURIDAD Y SALUD DURANTE LA EJECUCIÓN",
-                "2.5 RECURSOS PREVENTIVOS", "2.6 VIGILANCIA DE LA SALUD",
-                "3.1 PLAN DE SEGURIDAD Y SALUD", "3.2 LIBRO DE INCIDENCIAS Y CONTROL DOCUMENTAL",
-                "3.3 CERTIFICACIÓN DE MEDIDAS DE SEGURIDAD Y SALUD",
-                "3.4 MODIFICACIONES Y SITUACIONES NO PREVISTAS",
+                "2.1 NORMATIVA DE APLICACIÓN", "2.2 CONDICIONES GENERALES DE EJECUCIÓN",
+                "2.3 PRIORIDAD DE LA PROTECCIÓN COLECTIVA",
+                "2.4 NORMAS UNE DE APLICACIÓN",
+                "2.5 NOTAS TÉCNICAS DE PREVENCIÓN POR CAPÍTULOS DEL PRESUPUESTO",
+                "3.1 PROMOTOR", "3.2 CONTRATISTA", "3.3 SUBCONTRATISTAS Y TRABAJADORES AUTÓNOMOS",
+                "3.4 COORDINADOR DE SEGURIDAD Y SALUD DURANTE LA EJECUCIÓN",
+                "3.5 RECURSOS PREVENTIVOS", "3.6 VIGILANCIA DE LA SALUD",
+                "3.7 PLAN DE SEGURIDAD Y SALUD", "3.8 LIBROS Y CONTROL DOCUMENTAL",
+                "3.9 CONTROL DE LA EFECTIVIDAD",
+                "3.10 CONSULTA Y PARTICIPACIÓN DE LOS TRABAJADORES",
+                "3.11 OBLIGACIONES DE LOS TRABAJADORES",
+                "4.1 DE LOS MEDIOS DE PROTECCIÓN", "4.2 DE LA MAQUINARIA Y EQUIPOS",
+                "4.3 SOBRE SEÑALIZACIÓN, BALIZAMIENTO Y PROTECCIÓN DE TERCEROS",
+                "4.4 INSTALACIONES PROVISIONALES DE SALUD Y CONFORT",
+                "5.1 CERTIFICACIÓN DE MEDIDAS DE SEGURIDAD Y SALUD",
+                "5.2 RÉGIMEN ECONÓMICO DEL CONTRATO",
             ],
         )
         text = "\n".join(block.text for block in specification)
+        legal_start = next(
+            index for index, block in enumerate(specification)
+            if block.text == "2 CONDICIONES DE NATURALEZA LEGAL" and block.kind == "heading"
+        )
+        self.assertEqual(specification[1].text, (
+            "El objeto de este Pliego de Condiciones es fijar condiciones generales y particulares "
+            "por las que se desarrollarán los trabajos y se utilizarán las dotaciones de Seguridad "
+            "y Salud. Estas condiciones se plantean agrupadas de acuerdo con su naturaleza, en:"
+        ))
+        self.assertEqual(
+            [(block.kind, block.text) for block in specification[2:legal_start]],
+            [("list_item", f"- CONDICIONES DE NATURALEZA {nature}.")
+             for nature in ("LEGAL", "FACULTATIVA", "TÉCNICA", "ECONÓMICA")],
+        )
+        self.assertIn("mediante el procedimiento del artículo 7 del Real Decreto 1627/1997", text)
+        self.assertNotIn("capítulo 2 de este Pliego", text)
         for obligation in (
             "asciende a 86,38", "medición real", "no sustituye la revisión de sus cantidades",
             "por insuficiencia o agotamiento", "antes del comienzo de los trabajos",
@@ -885,6 +978,229 @@ class SafetyHealthStudyTests(unittest.TestCase):
             self.assertIn(obligation, text)
         self.assertNotIn("1.998,77", text)
         self.assertNotIn("{{", text)
+        end = next(index for index, block in enumerate(specification) if block.text == "5 CONDICIONES DE NATURALEZA ECONÓMICA")
+        economic_opening = specification[end + 1:end + 5]
+        self.assertTrue(all(block.kind == "paragraph" for block in economic_opening))
+        for block, beginning in zip(economic_opening, (
+            "Salvo pacto en contrario, una vez al mes",
+            "El abono de las certificaciones",
+            "En caso de ejecutar en obra unidades no previstas",
+            "En caso de plantearse una revisión de precios",
+        )):
+            self.assertTrue(block.text.startswith(beginning))
+        self.assertIn("precios contratados por el Promotor", economic_opening[0].text)
+        self.assertIn(
+            "habiendo obtenido la aprobación previa de la Dirección Facultativa "
+            "o la coordinación de Seguridad y Salud en fase de ejecución de las obras.",
+            economic_opening[-1].text,
+        )
+
+    def test_specification_completes_participation_without_obsolete_facultative_duties(self):
+        """Completa representación y trabajadores sin confundir competencias ni plantillas."""
+        blocks = _numbered_blocks(_build_study_content(self.make_app("odt")).blocks)
+        document_start = next(
+            index for index, block in enumerate(blocks)
+            if block.kind == "document" and block.text.startswith("DOCUMENTO II.")
+        )
+        specification = blocks[document_start + 1:]
+        texts = [block.text for block in specification]
+        facultative_end = texts.index("4 CONDICIONES DE NATURALEZA TÉCNICA")
+        facultative = texts[:facultative_end]
+        for heading in (
+            "3.10 CONSULTA Y PARTICIPACIÓN DE LOS TRABAJADORES",
+            "3.10.1 DELEGADOS DE PREVENCIÓN", "3.10.2 COMITÉ DE SEGURIDAD Y SALUD",
+            "3.11 OBLIGACIONES DE LOS TRABAJADORES",
+        ):
+            self.assertEqual(facultative.count(heading), 1)
+        self.assertEqual(facultative.count("3.8.1 LIBRO DE INCIDENCIAS"), 1)
+        text = "\n".join(facultative)
+        for required in (
+            "técnico competente integrado en la Dirección Facultativa",
+            "dentro de sus respectivas competencias",
+            "no atribuye por sí sola facultades para modificar precios",
+            "artículo 11.2 del Real Decreto 1627/1997",
+            "La documentación de empresas y personal se comprobará por los medios vigentes",
+            "actualizando las incorporaciones y bajas",
+            "sin recopilar datos personales ajenos a su finalidad",
+            "una copia del Plan y de sus modificaciones",
+            "reglas legales de cómputo de plantilla y contratación temporal",
+            "cincuenta o más trabajadores",
+            "No se deducirá su obligatoriedad exclusivamente de sumar trabajadores",
+            "Se reunirá trimestralmente y siempre que lo solicite",
+            "en igual número", "con voz y sin voto",
+            "artículo 32 bis", "artículo 22 bis",
+            "La presencia requerida por la Inspección",
+            "su antigüedad no implica por sí sola",
+            "Permanecerán durante todo el tiempo",
+            "el empresario actuará de inmediato",
+            "No anular ni poner fuera de funcionamiento",
+            "Informar de inmediato al superior",
+            "no reducirán el deber de protección del empresario",
+        ):
+            self.assertIn(required, text)
+        for obsolete in (
+            "independiente de la Dirección Facultativa",
+            "podrá ser objeto de demolición", "TC1", "TC2", "libro de matrícula",
+            "antes del día 10", "superior a 50", "homologados por el organismo",
+            "Hash:", "CÓDIGO CSV", "ANEJO Nº",
+        ):
+            self.assertNotIn(obsolete, text)
+        workers = specification[
+            texts.index("3.11 OBLIGACIONES DE LOS TRABAJADORES"):facultative_end
+        ]
+        self.assertEqual(sum(block.kind == "list_item" for block in workers), 6)
+
+    def test_specification_integrates_protections_and_welfare_in_technical_conditions(self):
+        """Situa protecciones e higiene en el pliego sin imponer dotaciones universales."""
+        blocks = _numbered_blocks(_build_study_content(self.make_app("odt")).blocks)
+        document_start = next(
+            index for index, block in enumerate(blocks)
+            if block.kind == "document" and block.text.startswith("DOCUMENTO II.")
+        )
+        specification = blocks[document_start + 1:]
+        texts = [block.text for block in specification]
+        start = texts.index("4 CONDICIONES DE NATURALEZA TÉCNICA")
+        end = texts.index("5 CONDICIONES DE NATURALEZA ECONÓMICA")
+        technical = specification[start:end]
+        self.assertEqual([block.text for block in technical if block.kind == "heading"], [
+            "4 CONDICIONES DE NATURALEZA TÉCNICA",
+            "4.1 DE LOS MEDIOS DE PROTECCIÓN",
+            "4.1.1 MEDIOS DE PROTECCIÓN COLECTIVA",
+            "4.1.2 MEDIOS DE PROTECCIÓN INDIVIDUAL",
+            "4.2 DE LA MAQUINARIA Y EQUIPOS",
+            "4.3 SOBRE SEÑALIZACIÓN, BALIZAMIENTO Y PROTECCIÓN DE TERCEROS",
+            "4.4 INSTALACIONES PROVISIONALES DE SALUD Y CONFORT",
+            "4.4.1 VESTUARIOS", "4.4.2 ASEOS, LAVABOS Y DUCHAS",
+            "4.4.3 RETRETES", "4.4.4 COMEDORES, COCINA Y LOCALES DE DESCANSO",
+        ])
+        protection = "\n".join(texts[
+            texts.index("4.1 DE LOS MEDIOS DE PROTECCIÓN"):
+            texts.index("4.2 DE LA MAQUINARIA Y EQUIPOS")
+        ])
+        for required in (
+            "antes de comenzar los trabajos", "medidas alternativas de eficacia equivalente",
+            "El contratista organizará las revisiones por personal competente",
+            "El empresario organizará su mantenimiento y reposición",
+            "los suministrará gratuitamente", "marcado CE en el soporte que legalmente corresponda",
+            "Si excepcionalmente fueran compartidos", "impedir su uso",
+        ):
+            self.assertIn(required, protection)
+        welfare = "\n".join(texts[
+            texts.index("4.4 INSTALACIONES PROVISIONALES DE SALUD Y CONFORT"):end
+        ])
+        for required in (
+            "anexo IV del Real Decreto 1627/1997", "convenio colectivo aplicable",
+            "número máximo de trabajadores que coincidan", "respetando los mínimos exigibles",
+            "limpieza diaria", "disponibilidad efectiva, proximidad, capacidad",
+            "guardar bajo llave", "agua corriente fría y caliente",
+            "utilización por separado", "sistemas sanitarios autónomos",
+            "No se admitirán vertidos incontrolados", "agua potable",
+            "La capacidad se revisará si cambia la plantilla simultánea",
+        ):
+            self.assertIn(required, welfare)
+        for obsolete in (
+            "1 ducha por cada 10", "1 retrete por cada 25",
+            "2 m² por cada", "2,30 metros", "cada semana) por el Delegado",
+        ):
+            self.assertNotIn(obsolete, "\n".join(block.text for block in technical))
+
+    def test_specification_integrates_effectiveness_and_current_documentary_requirements(self):
+        """Integra controles y tramites sin duplicar PSS ni mantener obligaciones derogadas."""
+        blocks = _numbered_blocks(_build_study_content(self.make_app("odt")).blocks)
+        start = next(
+            index for index, block in enumerate(blocks)
+            if block.kind == "document" and block.text.startswith("DOCUMENTO II.")
+        )
+        specification = blocks[start + 1:]
+        texts = [block.text for block in specification]
+        for heading in (
+            "3.7.1 ACTA O RESOLUCIÓN DE APROBACIÓN DEL PLAN",
+            "3.7.2 COMUNICACIÓN DE APERTURA DEL CENTRO DE TRABAJO",
+            "3.7.3 MODIFICACIONES Y SITUACIONES NO PREVISTAS",
+            "3.8.1 LIBRO DE INCIDENCIAS", "3.8.2 LIBRO DE ÓRDENES Y ASISTENCIAS",
+            "3.8.3 DILIGENCIAS DE LA INSPECCIÓN DE TRABAJO Y SEGURIDAD SOCIAL",
+            "3.8.4 LIBRO DE SUBCONTRATACIÓN",
+            "3.9.1 CUADRO DE CONTROL Y SEGUIMIENTO", "3.9.2 ÍNDICES DE CONTROL",
+            "3.9.3 PARTES DE ACCIDENTES E INVESTIGACIÓN",
+            "3.9.4 PARTES DE DEFICIENCIAS Y COMPROBACIÓN DEL CIERRE",
+        ):
+            self.assertEqual(texts.count(heading), 1)
+        text = "\n".join(texts)
+        for required in (
+            "I.I. = (A / T) x 100.", "I.F. = (A / H) x 1.000.000.",
+            "I.G. = (J / H) x 1.000.", "D.M.I. = J / A.",
+            "número medio de trabajadores expuestos",
+            "Cuando el denominador de un indicador sea cero",
+            "No calculable", "una casilla vacía no acreditará conformidad",
+            "número total de conceptos efectivamente examinados",
+            "persona que haya comprobado su implantación y eficacia",
+            "hechos comprobados de las hipótesis",
+            "No se establece un visado colegial obligatorio general",
+            "previo informe del coordinador",
+            "adjuntarán el Plan de Seguridad y Salud y su aprobación",
+            "antes del comienzo de sus trabajos",
+            "se expondrá en lugar visible", "plazo de diez días",
+            "incumplimiento de advertencias u observaciones previamente anotadas",
+            "supuesto de paralización regulado en el artículo 14",
+            "plazo de veinticuatro horas",
+            "No se exigirá adquirir ni habilitar un nuevo Libro de Visitas",
+            "cinco años desde su expedición",
+            "habilitado por la autoridad laboral competente antes de subcontratar",
+            "Los técnicos y delegados de prevención",
+            "precios contradictorios", "trabajos por administración",
+            "indemnizaciones mutuas", "liquidación económica y final",
+            "no atribuye por sí sola competencia para aprobar precios",
+        ):
+            self.assertIn(required, text)
+        for removed in ("I.I. = (A / H)", "visado por el Colegio Profesional correspondiente",
+                        "Hash:", "CÓDIGO CSV", "FIRMANTE NIF/CIF", "ANEJO Nº"):
+            self.assertNotIn(removed, text)
+        economic_start = texts.index("5 CONDICIONES DE NATURALEZA ECONÓMICA")
+        economic_headings = [
+            block.text for block in specification[economic_start:]
+            if block.kind == "heading"
+        ]
+        self.assertEqual(economic_headings, [
+            "5 CONDICIONES DE NATURALEZA ECONÓMICA",
+            "5.1 CERTIFICACIÓN DE MEDIDAS DE SEGURIDAD Y SALUD",
+            "5.2 RÉGIMEN ECONÓMICO DEL CONTRATO",
+        ])
+
+    def test_general_une_list_excludes_withdrawn_drafts_and_unrelated_number_matches(self):
+        """Lista equipos preventivos vigentes sin confundir familias EN e ISO homonimas."""
+        catalog = load_reference_entries("UNE")
+        ladder = next(
+            entry for entry in catalog
+            if entry.code.startswith("UNE-EN 131-1:") and entry.status == "Vigente"
+        )
+        excluded = (
+            "PNE-EN 131-1:2099", "UNE-EN ISO 354:2004", "UNE-EN ISO 361:2016",
+            "UNE-EN 16321-1:2014", "UNE-EN ISO 374-6:2025",
+        )
+        with patch(
+            "tools.safety_health.regulations.load_reference_entries",
+            return_value=(*catalog, ladder, *(replace(ladder, code=code) for code in excluded)),
+        ):
+            markdown = general_une_references()
+        blocks = _markdown_blocks(markdown)
+        codes = [
+            block.text.removeprefix("- ").split(" — ", 1)[0]
+            for block in blocks if block.kind == "list_item"
+        ]
+        self.assertEqual(len(codes), len(set(codes)))
+        for prefix in (
+            "UNE-EN 131-", "UNE-EN 352-", "UNE-EN 143:", "UNE-EN 388:",
+            "UNE-EN ISO 20345:", "UNE-EN 1263-", "UNE-EN 358:", "UNE-EN 361:",
+        ):
+            self.assertTrue(any(code.startswith(prefix) for code in codes), prefix)
+        current_codes = {entry.code for entry in catalog if entry.status == "Vigente"}
+        self.assertTrue(set(codes) <= current_codes)
+        for code in (*excluded, "UNE-EN 131-1:1994", "UNE-EN 143:2001"):
+            self.assertNotIn(code, codes)
+        self.assertIn("Los cinturones de retención o posicionamiento no sustituyen", markdown)
+        with patch("tools.safety_health.regulations.load_reference_entries", return_value=()):
+            with self.assertRaisesRegex(ValueError, "no contiene referencias vigentes"):
+                general_une_references()
 
     def test_ntp_proposals_use_explicit_references_and_do_not_confirm_thematic_matches(self):
         """No infiere riesgos por la descripcion ni atribuye vigencia a coincidencias BCCA."""
@@ -923,8 +1239,9 @@ class SafetyHealthStudyTests(unittest.TestCase):
                         "context": review_context(units),
                         "laws": {"L31-1995": True, "RD614-2001": False},
                         "ntps": {"15APAA00001": {"NTP 278": True, "NTP 477": False},
-                                 "OBRA001": {"NTP 4": True}},
+                                 "OBRA001": {"NTP 4": True, "NTP 278": True}},
                     }
+                    app.chapter_order = ["02#", "01#", "CAP.03#"]
                     app.safety_health_state["regulatory_review"] = review
                     restored = restore_project_state(app.safety_health_state)
                     self.assertEqual(restored["regulatory_review"], review)
@@ -939,10 +1256,14 @@ class SafetyHealthStudyTests(unittest.TestCase):
                         and block.headers[-1] == "NTP confirmadas"
                     )
                     self.assertTrue(table.blue_table)
-                    self.assertEqual(table.rows[0][1], ", ".join(units[0].risks))
-                    self.assertEqual(table.rows[0][2], ", ".join(units[0].measures))
-                    self.assertEqual(table.rows[0][3], "NTP 278")
-                    self.assertEqual(table.rows[1][3], "NTP 4")
+                    self.assertEqual(table.headers, ("Capítulo del presupuesto", "NTP confirmadas"))
+                    self.assertIn("Pavimentos", table.rows[0][0])
+                    self.assertIn("Saneamiento", table.rows[1][0])
+                    self.assertEqual(len(table.rows[0][1].splitlines()), 2)
+                    self.assertTrue(all(line.startswith("• ") for line in table.rows[0][1].splitlines()))
+                    self.assertIn("NTP 278 —", table.rows[0][1])
+                    self.assertIn("NTP 4 —", table.rows[0][1])
+                    self.assertIn("Sin NTP adicionales", table.rows[1][1])
                     target = Path(folder) / f"normativa.{output_format}"
                     write_study_report(app, target)
                     if output_format == "pdf":
@@ -953,12 +1274,17 @@ class SafetyHealthStudyTests(unittest.TestCase):
                         text = "".join(tree.itertext())
                     text = " ".join(text.split())
                     for label in (
-                        "1 NORMATIVA Y DISPOSICIONES GENERALES", "Tabla 6.", "NTP 278",
+                        "1 OBJETO DEL PRESENTE PLIEGO", "Tabla 6.", "NTP 278",
                         "NTP 4", "Ley 31/1995", "no disposiciones legales obligatorias",
-                        "2 ORGANIZACIÓN PREVENTIVA", "3 PLAN DE SEGURIDAD Y SALUD",
+                        "2 CONDICIONES DE NATURALEZA LEGAL",
+                        "3 CONDICIONES DE NATURALEZA FACULTATIVA",
+                        "4 CONDICIONES DE NATURALEZA TÉCNICA",
+                        "5 CONDICIONES DE NATURALEZA ECONÓMICA",
                     ):
                         self.assertIn(label, text)
                     self.assertNotIn("NTP 477", text)
+                    self.assertEqual(len(re.findall(r"NTP\s+278(?!\d)", text)), 1)
+                    self.assertEqual(len(re.findall(r"NTP\s+4(?!\d)", text)), 1)
                     self.assertNotIn("Real Decreto 614/2001", text)
                     self.assertNotIn("Lucena", text)
                     app.budget_items.append(ProjectItem("NUEVA", "01#", "ud", "Nueva fase"))
@@ -967,8 +1293,145 @@ class SafetyHealthStudyTests(unittest.TestCase):
                         block for block in changed.blocks if block.headers
                         and block.headers[-1] == "NTP confirmadas"
                     )
-                    self.assertTrue(all("pendiente de confirmación" in row[3] for row in table.rows))
+                    self.assertTrue(all("pendiente de confirmación" in row[1] for row in table.rows))
                     self.assertTrue(any("Confirmar normativa y NTP" in warning for warning in changed.warnings))
+
+    def test_selected_chapters_filter_analysis_without_changing_project_amounts(self):
+        """Excluye fichas, recursos y mano de obra ajenos al ambito, no el importe legal global."""
+        from tools.safety_health import evaluate_study_criteria, proposed_lines
+
+        app = self.make_app("odt")
+        for chapter, title, code, summary in (
+            ("17#", "Gestión de RCDs", "17RB00001", "Residuo descartado"),
+            ("18#", "Control de Calidad", "18HHI00001", "Ensayo de túnel descartado"),
+            ("03#", "Trabajos no seleccionados", "01UPP00001", "Escalera portátil SOLOEXCLUIDO"),
+        ):
+            app.chapter_order.append(chapter)
+            app.chapter_titles[chapter] = title
+            app.budget_items.append(ProjectItem(
+                code, chapter, "m2", summary, measurement=1000, unit_price=1000, rendimiento=4000,
+            ))
+        app.safety_health_state["chapter_selection"] = {"03#": False}
+        selection = {chapter.code: chapter.selected for chapter in study_chapters(app)}
+        self.assertEqual(selection, {"01#": True, "02#": True, "17#": False, "18#": False, "03#": False})
+        app.planning_state = {"activities": [
+            {"chapter": "01#", "code": "15APAA00001", "manual_duration": 3},
+            {"chapter": "02#", "code": "OBRA001", "manual_duration": 4, "pred": 1},
+            {"chapter": "17#", "code": "17RB00001", "manual_duration": 999},
+        ]}
+        original = list(app.budget_items)
+        assessment = evaluate_study_criteria(app)
+        self.assertEqual(assessment.duration_days, 7)
+        self.assertEqual(assessment.worker_days, Decimal(100))
+        self.assertEqual(assessment.peak_workers, Decimal(17))
+        self.assertTrue(assessment.criterion_1_met)
+        self.assertFalse(assessment.criterion_3_met)
+        self.assertFalse(assessment.special_work)
+        self.assertGreater(assessment.contract_budget, Decimal(3000000))
+        content = _build_study_content(app)
+        text = "\n".join(
+            value for block in content.blocks
+            for value in (block.text, *(cell for row in block.rows for cell in row))
+        )
+        for excluded in ("17RB00001", "18HHI00001", "01UPP00001", "SOLOEXCLUIDO",
+                         "Gestión de RCDs", "Control de Calidad", "Trabajos no seleccionados"):
+            self.assertNotIn(excluded.casefold(), text.casefold())
+        self.assertEqual([unit.code for unit in study_work_units(app)], ["15APAA00001", "OBRA001"])
+        with tempfile.TemporaryDirectory() as folder:
+            matrix = Path(folder) / "matriz.csv"
+            matrix.write_text(
+                "uo_codigo,ss_codigo,ss_unidad,ss_resumen,ss_precio,peso_presupuesto_ss\n"
+                "15APAA00001,INCLUIDA,ud,Proteccion incluida,1,1\n"
+                "17RB00001,EXCLUIDA,ud,Proteccion excluida,1,100\n",
+                encoding="utf-8",
+            )
+            with patch("tools.safety_health.RELATIONSHIP_PATH", matrix):
+                self.assertEqual([line.code for line in proposed_lines(study_items(app))], ["INCLUIDA"])
+        self.assertEqual(app.budget_items, original)
+        synchronize_budget(
+            app, [SafetyLine("S", "ud", "Protección", Decimal(1), Decimal(1))], Decimal(2),
+        )
+        self.assertEqual(app.safety_health_state["chapter_selection"], {"03#": False})
+        self.assertAlmostEqual(
+            sum(item.import_total for item in app.budget_items if item.source.startswith("SS:")),
+            3.0, places=2,
+        )
+        app.safety_health_state["chapter_selection"]["17#"] = True
+        self.assertIn("17RB00001", [item.code for item in study_items(app)])
+        self.assertIn("17RB00001", [unit.code for unit in study_work_units(app)])
+
+    def test_chapter_screen_precedes_analysis_and_persists_explicit_opt_in(self):
+        """No consulta la matriz ni calcula criterios antes de aceptar las casillas."""
+        from tools.safety_health import open_tool
+
+        app = self.make_app("odt")
+        app.budget_items.extend((
+            ProjectItem("17RB00001", "17#", "ud", "Residuo", measurement=1, unit_price=1),
+            ProjectItem("18HHI00001", "18#", "ud", "Ensayo", measurement=1, unit_price=1),
+        ))
+        app.chapter_order.extend(("17#", "18#"))
+        app.chapter_titles.update({"17#": "Tratamiento de residuos", "18#": "Control de calidad"})
+        root = tk.Tk()
+        root.withdraw()
+        app.root, app._safety_health_window = root, None
+        try:
+            with patch("tools.safety_health.SafetyHealthWindow") as analysis, patch(
+                "tools.safety_health.proposed_lines",
+            ) as proposals, patch("tools.safety_health.evaluate_study_criteria") as criteria:
+                open_tool(app)
+                screen = app._safety_health_window
+                self.assertIsInstance(screen, ChapterSelectionWindow)
+                self.assertFalse(screen.choices["17#"].get())
+                self.assertFalse(screen.choices["18#"].get())
+                proposals.assert_not_called()
+                criteria.assert_not_called()
+                analysis.assert_not_called()
+                for variable in screen.choices.values():
+                    variable.set(False)
+                with patch("tools.safety_health.chapter_selection.messagebox.showerror") as error:
+                    screen.accept()
+                error.assert_called_once()
+                analysis.assert_not_called()
+                screen.choices["01#"].set(True)
+                screen.choices["17#"].set(True)
+                screen.accept()
+                analysis.assert_called_once_with(root, app)
+                self.assertEqual(
+                    restore_project_state(app.safety_health_state)["chapter_selection"],
+                    {"01#": True, "02#": False, "17#": True, "18#": False},
+                )
+                self.assertEqual(app.safety_health_state["lines"], [])
+                self.assertNotIn("study_criteria", app.safety_health_state)
+            reopened = ChapterSelectionWindow(app, lambda choices: None)
+            self.assertTrue(reopened.choices["17#"].get())
+            self.assertFalse(reopened.choices["02#"].get())
+            reopened.destroy()
+        finally:
+            root.destroy()
+
+    def test_first_chapter_confirmation_preserves_legacy_budget_lines(self):
+        """Conserva las partidas SS de proyectos antiguos si no cambia el ambito completo."""
+        from tools.safety_health import SafetyHealthWindow, open_tool
+
+        app = self.make_app("odt")
+        app.safety_health_state = {}
+        root = tk.Tk()
+        root.withdraw()
+        app.root, app._safety_health_window = root, None
+        try:
+            with patch("tools.safety_health.proposed_lines", return_value=[]) as proposals, patch(
+                "tools.safety_health.messagebox.showerror",
+            ) as error:
+                open_tool(app)
+                app._safety_health_window.accept()
+                window = app._safety_health_window
+                self.assertIsInstance(window, SafetyHealthWindow)
+                self.assertEqual([line.code for line in window.lines], ["SS0001"])
+                self.assertEqual(window.lines[0].price, Decimal("3.11"))
+                proposals.assert_not_called()
+                error.assert_not_called()
+        finally:
+            root.destroy()
 
     def test_regulatory_window_preserves_exclusions_and_manual_assignments_on_reopening(self):
         """Guarda la revision explicita y mantiene independientes las parejas partida/NTP."""
@@ -1001,6 +1464,161 @@ class SafetyHealthStudyTests(unittest.TestCase):
             reopened.destroy()
         finally:
             root.destroy()
+
+    def test_technical_proposals_use_scoped_references_real_resources_and_confirmed_conditions(self):
+        """No interpreta palabras de UO sin ficha ni maquinaria de capítulos excluidos."""
+        app = self.make_app("pdf")
+        app.safety_health_state["chapter_selection"] = {"01#": False, "02#": True}
+        item = app.budget_items[1]
+        item.summary = "Camión grúa, extendido y compactación"
+        _context, proposals, pending = study_technical_review(app)
+        self.assertEqual(proposals, {})
+        self.assertTrue(any("Partida sin ficha" in message for message in pending))
+        item.component_concepts.update({
+            "AUX": Concept("AUX", "ud", "Auxiliar", children=[("GRUA", 1)]),
+            "GRUA": Concept("GRUA", "h", "Camión grúa", ctype="2"),
+            "MO": Concept("MO", "h", "Conductor de rodillo", ctype="1"),
+            "CERO": Concept("CERO", "h", "Rodillo compactador", ctype="2"),
+        })
+        item.decomposition = [("AUX", 1), ("MO", 1), ("CERO", 0)]
+        app.safety_health_state["external_conditions"] = {
+            "peatones_terceros": {"applicability": "yes", "description": "Accesos a viviendas."},
+            "trafico_existente": {"applicability": "pending", "description": "Por confirmar."},
+        }
+        _context, proposals, _pending = study_technical_review(app)
+        self.assertIn("GRUA", proposals["lifting"])
+        self.assertIn("mobile", proposals)
+        self.assertIn("pedestrians", proposals)
+        self.assertNotIn("paving", proposals)
+        self.assertNotIn("openings", proposals)
+        self.assertNotIn("signage", proposals)
+        app.safety_health_state["chapter_selection"]["01#"] = True
+        self.assertIn("openings", study_technical_review(app)[1])
+
+    def test_technical_confirmation_requires_current_sources_and_complete_boolean_choices(self):
+        """Invalida cambios de ámbito, referencias, equipos, entorno o prescripciones."""
+        units = study_work_units(self.make_app("pdf"))
+        refs = {"R": ["R-TERCEROS"]}
+        resources = [("GRUA", "Camión grúa")]
+        context, _proposals = technical_review_data(units, refs, resources, {}, "Pliego")
+        saved = {
+            "context": context,
+            "blocks": {block.key: block.key == "lifting" for block in TECHNICAL_BLOCKS},
+        }
+        self.assertTrue(technical_review_confirmed(saved, context))
+        changed_contexts = (
+            technical_review_data(units[1:], refs, resources, {}, "Pliego")[0],
+            technical_review_data(units, {"EQ": ["EQ-CORTE"]}, resources, {}, "Pliego")[0],
+            technical_review_data(units, refs, [("GRUA", "Grúa revisada")], {}, "Pliego")[0],
+            technical_review_data(units, refs, resources, {
+                "trafico_existente": {"description": "Vía pública.", "applicability": "yes"},
+            }, "Pliego")[0],
+            technical_review_data(units, refs, resources, {}, "Pliego revisado")[0],
+        )
+        for changed in changed_contexts:
+            self.assertFalse(technical_review_confirmed(saved, changed))
+        self.assertFalse(technical_review_confirmed(
+            {"context": context, "blocks": {"lifting": True}}, context,
+        ))
+        for choices in ({"lifting": "sí"}, {"desconocido": True}):
+            with self.assertRaises(ValueError):
+                restore_technical_review({"context": context, "blocks": choices})
+
+    def test_technical_template_distinguishes_explicit_empty_selection_from_pending_review(self):
+        """Conserva el núcleo, admite exclusión total y rechaza marcadores incompletos."""
+        template = "Núcleo general.\n<!-- ESS-TECH-REVIEW -->\n" + "\n".join(
+            f"<!-- ESS-TECH:{block.key} -->\n#### {block.title}\nContenido {block.key}.\n<!-- /ESS-TECH -->"
+            for block in TECHNICAL_BLOCKS
+        )
+        context = "0" * 64
+        saved = {
+            "context": context, "blocks": {block.key: False for block in TECHNICAL_BLOCKS},
+        }
+        pending = []
+        text = selected_technical_template(template, saved, context, pending)
+        self.assertIn("Núcleo general.", text)
+        self.assertIn("Tras la revisión no se han seleccionado", text)
+        self.assertNotIn("Contenido", text)
+        self.assertNotIn("ESS-TECH", text)
+        self.assertEqual(pending, [])
+        text = selected_technical_template(template, None, context, pending)
+        self.assertIn("este documento no acredita su innecesariedad", text)
+        self.assertTrue(pending)
+        for malformed in (
+            template.replace("<!-- /ESS-TECH -->", "", 1),
+            template + "\n<!-- ESS-TECH:desconocido -->\n",
+        ):
+            with self.assertRaises(ValueError):
+                selected_technical_template(malformed, saved, context, [])
+
+    def test_technical_window_preserves_manual_choices_and_exports_only_confirmed_blocks(self):
+        """Persiste exclusiones e inclusiones manuales y comparte el filtro PDF/ODT."""
+        app = self.make_app("pdf")
+        context, proposals, pending = study_technical_review(app)
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            window = TechnicalReviewWindow(root, app, context, proposals, pending, app.safety_health_state)
+            self.assertTrue(window.choices["openings"])
+            self.assertFalse(window.choices["paving"])
+            for key in ("openings", "paving"):
+                window.tree.selection_set(key)
+                window._toggle()
+            window._accept()
+            app.safety_health_state = restore_project_state(app.safety_health_state)
+            synchronize_budget(
+                app, [SafetyLine("SS0001", "ud", "Protecciones", Decimal("3.11"), Decimal(1))],
+                Decimal("2"),
+            )
+            context, proposals, pending = study_technical_review(app)
+            self.assertTrue(technical_review_confirmed(app.safety_health_state["technical_review"], context))
+            reopened = TechnicalReviewWindow(root, app, context, proposals, pending, app.safety_health_state)
+            self.assertFalse(reopened.choices["openings"])
+            self.assertTrue(reopened.choices["paving"])
+            reopened.destroy()
+        finally:
+            root.destroy()
+        with tempfile.TemporaryDirectory() as folder:
+            for output_format in ("pdf", "odt"):
+                app.report_settings.output_format = output_format
+                path = Path(folder) / f"tecnica.{output_format}"
+                warnings = write_study_report(app, path)
+                if output_format == "pdf":
+                    text = "\n".join(page.extract_text() or "" for page in PdfReader(path).pages)
+                else:
+                    with ZipFile(path) as archive:
+                        text = "".join(ET.fromstring(archive.read("content.xml")).itertext())
+                text = " ".join(text.split())
+                self.assertIn("EQUIPOS DE EXTENDIDO Y COMPACTACIÓN", text)
+                self.assertNotIn("PROTECCIÓN DE HUECOS, ARQUETAS Y REGISTROS", text)
+                self.assertIn("Las plataformas, accesos y peldaños", text)
+                self.assertIn("La protección respiratoria no sustituirá", text)
+                self.assertIn("energías aisladas o controladas", text)
+                self.assertNotIn("ESS-TECH", text)
+                self.assertFalse(any("Confirmar las condiciones técnicas específicas" in item for item in warnings))
+        app.safety_health_state["external_conditions"] = {
+            "trafico_existente": {"description": "Nueva afección.", "applicability": "yes"},
+        }
+        draft = _build_study_content(app)
+        self.assertTrue(any("Confirmar las condiciones técnicas específicas" in item for item in draft.warnings))
+        draft_text = "\n".join(block.text for block in draft.blocks)
+        self.assertIn("este documento no acredita su innecesariedad", draft_text)
+        self.assertNotIn("EQUIPOS DE EXTENDIDO Y COMPACTACIÓN", draft_text)
+
+    def test_cancelling_required_technical_review_prevents_export(self):
+        """No permite que la selección pendiente se eluda al cancelar la revisión."""
+        proposal = create_autospec(SafetyProposalWindow, instance=True)
+        proposal.app = self.make_app("pdf")
+        proposal.app.safety_health_state["regulatory_review"] = {
+            "context": review_context(study_work_units(proposal.app)), "laws": {}, "ntps": {},
+        }
+        proposal._create_chapter.return_value = True
+        for window in (None, object()):
+            with self.subTest(window=window):
+                proposal.owner = SimpleNamespace(open_technical_review=lambda: window)
+                with patch("tools.safety_health.filedialog.asksaveasfilename") as choose:
+                    SafetyProposalWindow.generate_report(proposal)
+                choose.assert_not_called()
 
     def test_cancelling_required_regulatory_review_prevents_export(self):
         """No genera ni pide ruta si se cancela la confirmacion pendiente."""

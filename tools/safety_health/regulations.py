@@ -24,6 +24,8 @@ class WorkUnit:
     fiches: tuple[str, ...]
     risks: tuple[str, ...]
     measures: tuple[str, ...]
+    chapter: str = ""
+    chapter_title: str = ""
 
 
 @dataclass(frozen=True)
@@ -68,6 +70,79 @@ _NTP_TRIGGERS = {
     "NTP 923": ("R-CALOR",),
 }
 
+_UNE_FAMILIES = (
+    (
+        "Escaleras portátiles",
+        r"UNE-EN 131-(?:1|2|3|4|6|7)(?=:)",
+        "Se aplicarán las partes correspondientes al tipo de escalera utilizado, "
+        "incluidas sus instrucciones de uso y limitaciones.",
+    ),
+    (
+        "Protectores auditivos",
+        r"UNE-EN (?:352-(?:[1-9]|10)|458)(?=:)",
+        "Se seleccionarán las partes correspondientes a orejeras, tapones o equipos "
+        "acoplados y a sus funciones; la atenuación se ajustará a la exposición.",
+    ),
+    (
+        "Protección respiratoria y filtros contra partículas",
+        r"UNE-EN (?:136|140|143|149|14387|12941|12942)(?=:)",
+        "Se diferenciarán los filtros contra partículas, las medias máscaras filtrantes, "
+        "las máscaras y los filtros para gases o combinados. La selección dependerá "
+        "del contaminante, su concentración y el ajuste al usuario.",
+    ),
+    (
+        "Guantes de protección",
+        r"UNE-EN (?:ISO (?:21420|374-[1245])|388|407|511|12477)(?=:)",
+        "Se combinarán los requisitos generales con las prestaciones mecánicas, "
+        "químicas, biológicas o térmicas necesarias para la operación.",
+    ),
+    (
+        "Calzado de seguridad, protección y trabajo",
+        r"UNE-EN ISO 2034[4-7](?=:)",
+        "Se seleccionará la categoría y las prestaciones exigidas por el riesgo. "
+        "El calzado de trabajo no sustituirá al calzado de seguridad cuando este sea necesario.",
+    ),
+    (
+        "Protección de cabeza, ojos y cara y ropa de protección",
+        r"UNE-EN (?:397|812|ISO (?:16321-[123]|13688|20471|11612))(?=:)",
+        "Se comprobarán las prestaciones y la compatibilidad de los equipos. Un casco "
+        "contra golpes no sustituirá a un casco de protección cuando exista riesgo "
+        "de caída de objetos.",
+    ),
+    (
+        "Redes de seguridad",
+        r"UNE-EN 1263-[12](?=:)",
+        "Cuando se prevean redes, se definirán el sistema, sus apoyos, los límites "
+        "de instalación, el montaje y las comprobaciones necesarias.",
+    ),
+    (
+        "Cinturones, arneses y sistemas de protección contra caídas",
+        r"UNE-EN (?:354|355|358|360|361|362|363|365|795)(?=:)",
+        "Los cinturones de retención o posicionamiento no sustituyen a los sistemas "
+        "de detención de caídas. Se comprobarán compatibilidad, anclajes, instrucciones, "
+        "revisiones y rescate según el sistema realmente previsto.",
+    ),
+)
+
+
+def general_une_references() -> str:
+    """Lista familias preventivas vigentes en el catalogo, sin afirmar su aplicacion a la obra."""
+    catalog = load_reference_entries("UNE")
+    sections = []
+    for title, pattern, condition in _UNE_FAMILIES:
+        references = dict.fromkeys(
+            (entry.code, entry.title)
+            for entry in catalog
+            if entry.status.casefold() == "vigente" and re.match(pattern, entry.code)
+        )
+        if not references:
+            raise ValueError(f"El catálogo UNE no contiene referencias vigentes para {title}.")
+        sections.extend((
+            f"#### {title}", condition,
+            "\n".join(f"- {code} — {description}" for code, description in references),
+        ))
+    return "\n\n".join(sections)
+
 
 def _csv_rows(path: Path, columns: set[str]) -> list[dict[str, str]]:
     """Lee datos locales completos o informa de la fila y del catalogo incorrectos."""
@@ -103,7 +178,7 @@ def review_context(units: list[WorkUnit]) -> str:
     """Detecta cambios de partidas, referencias, reglas o catalogos tras la confirmacion."""
     unit_values = sorted(
         (asdict(unit) for unit in units),
-        key=lambda row: (row["code"], row["summary"]),
+        key=lambda row: (row["chapter"], row["code"], row["summary"]),
     )
     try:
         catalogues = {

@@ -15,13 +15,14 @@ from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from math import isfinite
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from municipalities import Municipality, resolve_municipalities
 from cpv_catalog import CpvEntry, resolve_cpv_codes
 
 if TYPE_CHECKING:
     from bc3_gui import BudgetApp
+    from report_layout import ReportLayout
 
 
 REPORT_NAMES = (
@@ -33,6 +34,16 @@ REPORT_NAMES = (
     "Presupuesto mediciones",
     "Presupuesto resumen",
 )
+REPORT_TITLES = {
+    "Cuadro de precios 1 y 2 por capitulos": "CUADRO DE PRECIOS 1",
+    "Mediciones": "MEDICIONES",
+    "Descompuestos": "CUADRO DE PRECIOS DESCOMPUESTOS",
+    "Materiales": "LISTADO ELEMENTALES VALORADOS\n(PRESUPUESTO)",
+    "Precios elementales": "LISTADO DE PRECIOS ELEMENTALES",
+    "Precios Auxiliares": "CUADRO DE PRECIOS AUXILIARES",
+    "Presupuesto mediciones": "PRESUPUESTO",
+    "Presupuesto resumen": "RESUMEN DE PRESUPUESTO",
+}
 CERTIFICATION_REPORT_NAMES = ("Resumen certificaciones", "Certificaciones con mediciones")
 DEVIATION_REPORT_NAME = "Informe de desviaciones"
 PERCENTAGE_FIELDS = {
@@ -234,7 +245,7 @@ def amount_in_words(
     return (("menos " if negative else "") + text).upper()
 
 
-def _collect_report_resources(app):
+def _collect_report_resources(app, *, elementary: bool = False):
     """Acumula auxiliares y materiales usados con sus cantidades y precios actuales."""
     from bc3_gui import Concept, ProjectItem
 
@@ -259,7 +270,7 @@ def _collect_report_resources(app):
                      (*stack, concept.code))
         elif kind == "aux":
             raise ValueError(f"No se dispone de la descomposición del auxiliar {concept.code}.")
-        elif (kind or concept.ctype) == "3":
+        elif (kind or concept.ctype) in ({"1", "2", "3"} if elementary else {"3"}):
             key = (concept.code, concept.unit, concept.summary, price)
             if key not in materials:
                 materials[key] = [concept, Decimal(0), price]
@@ -282,21 +293,21 @@ def _collect_report_resources(app):
     return auxiliaries, materials
 
 
-def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
-    """Genera tablas paginadas; solo recorre los auxiliares usados en la obra."""
-    from reportlab.lib.pagesizes import A4
+def build_pdf_report(
+    app: BudgetApp, report: str, layout: ReportLayout, *, embedded: bool = False,
+) -> tuple[list, Callable]:
+    """Construye los listados reutilizables con cabeceras internas al integrarlos en un anejo."""
     from reportlab.lib.units import mm
     from reportlab.platypus import (
-        KeepTogether, PageBreak, SimpleDocTemplate, Spacer, Flowable,
+        KeepTogether, PageBreak, Spacer, Flowable,
     )
-    from reportlab.platypus.doctemplate import LayoutError
     from bc3_gui import fmt_number, format_chapter_code
     from report_layout import (
-        COLUMN_REFERENCE_WIDTH, CONTENT_WIDTH, LEFT_MARGIN, RIGHT_MARGIN, ReportLayout,
+        COLUMN_REFERENCE_WIDTH, CONTENT_WIDTH,
         MEASUREMENT_COLUMN_RATIOS, budget_report_columns, report_project_label,
     )
 
-    if report not in REPORT_NAMES:
+    if report not in REPORT_TITLES:
         raise ValueError(f"Tipo de informe desconocido: {report}")
     settings = app.report_settings
     title = app._project_title()
@@ -305,27 +316,17 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
     project_label = report_project_label(
         title, "" if report == "Mediciones" else currency_label(settings.currency, settings.custom_currency),
     )
-    layout = ReportLayout(
-        template_path=settings.template_path,
-        expediente=settings.expediente,
-        template_title=title,
-    )
     text = layout.text
     table = layout.table
     story = []
-    header_title = {
-        "Descompuestos": "CUADRO DE PRECIOS DESCOMPUESTOS",
-        "Materiales": "LISTADO ELEMENTALES VALORADOS\n(PRESUPUESTO)",
-        "Precios Auxiliares": "CUADRO DE PRECIOS AUXILIARES",
-        "Presupuesto mediciones": "PRESUPUESTO",
-        "Presupuesto resumen": "RESUMEN DE PRESUPUESTO",
-        "Mediciones": "MEDICIONES",
-    }.get(report, "CUADRO DE PRECIOS 1")
+    header_title = REPORT_TITLES[report]
     page_headings = {}
     current_heading = header_title
     _, component_widths = budget_report_columns("Descompuestos")
     _, auxiliary_widths = budget_report_columns("Precios Auxiliares")
-    column_headers, column_ratios = budget_report_columns(report)
+    column_headers, column_ratios = budget_report_columns(
+        "Materiales" if report == "Precios elementales" else report,
+    )
 
     class SectionMarker(Flowable):
         def __init__(self, value):
@@ -388,8 +389,8 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
     groups = [(code, items) for code, items in grouped_items() if items]
     pem = sum((money(i.import_total) for i in app.budget_items), Decimal(0))
 
-    if report in {"Materiales", "Precios Auxiliares"}:
-        auxiliaries, materials = _collect_report_resources(app)
+    if report in {"Materiales", "Precios elementales", "Precios Auxiliares"}:
+        auxiliaries, materials = _collect_report_resources(app, elementary=report == "Precios elementales")
     else:
         auxiliaries, materials = {}, {}
 
@@ -414,7 +415,7 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
                           amount_in_words(
                               totals["total"], settings.currency, settings.custom_currency
                           ), layout.words_style))
-    elif report == "Materiales":
+    elif report in {"Materiales", "Precios elementales"}:
         rows = []
         group = None
         subtotal = Decimal(0)
@@ -438,7 +439,11 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
                                rows, [50, 45, 18, 290, 50, 57], bold_rows=subtotal_rows,
                                highlighted_rows=subtotal_rows))
         else:
-            story.append(text("No hay materiales en las descomposiciones del proyecto."))
+            story.append(text(
+                "No hay precios elementales identificados en el proyecto."
+                if report == "Precios elementales"
+                else "No hay materiales en las descomposiciones del proyecto."
+            ))
         total("TOTAL", grand_total)
     elif report == "Precios Auxiliares":
         for concept, price, children in auxiliaries.values():
@@ -450,7 +455,7 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
                 story.append(layout.description(concept.text))
             rows = [[c.code, c.unit, fmt_number(q, 3), c.summary, money(p), money(q * p), ""]
                     for c, q, p in children]
-            story.append(table([], rows, auxiliary_widths))
+            story.append(table(column_headers if embedded else [], rows, auxiliary_widths))
             total("COSTE UNITARIO TOTAL", price)
             difference = money(price) - sum((money(q * p) for _, q, p in children), Decimal(0))
             if difference:
@@ -506,7 +511,7 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
                         rows = [[c.code, c.unit, c.summary, fmt_number(q, 3), money(p), money(q * p), ""]
                                 for c, q, p in components(item)]
                         if rows:
-                            story.append(table([], rows, component_widths))
+                            story.append(table(column_headers if embedded else [], rows, component_widths))
                             difference = money(item.unit_price) - sum(
                                 (money(q * p) for _, q, p in components(item)), Decimal(0))
                             if difference:
@@ -550,7 +555,7 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
     signature = [v for v in (
         settings.location, settings.role, settings.author, settings.organization, settings.signature
     ) if v]
-    if signature:
+    if signature and not embedded:
         story.append(KeepTogether([Spacer(1, 8 * mm), *[
             text(v, layout.signature_note if v == settings.signature else layout.center)
             for v in signature
@@ -562,6 +567,31 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
                       project_label,
                       footer=f"{date.today():%d/%m/%Y}",
                       column_headers=column_headers, ratios=column_ratios)
+
+    return story, page_header
+
+
+def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
+    """Genera el informe independiente conservando sus cabeceras y firmas."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.platypus import SimpleDocTemplate
+    from reportlab.platypus.doctemplate import LayoutError
+    from bc3_gui import currency_label
+    from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout, budget_report_columns, report_project_label
+
+    if report not in REPORT_NAMES:
+        raise ValueError(f"Tipo de informe desconocido: {report}")
+    settings = app.report_settings
+    title = app._project_title()
+    layout = ReportLayout(
+        template_path=settings.template_path, expediente=settings.expediente, template_title=title,
+    )
+    story, page_header = build_pdf_report(app, report, layout)
+    header_title = REPORT_TITLES[report]
+    column_headers, column_ratios = budget_report_columns(report)
+    project_label = report_project_label(
+        title, "" if report == "Mediciones" else currency_label(settings.currency, settings.custom_currency),
+    )
 
     class ReportDocument(SimpleDocTemplate):
         def afterPage(self):

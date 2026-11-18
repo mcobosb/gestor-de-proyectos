@@ -98,7 +98,11 @@
   de PPTP, con nombres por código y título, sin extender el catálogo a todas
   sus familias. Cada ficha incluye definición y alcance, riesgos y medidas
   preventivas, con protecciones colectivas, EPI, equipos y validación como
-  subapartados textuales. Sumideros varios dispone de ficha autónoma completa.
+  subapartados textuales. Revisadas las once fichas: títulos visibles sin código,
+  sin párrafos de unidades vinculadas ni clasificación; riesgos como códigos
+  enlazados al catálogo; protecciones, EPI y equipos en viñetas, y Validación
+  como último apartado independiente. Se conservan el alcance, el primer bloque
+  de medidas y las condiciones específicas. Sumideros varios dispone de ficha autónoma completa.
   Las unidades sin ficha se señalan expresamente como pendientes y ya no se
   clasifican por palabras de su descripción. Revisadas las correspondencias
   de residuos bituminosos y ensayos; compatibilidad revisable de 17RRBN con 17RB.
@@ -113,21 +117,73 @@
 - ESS organizado en Documento I (Memoria, capítulos 1 a 4) y Documento II
   (Pliego de condiciones), dentro del mismo PDF/ODT y con índices propios
   enlazados y actualizables en ODT, sin mezclar entradas entre documentos.
-  El pliego reinicia la numeración con normativa y disposiciones generales,
-  organización preventiva y obligaciones, y Plan de Seguridad y Salud, control
-  y certificación.
+  El pliego reinicia la numeración con Objeto del presente pliego y su listado
+  de condiciones; siguen los capítulos de naturaleza legal, facultativa,
+  técnica y económica (2 a 5), conservando el contenido de los cuatro bloques
+  anteriores y actualizando índices y referencias. El capítulo 4 mantiene
+  apartados para protecciones, maquinaria/equipos y señalización/balizamiento/
+  protección de terceros.
   Se amplían las obligaciones de los agentes, la aprobación del PSS, el control
   documental, las modificaciones y la certificación con el importe preventivo
   real del presupuesto, adaptando las referencias del ejemplo a cada obra.
+- El capítulo de naturaleza económica incorpora valoración mensual salvo pacto
+  en contrario, precios contratados y aprobación previa al abono, pago según
+  contrato, valoración de unidades no previstas y comunicación escrita de
+  revisiones de precios con aprobación previa.
+- Integrados en el capítulo facultativo el PSS y sus modificaciones, acta o
+  resolución de aprobación, comunicación de apertura, libros y control de la
+  efectividad. Cuadro de seguimiento, cuatro índices con fórmulas coherentes
+  y tratamiento de denominadores cero, investigación de accidentes y cierre
+  verificado de deficiencias. Actualizados Libro de Incidencias, Subcontratación,
+  Órdenes y diligencias inspectoras; sin exigir un nuevo Libro de Visitas ni
+  visado obligatorio general del acta. El capítulo económico conserva el abono
+  y la certificación e incorpora garantías, precios, mediciones, plazos y
+  liquidación según contrato, sin duplicar trámites facultativos.
+- Completadas las condiciones facultativas con consulta y participación,
+  delegados, comité y obligaciones de los trabajadores; precisados los recursos
+  preventivos y la documentación vigente. El coordinador se integra en la
+  Dirección Facultativa sin asumir automáticamente competencias económicas.
+  El comité se condiciona a los supuestos de empresa o centro con 50 o más
+  trabajadores, no a sumar plantillas de distintas empresas. No se reproducen
+  remisiones indiscriminadas de todas las anotaciones a la Inspección,
+  demolición automática, homologaciones genéricas ni modelos documentales antiguos.
+- Desarrollados los medios de protección colectiva e individual en el apartado
+  4.1 y añadidas las instalaciones provisionales en el 4.4: vestuarios, aseos,
+  duchas, retretes, comedores y descanso. Responsabilidad empresarial del
+  mantenimiento, marcado CE conforme al régimen aplicable y dimensionado
+  según plantilla simultánea, normativa y convenio, sin ratios universales.
+- Condiciones técnicas del ESS con núcleo general fijo y diez bloques
+  específicos revisables. Propuestas por referencias de fichas, recursos
+  físicos y condicionantes confirmados, con inclusión manual de los no
+  detectados y conservación de exclusiones expresas.
+  Se completan cerramientos, huecos, pasos, maquinaria, elevación,
+  señalización, señalistas y protección de terceros. La selección se guarda
+  en el proyecto, se conserva al recalcular y se confirma antes de exportar
+  cuando cambian sus fuentes o prescripciones. PDF y ODT comparten el filtro
+  y la numeración; los borradores programáticos sin revisión lo advierten.
 - Confirmación persistente de normativa preventiva y NTP por unidades de obra.
   Propuestas basadas en códigos BCCA y riesgos/medidas expresos de las fichas,
   con exclusiones y asignación manual desde el catálogo oficial local.
   Las coincidencias solo temáticas y las referencias con avisos no se marcan
   automáticamente. Una modificación de las unidades o sus fichas requiere
-  nueva confirmación. El primer capítulo del Pliego incorpora las normas
+  nueva confirmación. El capítulo legal del Pliego incorpora las normas
   confirmadas, condiciones generales, prioridad de protección colectiva y una
-  tabla enlazada a los códigos de riesgos/medidas con las NTP seleccionadas,
+  tabla de dos columnas en el apartado 2.5, por capítulo presupuestario y NTP
+  seleccionadas en viñetas. Cada NTP compartida figura solo en el primer capítulo
+  seleccionado según el orden del presupuesto. Se mantienen los riesgos y
+  medidas en las fichas de la Memoria y las NTP quedan
   identificadas como guías técnicas y no como disposiciones obligatorias.
+- Nuevo apartado 2.4 de UNE por familias de equipos y protecciones, antes de las
+  NTP. Reutiliza el catálogo UNE local, incluye solo referencias vigentes y
+  excluye proyectos, normas anuladas y familias homónimas ajenas a prevención.
+  Su aplicación se condiciona a los equipos reales y a la revisión de edición,
+  modificaciones, correcciones y exigibilidad, sin confirmar obligatoriedad.
+- Selección persistente de capítulos antes de iniciar el análisis de Seguridad
+  y Salud. RCD y Control de Calidad se desmarcan por defecto, con inclusión
+  expresa opcional. Propuestas, fichas, medios, planificación y normativa se
+  limitan al ámbito marcado, sin alterar los importes globales del proyecto
+  ni su criterio legal por presupuesto. El porcentaje preventivo usa la base
+  seleccionada; cambiar el ámbito obliga a revisar de nuevo sus propuestas.
 - PPTP agrupado por capítulos del presupuesto, con tabla de fichas enlazadas,
   colores alternos e índice de profundidad configurable. Las disposiciones
   legales y UNE seleccionadas se agrupan por ámbitos temáticos en su apartado,

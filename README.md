@@ -165,17 +165,22 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
   muestran únicamente los códigos aplicables, separados por coma y espacio,
   sin viñetas ni definiciones y con enlaces a las filas del catálogo.
 - El **capítulo 3** comienza con una introducción y la **Tabla 5**, con leyenda
-  superior y formato azul/blanco: relaciona todas las unidades del presupuesto
+  superior y formato azul/blanco: relaciona las unidades de los capítulos seleccionados
   con sus fichas BCCA, riesgos y medidas preventivas enlazadas al catálogo.
   Después aparecen las fichas específicas disponibles, una sola vez por ficha,
-  con las partidas vinculadas y en el orden de clasificación de PPTP.
+  en el orden de clasificación de PPTP. Sus títulos muestran solo la denominación,
+  sin anteponer el código ni los párrafos de unidades vinculadas o clasificación.
+  La relación con las partidas y los códigos BCCA se conserva en la Tabla 5.
   Las **11 fichas ESS** conservan su especialidad preventiva y se organizan en
-  las mismas carpetas y subcarpetas BCCA de PPTP, con nombres por código y título.
+  las mismas carpetas y subcarpetas BCCA de PPTP, con archivos internos por código y título.
   Las familias generales 15CP y 15CR se mantienen en sus carpetas respectivas;
   no se amplía la biblioteca a las 1.661 fichas del PPTP.
   Cada ficha desarrolla en texto **Definición y alcance**, **Riesgos detectados**
   y **Medidas preventivas**, con subapartados de **Protecciones colectivas**,
-  **Equipos de protección individual**, **Equipos de trabajo** y **Validación**.
+  **Equipos de protección individual** y **Equipos de trabajo**, desglosados en
+  viñetas por protección o equipo. **Validación** cierra cada ficha como apartado
+  independiente. Los riesgos se muestran como códigos separados por comas
+  (por ejemplo, R-ATROPELLO), enlazados a su definición en el catálogo, sin repetirla.
   Las viñetas tienen sangría y las referencias conservan sus enlaces.
   No se muestran códigos UO ni capítulos separados de matriz y fichas BCCA.
   Las unidades sin ficha específica se marcan expresamente como pendientes,
@@ -203,12 +208,56 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
   Los capítulos 1 a 4 forman el **Documento I. Memoria**.
 - El **Documento II. Pliego de condiciones** se incluye en el mismo PDF/ODT,
   con índice propio y numeración de capítulos reiniciada:
-  **1. Normativa y disposiciones generales**,
-  **2. Organización preventiva, coordinación y obligaciones** y
-  **3. Plan de Seguridad y Salud, control y certificación**.
+  **1. Objeto del presente pliego**,
+  **2. Condiciones de naturaleza legal**,
+  **3. Condiciones de naturaleza facultativa**,
+  **4. Condiciones de naturaleza técnica** y
+  **5. Condiciones de naturaleza económica**.
+  El objeto introduce las cuatro naturalezas de condiciones mediante viñetas.
+  El capítulo 4 desarrolla la protección colectiva y los EPI en el apartado
+  4.1, y las instalaciones provisionales de salud y confort en el 4.4
+  (vestuarios, aseos y duchas, retretes, comedores y descanso). Su mantenimiento
+  corresponde al empresario; el Plan dimensiona las dotaciones por plantilla
+  simultánea y conforme a la normativa y al convenio aplicables, sin imponer
+  ratios universales. Maquinaria/equipos y señalización/balizamiento/protección
+  de terceros se desarrollan en los apartados 4.2 y 4.3.
+  **Condiciones técnicas...** mantiene un núcleo general fijo y permite revisar
+  diez bloques específicos (cerramientos, huecos, pasos, maquinaria móvil,
+  extendido/compactación, corte/demolición, elevación, señalización, señalistas
+  y peatones). Las propuestas proceden de las referencias de las fichas de las
+  UO seleccionadas, recursos físicos del presupuesto y condicionantes expresamente
+  aplicables, no de buscar palabras en la descripción de las partidas.
+  Todos los bloques pueden incluirse o excluirse manualmente; la falta de una
+  ficha o recurso no demuestra su innecesariedad. Las decisiones se guardan en
+  el proyecto y se conservan al recalcular el capítulo preventivo.
+  Antes de exportar desde la ventana se exige confirmar el contexto actual;
+  los cambios de UO, referencias, equipos, condicionantes o prescripciones obligan
+  a revisar de nuevo. PDF y ODT incluyen los mismos bloques confirmados y
+  renumeran sus epígrafes. La generación programática sin revisión actualizada
+  muestra una advertencia explícita en el documento y en su lista de validaciones,
+  sin presentar los bloques omitidos como innecesarios.
   Define las obligaciones de los agentes, el PSS y su aprobación, el control
   documental, la certificación y las modificaciones. Utiliza el importe
   preventivo realmente incorporado al presupuesto, no una cantidad de ejemplo.
+  El capítulo 3 agrupa el PSS, su acta o resolución de aprobación, la comunicación
+  de apertura, las modificaciones, los libros y el control de la efectividad.
+  Este último desarrolla el cuadro de seguimiento, los índices de incidencia,
+  frecuencia, gravedad y duración media, y los partes de accidentes y deficiencias
+  con responsables, plazos y comprobación del cierre. La incidencia se expresa
+  por cien trabajadores de plantilla media, no por horas; los indicadores con
+  denominador cero se identifican como no calculables.
+  Se distingue la aprobación pública del Plan y no se impone un visado general
+  del acta. El antiguo Libro de Visitas se trata mediante las diligencias
+  inspectoras y su conservación, sin exigir un nuevo libro.
+  Los apartados 3.10 y 3.11 completan consulta, delegados, comité y obligaciones
+  de los trabajadores. El umbral del comité se refiere a empresas o centros
+  de trabajo, no a sumar automáticamente personal de distintas empresas en la
+  obra. Se precisan la integración del coordinador en la Dirección Facultativa,
+  los supuestos y permanencia de recursos preventivos y la comprobación de
+  documentación vigente, sin exigir modelos o libros derogados.
+  El capítulo 5 conserva valoración, certificación y abono, y concreta las
+  materias económicas que deberán regularse en el contrato, sin inventar
+  porcentajes de garantías ni revisiones automáticas de precios.
   Ambos índices están enlazados a sus propios epígrafes; en ODT son actualizables
   de forma independiente. La numeración de páginas continúa entre documentos.
 - **Normativa y NTP...** permite confirmar las disposiciones y las asociaciones
@@ -219,11 +268,24 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
   proyecto y se conservan al recalcular el capítulo preventivo.
   Las coincidencias solo temáticas y las NTP con avisos no se preseleccionan.
   El capítulo normativo incluye las disposiciones confirmadas, las condiciones
-  generales, la prioridad de la protección colectiva y la Tabla 6 de códigos de
-  unidades de obra, riesgos, medidas y NTP. Las NTP se presentan como guías
+  generales y la prioridad de la protección colectiva. El apartado **2.4. Normas
+  UNE de aplicación** recoge un listado general por familias: escaleras portátiles,
+  protectores auditivos, protección respiratoria y filtros, guantes, calzado,
+  protección de cabeza/ojos/cara y ropa, redes y sistemas contra caídas.
+  Solo incluye referencias marcadas como vigentes en el catálogo UNE local,
+  con sus títulos y ediciones, sin proyectos ni normas anuladas. Su aplicación
+  queda condicionada al equipo y al trabajo realmente previstos; el listado
+  no confirma su obligatoriedad ni el carácter armonizado de las normas.
+  Se deberán comprobar las ediciones, modificaciones y correcciones antes del uso.
+  El apartado **2.5**
+  contiene la **Tabla 6**, con dos columnas: capítulo del presupuesto y NTP
+  confirmadas en viñetas. Las NTP compartidas aparecen solo en el primer
+  capítulo seleccionado, según el orden del presupuesto; su ausencia en los
+  siguientes no implica que dejen de ser aplicables. Las fichas de la Memoria
+  mantienen las referencias a riesgos y medidas. Las NTP se presentan como guías
   técnicas, no como legislación obligatoria. Deben comprobarse alcance, edición,
   avisos y normativa vigente a la fecha de ejecución.
-  Si cambian las unidades, los códigos de fichas, riesgos o medidas, o los
+  Si cambian las unidades, sus capítulos o títulos, los códigos de fichas, riesgos o medidas, o los
   catálogos locales, se requiere una nueva confirmación. Las unidades sin ficha
   o asociación no se dan por evaluadas.
 - El informe y su índice no incluyen el anexo de trazabilidad con importes ni
@@ -242,8 +304,17 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
   la dirección postal completa, los teléfonos y las observaciones revisadas,
   además del teléfono general de emergencias 112. Otros contactos pueden añadirse
   en el texto libre o en la descripción del condicionante de centro asistencial.
-- La selección y el porcentaje aceptados se guardan en JSON; al reabrir la
-  herramienta se recuperan sin consultar de nuevo la matriz ni recalcular el capítulo.
+- Antes de iniciar el análisis se muestran los capítulos con partidas y sus
+  casillas de selección. **Gestión o tratamiento de RCD** y **Control de Calidad**
+  aparecen desmarcados inicialmente, aunque pueden incluirse expresamente.
+  El capítulo generado de Seguridad y Salud no se analiza como unidad de obra.
+  Solo los capítulos marcados alimentan la propuesta preventiva, las fichas,
+  los recursos, la planificación analizada y la revisión normativa/NTP.
+  El porcentaje preventivo se aplica a su importe seleccionado; los importes
+  globales y el criterio legal por presupuesto conservan el presupuesto completo.
+- Las selecciones de capítulos y medidas, y el porcentaje aceptado, se guardan
+  en JSON. Al reabrir se recuperan sin consultar de nuevo la matriz ni recalcular
+  el capítulo, salvo que se cambie el ámbito de capítulos.
 
 ### Consulta de NTP y UNE
 

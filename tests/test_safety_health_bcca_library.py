@@ -69,8 +69,23 @@ class SafetyHealthBccaLibraryTests(unittest.TestCase):
                 self.assertIn(PurePosixPath(path).parent.as_posix(), folders)
                 self.assertNotIn("FICHA_ESS_", path)
                 self.assertNotIn("UO-", text)
+                self.assertNotIn("Clasificación BCCA:", text)
+                self.assertNotIn("Unidades de obra vinculadas:", text)
                 blocks = _markdown_blocks(text)
                 self.assertFalse(any(block.kind == "table" for block in blocks))
+                headings = [block for block in blocks if block.kind == "heading"]
+                self.assertEqual(headings[-1].text, "Validación")
+                self.assertEqual(headings[-1].level, 2)
+                for position, block in enumerate(blocks):
+                    if block.kind == "heading" and block.level == 3:
+                        self.assertEqual(blocks[position + 1].kind, "list_item", (path, block.text))
+                risks = next(
+                    position for position, block in enumerate(blocks)
+                    if block.kind == "heading" and block.text == "Riesgos detectados"
+                )
+                self.assertRegex(
+                    blocks[risks + 2].text, r"^R-[A-Z0-9-]+(?:, R-[A-Z0-9-]+)*\.$",
+                )
                 for category in ("R", "MP", "PC", "EPI"):
                     self.assertTrue(references[path][category], (path, category))
                 self.assertTrue(all(

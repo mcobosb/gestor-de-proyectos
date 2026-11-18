@@ -17,8 +17,12 @@ from zipfile import BadZipFile, ZipFile
 from budget_reports import budget_totals
 from cpv_catalog import resolve_cpv_codes
 from .care_centers import format_centers, restore_centers
+from .chapter_selection import study_chapters, study_items
 from .external_conditions import APPLICABILITY, EXTERNAL_CONDITIONS, restore_external_conditions
-from .regulations import REGULATIONS, WorkUnit, load_ntps, restore_review, review_context
+from .regulations import (
+    REGULATIONS, WorkUnit, general_une_references, load_ntps, restore_review, review_context,
+)
+from .technical_conditions import selected_technical_template, technical_review_data
 from localization import translate
 from municipalities import resolve_municipalities
 from report_layout import LEFT_MARGIN, PAGE_MARGIN, RIGHT_MARGIN, ReportLayout, report_project_label
@@ -71,7 +75,7 @@ _GENERAL_RISK_HEADERS = (
 _CATALOGUE_HEADERS = ("Tipo", "Referencia", "Descripción")
 _PPE_HEADERS = ("EPI", "USOS PREVISIBLES", "OBSERVACIONES")
 _WORK_UNIT_HEADERS = ("Unidad de obra / ficha BCCA", "Riesgos detectados", "Medidas preventivas")
-_NTP_HEADERS = ("Unidad de obra", "Riesgos", "Medidas preventivas", "NTP confirmadas")
+_NTP_HEADERS = ("Capítulo del presupuesto", "NTP confirmadas")
 
 
 @dataclass(frozen=True)
@@ -101,12 +105,12 @@ def _normalized_text(value: str) -> str:
     return unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii").casefold()
 
 
-def _budget_equipment(
+def _budget_resources(
     app: BudgetApp, items: list[ProjectItem], pending: list[str],
-) -> tuple[str, str]:
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
     """Separa medios auxiliares fisicos y maquinaria sin incluir porcentajes ni precios auxiliares."""
-    auxiliaries: dict[tuple[str, str], str] = {}
-    machinery: dict[tuple[str, str], str] = {}
+    auxiliaries: dict[tuple[str, str], tuple[str, str]] = {}
+    machinery: dict[tuple[str, str], tuple[str, str]] = {}
     for item in items:
         if item.measurement <= 0 or item.unit == "%" or "%" in item.code:
             continue
@@ -123,7 +127,7 @@ def _budget_equipment(
             else:
                 return
             label = description.strip() or code
-            found[(code, _normalized_text(label))] = f"• {code} — {label}"
+            found[(code, _normalized_text(label))] = (code, label)
 
         def walk(code: str, quantity: float, stack: tuple[str, ...]) -> None:
             """Recorre tambien los descompuestos anidados y avisa si faltan recursos."""
@@ -154,14 +158,7 @@ def _budget_equipment(
         include(item.code, item.summary, app._budget_concept_type(item))
         for code, quantity in item.decomposition:
             walk(code, quantity, (item.code,))
-    return (
-        "\n".join(auxiliaries.values()) or (
-            "No se han identificado medios auxiliares en el presupuesto disponible."
-        ),
-        "\n".join(machinery.values()) or (
-            "No se ha identificado maquinaria en el presupuesto disponible."
-        ),
-    )
+    return list(auxiliaries.values()), list(machinery.values())
 
 
 def _inline_text(value: str) -> str:
@@ -177,7 +174,9 @@ def _display_value(value: str) -> str:
 
 def _template_value(name: str, value: str) -> str:
     """Conserva criterios y normativa redactada y capitaliza los demas datos del proyecto."""
-    return value if name in {"justificacion_estudio", "normativa_confirmada"} else _display_value(value)
+    return value if name in {
+        "justificacion_estudio", "normativa_confirmada", "normas_une",
+    } else _display_value(value)
 
 
 def _table_cells(line: str) -> list[str] | None:
@@ -412,7 +411,7 @@ def _load_selected_fiches(
         for title, level in (
             ("Definición y alcance", 2), ("Riesgos detectados", 2), ("Medidas preventivas", 2),
             ("Protecciones colectivas", 3), ("Equipos de protección individual", 3),
-            ("Equipos de trabajo", 3), ("Validación", 3),
+            ("Equipos de trabajo", 3), ("Validación", 2),
         ):
             if (_normalized_text(title), level) not in headings:
                 raise ValueError(f"La ficha ESS {path} no contiene el apartado {title}.")
@@ -435,10 +434,7 @@ def _load_selected_fiches(
 
 def _study_fiches(app, pending: list[str]):
     """Comparte entre revision y exportacion la misma vinculacion BCCA de las fichas."""
-    work_items = [
-        item for item in app.budget_items
-        if not item.source.startswith(SAFETY_BUDGET_SOURCE)
-    ]
+    work_items = study_items(app)
     templates = _read_library()
     index = _parse_index(templates["index"])
     fiche_paths: list[str] = []
@@ -480,7 +476,7 @@ def _study_fiches(app, pending: list[str]):
     return templates, item_fiches, fiche_references, fiche_contents
 
 
-def _work_units(item_fiches, fiche_references) -> list[WorkUnit]:
+def _work_units(app, item_fiches, fiche_references) -> list[WorkUnit]:
     """Expone las referencias de cada partida sin clasificar por palabras de su texto."""
     units = []
     for item, paths in item_fiches:
@@ -489,6 +485,7 @@ def _work_units(item_fiches, fiche_references) -> list[WorkUnit]:
             item.code, item.summary,
             tuple(PurePosixPath(path).stem.split("-", 1)[0] for path in paths),
             tuple(references["R"]), tuple(references["MP"]),
+            item.chapter, app._chapter_title(item.chapter),
         ))
     return units
 
@@ -496,10 +493,25 @@ def _work_units(item_fiches, fiche_references) -> list[WorkUnit]:
 def study_work_units(app) -> list[WorkUnit]:
     """Obtiene el contexto revisable incluso antes de crear el capitulo presupuestario SS."""
     _templates, item_fiches, references, _contents = _study_fiches(app, [])
-    return _work_units(item_fiches, references)
+    return _work_units(app, item_fiches, references)
 
 
-def _add_normative_chapter(blocks, template, units, state, pending) -> None:
+def study_technical_review(app) -> tuple[str, dict[str, str], list[str]]:
+    """Comparte entre revisión y exportación las fuentes técnicas del ámbito seleccionado."""
+    pending: list[str] = []
+    templates, item_fiches, references, _contents = _study_fiches(app, pending)
+    if not item_fiches:
+        raise ValueError("No hay unidades de obra para revisar las condiciones técnicas.")
+    auxiliaries, machinery = _budget_resources(app, study_items(app), pending)
+    context, proposals = technical_review_data(
+        _work_units(app, item_fiches, references), _merge_references(*references.values()),
+        auxiliaries + machinery, app.safety_health_state.get("external_conditions"),
+        templates["specification"],
+    )
+    return context, proposals, pending
+
+
+def _add_normative_chapter(blocks, template, units, state, pending, chapters) -> None:
     """Incluye solo decisiones confirmadas para el contexto actual y explicita las carencias."""
     review = restore_review(state.get("regulatory_review"))
     confirmed = review.get("context") == review_context(units)
@@ -508,51 +520,50 @@ def _add_normative_chapter(blocks, template, units, state, pending) -> None:
     laws = [
         law.title for law in REGULATIONS if confirmed and review["laws"].get(law.code, False)
     ]
-    _add_heading(blocks, "Normativa y disposiciones generales", 1)
     _add_markdown(blocks, template, {
+        "normas_une": general_une_references(),
         "normativa_confirmada": "\n".join(f"- {title}" for title in laws) if laws else (
             "[VALIDAR] No hay disposiciones confirmadas para las unidades de obra actuales."
         ),
-    })
+    }, heading_offset=-1)
     catalog = load_ntps()
-    rows = []
-    included = set()
+    chapter_ntps = {code: set() for code, _label in chapters}
     for unit in units:
-        codes = sorted(
-            (code for code, selected in review.get("ntps", {}).get(unit.code, {}).items()
-             if selected and confirmed),
-            key=lambda code: int(code.split()[1]),
-        )
+        codes = {
+            code for code, selected in review.get("ntps", {}).get(unit.code, {}).items()
+            if selected and confirmed
+        }
         for code in codes:
             if code not in catalog:
                 raise ValueError(f"La NTP confirmada {code} ya no existe en el catálogo.")
+        chapter_ntps[unit.chapter].update(codes)
+    rows = []
+    included = set()
+    for chapter, label in chapters:
+        codes = sorted(chapter_ntps[chapter] - included, key=lambda code: int(code.split()[1]))
         included.update(codes)
         rows.append((
-            f"{unit.code} — {unit.summary}",
-            ", ".join(unit.risks) or "[VALIDAR] Identificación de riesgos pendiente.",
-            ", ".join(unit.measures) or "[VALIDAR] Medidas preventivas pendientes.",
-            ", ".join(codes) or (
+            label,
+            "\n".join(
+                f"• {code} — {catalog[code].title} "
+                f"({catalog[code].publication}; {catalog[code].status})."
+                for code in codes
+            ) or (
+                "Sin NTP adicionales; las compartidas figuran en capítulos anteriores."
+                if confirmed and chapter_ntps[chapter] else
                 "Sin NTP asignadas tras la revisión." if confirmed
                 else "[VALIDAR] Asignación NTP pendiente de confirmación."
             ),
         ))
     blocks.extend((
-        _Block("caption", "Tabla 6. Unidades de obra, riesgos, medidas preventivas y NTP confirmadas."),
+        _Block("caption", "Tabla 6. NTP confirmadas por capítulo del presupuesto."),
         _Block("table", headers=_NTP_HEADERS, rows=tuple(rows), blue_table=True),
     ))
-    for code in sorted(included, key=lambda value: int(value.split()[1])):
-        entry = catalog[code]
-        blocks.append(_Block(
-            "list_item", f"- {code} — {entry.title} ({entry.publication}; {entry.status}).",
-        ))
 
 
 def _build_study_content(app) -> _StudyContent:
     """Combina los datos del proyecto con las secciones y reglas de las plantillas ESS."""
-    work_items = [
-        item for item in app.budget_items
-        if not item.source.startswith(SAFETY_BUDGET_SOURCE)
-    ]
+    work_items = study_items(app)
     safety_items = [
         item for item in app.budget_items if item.source.startswith(SAFETY_BUDGET_SOURCE)
     ]
@@ -731,7 +742,17 @@ def _build_study_content(app) -> _StudyContent:
         "Emergencias: 112",
         f"Aplicabilidad: {APPLICABILITY[center_condition.get('applicability', 'pending')]}",
     ))
-    auxiliary_means, machinery = _budget_equipment(app, app.budget_items, pending)
+    auxiliary_rows, machinery_rows = _budget_resources(app, work_items, pending)
+    auxiliary_means = "\n".join(f"• {code} — {label}" for code, label in auxiliary_rows) or (
+        "No se han identificado medios auxiliares en el presupuesto disponible."
+    )
+    machinery = "\n".join(f"• {code} — {label}" for code, label in machinery_rows) or (
+        "No se ha identificado maquinaria en el presupuesto disponible."
+    )
+    technical_context, _proposals = technical_review_data(
+        _work_units(app, item_fiches, fiche_references), all_references,
+        auxiliary_rows + machinery_rows, state.get("external_conditions"), templates["specification"],
+    )
     replacements = {
         "titulo_proyecto": data_values["Titulo del proyecto"],
         "tipo_actuacion": data_values["Tipo de actuacion"],
@@ -849,18 +870,12 @@ def _build_study_content(app) -> _StudyContent:
         _Block("table", headers=_WORK_UNIT_HEADERS, rows=tuple(work_unit_rows), blue_table=True),
     ))
     for path, text in fiche_contents:
-        code = PurePosixPath(path).stem.split("-", 1)[0]
         heading = next(
             (_inline_text(line.lstrip("# ").strip()) for line in text.splitlines()
              if line.startswith("# ")),
-            PurePosixPath(path).stem,
+            PurePosixPath(path).stem.split("-", 1)[-1],
         )
-        _add_heading(blocks, f"{code} — {heading}", 2)
-        blocks.append(_Block(
-            "paragraph", "Unidades de obra vinculadas: " + "; ".join(
-                f"{item.code} — {item.summary}" for item, paths in item_fiches if path in paths
-            ) + ".",
-        ))
+        _add_heading(blocks, heading, 2)
         _add_markdown(blocks, text, heading_offset=1)
 
     _add_heading(blocks, "Seguimiento, control, coordinación, formación y documentación", 1)
@@ -868,9 +883,14 @@ def _build_study_content(app) -> _StudyContent:
 
     blocks.append(_Block("document", "DOCUMENTO II. PLIEGO DE CONDICIONES"))
     _add_normative_chapter(
-        blocks, templates["normative"], _work_units(item_fiches, fiche_references), state, pending,
+        blocks, templates["normative"], _work_units(app, item_fiches, fiche_references), state, pending,
+        [(chapter.code, _chapter_label(app, chapter.code))
+         for chapter in study_chapters(app) if chapter.selected],
     )
-    _add_markdown(blocks, templates["specification"], replacements, heading_offset=-1)
+    specification = selected_technical_template(
+        templates["specification"], state.get("technical_review"), technical_context, pending,
+    )
+    _add_markdown(blocks, specification, replacements, heading_offset=-1)
 
     all_references = _merge_references(all_references, _reference_groups("\n".join(
         value for block in blocks
@@ -968,6 +988,8 @@ def _column_ratios(headers: tuple[str, ...]) -> tuple[float, ...]:
         return (0.34, 0.33, 0.33)
     if headers == _CATALOGUE_HEADERS:
         return (0.18, 0.28, 0.54)
+    if headers == _NTP_HEADERS:
+        return (0.30, 0.70)
     if len(headers) == 2:
         return (1.2, 4.8)
     if len(headers) == 3:
@@ -1259,6 +1281,8 @@ def _write_odt_blue_table(document, block: _Block) -> None:
         table.set(_tag("table:name"), "ESSPPE")
     elif block.headers == _WORK_UNIT_HEADERS:
         table.set(_tag("table:name"), "ESSWorkUnits")
+    elif block.headers == _NTP_HEADERS:
+        table.set(_tag("table:name"), "ESSChapterNTPs")
     for cell in table.find(_tag("table:table-header-rows")).iter(_tag("table:table-cell")):
         cell.set(_tag("table:style-name"), "ESSSummaryHeaderCell")
         cell.find(_tag("text:p")).set(_tag("text:style-name"), "ESSSummaryHeader")
