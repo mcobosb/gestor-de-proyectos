@@ -686,6 +686,7 @@ class BudgetApp:
         self.rcd_state: dict = {}
         self.safety_health_state: dict = {}
         self.pptp_state: dict = {}
+        self.price_justification_state: dict = {}
         self._rcd_window: tk.Toplevel | None = None
         self._safety_health_window: tk.Toplevel | None = None
         self._reference_search_windows: dict[ReferenceKind, ReferenceSearchWindow] = {}
@@ -1606,6 +1607,7 @@ class BudgetApp:
             self.rcd_state = {}
             self.safety_health_state = {}
             self.pptp_state = {}
+            self.price_justification_state = {}
             self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
             for item in self.budget_items:
                 item.set_indirect_costs(self.report_settings.indirect_costs)
@@ -1648,6 +1650,7 @@ class BudgetApp:
         self.rcd_state = {}
         self.safety_health_state = {}
         self.pptp_state = {}
+        self.price_justification_state = {}
         self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
         self.project_title = project_title.strip() or "Nuevo proyecto"
         self.project_path = None
@@ -3270,6 +3273,7 @@ class BudgetApp:
             "rcds": self.rcd_state,
             "safety_health": self.safety_health_state,
             "pptp": self.pptp_state,
+            "price_justification": self.price_justification_state,
             "settings": self.report_settings,
             "title": self.project_title,
         })
@@ -3311,6 +3315,7 @@ class BudgetApp:
         self.rcd_state = restored["rcds"]
         self.safety_health_state = restored["safety_health"]
         self.pptp_state = restored["pptp"]
+        self.price_justification_state = restored["price_justification"]
         self.report_settings = restored["settings"]
         self.project_title = restored["title"]
         self.selected_budget_index = None
@@ -3953,6 +3958,7 @@ class BudgetApp:
             "rcds": self.rcd_state,
             "safety_health": self.safety_health_state,
             "pptp": self.pptp_state,
+            "price_justification": self.price_justification_state,
             "report_settings": self.report_settings.to_dict(),
             "items": [
                 {
@@ -4023,6 +4029,9 @@ class BudgetApp:
                 "safety_health", payload.get("safety_health", {}),
             )
             pptp_state = self._restore_tool_state("pptp", payload.get("pptp", {}))
+            price_justification_state = self._restore_tool_state(
+                "price_justification", payload.get("price_justification", {}),
+            )
             if source_budget_path is not None:
                 declared_source = payload.get("source_budget_bc3")
                 if declared_source is not None and Path(declared_source).name != source_budget_path.name:
@@ -4087,11 +4096,13 @@ class BudgetApp:
         self.rcd_state = rcd_state
         self.safety_health_state = safety_health_state
         self.pptp_state = pptp_state
+        self.price_justification_state = price_justification_state
         missing_tools = [
             name for name, state in (
                 ("invoicing", invoicing_state), ("rcd", rcd_state),
                 ("safety_health", safety_health_state), ("planning", planning_state),
                 ("pptp", pptp_state),
+                ("price_justification", price_justification_state),
             ) if state and name not in self.tools_by_name
         ]
         if missing_tools:

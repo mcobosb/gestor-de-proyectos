@@ -3,6 +3,7 @@
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+import tempfile
 from xml.etree import ElementTree as ET
 
 
@@ -52,9 +53,18 @@ def restore_state(data) -> dict:
         raise ValueError("El régimen de contratación no es válido.")
     if state["machinery_method"] not in {"budget", "analytical"}:
         raise ValueError("El método de valoración de maquinaria no es válido.")
+    return state
+
+
+def validate_state(data) -> dict:
+    """Comprueba los datos finalizados, permitiendo restaurar ediciones intermedias al deshacer."""
+    state = restore_state(data)
+    if not state:
+        return state
     if state["reference_date"]:
         try:
-            date.fromisoformat(state["reference_date"])
+            if date.fromisoformat(state["reference_date"]).isoformat() != state["reference_date"]:
+                raise ValueError("La fecha no está en formato ISO extendido.")
         except ValueError as exc:
             raise ValueError("La fecha de referencia debe tener formato AAAA-MM-DD.") from exc
     if state["annual_hours"]:
@@ -76,7 +86,7 @@ def narrative(app, data: dict) -> list[tuple[int, str]]:
     """Compone los apartados técnicos con los datos actuales y sin cálculos de fórmulas."""
     from bc3_gui import fmt_number
 
-    state = FIELDS | restore_state(data)
+    state = FIELDS | validate_state(data)
     public = state["contract_type"] == "public"
     blocks = [
         (1, "1. LEGISLACIÓN VIGENTE"),
@@ -176,11 +186,22 @@ def write_document(app, target: Path, data: dict) -> None:
     blocks = narrative(app, data)
     output_format = app.report_settings.output_format
     if output_format == "odt":
-        _write_odt(app, target, blocks)
+        writer = _write_odt
     elif output_format == "pdf":
-        _write_pdf(app, target, blocks)
+        writer = _write_pdf
     else:
         raise ValueError(f"Formato de informe no admitido: {output_format}")
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=target.parent, suffix=f".{output_format}", delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+        writer(app, temporary, blocks)
+        temporary.replace(target)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
 
 
 def _write_odt(app, target: Path, blocks: list[tuple[int, str]]) -> None:
@@ -189,7 +210,7 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str]]) -> None:
 
     document = _new_report(
         TITLE.upper(), app._project_title(), app.report_settings,
-        footer_title=TITLE, template_title=TITLE,
+        footer_title=TITLE, template_title=TITLE, repeat_titles=False,
     )
     for level in range(1, 4):
         name = f"PricesHeading{level}"
@@ -213,7 +234,7 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str]]) -> None:
     })
     headings = [(level, text) for level, text in blocks if level]
     headings.extend((1, title) for title, _ in LISTINGS)
-    document.heading(TITLE.upper(), 1, style="PricesHeading1")
+    document.paragraph(TITLE.upper(), style="PricesHeading1")
     document.table_of_contents(headings, max_level=3, name="PricesContents")
     bookmark = 0
     for level, text in blocks:
@@ -226,10 +247,14 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str]]) -> None:
         document.heading(title, 1, style="PricesListingHeading", bookmark=f"PPTPHeading{bookmark}")
         bookmark += 1
         append_report_odt(app, report, document, embedded=True)
-    signature = app.report_settings.signature_text()
+    settings = app.report_settings
+    signature = [value for value in (
+        settings.location, settings.role, settings.author, settings.organization, settings.signature,
+    ) if value]
     if signature:
         document.space(12)
-        document.paragraph(signature, "SignatureText")
+        for value in signature:
+            document.paragraph(value, "SignatureNote" if value == settings.signature else "Signature")
     document.write(target)
 
 
@@ -243,7 +268,7 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str]]) -> None:
     from reportlab.platypus.doctemplate import LayoutError
     from reportlab.platypus.tableofcontents import TableOfContents
     from budget_reports import build_pdf_report
-    from report_layout import CONTENT_WIDTH, LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
+    from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
 
     settings = app.report_settings
     layout = ReportLayout(
@@ -265,25 +290,32 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str]]) -> None:
             fontSize=10, textColor=colors.black, spaceBefore=4,
         ) for level in range(3)
     ]
-    story = [Paragraph(escape(TITLE.upper()), heading_styles[1]), Spacer(1, 12), toc, PageBreak()]
+    story = [
+        Paragraph(escape(TITLE.upper()), heading_styles[1]), Spacer(1, 12),
+        Paragraph("ÍNDICE", heading_styles[2]), toc, PageBreak(),
+    ]
     heading_index = 0
+    reports = dict(LISTINGS)
     for level, text in blocks + [(1, title) for title, _ in LISTINGS]:
         if level:
-            if (text, dict(LISTINGS).get(text)) in LISTINGS:
+            if text in reports:
                 story.append(PageBreak())
             paragraph = Paragraph(escape(text), heading_styles[level])
             paragraph._prices_heading = (level - 1, text, f"PricesHeading{heading_index}")
             heading_index += 1
             story.append(paragraph)
-            report = dict(LISTINGS).get(text)
+            report = reports.get(text)
             if report:
                 listing, _ = build_pdf_report(app, report, layout, embedded=True)
                 story.extend(listing)
         else:
             story.append(Paragraph(escape(text).replace("\n", "<br/>"), body))
-    signature = settings.signature_text()
+    signature = [value for value in (
+        settings.location, settings.role, settings.author, settings.organization, settings.signature,
+    ) if value]
     if signature:
-        story.extend([Spacer(1, 12), Paragraph(escape(signature).replace("\n", "<br/>"), body)])
+        story.append(Spacer(1, 12))
+        story.extend(Paragraph(escape(value).replace("\n", "<br/>"), body) for value in signature)
 
     class PricesDocument(SimpleDocTemplate):
         """Resuelve los destinos del índice durante las pasadas de maquetación."""
@@ -302,7 +334,8 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str]]) -> None:
 
     document = PricesDocument(
         str(target), pagesize=A4, leftMargin=LEFT_MARGIN, rightMargin=RIGHT_MARGIN,
-        topMargin=layout.top_margin, bottomMargin=layout.bottom_margin,
+        topMargin=layout.top_margin(TITLE.upper(), app._project_title()),
+        bottomMargin=layout.bottom_margin(),
         title=TITLE, author=settings.author,
     )
     try:

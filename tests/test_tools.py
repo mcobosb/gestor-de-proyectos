@@ -127,12 +127,12 @@ class ToolDiscoveryTests(ToolTestCase):
         self.assertEqual([tool.name for tool in loaded], ["z_first", "package_tool", "a_last"])
 
     def test_builtin_modules_are_moved_and_keep_their_order(self):
-        """Las herramientas viven en tools y PPTP se situa tras Planificacion."""
+        """Justificación encabeza las herramientas y PPTP sigue a Planificación."""
         loaded, errors = discover_tools(ROOT / "tools")
         self.assertEqual(errors, [])
         self.assertEqual(
             [tool.name for tool in loaded],
-            ["rcd", "safety_health", "planning", "pptp", "certifications", "invoicing"],
+            ["price_justification", "rcd", "safety_health", "planning", "pptp", "certifications", "invoicing"],
         )
         labels = {tool.name: tool.label for tool in loaded}
         self.assertEqual(labels["pptp"], "PPTP (BCCA · Junta de Andalucía)")
@@ -363,6 +363,7 @@ class ToolMenuTests(ToolTestCase):
             "safety_health": {"percentage": "2.5", "lines": []},
             "planning": {"custom": "saved"},
             "pptp": {"custom": {"selections": [True, False]}},
+            "price_justification": {"custom": {"preserved": True}},
         }
         payload = {
             "items": [{"code": "R1", "chapter": "RCD", "unit": "ud", "summary": "Residuo",

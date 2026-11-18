@@ -3,29 +3,34 @@
 from datetime import date
 from pathlib import Path
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, ttk
+from localization import messagebox
 
-from .document import FIELDS, TITLE, restore_state, write_document
+from .document import FIELDS, TITLE, restore_state, validate_state, write_document
 
 
 TOOL_LABEL = TITLE
 TOOL_ORDER = 0
 
 
-def restore_project_state(app, data) -> dict:
+def restore_project_state(data) -> dict:
     """Restaura datos independientes del presupuesto y comprueba su estructura."""
     return restore_state(data)
 
 
 def before_project_save(app) -> None:
     """Valida también las ediciones pendientes antes de escribir el proyecto."""
-    app.price_justification_state = restore_state(app.price_justification_state)
+    state = app.price_justification_state
+    for window in app._project_windows:
+        if isinstance(window, PriceJustificationWindow) and window.winfo_exists():
+            state = window._collect()
+    app.price_justification_state = validate_state(state)
 
 
 def open_tool(app) -> None:
     """Abre una única ventana vinculada al proyecto presupuestario actual."""
     if not app.budget_items:
-        messagebox.showinfo(TITLE, "Añade partidas al proyecto antes de justificar sus precios.", parent=app)
+        messagebox.showinfo(TITLE, "Añade partidas al proyecto antes de justificar sus precios.", parent=app.root)
         return
     for window in app._project_windows:
         if isinstance(window, PriceJustificationWindow) and window.winfo_exists():
@@ -40,12 +45,12 @@ class PriceJustificationWindow(tk.Toplevel):
 
     def __init__(self, app):
         """Construye las pestañas de documentación y enlaza las ediciones al proyecto."""
-        super().__init__(app)
+        super().__init__(app.root)
         self.app = app
         self.title(TITLE)
         self.geometry("1000x760")
         self.minsize(800, 620)
-        self.transient(app)
+        self.transient(app.root)
         self._loading = True
         state = FIELDS | restore_state(app.price_justification_state)
         if not state["reference_date"]:
@@ -146,7 +151,7 @@ class PriceJustificationWindow(tk.Toplevel):
         canvas.pack(side="left", fill="both", expand=True)
         content = ttk.Frame(canvas, padding=12)
         window = canvas.create_window((0, 0), window=content, anchor="nw")
-        content.bind("<Configure>", lambda event: canvas.configure(scrollregion=canvas.bbox("all")))
+        content.bind("<Configure>", lambda _event: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.bind("<Configure>", lambda event: canvas.itemconfigure(window, width=event.width))
         return content
 
@@ -198,7 +203,7 @@ class PriceJustificationWindow(tk.Toplevel):
         state["machinery_method"] = self.methods[state["machinery_method"]]
         return state
 
-    def _changed(self, *args):
+    def _changed(self, *_args):
         """Mantiene el estado y el historial de deshacer del proyecto al editar."""
         if not self._loading:
             self.app.price_justification_state = self._collect()
@@ -206,7 +211,7 @@ class PriceJustificationWindow(tk.Toplevel):
 
     def _validated(self) -> dict:
         """Valida antes de cerrar o exportar y registra la fecha propuesta si no había ediciones."""
-        state = restore_state(self._collect())
+        state = validate_state(self._collect())
         self.app.price_justification_state = state
         self.app._mark_dirty()
         return state
@@ -235,7 +240,7 @@ class PriceJustificationWindow(tk.Toplevel):
             )
             if not target:
                 return
-            write_document(self.app, Path(target), state)
+            write_document(self.app, Path(target).with_suffix(f".{output_format}"), state)
         except (OSError, ValueError, ImportError) as exc:
             messagebox.showerror(TITLE, f"No se pudo generar el anejo:\n{exc}", parent=self)
             return
