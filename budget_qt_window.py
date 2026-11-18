@@ -1162,6 +1162,7 @@ class BudgetMainWindow(QMainWindow):
         from tools.rcd import restore_project_state as restore_rcd_state
         from tools.safety_health import restore_project_state as restore_safety_state
         from tools.pptp import restore_project_state as restore_pptp_state
+        from tools.invoicing import restore_project_state as restore_invoice_state
 
         try:
             document = read_project(
@@ -1176,6 +1177,7 @@ class BudgetMainWindow(QMainWindow):
             rcd_state = restore_rcd_state(document.rcds)
             safety_state = restore_safety_state(document.safety_health)
             pptp_state = restore_pptp_state(document.pptp)
+            invoicing_state = restore_invoice_state(document.invoicing)
         except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
             QMessageBox.critical(
                 self, "No se pudo abrir el proyecto", f"El archivo no es válido:\n{exc}"
@@ -1192,7 +1194,7 @@ class BudgetMainWindow(QMainWindow):
         self.source_budget_path = document.source_budget_path
         self.project_title = document.title
         self.planning_state = document.planning
-        self.invoicing_state = document.invoicing
+        self.invoicing_state = invoicing_state
         self.rcd_state = rcd_state
         self.safety_health_state = safety_state
         self.pptp_state = pptp_state

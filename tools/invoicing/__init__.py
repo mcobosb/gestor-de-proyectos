@@ -46,6 +46,28 @@ def restore_project_state(data: dict) -> dict:
     """Valida las facturas y asignaciones guardadas en el proyecto."""
     return InvoiceState.from_dict(data).to_dict()
 
+
+def open_tool_qt(app) -> None:
+    """Abre una única ventana Qt de facturación."""
+    from PySide6.QtWidgets import QMessageBox
+    from .qt_window import InvoicingWindowQt
+
+    if not app.budget_items:
+        QMessageBox.information(
+            app, TOOL_LABEL,
+            "Carga o crea un presupuesto antes de gestionar facturas.",
+        )
+        return
+    for window in app._project_windows:
+        if isinstance(window, InvoicingWindowQt) and window.isVisible():
+            window.raise_()
+            window.activateWindow()
+            return
+    state = InvoiceState.from_dict(app.invoicing_state)
+    window = InvoicingWindowQt(app, state)
+    app._project_windows.append(window)
+    window.show()
+
 if TYPE_CHECKING:
     from bc3_gui import BudgetApp, ProjectItem
     from PIL import Image

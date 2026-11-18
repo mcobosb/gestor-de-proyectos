@@ -31,6 +31,8 @@ from tools.safety_health.qt_window import (
 from tools.pptp.qt_window import PptpWindowQt
 from tools.certifications.qt_window import CertificationWindowQt
 from tools.planning.qt_window import PlanningWindowQt
+from tools.invoicing import Invoice, InvoiceLine, InvoiceState
+from tools.invoicing.qt_window import InvoicingWindowQt
 from decimal import Decimal
 
 
@@ -504,6 +506,53 @@ class BudgetQtWindowTests(unittest.TestCase):
             with patch.object(window, "save_project", return_value=True):
                 tool.save_changes()
             self.assertFalse(tool.dirty)
+            tool.reject()
+            window.is_dirty = False
+            window.close()
+            self.application.processEvents()
+
+    def test_invoicing_qt_preserves_matrix_assignments_and_review_lines(self) -> None:
+        """Migra registro, visor, matriz y asignaciones persistentes."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            from tests.test_invoicing import set_budget
+
+            set_budget(window)
+            window.invoicing_state = InvoiceState(
+                invoices=[
+                    Invoice(
+                        "one",
+                        "Factura",
+                        date="01/02/2026",
+                        declared=30,
+                        lines=[InvoiceLine("MAT", 30)],
+                    )
+                ]
+            ).to_dict()
+            window._open_tool("invoicing")
+            tool = window._project_windows[-1]
+            self.assertIsInstance(tool, InvoicingWindowQt)
+            window._open_tool("invoicing")
+            self.assertEqual(len(window._project_windows), 1)
+            self.assertEqual(tool.register.rowCount(), 1)
+            self.assertGreater(tool.table.rowCount(), 0)
+            invoice = tool.current_invoice()
+            self.assertIsNotNone(invoice)
+            row_id = tool.data.rows[0].id
+            self.assertTrue(tool.commit_cell(invoice.id, row_id, "12,50"))
+            self.assertEqual(invoice.amounts[row_id], 12.5)
+            self.assertEqual(
+                window.invoicing_state["invoices"][0]["amounts"][row_id],
+                12.5,
+            )
+            tool.resource_filter = "Material"
+            tool.refresh()
+            self.assertTrue(all(
+                tool.visible_rows[index][1][0].kind == "Material"
+                for index in range(len(tool.visible_rows))
+            ))
             tool.reject()
             window.is_dirty = False
             window.close()
