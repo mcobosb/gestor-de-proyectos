@@ -28,6 +28,7 @@ from tools.safety_health.qt_window import (
     ExternalConditionsDialogQt,
     SafetyHealthWindowQt,
 )
+from tools.pptp.qt_window import PptpWindowQt
 from decimal import Decimal
 
 
@@ -370,6 +371,53 @@ class BudgetQtWindowTests(unittest.TestCase):
                 dialog.accept_selection()
             error.assert_called_once()
             dialog.reject()
+            window.close()
+            self.application.processEvents()
+
+    def test_pptp_qt_keeps_three_steps_manual_sheets_and_price_settings(self) -> None:
+        """Migra el asistente PPTP sin perder asignaciones ni revisión económica."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            window.budget_items = [
+                ProjectItem(
+                    "01AAB00001", "01#", "m2", "Partida PPTP", 1, 10
+                )
+            ]
+            window.chapter_order = ["01#"]
+            window.chapter_titles = {"01#": "Obra"}
+            window._open_tool("pptp")
+            tool = window._project_windows[-1]
+            self.assertIsInstance(tool, PptpWindowQt)
+            window._open_tool("pptp")
+            self.assertEqual(len(window._project_windows), 1)
+            self.assertEqual(tool.pages.count(), 3)
+            self.assertIn(tool.toc_depth.currentText(), tuple(str(i) for i in range(1, 7)))
+            tool.price_revision.setChecked(True)
+            self.assertTrue(tool.variables["FORMULA_REVISION_PRECIOS"].isEnabled())
+            for key, field in tool.variables.items():
+                if not field.text().strip():
+                    field.setText("Dato de prueba")
+            tool.variables["plazo_ejecucion"].setText("18 meses")
+            tool.summary.setPlainText("Resumen de obra")
+            tool.open_library_editor()
+            self.assertGreater(
+                tool.library_editor.members.count(),
+                len(tool.automatic) + len(tool.unmatched),
+            )
+            tool.library_editor.reject()
+            tool.accept_step()
+            self.assertEqual(tool.pages.currentIndex(), 1)
+            tool.accept_step()
+            self.assertEqual(tool.pages.currentIndex(), 2)
+            before = len(tool.unmatched)
+            if tool.manual_table.rowCount():
+                tool.manual_table.selectRow(0)
+                tool.add_sheet()
+                self.assertEqual(len(tool.unmatched), before + 1)
+            tool.reject()
+            window.is_dirty = False
             window.close()
             self.application.processEvents()
 

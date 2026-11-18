@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ._library_editor import _signature, read_markdown, write_markdown
+from ._library_editor import _signature, library_members, read_markdown, write_markdown
 from ._library_history import add_revision
 
 
@@ -62,9 +62,10 @@ class LibraryEditorQt(QDialog):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.members = QListWidget()
         self.members.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        for member in sorted(used_members, key=str.casefold):
+        for member in sorted(library_members(archive_path), key=str.casefold):
             item = QListWidgetItem(member)
-            item.setForeground(Qt.GlobalColor.darkGreen)
+            if member in used_members:
+                item.setForeground(Qt.GlobalColor.darkGreen)
             self.members.addItem(item)
         self.members.currentItemChanged.connect(self._change_member)
         splitter.addWidget(self.members)

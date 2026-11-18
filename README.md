@@ -666,6 +666,7 @@ migran las herramientas secundarias.
 | [tools/price_justification/qt_window.py](tools/price_justification/qt_window.py) | Herramienta de justificación de precios migrada a PySide6 |
 | [tools/rcd/qt_window.py](tools/rcd/qt_window.py) | Herramienta de RCDs migrada a PySide6 |
 | [tools/safety_health/qt_window.py](tools/safety_health/qt_window.py) | Herramienta de Seguridad y Salud migrada a PySide6 |
+| [tools/pptp/qt_window.py](tools/pptp/qt_window.py) | Asistente PPTP migrado a PySide6 |
 | [budget_reports.py](budget_reports.py) | Configuración, cálculos e informes |
 | [report_layout.py](report_layout.py) | Estilos y maquetación PDF compartida |
 | [odt_reports.py](odt_reports.py) | Exportación editable de informes ODT |

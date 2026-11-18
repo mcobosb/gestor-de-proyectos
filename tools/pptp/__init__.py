@@ -46,6 +46,30 @@ def open_tool(app: BudgetApp) -> None:
     app._project_windows.append(window)
 
 
+def open_tool_qt(app) -> None:
+    """Abre el asistente PPTP de PySide6 o enfoca su única instancia."""
+    from PySide6.QtWidgets import QMessageBox
+    from .qt_window import PptpWindowQt
+
+    if not app.budget_items:
+        QMessageBox.information(
+            app, TOOL_LABEL, "Carga o crea un presupuesto antes de preparar el PPTP."
+        )
+        return
+    for window in app._project_windows:
+        if isinstance(window, PptpWindowQt) and window.isVisible():
+            window.raise_()
+            window.activateWindow()
+            return
+    try:
+        window = PptpWindowQt(app)
+    except (ImportError, OSError, UnicodeError, ValueError) as exc:
+        QMessageBox.critical(app, TOOL_LABEL, str(exc))
+        return
+    app._project_windows.append(window)
+    window.show()
+
+
 class PptpWindow(tk.Toplevel):
     """Tres pasos de datos, coincidencias automaticas y asignacion manual."""
 
