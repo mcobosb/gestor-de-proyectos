@@ -246,7 +246,7 @@ def amount_in_words(
 
 
 def _collect_report_resources(app, *, elementary: bool = False):
-    """Acumula auxiliares y materiales usados con sus cantidades y precios actuales."""
+    """Acumula auxiliares y materiales, o todos los elementales, con cantidades y precios actuales."""
     from bc3_gui import Concept, ProjectItem
 
     auxiliaries: dict[tuple, tuple] = {}

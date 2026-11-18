@@ -3,6 +3,14 @@
 ## 1.7.0 — 2026-11-17
 
 ### Añadido
+- Herramienta «Justificación de precios» como primera opción del menú, con
+  biblioteca de ocho documentos base Markdown y editor con historial como el
+  del PPTP. Incluye el texto técnico y las fórmulas de composición, indirectos,
+  mano de obra y maquinaria como texto nativo con subíndices y exponentes.
+  Lee el emplazamiento y demás datos comunes de la configuración general,
+  conserva los datos particulares y notas previas en el proyecto y genera un
+  único anejo PDF/ODT con índice y los listados reutilizados de elementales,
+  auxiliares y descompuestos, sin recalcular los precios presupuestados.
 - Menú Consultas entre Herramientas e Información, con buscadores independientes
   de NTP y UNE. Filtrado inmediato por código, título y metadatos, sin distinguir
   tildes ni mayúsculas; detalle de la selección y apertura de la ficha oficial.

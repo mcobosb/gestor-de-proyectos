@@ -76,6 +76,7 @@ foreach ($requiredResource in @(
     "safety_health\datos\seguridad_salud_relaciones_bcca2023.csv",
     "safety_health\BIBLIOTECA.zip",
     "pptp\BIBLIOTECA.zip",
+    "price_justification\BIBLIOTECA.zip",
     "BCCA2023_V02.bc3"
 )) {
     $resourcePath = Join-Path $toolsSource $requiredResource

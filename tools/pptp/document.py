@@ -16,7 +16,7 @@ from .sheet_index import (
     INDEX_MARKER, INDEX_TOKEN, SheetIndexRow, extract_index, markdown_index, pdf_index,
     write_odt_index,
 )
-from tools._library_markdown import document_markdown
+from tools._library_markdown import document_markdown, text_blocks
 from tools._shared.document_layout import (
     DEFAULT_TOC_DEPTH, number_headings, template_paragraph_styles,
 )
@@ -689,48 +689,6 @@ def compose(
         ]
         result = result.replace(INDEX_TOKEN, markdown_index(rows))
     return result
-
-
-def text_blocks(source: str, *, preserve_bold: bool = False) -> list[tuple[int, str]]:
-    """Transforma Markdown y conserva niveles de lista junto a titulos y avisos."""
-    source = document_markdown(source)
-    source = re.sub(r"<!--.*?-->", "", source, flags=re.DOTALL)
-    source = re.sub(r"\[([^]]+)\]\(([^)]+)\)",
-                    lambda match: (f"{match[1]} ({match[2]})" if match[2].startswith(("http:", "https:"))
-                                   else match[1]), source)
-    source = source.replace("`", "")
-    blocks, paragraph = [], []
-    for line in [*source.splitlines(), ""]:
-        heading = re.match(r"^(#{1,6})\s+(.*)", line)
-        bullet = re.match(r"^(?P<indent>[ \t]*)(?:[-*+]\s+|•\s*)(?P<text>.*)", line)
-        ordered = re.match(
-            r"^(?P<indent>[ \t]*)(?P<bold>\*\*)?(?P<number>\d+[.)])[ \t]+(?P<text>.*)", line,
-        )
-        separator = re.fullmatch(r"\s*\*\*[^*\n]+\*\*\s*", line)
-        if not line.strip() or heading or bullet or ordered or separator or "\t" in line or line.startswith(">"):
-            if paragraph:
-                blocks.append((0, " ".join(paragraph)))
-                paragraph = []
-            if heading:
-                blocks.append((len(heading[1]), heading[2]))
-            elif bullet:
-                spaces = len(bullet["indent"].expandtabs(4))
-                depth = (spaces + 3) // 4
-                blocks.append((-(depth + 1), "• " + bullet["text"].strip()))
-            elif ordered:
-                spaces = len(ordered["indent"].expandtabs(4))
-                depth = (spaces + 3) // 4
-                text = (ordered["bold"] or "") + ordered["number"] + " " + ordered["text"].strip()
-                blocks.append((-(depth + 1), text))
-            elif separator:
-                blocks.append((0, line.rstrip()))
-            elif line.startswith(">"):
-                blocks.append((0, line.lstrip("> ")))
-            elif line.strip():
-                blocks.append((0, line.rstrip(" \r")))
-        else:
-            paragraph.append(line.strip())
-    return blocks if preserve_bold else [(level, text.replace("**", "")) for level, text in blocks]
 
 
 def bold_runs(text: str) -> list[tuple[str, bool]]:

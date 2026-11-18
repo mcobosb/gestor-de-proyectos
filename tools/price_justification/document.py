@@ -5,12 +5,14 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 import tempfile
 from xml.etree import ElementTree as ET
+from .templates import (
+    FORMULA_LEVEL, LIBRARY_PATH, document_blocks, formula_runs, load_documents, template_variables,
+)
 
 
 TITLE = "Justificación de precios"
 FIELDS = {
     "reference_date": "",
-    "territory": "",
     "contract_type": "public",
     "price_source": "Precios y descomposiciones del presupuesto del proyecto.",
     "legislation_notes": "",
@@ -45,6 +47,7 @@ def restore_state(data) -> dict:
     if not data:
         return {}
     state = FIELDS | data
+    state.pop("territory", None)
     for key in FIELDS:
         if not isinstance(state[key], str):
             raise ValueError(f"El campo {key} de justificación de precios debe ser texto.")
@@ -77,108 +80,14 @@ def validate_state(data) -> dict:
     return state
 
 
-def _pending(value: str) -> str:
-    """Identifica expresamente los datos que todavía no ha aportado el redactor."""
-    return value or "[PENDIENTE DE DEFINIR Y VERIFICAR]"
-
-
 def narrative(app, data: dict) -> list[tuple[int, str]]:
-    """Compone los apartados técnicos con los datos actuales y sin cálculos de fórmulas."""
-    from bc3_gui import fmt_number
-
+    """Compone los documentos base de la biblioteca con los datos actuales del proyecto."""
     state = FIELDS | validate_state(data)
-    public = state["contract_type"] == "public"
-    blocks = [
-        (1, "1. LEGISLACIÓN VIGENTE"),
-        (0, f"Fecha de referencia: {_pending(state['reference_date'])}. "
-            f"Ámbito territorial: {_pending(state['territory'])}."),
-        (0, "La determinación de los precios debe atender a la normativa y a las condiciones "
-            "laborales aplicables a la obra en su fecha y ámbito territorial. Las referencias "
-            "y los datos económicos se revisarán antes de aprobar el proyecto."),
+    values = template_variables(app, state)
+    return [
+        block for _, source in load_documents(LIBRARY_PATH)
+        for block in document_blocks(source, values)
     ]
-    if public:
-        blocks.extend([
-            (0, "Ley 9/2017, de 8 de noviembre, de Contratos del Sector Público, y Reglamento "
-                "general de la Ley de Contratos de las Administraciones Públicas, aprobado "
-                "por Real Decreto 1098/2001, de 12 de octubre, en lo que resulte vigente y aplicable. "
-                "Para la composición de los precios se toma como referencia su artículo 130."),
-        ])
-    else:
-        blocks.append((0, "En contratación privada se atenderá al contrato y a la normativa "
-                           "aplicable. Los criterios de composición de costes se describen "
-                           "como criterios técnicos, no como imposiciones generales de la contratación pública."))
-    blocks.extend([
-        (0, "Ley 31/1995, de 8 de noviembre, de Prevención de Riesgos Laborales, y Real "
-            "Decreto 1627/1997, de 24 de octubre, en los aspectos que afecten a los trabajos y sus costes."),
-        (0, "Se comprobarán el convenio colectivo y sus revisiones salariales, el salario mínimo "
-            "interprofesional, las reglas de cotización y el calendario laboral aplicables. "
-            "No se presuponen salarios, cotizaciones ni calendarios de ejercicios anteriores."),
-        (0, state["legislation_notes"]),
-        (1, "2. COMPOSICIÓN DE LOS PRECIOS"),
-        (0, f"Fuente de precios: {_pending(state['price_source'])}."),
-        (0, "El precio de ejecución material comprende los costes directos de mano de obra, "
-            "materiales a pie de obra y utilización de maquinaria, junto con los costes indirectos "
-            "que correspondan. No incluye IVA, gastos generales de empresa ni beneficio industrial."),
-        (0, "Los listados finales se obtienen del presupuesto actual, conservando sus rendimientos, "
-            "precios y criterios de redondeo. La presente herramienta no modifica el presupuesto."),
-        (0, state["composition_notes"]),
-        (2, "2.1. COSTES INDIRECTOS"),
-        (0, f"Porcentaje configurado en los informes del proyecto: "
-            f"{fmt_number(app.report_settings.indirect_costs)} %. "
-            "Los descompuestos muestran los importes efectivos de cada partida; este anejo no añade un segundo recargo."),
-        (0, "Su justificación atenderá a la naturaleza, presupuesto y plazo de la obra. No se "
-            "duplicarán gastos ya valorados en unidades de obra o partidas específicas. "
-            "No se adopta un límite universal ni un porcentaje fijo de imprevistos."),
-        (0, f"Personal técnico y administrativo adscrito a la obra:\n{_pending(state['indirect_staff'])}"),
-        (0, f"Instalaciones provisionales, oficinas, almacenes y talleres:\n{_pending(state['indirect_installations'])}"),
-        (0, f"Trabajos técnicos y controles exigidos por el contrato:\n{_pending(state['indirect_technical'])}"),
-        (0, f"Otros costes y criterio de adopción del porcentaje:\n{_pending(state['indirect_other'])}"),
-        (0, "Los datos anteriores son documentación de apoyo. No se ha calculado automáticamente "
-            "un coeficiente de costes indirectos a partir de ellos."),
-        (2, "2.2. MANO DE OBRA"),
-        (0, "El coste horario debe considerar las retribuciones sujetas a cotización, los "
-            "conceptos no salariales que procedan, las cargas empresariales y las horas anuales "
-            "efectivas de trabajo, evitando duplicidades entre conceptos."),
-        (0, f"Convenio y revisión salarial: {_pending(state['agreement'])}."),
-        (0, f"Referencia salarial / SMI: {_pending(state['wage_reference'])}."),
-        (0, f"Cotizaciones y contingencias profesionales: {_pending(state['contributions'])}."),
-        (0, f"Calendario laboral: {_pending(state['calendar'])}."),
-        (0, f"Jornada anual de referencia: {state['annual_hours'] + ' h' if state['annual_hours'] else _pending('')}."),
-        (0, state["labor_notes"]),
-        (2, "2.3. MATERIAL A PIE DE OBRA"),
-        (0, "El precio a pie de obra integra la adquisición y, cuando no estén ya incluidos, "
-            "la carga, el transporte y la descarga necesarios. Se identificarán las fuentes, "
-            "distancias y condiciones de suministro, sin duplicar costes recogidos en otros componentes."),
-        (0, _pending(state["materials_notes"])),
-        (2, "2.4. MAQUINARIA"),
-        (0, "Se distinguirán los costes de disponibilidad y propiedad de los costes de funcionamiento "
-            "y de los medios complementarios. Se comprobará si el precio incorpora operario, "
-            "combustible, energía, mantenimiento y transporte para evitar duplicidades."),
-        (3, "2.4.1. RESUMEN DEL MÉTODO DE CÁLCULO"),
-        (0, "Criterio seleccionado: " + (
-            "precios horarios de la fuente presupuestaria. No se presupone que se hayan obtenido "
-            "mediante un método analítico concreto."
-            if state["machinery_method"] == "budget" else
-            "documentación de una valoración analítica. Sus parámetros y resultados deben "
-            "ser aportados y contrastados por el redactor; las fórmulas no están implementadas."
-        )),
-        (0, "Si se adopta el método MOPU de 1976, se identificará como referencia técnica histórica "
-            "y se justificarán sus parámetros y actualizaciones; no constituye por sí solo "
-            "una obligación normativa ni acredita un cálculo realizado."),
-        (0, "Parámetros documentales: valor de reposición, vida útil, horas totales y anuales, "
-            "días de disponibilidad, interés, seguros, amortización, reparaciones y conservación. "
-            "No se asignan valores automáticos."),
-        (0, state["machinery_parameters"]),
-        (3, "2.4.2. ESTRUCTURA DEL COSTE"),
-        (0, "El coste intrínseco comprende la reposición del capital, los intereses, seguros, "
-            "otros gastos fijos y las reparaciones y conservación que procedan. El coste "
-            "complementario comprende el personal y los consumos no incluidos previamente."),
-        (0, "Los consumos principales y secundarios se documentarán para el equipo y las "
-            "condiciones reales de utilización. No se adoptan ratios universales de combustible o lubricantes."),
-        (0, _pending(state["machinery_consumption"])),
-        (0, state["machinery_notes"]),
-    ])
-    return [(level, text) for level, text in blocks if text.strip()]
 
 
 def write_document(app, target: Path, data: dict) -> None:
@@ -212,7 +121,7 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str]]) -> None:
         TITLE.upper(), app._project_title(), app.report_settings,
         footer_title=TITLE, template_title=TITLE, repeat_titles=False,
     )
-    for level in range(1, 4):
+    for level in range(1, 7):
         name = f"PricesHeading{level}"
         style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
             _tag("style:name"): name, _tag("style:family"): "paragraph",
@@ -225,6 +134,23 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str]]) -> None:
         ET.SubElement(style, _tag("style:text-properties"), {
             _tag("fo:font-weight"): "bold", _tag("fo:font-size"): f"{15 - level}pt",
         })
+    for name, position in (("PricesSubscript", "sub"), ("PricesSuperscript", "super")):
+        style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+            _tag("style:name"): name, _tag("style:family"): "text",
+        })
+        ET.SubElement(style, _tag("style:text-properties"), {
+            _tag("style:text-position"): f"{position} 75%",
+        })
+    for name, properties in (
+        ("PricesFormula", {_tag("fo:text-align"): "center", _tag("fo:margin-top"): "6pt",
+                           _tag("fo:margin-bottom"): "9pt"}),
+        ("PricesBullet", {_tag("fo:margin-left"): "12pt", _tag("fo:text-indent"): "-7pt"}),
+    ):
+        style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+            _tag("style:name"): name, _tag("style:family"): "paragraph",
+            _tag("style:parent-style-name"): "ReportBody",
+        })
+        ET.SubElement(style, _tag("style:paragraph-properties"), properties)
     style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
         _tag("style:name"): "PricesListingHeading", _tag("style:family"): "paragraph",
         _tag("style:parent-style-name"): "PricesHeading1",
@@ -232,17 +158,28 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str]]) -> None:
     ET.SubElement(style, _tag("style:paragraph-properties"), {
         _tag("fo:break-before"): "page", _tag("fo:keep-with-next"): "always",
     })
-    headings = [(level, text) for level, text in blocks if level]
+    headings = [(level, text) for level, text in blocks if level > 0]
     headings.extend((1, title) for title, _ in LISTINGS)
     document.paragraph(TITLE.upper(), style="PricesHeading1")
     document.table_of_contents(headings, max_level=3, name="PricesContents")
     bookmark = 0
     for level, text in blocks:
-        if level:
+        if level > 0:
             document.heading(text, level, style=f"PricesHeading{level}", bookmark=f"PPTPHeading{bookmark}")
             bookmark += 1
+        elif level == FORMULA_LEVEL:
+            paragraph = ET.SubElement(document.body, _tag("text:p"), {
+                _tag("text:style-name"): "PricesFormula",
+            })
+            for value, position in formula_runs(text):
+                attributes = {}
+                if position:
+                    attributes[_tag("text:style-name")] = (
+                        "PricesSubscript" if position == "sub" else "PricesSuperscript"
+                    )
+                ET.SubElement(paragraph, _tag("text:span"), attributes).text = value
         else:
-            document.paragraph(text)
+            document.paragraph(text, "PricesBullet" if level < 0 else "ReportBody")
     for title, report in LISTINGS:
         document.heading(title, 1, style="PricesListingHeading", bookmark=f"PPTPHeading{bookmark}")
         bookmark += 1
@@ -262,6 +199,7 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str]]) -> None:
     """Pagina el anejo con índice real y tablas del generador presupuestario común."""
     from html import escape
     from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer
@@ -275,13 +213,21 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str]]) -> None:
         template_path=settings.template_path, expediente=settings.expediente,
         template_title=TITLE, footer_title=TITLE, repeat_titles=False,
     )
-    body = ParagraphStyle("PricesBody", fontName="Helvetica", fontSize=10, leading=14, spaceAfter=7)
+    body = ParagraphStyle(
+        "PricesBody", fontName="Helvetica", fontSize=10, leading=14,
+        spaceAfter=7, alignment=TA_JUSTIFY,
+    )
+    formula_style = ParagraphStyle(
+        "PricesFormula", parent=body, fontName="Times-Roman", fontSize=10,
+        alignment=TA_CENTER, spaceBefore=6, spaceAfter=9,
+    )
+    bullet_style = ParagraphStyle("PricesBullet", parent=body, leftIndent=12, firstLineIndent=-7)
     heading_styles = {
         level: ParagraphStyle(
             f"PricesHeading{level}", parent=body, fontName="Helvetica-Bold",
             fontSize=15 - level, leading=18 - level, spaceBefore=12,
             spaceAfter=7, keepWithNext=True,
-        ) for level in range(1, 4)
+        ) for level in range(1, 7)
     }
     toc = TableOfContents()
     toc.levelStyles = [
@@ -297,7 +243,7 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str]]) -> None:
     heading_index = 0
     reports = dict(LISTINGS)
     for level, text in blocks + [(1, title) for title, _ in LISTINGS]:
-        if level:
+        if level > 0:
             if text in reports:
                 story.append(PageBreak())
             paragraph = Paragraph(escape(text), heading_styles[level])
@@ -308,8 +254,16 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str]]) -> None:
             if report:
                 listing, _ = build_pdf_report(app, report, layout, embedded=True)
                 story.extend(listing)
+        elif level == FORMULA_LEVEL:
+            formula = "".join(
+                f"<{position}>{escape(value)}</{position}>" if position else escape(value)
+                for value, position in formula_runs(text)
+            )
+            story.append(Paragraph(formula, formula_style))
         else:
-            story.append(Paragraph(escape(text).replace("\n", "<br/>"), body))
+            story.append(Paragraph(
+                escape(text).replace("\n", "<br/>"), bullet_style if level < 0 else body,
+            ))
     signature = [value for value in (
         settings.location, settings.role, settings.author, settings.organization, settings.signature,
     ) if value]

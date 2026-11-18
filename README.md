@@ -65,6 +65,36 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
 - La selección conserva el dígito de control y se guarda con el proyecto y
   como configuración inicial de nuevos proyectos, igual que los municipios.
 
+### Justificación de precios
+
+- **Herramientas → Justificación de precios** es la primera opción del menú.
+  La pestaña **Documentos base** muestra el texto del anejo por apartados,
+  con las fórmulas de composición, costes indirectos, mano de obra y maquinaria.
+- **Editar biblioteca de documentos…** abre el mismo editor de Markdown y
+  biblioteca ZIP del PPTP, con historial de revisiones. Los ocho documentos de
+  `tools/price_justification/BIBLIOTECA.zip` son la fuente del texto generado;
+  las modificaciones guardadas se utilizan en las próximas exportaciones.
+- Proyecto, entidad, autoría, expediente, emplazamiento, provincias, comunidades
+  autónomas y porcentaje de indirectos se leen de la configuración general
+  actual, sin mantener otra copia en la herramienta. Si no se han seleccionado
+  municipios se utiliza la localidad configurada, sin deducir su provincia.
+- **Datos específicos** recoge fecha de referencia, contratación pública o
+  privada, fuente de precios, convenio, salarios, cotizaciones, calendario,
+  jornada anual y criterio de maquinaria. Se conservan con el proyecto y su
+  historial; las notas anteriores permanecen en **Complementos opcionales**.
+- **Guardar anejo…** genera un único documento con índice, texto y listados
+  de precios elementales, auxiliares y descompuestos, en la plantilla y formato
+  PDF u ODT elegidos en la configuración de informes. El ODT contiene texto
+  y tablas editables, no capturas. Las fórmulas son texto nativo centrado,
+  con subíndices y exponentes, y se editan en los bloques `$$` de la biblioteca.
+- Los elementales incluyen mano de obra, maquinaria y materiales identificados.
+  Se reutilizan las cantidades, precios y redondeos del presupuesto actual,
+  sin cambiar el informe «Materiales» existente ni aplicar otro recargo indirecto.
+- Incluir las fórmulas no recalcula los precios. Los importes del ejemplo no
+  se adoptan como datos reales ni se presentan referencias de 2008-2009 como
+  vigentes. Los consumos históricos se identifican como orientativos; los
+  parámetros económicos y referencias laborales se deben verificar.
+
 ### Planificación en plantilla
 
 - En **Herramientas → Planificación**, **Guardar planificación en plantilla**
