@@ -711,7 +711,7 @@ class RcdWindow(tk.Toplevel):
         self.minsize(1000, 600)
         self.data = data
         self._dirty = False
-        self.documentation_window = None
+        self.library_editor = None
         self.content = ttk.Frame(self, padding=12)
         self.content.pack(fill="both", expand=True)
         self.protocol("WM_DELETE_WINDOW", self.close)
@@ -724,11 +724,16 @@ class RcdWindow(tk.Toplevel):
             widget.destroy()
         ttk.Label(self.content, text="RCDs — Datos de cálculo (revisa también los valores recuperados)",
                   style="Total.TLabel").pack(anchor="w", pady=6)
-        ttk.Label(self.content, text=NOTE, wraplength=1100).pack(fill="x", pady=6)
-        ttk.Button(self.content, text="Documentación del estudio…",
-                   command=self.open_documentation).pack(anchor="w", pady=6)
-        ttk.Button(self.content, text="Llevar mediciones de demolición a transporte a vertedero",
-                   command=self.review_demolition).pack(anchor="w", pady=6)
+        actions = ttk.Frame(self.content)
+        actions.pack(fill="x", pady=6)
+        ttk.Button(
+            actions, text="Editar documentación del estudio…",
+            command=self.open_library_editor,
+        ).pack(side="left")
+        ttk.Button(
+            actions, text="Llevar mediciones de demolición a transporte a vertedero",
+            command=self.review_demolition,
+        ).pack(side="left", padx=8)
         self.measured_label = ttk.Label(self.content, text=MEASURED_NOTE if self.data.demolition else "",
                                         wraplength=1100)
         self.measured_label.pack(fill="x", pady=(0, 6))
@@ -745,13 +750,14 @@ class RcdWindow(tk.Toplevel):
         canvas.bind("<Configure>", lambda event: canvas.itemconfigure(window, width=event.width))
         self.variables = {}
         self.group_variables = {}
+        self.documentation_texts = {}
         for row, (key, label, _) in enumerate(INPUTS):
             ttk.Label(form, text=label).grid(row=row, column=0, sticky="w", pady=3)
             value = self.data.inputs[key]
             variable = tk.StringVar(value="" if value is None else str(value))
             self.variables[key] = variable
             ttk.Entry(form, textvariable=variable, width=18).grid(row=row, column=1, padx=8)
-            source = self.data.sources.get(key, "Valor del modelo; editable.")
+            source = self.data.sources.get(key, "Valor del modelo.")
             if value is None:
                 source = "PENDIENTE — " + self.data.sources.get(key, "Indica el valor, o 0 si no procede.")
             ttk.Label(form, text=source, wraplength=500).grid(row=row, column=2, sticky="w")
@@ -767,6 +773,40 @@ class RcdWindow(tk.Toplevel):
                 entry.grid(row=index, column=column, sticky="w", padx=8)
                 if key == "earth" and name == "percentage":
                     entry.configure(state="disabled")
+        from .study import DOCUMENT_FIELDS
+
+        documentation_start = start + len(GROUPS) + 1
+        ttk.Separator(form, orient="horizontal").grid(
+            row=documentation_start, column=0, columnspan=3, sticky="ew", pady=(14, 8),
+        )
+        ttk.Label(
+            form, text="Decisiones particulares de la obra", style="Total.TLabel",
+        ).grid(row=documentation_start + 1, column=0, columnspan=3, sticky="w", pady=(0, 4))
+        ttk.Label(
+            form, text="Completa los datos que no se obtienen del presupuesto ni de la configuración general.",
+            wraplength=1000,
+        ).grid(row=documentation_start + 2, column=0, columnspan=3, sticky="w", pady=(0, 8))
+        documentation_row = documentation_start + 3
+        for key, label in DOCUMENT_FIELDS.items():
+            ttk.Label(form, text=label).grid(
+                row=documentation_row, column=0, columnspan=3, sticky="w",
+            )
+            text_frame = ttk.Frame(form)
+            text_frame.grid(
+                row=documentation_row + 1, column=0, columnspan=3, sticky="ew", pady=(2, 10),
+            )
+            text = tk.Text(text_frame, wrap="word", height=4, undo=True)
+            text_scroll = ttk.Scrollbar(text_frame, command=text.yview)
+            text.configure(yscrollcommand=text_scroll.set)
+            text_scroll.pack(side="right", fill="y")
+            text.pack(fill="both", expand=True)
+            text.insert("1.0", self.data.documentation.get(key, ""))
+            text.edit_modified(False)
+            text.bind("<<Modified>>", self.documentation_changed)
+            self.documentation_texts[key] = text
+            documentation_row += 2
+        form.columnconfigure(0, weight=1)
+        form.columnconfigure(2, weight=1)
         ttk.Button(self.content, text="Aceptar y revisar residuos", command=self.accept_inputs,
                    style="Accent.TButton").pack(anchor="e", pady=8)
         localize_widget_tree(self)
@@ -792,6 +832,9 @@ class RcdWindow(tk.Toplevel):
             raw["inputs"][key] = None if self.data.demolition and key in MODEL_INPUTS and not value.strip() else value
         for (key, name), variable in self.group_variables.items():
             raw["groups"][key][name] = variable.get()
+        raw["documentation"] = {
+            key: text.get("1.0", "end-1c") for key, text in self.documentation_texts.items()
+        }
         try:
             candidate = RcdState.from_dict(raw)
             calculate(candidate)
@@ -804,6 +847,15 @@ class RcdWindow(tk.Toplevel):
         self.data = candidate
         self.changed()
         self.show_wastes()
+
+    def documentation_changed(self, event):
+        """Guarda con el proyecto las decisiones particulares introducidas en el formulario."""
+        if event.widget.edit_modified():
+            event.widget.edit_modified(False)
+            self.data.documentation.update({
+                key: text.get("1.0", "end-1c") for key, text in self.documentation_texts.items()
+            })
+            self.changed()
 
     def changed(self):
         """Publica cada edición aceptada en el proyecto y señala guardado pendiente."""
@@ -822,8 +874,8 @@ class RcdWindow(tk.Toplevel):
         toolbar = ttk.Frame(self.content)
         toolbar.pack(fill="x", pady=6)
         ttk.Button(toolbar, text="Datos de cálculo", command=self.show_inputs).pack(side="left")
-        ttk.Button(toolbar, text="Documentación del estudio…",
-                   command=self.open_documentation).pack(side="left", padx=8)
+        ttk.Button(toolbar, text="Editar documentación del estudio…",
+                   command=self.open_library_editor).pack(side="left", padx=8)
         ttk.Button(toolbar, text="Vínculos LER–BCCA…",
                    command=self.show_ler_links).pack(side="left")
         ttk.Button(toolbar, text="Generar estudio RCDs", command=self.generate_report).pack(side="left", padx=8)
@@ -902,7 +954,7 @@ class RcdWindow(tk.Toplevel):
             for row in rows:
                 self.preview.insert("", "end", values=row)
         self.status.configure(text=f"{sum(self.data.selected.values())} residuos seleccionados. "
-                              f"Total: {sections[-1][1][0][3]} € (sin fianza ni IVA).")
+                              f"Total: {sections[-1][1][0][3]} €.")
 
     def save(self):
         """Incorpora el presupuesto RCDs al proyecto antes de guardarlo."""
@@ -919,20 +971,29 @@ class RcdWindow(tk.Toplevel):
             self.save_button.configure(background=self._save_background, foreground=self._save_foreground)
             self.status.configure(text="RCDs y capítulo Gestión de residuos guardados con el proyecto.")
 
-    def open_documentation(self):
-        """Abre los documentos base y decisiones particulares sin exigir cálculos completos."""
-        from .documentation import RcdDocumentationWindow
-        from .study import LIBRARY_PATH, load_documents
+    def open_library_editor(self):
+        """Abre el editor compartido de la biblioteca con historial de revisiones."""
+        from tools._library_editor import LibraryEditor
+        from . import study
 
-        if self.documentation_window is not None and self.documentation_window.winfo_exists():
-            self.documentation_window.lift()
+        if self.library_editor is not None and self.library_editor.winfo_exists():
+            self.library_editor.lift()
             return
+        self.library_editor = LibraryEditor(
+            self, study.LIBRARY_PATH, "Biblioteca del estudio RCDs",
+            on_saved=self.reload_library,
+            used_members={name for name, _ in study.DOCUMENTS},
+            track_changes=True,
+        )
+
+    def reload_library(self):
+        """Valida la biblioteca actualizada antes de permitir su uso en el estudio."""
+        from . import study
+
         try:
-            documents = dict(load_documents(LIBRARY_PATH))
+            study.load_documents(study.LIBRARY_PATH)
         except (OSError, ValueError) as exc:
             messagebox.showerror("Documentación RCDs", str(exc), parent=self)
-            return
-        self.documentation_window = RcdDocumentationWindow(self, documents)
 
     def show_ler_links(self):
         """Muestra todos los indicios BCCA de las partidas actuales sin tocar marcas revisadas."""
@@ -975,8 +1036,8 @@ class RcdWindow(tk.Toplevel):
     def generate_report(self):
         """Genera atómicamente el formato configurado y abre el archivo resultante."""
         settings = self.app.report_settings
-        if (self.documentation_window is not None and self.documentation_window.winfo_exists()
-                and self.documentation_window.has_unsaved_library()):
+        if (self.library_editor is not None and self.library_editor.winfo_exists()
+                and self.library_editor.dirty):
             messagebox.showerror(
                 "Documentación RCDs",
                 "Guarda o descarta los cambios de la biblioteca antes de generar el estudio.", parent=self,
@@ -1013,9 +1074,9 @@ class RcdWindow(tk.Toplevel):
 
     def close(self):
         """Cierra conservando las ediciones aceptadas en memoria del proyecto."""
-        if self.documentation_window is not None and self.documentation_window.winfo_exists():
-            self.documentation_window.close()
-            if self.documentation_window.winfo_exists():
+        if self.library_editor is not None and self.library_editor.winfo_exists():
+            self.library_editor.close()
+            if self.library_editor.winfo_exists():
                 return
         self.destroy()
 

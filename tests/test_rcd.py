@@ -493,6 +493,7 @@ class RcdWindowTests(unittest.TestCase):
             error.assert_called_once()
             self.assertFalse(hasattr(window, "tree"))
         self.accept(window)
+        self.assertNotIn("sin fianza ni IVA", window.status.cget("text"))
         self.assertEqual(len(window.tree.get_children()), 57)
         self.assertEqual(window.tree.set("40", "x"), "X")
         self.assertEqual(window.tree.set("15", "x"), "")
@@ -724,7 +725,7 @@ class RcdWindowTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(), old)
         self.assertFalse(any(path.name.startswith("tmp") for path in self.folder.iterdir()))
 
-    def test_documentation_before_calculation_and_library_editor_export_close_guards(self):
+    def test_manual_documentation_is_on_first_screen_and_library_editor_guards(self):
         from tools._library_editor import _signature, read_markdown, write_markdown
         from tools.rcd import study
 
@@ -732,23 +733,37 @@ class RcdWindowTests(unittest.TestCase):
         shutil.copyfile(study.LIBRARY_PATH, library)
         window = self.open()
         with patch.object(study, "LIBRARY_PATH", library):
-            window.open_documentation()
-            documents = window.documentation_window
-            self.assertIn("MEMORIA", documents.preview.get("1.0", "end"))
-            documents.texts["facilities"].insert("1.0", "Véase plano de implantación RCD-01.")
+            self.assertFalse(hasattr(window, "documentation_window"))
+            self.assertIn("facilities", window.documentation_texts)
+            window.documentation_texts["facilities"].insert(
+                "1.0", "Véase plano de implantación RCD-01.",
+            )
             self.root.update()
             self.assertEqual(self.app.rcd_state["documentation"]["facilities"],
                              "Véase plano de implantación RCD-01.")
+            def widget_texts(widget):
+                texts = []
+                if isinstance(widget, (ttk.Label, ttk.Button)):
+                    texts.append(str(widget.cget("text")))
+                for child in widget.winfo_children():
+                    texts.extend(widget_texts(child))
+                return texts
+
+            visible_text = " ".join(widget_texts(window))
+            self.assertIn("Editar documentación del estudio", visible_text)
+            self.assertNotIn("; editable", visible_text)
+            self.assertNotIn("Estimación orientativa, sin fianza ni IVA.", visible_text)
             self.accept(window)
-            documents.open_library_editor()
-            self.assertTrue(documents.library_editor.track_changes)
-            self.assertEqual(documents.library_editor.archive_path, library)
+            window.open_library_editor()
+            editor = window.library_editor
+            self.assertTrue(editor.track_changes)
+            self.assertEqual(editor.archive_path, library)
             member = study.DOCUMENTS[0][0]
             source = read_markdown(library, member)
             write_markdown(library, member, source + "\n\nRevisión RCD visible.\n", _signature(library))
-            documents.reload_library()
-            self.assertIn("Revisión RCD visible", documents.preview.get("1.0", "end"))
-            documents.library_editor.dirty = True
+            window.reload_library()
+            self.assertIn("Revisión RCD visible", dict(study.load_documents(library))[member])
+            editor.dirty = True
             with (
                 patch("tools.rcd.messagebox.showerror") as error,
                 patch("tools.rcd.filedialog.asksaveasfilename") as choose,
@@ -756,10 +771,10 @@ class RcdWindowTests(unittest.TestCase):
                 window.generate_report()
             error.assert_called_once()
             choose.assert_not_called()
-            with patch.object(documents.library_editor, "close"):
+            with patch.object(editor, "close"):
                 window.close()
                 self.assertTrue(window.winfo_exists())
-            documents.library_editor.dirty = False
+            editor.dirty = False
             window.close()
             self.assertFalse(window.winfo_exists())
 
@@ -797,9 +812,10 @@ class RcdWindowTests(unittest.TestCase):
 
     def test_demolition_review_requires_factor_then_creates_transport_and_updates_calculation(self):
         window = self.open()
-        button = next(child for child in window.content.winfo_children()
-                      if isinstance(child, ttk.Button) and
-                      child.cget("text") == "Llevar mediciones de demolición a transporte a vertedero")
+        button = next(widget for parent in window.content.winfo_children()
+                      for widget in parent.winfo_children()
+                      if isinstance(widget, ttk.Button) and
+                      widget.cget("text") == "Llevar mediciones de demolición a transporte a vertedero")
         button.invoke()
         dialog = next(child for child in window.winfo_children() if isinstance(child, DemolitionDialog))
         with patch("tools.rcd.messagebox.showerror") as error:
