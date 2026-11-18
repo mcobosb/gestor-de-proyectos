@@ -112,19 +112,29 @@ class DistributionTests(unittest.TestCase):
         finally:
             root.destroy()
 
-    def test_main_shows_splash_before_building_application(self):
-        """Construye la aplicación solo después de cerrar la imagen de arranque."""
-        calls = Mock()
-        with (
-            patch("bc3_gui.tk.Tk", return_value=calls.root),
-            patch("bc3_gui.show_startup_screen", calls.splash),
-            patch("bc3_gui.BudgetApp", calls.application),
-        ):
-            main()
-        self.assertEqual(
-            [call[0] for call in calls.mock_calls],
-            ["root.withdraw", "splash", "application", "root.deiconify", "root.mainloop"],
+    def test_main_delegates_to_pyside6_entrypoint(self):
+        """La entrada pública usa PySide6 sin construir la ventana Tk heredada."""
+        with patch("bc3_qt.main", return_value=17) as qt_main:
+            result = main()
+        qt_main.assert_called_once_with()
+        self.assertEqual(result, 17)
+
+    def test_budget_core_has_no_gui_framework_dependency(self):
+        """El parser, los modelos y los cálculos no dependen de ningún toolkit GUI."""
+        core_path = ROOT / "budget_core.py"
+        tree = ast.parse(core_path.read_text(encoding="utf-8"))
+        imports = {
+            alias.name.split(".")[0]
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Import)
+            for alias in node.names
+        }
+        imports.update(
+            node.module.split(".")[0]
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and node.module
         )
+        self.assertTrue({"tkinter", "PySide6"}.isdisjoint(imports))
 
     def test_missing_splash_image_warns_without_blocking_startup(self):
         """Notifica un recurso ausente y permite continuar al programa."""
@@ -255,7 +265,9 @@ class DistributionTests(unittest.TestCase):
         self.assertTrue((ROOT / "iconos" / "Arranque.jpg").is_file())
         self.assertTrue((ROOT / "iconos" / "logo_odt.jpg").is_file())
         requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8").lower()
-        for name in ("odfpy", "openpyxl", "reportlab", "pillow", "matplotlib"):
+        for name in (
+            "odfpy", "openpyxl", "reportlab", "pillow", "matplotlib", "pyside6",
+        ):
             with self.subTest(package=name):
                 self.assertIn(name, requirements)
         self.assertIn("-r requirements.txt", (ROOT / "requirements-test.txt").read_text(encoding="utf-8"))

@@ -545,7 +545,7 @@ compilación Nuitka dificulta recuperar el código, aunque no puede impedir
 completamente la ingeniería inversa.
 
 Para ejecutar desde el código fuente se necesita Windows, Python 3.11 o
-posterior con Tkinter y una sesión gráfica.
+posterior y una sesión gráfica. PySide6 se instala desde `requirements.txt`.
 No se necesita Excel para exportar hojas de cálculo ni para generar el Gantt
 desde la aplicación.
 
@@ -556,6 +556,10 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe bc3_gui.py
 ```
+
+La ventana principal del presupuesto usa PySide6. Durante la migración, las
+herramientas secundarias conservan temporalmente su implementación heredada en
+Tkinter y pueden abrirse con `bc3_gui.py --legacy`.
 
 En modo desarrollo, la carpeta debe permitir escritura porque las preferencias
 se guardan junto al código. La versión instalada guarda preferencias e historial
@@ -626,6 +630,7 @@ El archivo [requirements.txt](requirements.txt) contiene las dependencias de uso
 
 | Paquete | Uso |
 |---|---|
+| PySide6 | Ventana principal, controles y ciclo de eventos Qt |
 | Pillow | Icono e imágenes de la interfaz |
 | odfpy | Exportación de hojas de cálculo ODS |
 | openpyxl | Conversión independiente de planificación a XLSX |
@@ -636,14 +641,19 @@ El archivo [requirements.txt](requirements.txt) contiene las dependencias de uso
 
 Los informes también se generan como ODT editable con los módulos estándar de Python.
 El formato se elige en **Archivo → Configuración…** y, de inicio, es PDF.
-Tkinter y los módulos restantes forman parte de Python. Si `python -m tkinter`
-no abre una ventana, revisa la instalación de Python antes de iniciar la app.
+Tkinter solo es necesario para la entrada heredada `--legacy` mientras se
+migran las herramientas secundarias.
 
 ## Organización
 
 | Archivo o carpeta | Función |
 |---|---|
-| [bc3_gui.py](bc3_gui.py) | Entrada de la aplicación, presupuesto y mediciones |
+| [bc3_gui.py](bc3_gui.py) | Entrada compatible y frontend heredado |
+| [budget_qt_window.py](budget_qt_window.py) | Coordinación de la ventana principal PySide6 |
+| [budget_qt_dialogs.py](budget_qt_dialogs.py) | Diálogos reutilizables de PySide6 |
+| [budget_core.py](budget_core.py) | Modelos, cálculos y lectura FIEBDC sin GUI |
+| [budget_project.py](budget_project.py) | Lectura, validación y persistencia de proyectos |
+| [budget_config.py](budget_config.py) | Metadatos y constantes compartidas |
 | [tool_loader.py](tool_loader.py) | Descubrimiento y validación de herramientas opcionales |
 | [tools/](tools/) | Módulos opcionales del menú Herramientas y sus auxiliares |
 | [tools/rcd/](tools/rcd/) | Estimación, revisión y presupuesto de gestión de RCDs |

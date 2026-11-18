@@ -7,8 +7,8 @@ certificaciones. Los ejemplos de rutas de este manual son ficticios.
 
 ## 1. Instalar y abrir
 
-Instala Python 3.11 o posterior para Windows con Tkinter. Descarga el repositorio
-y descomprímelo en una carpeta donde puedas escribir.
+Instala Python 3.11 o posterior para Windows. Descarga el repositorio y
+descomprímelo en una carpeta donde puedas escribir.
 
 Abre PowerShell en esa carpeta y ejecuta:
 
@@ -20,6 +20,10 @@ python -m venv .venv
 
 En las siguientes ocasiones basta con ejecutar el último comando. Mantén juntos
 los módulos principales y las carpetas `iconos` y `tools`.
+La ventana principal del presupuesto utiliza PySide6. Mientras se migran las
+herramientas secundarias, puedes iniciar la versión heredada con
+`.\.venv\Scripts\python.exe bc3_gui.py --legacy`. En **Archivo → Configuración →
+Apariencia** puedes elegir el tema **Sistema**, **Claro** u **Oscuro**.
 
 Al arrancar, el programa examina `tools` junto a la aplicación y añade al menú
 **Herramientas** los módulos disponibles. En el instalador de Windows, la
@@ -977,7 +981,8 @@ no se deducen ni se añaden impuestos automáticamente.
 | Problema | Comprobación |
 |---|---|
 | No se abre el programa | Ejecuta desde PowerShell y revisa el mensaje; instala las dependencias con el Python del entorno |
-| Falta Tkinter | Comprueba `python -m tkinter` y repara la instalación de Python |
+| No se abre PySide6 | Reinstala dependencias con `pip install -r requirements.txt` |
+| Falla la entrada heredada | Comprueba `python -m tkinter` y repara la instalación de Python |
 | No se ve el icono o el logo del PDF | Conserva `iconos` junto a los módulos de la aplicación |
 | No puedo editar una medición | Selecciona una partida, no el capítulo; pulsa una celda distinta de Parcial |
 | Un informe pide precios | Carga la base de origen o completa los precios del proyecto |

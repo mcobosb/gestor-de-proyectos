@@ -29,7 +29,7 @@ if ($LASTEXITCODE -eq 0) {
 if ($LASTEXITCODE -ne 0) {
     throw "Falta Nuitka. Instala las dependencias con: python -m pip install -r requirements.txt -r requirements-build.txt"
 }
-& $python -c "import pdfminer, pdfplumber, pypdfium2"
+& $python -c "import pdfminer, pdfplumber, pypdfium2, PySide6"
 if ($LASTEXITCODE -ne 0) {
     throw "Faltan dependencias de ejecución. Instálalas con: python -m pip install -r requirements.txt"
 }
@@ -145,6 +145,7 @@ foreach ($tool in Get-ChildItem $toolsSource -Filter "*.py" -Recurse -File) {
     @compilerOptions `
     --assume-yes-for-downloads `
     --enable-plugin=tk-inter `
+    --enable-plugin=pyside6 `
     --windows-console-mode=disable `
     --windows-icon-from-ico=iconos\logo.ico `
     --company-name="Manuel Cobos Budia" `
@@ -163,6 +164,7 @@ foreach ($tool in Get-ChildItem $toolsSource -Filter "*.py" -Recurse -File) {
     --include-package=matplotlib `
     --include-package=openpyxl `
     --include-package=PIL `
+    --include-package=PySide6 `
     --include-package=pdfplumber `
     --include-package=pdfminer `
     --include-package=pypdfium2 `

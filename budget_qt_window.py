@@ -1,0 +1,1586 @@
+"""Ventana principal de presupuestos basada en PySide6."""
+from __future__ import annotations
+
+from copy import deepcopy
+from decimal import Decimal
+import json
+import os
+from pathlib import Path
+import sys
+import tempfile
+import webbrowser
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
+from PySide6.QtWidgets import (
+    QApplication,
+    QAbstractItemView,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QListWidget,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QPlainTextEdit,
+    QPushButton,
+    QSplitter,
+    QStatusBar,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QToolBar,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
+
+
+from budget_qt_dialogs import ItemEditor, MeasurementEditor
+from PySide6.QtWidgets import QTreeWidgetItemIterator
+from app_paths import user_data_directory
+from budget_config import (
+    APPLICATION_NAME, APPLICATION_RELEASE_DATE, APPLICATION_VERSION,
+    CONCEPT_TYPES, DUPLICATE_ITEM_MARKER,
+)
+from budget_core import (
+    Bc3Dataset,
+    Concept,
+    MeasurementLine,
+    ProjectItem,
+    currency_label,
+    fmt_number,
+    format_chapter_code,
+    format_currency,
+    is_chapter_code,
+    round_half_up,
+)
+from budget_project import (
+    budget_concept_type,
+    build_project_payload,
+    chapter_title_for,
+    component_dataset_for,
+    project_title_for,
+    read_project,
+    reference_base_for,
+    report_components,
+    write_project,
+)
+from budget_reports import REPORT_NAMES, ReportSettings, write_pdf
+from budget_qt_settings import SettingsDialog
+from budget_qt_theme import THEMES, apply_theme
+from localization import LANGUAGES, set_language
+from odt_reports import write_report_odt
+from ods_export import write_ods
+
+
+ROW_KIND = Qt.ItemDataRole.UserRole
+ROW_DATA = Qt.ItemDataRole.UserRole + 1
+
+
+class BudgetMainWindow(QMainWindow):
+    """Ventana principal Qt para editar proyectos de presupuesto."""
+
+    def __init__(self) -> None:
+        """Inicializa el estado, los menús y los dos paneles de presupuesto."""
+        super().__init__()
+        self.reference_bases: list[Bc3Dataset] = []
+        self.budget_dataset: Bc3Dataset | None = None
+        self.budget_items: list[ProjectItem] = []
+        self.selected_budget_index: int | None = None
+        self.selected_chapter: str | None = None
+        self.selected_reference: tuple[int, str] | None = None
+        self.chapter_order: list[str] = []
+        self.chapter_titles: dict[str, str] = {}
+        self.planning_state: dict = {}
+        self.invoicing_state: dict = {}
+        self.rcd_state: dict = {}
+        self.safety_health_state: dict = {}
+        self.pptp_state: dict = {}
+        self.price_justification_state: dict = {}
+        self.project_title: str | None = None
+        self.project_path: Path | None = None
+        self.source_budget_path: Path | None = None
+        self.is_dirty = False
+        self._undo_history: list[dict] = []
+        self._history_state: dict = {}
+        self._saved_state: dict | None = {}
+        data_directory = user_data_directory(__file__)
+        self.recent_projects_path = data_directory / "proyectos_recientes.json"
+        self.recent_reference_bases_path = data_directory / "bases_referencia_recientes.json"
+        self.preferences_path = data_directory / "preferencias.json"
+        self.report_settings_path = data_directory / "configuracion_informes.json"
+        self.recent_projects = self._read_recent_paths(self.recent_projects_path, 5)
+        self.recent_reference_bases = self._read_recent_paths(self.recent_reference_bases_path, 3)
+        self.default_report_settings = self._read_report_settings()
+        self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
+        self.language = self._read_language_preference()
+        self.theme = self._read_theme_preference()
+        set_language(self.language)
+        apply_theme(QApplication.instance(), self.theme)
+        self._build_ui()
+        self._reset_history()
+        self.resize(1480, 860)
+        self.setMinimumSize(1100, 650)
+
+    def _build_ui(self) -> None:
+        """Crea menús, barra de acciones, paneles, árboles y detalles."""
+        self.setWindowTitle(APPLICATION_NAME)
+        self._build_menus()
+        self._build_toolbar()
+        main = QWidget()
+        layout = QVBoxLayout(main)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.addWidget(self._build_budget_panel())
+        splitter.addWidget(self._build_reference_panel())
+        splitter.setSizes((760, 580))
+        layout.addWidget(splitter)
+        self.setCentralWidget(main)
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+
+    def _build_menus(self) -> None:
+        """Configura los menús de archivo, exportación, informes e información."""
+        menu = self.menuBar()
+        file_menu = menu.addMenu("Archivo")
+        self.recent_menu = file_menu.addMenu("Recientes")
+        self.recent_reference_menu = file_menu.addMenu("Bases de referencia recientes")
+        self._refresh_recent_menu()
+        self._refresh_recent_reference_menu()
+        file_menu.addSeparator()
+        file_menu.addAction(self._action("Nuevo proyecto", self.new_project, "Ctrl+N"))
+        file_menu.addSeparator()
+        file_menu.addAction(self._action("Importar presupuesto BC3…", self.import_budget))
+        file_menu.addAction(self._action("Añadir base de referencia BCCA…", self.load_references))
+        file_menu.addAction(
+            self._action("Quitar base de referencia…", self.remove_reference_bases)
+        )
+        file_menu.addSeparator()
+        file_menu.addAction(self._action("Abrir proyecto JSON…", self.open_project, "Ctrl+O"))
+        file_menu.addAction(self._action("Guardar", self.save_project, "Ctrl+S"))
+        file_menu.addAction(self._action("Guardar como (JSON)…", self.save_project_as))
+        file_menu.addSeparator()
+        file_menu.addAction(self._action("Configuración…", self.open_report_settings))
+
+        export_menu = menu.addMenu("Imprimir y exportar")
+        export_menu.addAction("Vista previa del presupuesto…", self.preview_budget)
+        export_menu.addAction("Exportar presupuesto a ODS…", self.export_budget_ods)
+        export_menu.addAction("Exportar mediciones a CSV…", self.export_measurements_csv)
+
+        reports_menu = menu.addMenu("Informes")
+        for report in REPORT_NAMES:
+            reports_menu.addAction(report, lambda checked=False, name=report: self.generate_report(name))
+
+        tools_menu = menu.addMenu("Herramientas")
+        pending = tools_menu.addAction("Las herramientas migrarán después de la ventana principal")
+        pending.setEnabled(False)
+
+        info_menu = menu.addMenu("Información")
+        info_menu.addAction(APPLICATION_NAME).setEnabled(False)
+        info_menu.addAction(
+            f"Versión {APPLICATION_VERSION} — {APPLICATION_RELEASE_DATE:%d/%m/%Y}"
+        ).setEnabled(False)
+        info_menu.addAction("Repositorio en GitHub", self.open_repository)
+        info_menu.addAction("Acerca de PySide6…", self.show_about_qt)
+
+    def _build_toolbar(self) -> None:
+        """Añade las acciones rápidas del presupuesto."""
+        toolbar = QToolBar("Presupuesto")
+        self.addToolBar(toolbar)
+        self.save_action = toolbar.addAction("Guardar")
+        self.save_action.triggered.connect(self.save_project)
+        self.save_action.setShortcut(QKeySequence.StandardKey.Save)
+        self.undo_action = toolbar.addAction("Deshacer")
+        self.undo_action.triggered.connect(self.undo_last_action)
+        self.undo_action.setShortcut(QKeySequence.StandardKey.Undo)
+        toolbar.addSeparator()
+        toolbar.addAction("Nuevo capítulo", self.add_chapter)
+        toolbar.addAction("Nueva partida", self.add_manual_item)
+        toolbar.addAction("Eliminar", self.delete_selection)
+        toolbar.addAction("← Añadir referencia", self.add_selected_reference)
+        toolbar.addAction("Editar", self.edit_selection)
+        toolbar.addAction("Duplicar", self.duplicate_selection)
+        toolbar.addAction("Subir", lambda: self.move_selection(-1))
+        toolbar.addAction("Bajar", lambda: self.move_selection(1))
+        toolbar.addSeparator()
+        toolbar.addAction("Expandir / contraer", self.toggle_budget_expansion)
+        self.summary_label = QLabel("Total: 0,00 €")
+        toolbar.addWidget(self.summary_label)
+
+    def _build_budget_panel(self) -> QWidget:
+        """Crea el árbol principal y los detalles de la partida seleccionada."""
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        self.project_heading = QLabel("Proyecto: Sin título")
+        self.project_heading.setStyleSheet("font-size: 16px; font-weight: 600;")
+        layout.addWidget(self.project_heading)
+        self.budget_search = QLineEdit()
+        self.budget_search.setPlaceholderText("Filtrar presupuesto por código o texto…")
+        self.budget_search.textChanged.connect(self.refresh_budget_tree)
+        layout.addWidget(self.budget_search)
+        self.budget_tree = QTreeWidget()
+        self.budget_tree.setColumnCount(5)
+        self.budget_tree.setHeaderLabels(("Código", "Tipo", "Texto", "Medición", "Importe"))
+        self.budget_tree.setAlternatingRowColors(True)
+        self.budget_tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.budget_tree.itemSelectionChanged.connect(self.on_budget_selection)
+        self.budget_tree.itemDoubleClicked.connect(self.edit_selection)
+        header = self.budget_tree.header()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        layout.addWidget(self.budget_tree, 3)
+        details = QTabWidget()
+        details.addTab(self._build_measurements_panel(), "Mediciones")
+        details.addTab(self._build_components_panel(), "Descomposición")
+        self.description = QPlainTextEdit()
+        self.description.textChanged.connect(self.on_description_changed)
+        details.addTab(self.description, "Descripción")
+        layout.addWidget(details, 2)
+        return panel
+
+    def _build_measurements_panel(self) -> QWidget:
+        """Crea la tabla editable de mediciones de la partida."""
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        self.measurement_table = QTableWidget(0, 7)
+        self.measurement_table.setHorizontalHeaderLabels(
+            ("Comentario", "Uds", "Largo", "Ancho", "Alto", "K", "Parcial")
+        )
+        self.measurement_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.measurement_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.measurement_table.doubleClicked.connect(self.edit_measurement)
+        layout.addWidget(self.measurement_table)
+        actions = QHBoxLayout()
+        actions.addWidget(QPushButton("Añadir", clicked=self.add_measurement))
+        actions.addWidget(QPushButton("Editar", clicked=self.edit_measurement))
+        actions.addWidget(QPushButton("Eliminar", clicked=self.delete_measurement))
+        self.measurement_total = QLabel("Sin partida seleccionada.")
+        actions.addStretch()
+        actions.addWidget(self.measurement_total)
+        layout.addLayout(actions)
+        return panel
+
+    def _build_components_panel(self) -> QWidget:
+        """Crea la tabla de componentes calculados de la partida."""
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        self.component_table = QTableWidget(0, 5)
+        self.component_table.setHorizontalHeaderLabels(
+            ("Código", "Descripción", "Cantidad", "Precio", "Importe")
+        )
+        self.component_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.component_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        layout.addWidget(self.component_table)
+        return panel
+
+    def _build_reference_panel(self) -> QWidget:
+        """Crea el buscador y árbol de bases de referencia."""
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        self.reference_heading = QLabel("Base de referencia: Sin cargar")
+        self.reference_heading.setStyleSheet("font-size: 16px; font-weight: 600;")
+        layout.addWidget(self.reference_heading)
+        self.reference_search = QLineEdit()
+        self.reference_search.setPlaceholderText("Buscar código o texto en las bases…")
+        self.reference_search.textChanged.connect(self.refresh_reference_tree)
+        layout.addWidget(self.reference_search)
+        self.reference_tree = QTreeWidget()
+        self.reference_tree.setColumnCount(5)
+        self.reference_tree.setHeaderLabels(("Código / texto", "Ud", "Rendimiento", "Precio", "Base"))
+        self.reference_tree.setAlternatingRowColors(True)
+        self.reference_tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.reference_tree.itemSelectionChanged.connect(self.on_reference_selection)
+        self.reference_tree.itemDoubleClicked.connect(self.add_selected_reference)
+        header = self.reference_tree.header()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for column in range(1, 5):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        layout.addWidget(self.reference_tree)
+        return panel
+
+    def _action(self, text: str, slot, shortcut: str = "") -> QAction:
+        """Crea una acción asociada a un método y a un atajo opcional."""
+        action = QAction(self)
+        action.setText(text)
+        action.triggered.connect(slot)
+        if shortcut:
+            action.setShortcut(shortcut)
+        return action
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        """Protege los cambios pendientes antes de cerrar la aplicación."""
+        if not self._confirm_project_change():
+            event.ignore()
+            return
+        event.accept()
+
+    def _set_status(self, text: str) -> None:
+        """Muestra una operación terminada en la barra de estado."""
+        self.status_bar.showMessage(text, 8000)
+
+    def _project_title(self) -> str:
+        """Obtiene el título explícito o lo deduce del BC3."""
+        return project_title_for(self)
+
+    def _chapter_title(self, chapter: str) -> str:
+        """Obtiene el nombre visible de un capítulo."""
+        return chapter_title_for(self, chapter)
+
+    def _reference_base_for(self, item: ProjectItem) -> Bc3Dataset | None:
+        """Localiza la base asociada a una partida."""
+        return reference_base_for(self, item)
+
+    def _component_dataset(self, item: ProjectItem) -> Bc3Dataset | None:
+        """Selecciona el conjunto de conceptos de una partida."""
+        return component_dataset_for(self, item)
+
+    def _budget_concept_type(self, item: ProjectItem, component_code: str | None = None) -> str:
+        """Determina el tipo visible de una partida o recurso."""
+        return budget_concept_type(self, item, component_code)
+
+    def _report_components(self, item: ProjectItem) -> list[tuple[Concept, float, float]]:
+        """Obtiene los componentes con los precios efectivos."""
+        return report_components(self, item)
+
+    def _format_currency(self, value: float) -> str:
+        """Formatea un importe con la moneda activa."""
+        return format_currency(
+            value, self.report_settings.currency, self.report_settings.custom_currency
+        )
+
+    def _currency_label(self) -> str:
+        """Devuelve la divisa activa."""
+        return currency_label(
+            self.report_settings.currency, self.report_settings.custom_currency
+        )
+
+    def _ensure_chapter(self, chapter: str) -> None:
+        """Añade un capítulo a la lista si todavía no existe."""
+        if chapter and chapter not in self.chapter_order:
+            self.chapter_order.append(chapter)
+
+    def _capture_project_state(self) -> dict:
+        """Copia únicamente los datos persistentes para el historial."""
+        return deepcopy({
+            "items": self.budget_items,
+            "order": self.chapter_order,
+            "titles": self.chapter_titles,
+            "planning": self.planning_state,
+            "invoicing": self.invoicing_state,
+            "rcds": self.rcd_state,
+            "safety_health": self.safety_health_state,
+            "pptp": self.pptp_state,
+            "price_justification": self.price_justification_state,
+            "settings": self.report_settings,
+            "title": self.project_title,
+        })
+
+    def _reset_history(self, saved: bool = True) -> None:
+        """Reinicia el historial después de abrir o guardar un proyecto."""
+        self._undo_history = []
+        self._history_state = self._capture_project_state()
+        self._saved_state = self._history_state if saved else None
+        self.is_dirty = not saved
+        self._update_actions()
+
+    def _mark_dirty(self) -> None:
+        """Registra una edición real y actualiza el estado de guardado."""
+        state = self._capture_project_state()
+        if state != self._history_state:
+            self._undo_history.append(self._history_state)
+            del self._undo_history[:-50]
+            self._history_state = state
+        self.is_dirty = state != self._saved_state
+        self._update_actions()
+
+    def _update_actions(self) -> None:
+        """Actualiza los indicadores de guardado y deshacer."""
+        if hasattr(self, "undo_action"):
+            self.undo_action.setEnabled(bool(self._undo_history))
+        title = f"{self._project_title()} *" if self.is_dirty else self._project_title()
+        self.project_heading.setText(f"Proyecto: {title}")
+        self.setWindowTitle(f"{title} — {APPLICATION_NAME}")
+
+    def undo_last_action(self) -> None:
+        """Restaura el último estado persistente editado."""
+        if not self._undo_history:
+            self._set_status("No hay acciones que deshacer.")
+            return
+        state = deepcopy(self._undo_history.pop())
+        self.budget_items = state["items"]
+        self.chapter_order = state["order"]
+        self.chapter_titles = state["titles"]
+        self.planning_state = state["planning"]
+        self.invoicing_state = state["invoicing"]
+        self.rcd_state = state["rcds"]
+        self.safety_health_state = state["safety_health"]
+        self.pptp_state = state["pptp"]
+        self.price_justification_state = state["price_justification"]
+        self.report_settings = state["settings"]
+        self.project_title = state["title"]
+        self._history_state = state
+        self.is_dirty = state != self._saved_state
+        self.selected_budget_index = None
+        self.selected_chapter = None
+        self.refresh_budget_tree()
+        self._show_item_details(None)
+        self._update_actions()
+        self._set_status("Última acción deshecha.")
+
+    def new_project(self) -> None:
+        """Crea un presupuesto vacío tras solicitar un nombre."""
+        from PySide6.QtWidgets import QInputDialog
+
+        title, accepted = QInputDialog.getText(
+            self, "Nuevo proyecto", "Nombre del proyecto:", text="Nuevo proyecto"
+        )
+        if not accepted or not self._confirm_project_change():
+            return
+        self.budget_dataset = None
+        self.budget_items = []
+        self.chapter_order = []
+        self.chapter_titles = {}
+        self.project_title = title.strip() or "Nuevo proyecto"
+        self.project_path = None
+        self.source_budget_path = None
+        self.planning_state = self.invoicing_state = self.rcd_state = {}
+        self.safety_health_state = self.pptp_state = self.price_justification_state = {}
+        self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
+        self.refresh_budget_tree()
+        self._show_item_details(None)
+        self._reset_history()
+        self._set_status("Nuevo proyecto vacío creado.")
+
+    def import_budget(self) -> None:
+        """Importa un BC3 y crea su JSON asociado."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Selecciona un presupuesto BC3", "", "BC3 (*.bc3)"
+        )
+        if path and self._confirm_project_change():
+            self._load_budget_file(Path(path))
+
+    def _load_budget_file(self, path: Path) -> None:
+        """Carga un BC3 o reabre el JSON asociado si ya existe."""
+        try:
+            dataset = Bc3Dataset(path)
+            project_path = path.with_suffix(".json")
+            if project_path.is_file():
+                if self._load_project_file(project_path, dataset, path):
+                    return
+                return
+            self.budget_dataset = dataset
+            self.source_budget_path = path
+            self.budget_items = dataset.to_project_items()
+            self.chapter_order = list(dict.fromkeys(item.chapter for item in self.budget_items))
+            self.chapter_titles = {
+                code: concept.summary
+                for code, concept in dataset.concepts.items()
+                if is_chapter_code(code) and not code.endswith("##")
+            }
+            self.project_title = path.stem
+            self.project_path = project_path
+            self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
+            for item in self.budget_items:
+                item.set_indirect_costs(self.report_settings.indirect_costs)
+            self.refresh_budget_tree()
+            self._show_item_details(None)
+            self._reset_history(saved=False)
+            if not self._write_project_file(project_path):
+                return
+            self._set_status(f"Presupuesto cargado: {path.name}")
+        except (OSError, UnicodeError, ValueError, TypeError) as exc:
+            QMessageBox.critical(self, "No se pudo cargar el presupuesto", str(exc))
+
+    def load_references(self) -> None:
+        """Selecciona y carga una o varias bases BC3 de referencia."""
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Selecciona bases de precios BC3", "", "BC3 (*.bc3)"
+        )
+        for name in paths:
+            self._load_reference_file(Path(name))
+
+    def remove_reference_bases(self) -> None:
+        """Permite retirar una o varias bases abiertas."""
+        if not self.reference_bases:
+            QMessageBox.information(
+                self, "Sin bases", "No hay bases de referencia cargadas."
+            )
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Quitar base de referencia")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("Selecciona las bases a quitar:"))
+        list_widget = QListWidget()
+        list_widget.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        list_widget.addItems(base.path.name for base in self.reference_bases)
+        layout.addWidget(list_widget)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        removed = {list_widget.row(item) for item in list_widget.selectedItems()}
+        if not removed:
+            return
+        self.reference_bases = [
+            base
+            for index, base in enumerate(self.reference_bases)
+            if index not in removed
+        ]
+        self.refresh_reference_tree()
+        self._set_status(f"Quitadas {len(removed)} base(s) de referencia.")
+
+    def _load_reference_file(self, path: Path) -> None:
+        """Carga una base, sustituyendo cualquier copia previa de la misma ruta."""
+        try:
+            dataset = Bc3Dataset(path)
+        except (OSError, UnicodeError, ValueError, TypeError) as exc:
+            QMessageBox.critical(self, "No se pudo cargar la base", str(exc))
+            return
+        resolved = path.resolve()
+        for index, base in enumerate(self.reference_bases):
+            if base.path.resolve() == resolved:
+                self.reference_bases[index] = dataset
+                break
+        else:
+            self.reference_bases.append(dataset)
+        self.recent_reference_bases = [path.resolve()] + [
+            value for value in self.recent_reference_bases if value != path.resolve()
+        ][:2]
+        self._write_recent_paths(self.recent_reference_bases_path, self.recent_reference_bases)
+        self._refresh_recent_reference_menu()
+        self.refresh_reference_tree()
+        self._set_status(f"BCCA cargada: {path.name}")
+
+    def refresh_reference_tree(self) -> None:
+        """Reconstruye el árbol de referencia respetando el filtro actual."""
+        self.reference_tree.clear()
+        term = self.reference_search.text().strip().lower()
+        grouped = len(self.reference_bases) > 1
+        for base_index, base in enumerate(self.reference_bases):
+            parent: QTreeWidgetItem = self.reference_tree.invisibleRootItem()
+            if grouped:
+                parent = QTreeWidgetItem([base.path.stem, "", "", "", base.path.name])
+                parent.setExpanded(True)
+                self.reference_tree.addTopLevelItem(parent)
+            if term:
+                codes = [
+                    code
+                    for code, concept in base.concepts.items()
+                    if concept.ctype == "0"
+                    and not is_chapter_code(code)
+                    and term in f"{code} {concept.summary}".lower()
+                ][:500]
+                for code in codes:
+                    self._reference_item(parent, base_index, code, None)
+                continue
+            for code in base.root_codes:
+                self._insert_reference_branch(parent, base_index, base, code)
+        label = ", ".join(base.path.stem for base in self.reference_bases) or "Sin cargar"
+        self.reference_heading.setText(f"Base de referencia: {label}")
+
+    def _insert_reference_branch(
+        self, parent: QTreeWidgetItem, base_index: int, base: Bc3Dataset, code: str
+    ) -> QTreeWidgetItem:
+        """Inserta un concepto y sus descendientes de capítulo."""
+        item = self._reference_item(parent, base_index, code, None)
+        if is_chapter_code(code):
+            for child in base.get_children(code):
+                if is_chapter_code(child):
+                    self._insert_reference_branch(item, base_index, base, child)
+                else:
+                    concept = base.concepts.get(child)
+                    if concept and concept.ctype == "0":
+                        self._reference_item(item, base_index, child, None)
+        return item
+
+    def _reference_item(
+        self,
+        parent: QTreeWidgetItem,
+        base_index: int,
+        code: str,
+        quantity: float | None,
+    ) -> QTreeWidgetItem:
+        """Crea una fila de referencia con sus metadatos de selección."""
+        concept = self.reference_bases[base_index].concepts.get(code, Concept(code))
+        item = QTreeWidgetItem(parent)
+        item.setText(0, f"{code} · {concept.summary}".strip(" ·"))
+        item.setText(1, fmt_number(quantity, 4) + f" {concept.unit}".strip() if quantity is not None else concept.unit)
+        item.setText(2, fmt_number(self.reference_bases[base_index].calculate_rendimiento(code), 4)
+                     if concept.ctype == "0" else "")
+        item.setText(3, fmt_number(concept.price))
+        item.setText(4, self.reference_bases[base_index].path.stem)
+        item.setData(0, ROW_KIND, "reference")
+        item.setData(0, ROW_DATA, (base_index, code))
+        if parent is self.reference_tree.invisibleRootItem():
+            self.reference_tree.addTopLevelItem(item)
+        return item
+
+    def on_reference_selection(self) -> None:
+        """Memoriza la base y el código seleccionados."""
+        item = self.reference_tree.currentItem()
+        data = item.data(0, ROW_DATA) if item else None
+        self.selected_reference = tuple(data) if data else None
+
+    def add_selected_reference(self, _item=None, _column=None) -> None:
+        """Añade al presupuesto la partida o capítulo de referencia seleccionado."""
+        if self.selected_reference is None:
+            QMessageBox.information(self, "Sin selección", "Selecciona una partida o capítulo.")
+            return
+        base_index, code = self.selected_reference
+        base = self.reference_bases[base_index]
+        if is_chapter_code(code):
+            self._add_reference_chapter(base, code)
+        else:
+            item = self._build_item_from_reference(base, code)
+            if item is not None:
+                self._insert_item(item)
+                self._mark_dirty()
+                self._set_status(f"Añadida la partida {item.code}.")
+
+    def _build_item_from_reference(self, base: Bc3Dataset, code: str) -> ProjectItem | None:
+        """Construye una partida editable desde una unidad de obra BCCA."""
+        concept = base.concepts.get(code)
+        if concept is None or concept.ctype != "0" or is_chapter_code(code):
+            QMessageBox.warning(self, "Selección no válida", "Selecciona una partida.")
+            return None
+        return ProjectItem(
+            code=code,
+            chapter=base.find_parent_chapter(code),
+            unit=concept.unit,
+            summary=concept.summary,
+            measurement=1.0,
+            unit_price=concept.price,
+            rendimiento=base.calculate_rendimiento(code),
+            source="BCCA",
+            reference_base=base.path.stem,
+            text=concept.text,
+            decomposition=list(concept.children),
+            measurement_lines=[MeasurementLine(comment="Medición inicial", units=1.0)],
+        )
+
+    def _add_reference_chapter(self, base: Bc3Dataset, code: str) -> None:
+        """Añade todas las unidades de obra descendientes del capítulo."""
+        added = 0
+        seen: set[str] = set()
+
+        def collect(chapter: str) -> None:
+            """Recorre capítulos sin repetir códigos."""
+            nonlocal added
+            if chapter in seen:
+                return
+            seen.add(chapter)
+            for child_code in base.get_children(chapter):
+                if is_chapter_code(child_code):
+                    collect(child_code)
+                    continue
+                item = self._build_item_from_reference(base, child_code)
+                if item is not None:
+                    item.chapter = code
+                    item.measurement = 1.0
+                    self._insert_item(item)
+                    added += 1
+
+        collect(code)
+        if added:
+            self._ensure_chapter(code)
+            self.chapter_titles.setdefault(code, base.concepts[code].summary)
+            self.refresh_budget_tree()
+            self._mark_dirty()
+            self._set_status(f"Añadidas {added} partidas de {format_chapter_code(code)}.")
+
+    def refresh_budget_tree(self) -> None:
+        """Reconstruye capítulos y partidas manteniendo la selección visible."""
+        self.budget_tree.clear()
+        term = self.budget_search.text().strip().lower()
+        chapter_items: dict[str, QTreeWidgetItem] = {}
+        total = 0.0
+        for chapter in self.chapter_order:
+            branch = QTreeWidgetItem((
+                format_chapter_code(chapter),
+                CONCEPT_TYPES["chapter"],
+                self._chapter_title(chapter),
+                "",
+                self._format_currency(sum(i.import_total for i in self.budget_items if i.chapter == chapter)),
+            ))
+            branch.setData(0, ROW_KIND, "chapter")
+            branch.setData(0, ROW_DATA, chapter)
+            branch.setExpanded(True)
+            self.budget_tree.addTopLevelItem(branch)
+            chapter_items[chapter] = branch
+        for index, item in enumerate(self.budget_items):
+            self._ensure_chapter(item.chapter)
+            if item.chapter not in chapter_items:
+                branch = QTreeWidgetItem((
+                    format_chapter_code(item.chapter), CONCEPT_TYPES["chapter"],
+                    self._chapter_title(item.chapter), "", "",
+                ))
+                branch.setData(0, ROW_KIND, "chapter")
+                branch.setData(0, ROW_DATA, item.chapter)
+                branch.setExpanded(True)
+                self.budget_tree.addTopLevelItem(branch)
+                chapter_items[item.chapter] = branch
+            matches = not term or term in f"{item.code} {item.summary} {item.chapter}".lower()
+            if not matches:
+                continue
+            row = QTreeWidgetItem(chapter_items[item.chapter], (
+                item.code,
+                CONCEPT_TYPES[self._budget_concept_type(item)],
+                item.summary,
+                f"{fmt_number(item.measurement)} {item.unit}".strip(),
+                self._format_currency(item.import_total),
+            ))
+            row.setData(0, ROW_KIND, "item")
+            row.setData(0, ROW_DATA, index)
+            if item.code.endswith(DUPLICATE_ITEM_MARKER):
+                row.setForeground(0, Qt.GlobalColor.darkYellow)
+            row.setExpanded(False)
+            total += item.import_total
+        if term:
+            for chapter in self.chapter_order:
+                branch = chapter_items.get(chapter)
+                if branch is not None:
+                    branch.setHidden(branch.childCount() == 0)
+            self.summary_label.setText(
+                f"Total presupuesto: {self._format_currency(sum(i.import_total for i in self.budget_items))}"
+            )
+        else:
+            self.summary_label.setText(f"Total presupuesto: {self._format_currency(total)}")
+        self._update_actions()
+
+    def on_budget_selection(self) -> None:
+        """Sincroniza la selección con los paneles de detalle."""
+        item = self.budget_tree.currentItem()
+        if item is None:
+            return
+        kind = item.data(0, ROW_KIND)
+        data = item.data(0, ROW_DATA)
+        if kind == "chapter":
+            self.selected_chapter = str(data)
+            self.selected_budget_index = None
+            self._show_item_details(None)
+        elif kind == "item":
+            self.selected_chapter = None
+            self.selected_budget_index = int(data)
+            self._show_item_details(self.budget_items[self.selected_budget_index])
+
+    def _show_item_details(self, item: ProjectItem | None) -> None:
+        """Actualiza mediciones, descomposición y descripción."""
+        self.measurement_table.blockSignals(True)
+        self.description.blockSignals(True)
+        self.measurement_table.setRowCount(0)
+        self.component_table.setRowCount(0)
+        self.description.clear()
+        if item is None:
+            self.measurement_total.setText("Sin partida seleccionada.")
+            self.description.setEnabled(False)
+        else:
+            self.description.setEnabled(True)
+            self.description.setPlainText(item.text or item.summary)
+            for line in item.measurement_lines:
+                row = self.measurement_table.rowCount()
+                self.measurement_table.insertRow(row)
+                values = (
+                    line.comment, line.units, line.length, line.width,
+                    line.height, line.k, line.partial,
+                )
+                for column, value in enumerate(values):
+                    self.measurement_table.setItem(
+                        row, column, QTableWidgetItem("" if value is None else str(value))
+                    )
+            dataset = self._component_dataset(item)
+            for concept, quantity, price in item.cost_components(dataset, strict=False) + item.indirect_components():
+                row = self.component_table.rowCount()
+                self.component_table.insertRow(row)
+                values = (
+                    concept.code, concept.summary, fmt_number(quantity, 4), fmt_number(price),
+                    self._format_currency(round_half_up(Decimal(str(quantity)) * Decimal(str(price)))),
+                )
+                for column, value in enumerate(values):
+                    self.component_table.setItem(row, column, QTableWidgetItem(value))
+            self.measurement_total.setText(f"Total: {fmt_number(item.measurement, 4)} {item.unit}")
+        self.description.blockSignals(False)
+        self.measurement_table.blockSignals(False)
+
+    def on_description_changed(self) -> None:
+        """Guarda la descripción editada de la partida seleccionada."""
+        if self.selected_budget_index is None:
+            return
+        value = self.description.toPlainText()
+        if self.budget_items[self.selected_budget_index].text != value:
+            self.budget_items[self.selected_budget_index].text = value
+            self._mark_dirty()
+
+    def add_chapter(self) -> None:
+        """Solicita el código y nombre de un capítulo nuevo."""
+        from PySide6.QtWidgets import QInputDialog
+
+        code, accepted = QInputDialog.getText(self, "Añadir capítulo", "Código del capítulo:")
+        if not accepted:
+            return
+        code = code.strip()
+        if code and not code.endswith("#"):
+            code += "#"
+        if not code:
+            QMessageBox.warning(self, "Código requerido", "Indica un código para el capítulo.")
+            return
+        if code in self.chapter_order:
+            QMessageBox.warning(self, "Capítulo existente", "Ese capítulo ya existe.")
+            return
+        title, accepted = QInputDialog.getText(
+            self, "Añadir capítulo", "Nombre del capítulo:", text=format_chapter_code(code)
+        )
+        if not accepted or not title.strip():
+            return
+        self.chapter_order.append(code)
+        self.chapter_titles[code] = title.strip()
+        self.refresh_budget_tree()
+        self._mark_dirty()
+
+    def add_manual_item(self) -> None:
+        """Abre el formulario para una partida manual."""
+        editor = ItemEditor(self, chapters=tuple(self.chapter_order))
+        if editor.exec() != QDialog.DialogCode.Accepted:
+            return
+        values = editor.values()
+        if not values["chapter"] or not values["code"] or not values["summary"]:
+            QMessageBox.warning(self, "Datos requeridos", "Indica capítulo, código y resumen.")
+            return
+        item = ProjectItem(
+            code=str(values["code"]),
+            chapter=str(values["chapter"]),
+            unit=str(values["unit"]),
+            summary=str(values["summary"]),
+            measurement=float(values["measurement"]),
+            unit_price=float(values["price"]),
+            rendimiento=float(values["rendimiento"]),
+            source="manual",
+        )
+        self._insert_item(item)
+        self._mark_dirty()
+
+    def _insert_item(self, item: ProjectItem, position: int | None = None) -> None:
+        """Inserta la partida en memoria y refresca su selección."""
+        self._ensure_chapter(item.chapter)
+        if position is None:
+            positions = [index for index, current in enumerate(self.budget_items) if current.chapter == item.chapter]
+            position = positions[-1] + 1 if positions else len(self.budget_items)
+        self.budget_items.insert(position, item)
+        self.selected_budget_index = position
+        self.selected_chapter = None
+        self.refresh_budget_tree()
+        self._select_budget_item(position)
+        self._show_item_details(item)
+
+    def _select_budget_item(self, index: int) -> None:
+        """Selecciona una fila por el índice estable de la lista."""
+        iterator = QTreeWidgetItemIterator(self.budget_tree)
+        while iterator.value():
+            row = iterator.value()
+            if row.data(0, ROW_KIND) == "item" and row.data(0, ROW_DATA) == index:
+                self.budget_tree.setCurrentItem(row)
+                break
+            iterator += 1
+
+    def edit_selection(self, *_args) -> None:
+        """Edita el nombre del capítulo o los datos de la partida."""
+        if self.selected_chapter is not None:
+            self.rename_chapter()
+            return
+        if self.selected_budget_index is None:
+            QMessageBox.information(self, "Sin selección", "Selecciona una partida.")
+            return
+        item = self.budget_items[self.selected_budget_index]
+        editor = ItemEditor(self, item, tuple(self.chapter_order))
+        if editor.exec() != QDialog.DialogCode.Accepted:
+            return
+        values = editor.values()
+        if not values["chapter"] or not values["code"] or not values["summary"]:
+            QMessageBox.warning(self, "Datos requeridos", "Indica capítulo, código y resumen.")
+            return
+        item.chapter = str(values["chapter"])
+        self._ensure_chapter(item.chapter)
+        item.code = str(values["code"])
+        item.unit = str(values["unit"])
+        item.summary = str(values["summary"])
+        item.measurement = float(values["measurement"])
+        item.rendimiento = float(values["rendimiento"])
+        item.set_indirect_costs(self.report_settings.indirect_costs, float(values["price"]))
+        if item.measurement_lines:
+            item.recalculate_measurement()
+        self.refresh_budget_tree()
+        self._show_item_details(item)
+        self._mark_dirty()
+
+    def rename_chapter(self) -> None:
+        """Cambia el código y título del capítulo seleccionado."""
+        from PySide6.QtWidgets import QInputDialog
+
+        chapter = self.selected_chapter
+        if chapter is None:
+            return
+        code, accepted = QInputDialog.getText(
+            self, "Editar capítulo", "Código:", text=chapter
+        )
+        if not accepted or not code.strip():
+            return
+        code = code.strip()
+        if not code.endswith("#"):
+            code += "#"
+        if code != chapter and code in self.chapter_order:
+            QMessageBox.warning(self, "Capítulo existente", "Ya existe ese código.")
+            return
+        title, accepted = QInputDialog.getText(
+            self, "Editar capítulo", "Nombre:", text=self._chapter_title(chapter)
+        )
+        if not accepted or not title.strip():
+            return
+        position = self.chapter_order.index(chapter)
+        self.chapter_order[position] = code
+        for item in self.budget_items:
+            if item.chapter == chapter:
+                item.chapter = code
+        self.chapter_titles.pop(chapter, None)
+        self.chapter_titles[code] = title.strip()
+        self.selected_chapter = code
+        self.refresh_budget_tree()
+        self._mark_dirty()
+
+    def delete_selection(self) -> None:
+        """Elimina la partida o capítulo seleccionado."""
+        if self.selected_chapter is not None:
+            chapter = self.selected_chapter
+            answer = QMessageBox.question(
+                self, "Eliminar capítulo",
+                f"¿Eliminar {format_chapter_code(chapter)} y todas sus partidas?",
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            self.budget_items = [item for item in self.budget_items if item.chapter != chapter]
+            self.chapter_order.remove(chapter)
+            self.chapter_titles.pop(chapter, None)
+            self.selected_chapter = None
+        elif self.selected_budget_index is not None:
+            item = self.budget_items[self.selected_budget_index]
+            answer = QMessageBox.question(
+                self, "Eliminar partida", f"¿Eliminar {item.code} — {item.summary}?"
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            del self.budget_items[self.selected_budget_index]
+            self.selected_budget_index = None
+        else:
+            QMessageBox.information(self, "Sin selección", "Selecciona una partida o capítulo.")
+            return
+        self.refresh_budget_tree()
+        self._show_item_details(None)
+        self._mark_dirty()
+
+    def duplicate_selection(self) -> None:
+        """Duplica una partida y la marca para revisión manual."""
+        if self.selected_budget_index is None:
+            QMessageBox.information(self, "Sin selección", "Selecciona una partida.")
+            return
+        source = self.budget_items[self.selected_budget_index]
+        duplicate = deepcopy(source)
+        existing = {item.code for item in self.budget_items}
+        duplicate.code = f"{source.code}{DUPLICATE_ITEM_MARKER}"
+        while duplicate.code in existing:
+            duplicate.code += DUPLICATE_ITEM_MARKER
+        duplicate.planned_amounts = {}
+        duplicate.certifications = {}
+        duplicate.certification_plans = {}
+        duplicate.certification_justifications = {}
+        self._insert_item(duplicate, self.selected_budget_index + 1)
+        self._mark_dirty()
+        QMessageBox.warning(
+            self, "Revisar partida duplicada",
+            f"La copia {duplicate.code} requiere revisión y edición manual."
+        )
+
+    def move_selection(self, direction: int) -> None:
+        """Sube o baja la partida o capítulo seleccionado."""
+        if self.selected_chapter is not None:
+            index = self.chapter_order.index(self.selected_chapter)
+            target = index + direction
+            if 0 <= target < len(self.chapter_order):
+                self.chapter_order[index], self.chapter_order[target] = (
+                    self.chapter_order[target], self.chapter_order[index],
+                )
+                self.budget_items = [
+                    item
+                    for chapter in self.chapter_order
+                    for item in self.budget_items
+                    if item.chapter == chapter
+                ]
+        elif self.selected_budget_index is not None:
+            index = self.selected_budget_index
+            chapter = self.budget_items[index].chapter
+            indices = [i for i, item in enumerate(self.budget_items) if item.chapter == chapter]
+            position = indices.index(index)
+            target_position = position + direction
+            if 0 <= target_position < len(indices):
+                target = indices[target_position]
+                self.budget_items[index], self.budget_items[target] = (
+                    self.budget_items[target], self.budget_items[index]
+                )
+                self.selected_budget_index = target
+            else:
+                return
+        else:
+            return
+        self.refresh_budget_tree()
+        self._mark_dirty()
+
+    def toggle_budget_expansion(self) -> None:
+        """Expande o contrae todas las ramas visibles del presupuesto."""
+        expand = not self._all_branches_expanded()
+        for index in range(self.budget_tree.topLevelItemCount()):
+            branch = self.budget_tree.topLevelItem(index)
+            if branch.childCount():
+                branch.setExpanded(expand)
+
+    def _all_branches_expanded(self) -> bool:
+        """Comprueba si todos los capítulos están desplegados."""
+        branches = [
+            self.budget_tree.topLevelItem(index)
+            for index in range(self.budget_tree.topLevelItemCount())
+            if self.budget_tree.topLevelItem(index).childCount()
+        ]
+        return bool(branches) and all(branch.isExpanded() for branch in branches)
+
+    def add_measurement(self) -> None:
+        """Añade una línea de medición a la partida seleccionada."""
+        self._edit_measurement(None)
+
+    def edit_measurement(self, *_args) -> None:
+        """Edita la línea de medición activa."""
+        row = self.measurement_table.currentRow()
+        if row < 0:
+            QMessageBox.information(self, "Sin selección", "Selecciona una medición.")
+            return
+        self._edit_measurement(row)
+
+    def _edit_measurement(self, row: int | None) -> None:
+        """Muestra el formulario de una medición nueva o existente."""
+        if self.selected_budget_index is None:
+            QMessageBox.information(self, "Sin selección", "Selecciona una partida.")
+            return
+        item = self.budget_items[self.selected_budget_index]
+        line = item.measurement_lines[row] if row is not None else None
+        editor = MeasurementEditor(self, line)
+        if editor.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            result = editor.result_line()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Dato inválido", str(exc))
+            return
+        if row is None:
+            item.measurement_lines.append(result)
+        else:
+            item.measurement_lines[row] = result
+        item.recalculate_measurement()
+        self.refresh_budget_tree()
+        self._show_item_details(item)
+        self._mark_dirty()
+
+    def delete_measurement(self) -> None:
+        """Elimina la línea de medición seleccionada."""
+        if self.selected_budget_index is None:
+            return
+        row = self.measurement_table.currentRow()
+        if row < 0:
+            return
+        answer = QMessageBox.question(self, "Eliminar medición", "¿Eliminar esta línea?")
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        item = self.budget_items[self.selected_budget_index]
+        del item.measurement_lines[row]
+        if item.measurement_lines:
+            item.recalculate_measurement()
+        self._show_item_details(item)
+        self.refresh_budget_tree()
+        self._mark_dirty()
+
+    def open_project(self) -> None:
+        """Selecciona y abre un proyecto JSON."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Abrir proyecto guardado", "", "Proyecto JSON (*.json)"
+        )
+        if path and self._confirm_project_change():
+            self._load_project_file(Path(path))
+
+    def _load_project_file(
+        self,
+        project_path: Path,
+        budget_dataset: Bc3Dataset | None = None,
+        source_budget_path: Path | None = None,
+    ) -> bool:
+        """Valida y restaura un proyecto JSON."""
+        try:
+            document = read_project(
+                project_path,
+                self.default_report_settings,
+                budget_dataset=budget_dataset,
+                source_budget_path=source_budget_path,
+            )
+        except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            QMessageBox.critical(
+                self, "No se pudo abrir el proyecto", f"El archivo no es válido:\n{exc}"
+            )
+            return False
+        self.budget_dataset = document.budget_dataset
+        self.budget_items = document.items
+        self.chapter_order = document.chapter_order
+        self.chapter_titles = document.chapter_titles
+        self.report_settings = document.settings
+        self.project_path = project_path
+        self.source_budget_path = document.source_budget_path
+        self.project_title = document.title
+        self.planning_state = document.planning
+        self.invoicing_state = document.invoicing
+        self.rcd_state = document.rcds
+        self.safety_health_state = document.safety_health
+        self.pptp_state = document.pptp
+        self.price_justification_state = document.price_justification
+        self.selected_budget_index = None
+        self.selected_chapter = None
+        self.refresh_budget_tree()
+        self._show_item_details(None)
+        self._reset_history()
+        self._remember_recent_project(project_path)
+        if document.missing_source is not None:
+            QMessageBox.warning(
+                self,
+                "BC3 de origen no encontrado",
+                f"El proyecto se ha abierto, pero no se encuentra:\n{document.missing_source}",
+            )
+        self._set_status(f"Proyecto abierto: {project_path.name}")
+        return True
+
+    def save_project(self) -> bool:
+        """Guarda en la ruta actual o solicita una nueva."""
+        if self.project_path is None:
+            return self.save_project_as()
+        return self._write_project_file(self.project_path)
+
+    def save_project_as(self) -> bool:
+        """Solicita una ruta para guardar el proyecto."""
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Guardar proyecto", self._project_title(), "Proyecto JSON (*.json)"
+        )
+        if not path:
+            return False
+        target = Path(path)
+        if target.suffix.lower() != ".json":
+            target = target.with_suffix(".json")
+        return self._write_project_file(target)
+
+    def _project_payload(self) -> dict:
+        """Construye el formato JSON compatible con el estado Tk."""
+        return build_project_payload(self)
+
+    def _write_project_file(self, path: Path) -> bool:
+        """Escribe el proyecto mediante sustitución atómica."""
+        try:
+            write_project(path, self._project_payload())
+        except (OSError, TypeError, ValueError) as exc:
+            QMessageBox.critical(self, "No se pudo guardar el proyecto", str(exc))
+            return False
+        self.project_path = path
+        self._saved_state = deepcopy(self._history_state)
+        self.is_dirty = False
+        self._update_actions()
+        self._remember_recent_project(path)
+        self._set_status(f"Proyecto guardado: {path}")
+        return True
+
+    def _confirm_project_change(self) -> bool:
+        """Ofrece guardar antes de sustituir o cerrar el proyecto actual."""
+        if not self.is_dirty:
+            return True
+        answer = QMessageBox.question(
+            self,
+            "Cambios sin guardar",
+            "Hay cambios sin guardar. ¿Quieres guardarlos?",
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Save,
+        )
+        if answer == QMessageBox.StandardButton.Cancel:
+            return False
+        return answer != QMessageBox.StandardButton.Save or self.save_project()
+
+    def _remember_recent_project(self, path: Path) -> None:
+        """Añade el proyecto al historial persistente."""
+        resolved = path.resolve()
+        self.recent_projects = [resolved] + [
+            previous for previous in self.recent_projects if previous != resolved
+        ][:4]
+        self._write_recent_paths(self.recent_projects_path, self.recent_projects)
+        self._refresh_recent_menu()
+
+    def _refresh_recent_menu(self) -> None:
+        """Reconstruye el menú de proyectos recientes."""
+        menu = self.recent_menu
+        menu.clear()
+        if not self.recent_projects:
+            menu.addAction("(No hay proyectos recientes)").setEnabled(False)
+            return
+        for path in self.recent_projects:
+            if path.is_file():
+                action = menu.addAction(str(path))
+                action.triggered.connect(
+                    lambda checked=False, selected=path: self._open_recent_project(selected)
+                )
+
+    def _refresh_recent_reference_menu(self) -> None:
+        """Reconstruye las bases de referencia recientes del menú Archivo."""
+        menu = self.recent_reference_menu
+        menu.clear()
+        if not self.recent_reference_bases:
+            menu.addAction("(No hay bases de referencia recientes)").setEnabled(False)
+            return
+        for path in self.recent_reference_bases:
+            if path.is_file():
+                action = menu.addAction(str(path))
+                action.triggered.connect(
+                    lambda checked=False, selected=path: self._load_reference_file(selected)
+                )
+
+    def _open_recent_project(self, path: Path) -> None:
+        """Abre un proyecto reciente tras proteger cambios pendientes."""
+        if self._confirm_project_change():
+            self._load_project_file(path)
+
+    def _read_recent_paths(self, path: Path, maximum: int) -> list[Path]:
+        """Lee rutas absolutas válidas y limita el historial."""
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, list):
+                raise ValueError("Se esperaba una lista de rutas.")
+            return list(dict.fromkeys(Path(value) for value in data if isinstance(value, str)))[:maximum]
+        except FileNotFoundError:
+            return []
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+            QMessageBox.warning(self, "Historial", f"No se pudo leer el historial:\n{exc}")
+            return []
+
+    @staticmethod
+    def _write_recent_paths(path: Path, values: list[Path]) -> None:
+        """Guarda un historial normalizado sin interrumpir la edición."""
+        try:
+            path.write_text(
+                json.dumps([str(value) for value in values], ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            QApplication.instance().beep()
+            print(f"No se pudo guardar el historial {path}: {exc}", file=sys.stderr)
+
+    def _read_report_settings(self) -> ReportSettings:
+        """Lee la configuración común de informes."""
+        try:
+            return ReportSettings.from_dict(
+                json.loads(self.report_settings_path.read_text(encoding="utf-8"))
+            )
+        except FileNotFoundError:
+            return ReportSettings()
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+            QMessageBox.warning(self, "Configuración", str(exc))
+            return ReportSettings()
+
+    def _read_language_preference(self) -> str:
+        """Lee el idioma global conservando español ante datos inválidos."""
+        try:
+            data = json.loads(self.preferences_path.read_text(encoding="utf-8"))
+            code = data.get("language") if isinstance(data, dict) else None
+            if code not in LANGUAGES:
+                raise ValueError("El idioma guardado no es válido.")
+            return str(code)
+        except FileNotFoundError:
+            return "es"
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+            QMessageBox.warning(
+                self,
+                "Preferencias de idioma",
+                f"No se pudieron leer las preferencias; se usará español:\n{exc}",
+            )
+            return "es"
+
+    def _read_theme_preference(self) -> str:
+        """Lee el tema global y usa Sistema ante datos ausentes o inválidos."""
+        try:
+            data = json.loads(self.preferences_path.read_text(encoding="utf-8"))
+            theme = data.get("theme") if isinstance(data, dict) else None
+            return theme if theme in THEMES else "system"
+        except (FileNotFoundError, OSError, UnicodeError, json.JSONDecodeError):
+            return "system"
+
+    def _save_language_preference(self, language: str) -> bool:
+        """Guarda el idioma global de forma atómica."""
+        if language not in LANGUAGES:
+            return False
+        return self._save_global_preferences(language=language)
+
+    def _save_theme_preference(self, theme: str) -> bool:
+        """Guarda y aplica inmediatamente el tema global."""
+        if theme not in THEMES:
+            return False
+        if not self._save_global_preferences(theme=theme):
+            return False
+        apply_theme(QApplication.instance(), theme)
+        self.theme = theme
+        self._set_status("Tema de la interfaz cambiado.")
+        return True
+
+    def _save_global_preferences(
+        self, *, language: str | None = None, theme: str | None = None
+    ) -> bool:
+        """Actualiza preferencias globales sin borrar las demás claves."""
+        try:
+            current = json.loads(self.preferences_path.read_text(encoding="utf-8"))
+            if not isinstance(current, dict):
+                current = {}
+        except (FileNotFoundError, OSError, UnicodeError, json.JSONDecodeError):
+            current = {}
+        if language is not None:
+            current["language"] = language
+        if theme is not None:
+            current["theme"] = theme
+        temporary: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=self.preferences_path.parent,
+                suffix=".tmp",
+                delete=False,
+            ) as output:
+                temporary = Path(output.name)
+                json.dump(current, output, ensure_ascii=False, indent=2)
+                output.write("\n")
+            os.replace(temporary, self.preferences_path)
+            temporary = None
+        except OSError as exc:
+            QMessageBox.critical(self, "No se pudo guardar la preferencia", str(exc))
+            return False
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+        if language is not None:
+            self.language = language
+            set_language(language)
+            self._set_status("Idioma cambiado.")
+        return True
+
+    def open_report_settings(self) -> None:
+        """Abre la configuración general con sus pestañas completas."""
+        try:
+            dialog = SettingsDialog(
+                self,
+                self.report_settings,
+                self._project_title(),
+                self.language,
+                self._save_language_preference,
+                self.theme,
+                self._save_theme_preference,
+            )
+        except ValueError as exc:
+            QMessageBox.critical(self, "Configuración", str(exc))
+            return
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        if not self._save_report_settings(dialog.values()):
+            self.open_report_settings()
+
+    def _save_report_settings(self, data: dict) -> bool:
+        """Valida, persiste y aplica la configuración del proyecto."""
+        try:
+            title = data.get("project_title")
+            if not isinstance(title, str) or not title.strip():
+                raise ValueError("El título del proyecto no puede estar vacío.")
+            settings = ReportSettings.from_dict({
+                key: value for key, value in data.items() if key != "project_title"
+            })
+            self.report_settings_path.write_text(
+                json.dumps(settings.to_dict(), ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except (OSError, TypeError, ValueError) as exc:
+            QMessageBox.critical(
+                self, "No se pudo guardar la configuración", str(exc)
+            )
+            return False
+        self.default_report_settings = settings
+        self.report_settings = ReportSettings.from_dict(settings.to_dict())
+        self.project_title = title.strip()
+        for item in self.budget_items:
+            item.set_indirect_costs(settings.indirect_costs)
+        self.refresh_budget_tree()
+        selected = self.selected_budget_index
+        self._show_item_details(
+            self.budget_items[selected] if selected is not None else None
+        )
+        self._mark_dirty()
+        if self.project_path is not None and not self._write_project_file(self.project_path):
+            return False
+        self._set_status("Configuración de informes guardada.")
+        return True
+
+    def preview_budget(self) -> None:
+        """Genera una vista HTML y la abre en el navegador."""
+        if not self.budget_items:
+            QMessageBox.information(self, "Presupuesto vacío", "No hay partidas que mostrar.")
+            return
+        rows = "".join(
+            f"<tr><td>{item.code}</td><td>{item.unit}</td><td>{item.summary}</td>"
+            f"<td class='num'>{fmt_number(item.measurement)}</td>"
+            f"<td class='num'>{fmt_number(item.unit_price)}</td>"
+            f"<td class='num'>{self._format_currency(item.import_total)}</td></tr>"
+            for item in self.budget_items
+        )
+        total = self._format_currency(sum(item.import_total for item in self.budget_items))
+        target = Path(tempfile.gettempdir()) / "presupuesto_bc3_qt.html"
+        target.write_text(
+            "<html><meta charset='utf-8'><style>body{font:12px sans-serif}table{"
+            "border-collapse:collapse;width:100%}td,th{border:1px solid #aaa;padding:6px}"
+            ".num{text-align:right}</style><h1>Presupuesto</h1><table><tr><th>Código</th>"
+            "<th>Ud</th><th>Descripción</th><th>Medición</th><th>Precio</th><th>Importe</th>"
+            f"</tr>{rows}<tr><th colspan='5'>TOTAL</th><td class='num'>{total}</td></tr>"
+            "</table></html>",
+            encoding="utf-8",
+        )
+        webbrowser.open(target.as_uri())
+        self._set_status("Vista previa abierta en el navegador.")
+
+    def export_budget_ods(self) -> None:
+        """Exporta presupuesto y mediciones a una hoja ODS."""
+        if not self.budget_items:
+            QMessageBox.information(self, "Presupuesto vacío", "No hay partidas que exportar.")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Exportar presupuesto", "presupuesto.ods", "ODS (*.ods)"
+        )
+        if not path:
+            return
+        try:
+            write_ods(Path(path), [
+                {
+                    "name": "Presupuesto",
+                    "rows": [
+                        ["Capítulo", "Código", "Ud", "Descripción", "Medición", "Precio", "Importe"],
+                        *[
+                            [
+                                format_chapter_code(item.chapter), item.code, item.unit,
+                                item.text or item.summary, item.measurement,
+                                item.unit_price, item.import_total,
+                            ]
+                            for item in self.budget_items
+                        ],
+                    ],
+                    "header": True,
+                    "number_formats": {4: 4, 5: 2, 6: 2},
+                },
+                {
+                    "name": "Mediciones",
+                    "rows": [
+                        ["Código", "Comentario", "Uds", "Largo", "Ancho", "Alto", "K", "Parcial"],
+                        *[
+                            [
+                                item.code, line.comment, line.units, line.length,
+                                line.width, line.height, line.k, line.partial,
+                            ]
+                            for item in self.budget_items
+                            for line in item.measurement_lines
+                        ],
+                    ],
+                    "header": True,
+                    "number_formats": {2: 4, 3: 4, 4: 4, 5: 4, 6: 4, 7: 4},
+                },
+            ])
+        except (OSError, ValueError, ImportError) as exc:
+            QMessageBox.critical(self, "No se pudo exportar", str(exc))
+            return
+        self._set_status(f"Presupuesto exportado a {path}")
+
+    def export_measurements_csv(self) -> None:
+        """Exporta las mediciones editables a CSV."""
+        if not self.budget_items:
+            QMessageBox.information(self, "Presupuesto vacío", "No hay mediciones que exportar.")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Exportar mediciones", "mediciones.csv", "CSV (*.csv)"
+        )
+        if not path:
+            return
+        try:
+            with Path(path).open("w", encoding="utf-8-sig", newline="") as output:
+                import csv
+
+                writer = csv.writer(output, delimiter=";")
+                writer.writerow(("Código", "Comentario", "Uds", "Longitud", "Anchura", "Altura", "K", "Parcial"))
+                for item in self.budget_items:
+                    for line in item.measurement_lines:
+                        writer.writerow((
+                            item.code, line.comment, line.units, line.length,
+                            line.width, line.height, line.k, line.partial,
+                        ))
+        except OSError as exc:
+            QMessageBox.critical(self, "No se pudo exportar", str(exc))
+            return
+        self._set_status(f"Mediciones exportadas a {path}")
+
+    def generate_report(self, report: str) -> None:
+        """Genera uno de los informes PDF existentes."""
+        if not self.budget_items:
+            QMessageBox.information(self, "Presupuesto vacío", "No hay partidas para informar.")
+            return
+        is_odt = self.report_settings.output_format == "odt"
+        extension = ".odt" if is_odt else ".pdf"
+        file_filter = "ODT (*.odt)" if is_odt else "PDF (*.pdf)"
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            f"Guardar informe: {report}",
+            f"{report}{extension}",
+            file_filter,
+        )
+        if not path:
+            return
+        target = Path(path)
+        if target.suffix.lower() != extension:
+            target = target.with_suffix(extension)
+        try:
+            if is_odt:
+                write_report_odt(self, report, target)
+            else:
+                write_pdf(self, report, target)
+        except (ImportError, OSError, ValueError) as exc:
+            QMessageBox.critical(self, "No se pudo generar el informe", str(exc))
+            return
+        self._set_status(f"Informe guardado: {target}")
+        try:
+            os.startfile(str(target))  # type: ignore[attr-defined]
+        except OSError:
+            pass
+
+    def open_repository(self) -> None:
+        """Abre el repositorio del proyecto en el navegador."""
+        webbrowser.open("https://github.com/mcobosb/gestor-de-proyectos")
+
+    def show_about_qt(self) -> None:
+        """Muestra el diálogo de información de PySide6."""
+        QMessageBox.aboutQt(self, APPLICATION_NAME)
