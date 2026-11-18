@@ -42,7 +42,7 @@ from PySide6.QtWidgets import (
 
 from budget_qt_dialogs import ItemEditor, MeasurementEditor
 from PySide6.QtWidgets import QTreeWidgetItemIterator
-from app_paths import user_data_directory
+from app_paths import application_directory, user_data_directory
 from budget_config import (
     APPLICATION_NAME, APPLICATION_RELEASE_DATE, APPLICATION_VERSION,
     CONCEPT_TYPES, DUPLICATE_ITEM_MARKER,
@@ -76,6 +76,7 @@ from budget_qt_theme import THEMES, apply_theme
 from localization import LANGUAGES, set_language
 from odt_reports import write_report_odt
 from ods_export import write_ods
+from tool_loader import discover_tools
 
 
 ROW_KIND = Qt.ItemDataRole.UserRole
@@ -102,6 +103,7 @@ class BudgetMainWindow(QMainWindow):
         self.safety_health_state: dict = {}
         self.pptp_state: dict = {}
         self.price_justification_state: dict = {}
+        self._project_windows: list[QDialog] = []
         self.project_title: str | None = None
         self.project_path: Path | None = None
         self.source_budget_path: Path | None = None
@@ -118,11 +120,24 @@ class BudgetMainWindow(QMainWindow):
         self.recent_reference_bases = self._read_recent_paths(self.recent_reference_bases_path, 3)
         self.default_report_settings = self._read_report_settings()
         self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
+        self.loaded_tools, tool_errors = discover_tools(
+            application_directory(__file__) / "tools"
+        )
+        self.tools_by_name = {
+            tool.name: tool for tool in self.loaded_tools if tool.open_qt is not None
+        }
         self.language = self._read_language_preference()
         self.theme = self._read_theme_preference()
         set_language(self.language)
         apply_theme(QApplication.instance(), self.theme)
         self._build_ui()
+        if tool_errors:
+            QMessageBox.warning(
+                self,
+                "Herramientas",
+                "No se pudieron cargar algunas herramientas:\n"
+                + "\n".join(tool_errors),
+            )
         self._reset_history()
         self.resize(1480, 860)
         self.setMinimumSize(1100, 650)
@@ -176,8 +191,14 @@ class BudgetMainWindow(QMainWindow):
             reports_menu.addAction(report, lambda checked=False, name=report: self.generate_report(name))
 
         tools_menu = menu.addMenu("Herramientas")
-        pending = tools_menu.addAction("Las herramientas migrarán después de la ventana principal")
-        pending.setEnabled(False)
+        for tool in sorted(
+            self.tools_by_name.values(),
+            key=lambda entry: (entry.order, entry.label.casefold()),
+        ):
+            action = tools_menu.addAction(tool.label)
+            action.triggered.connect(
+                lambda checked=False, name=tool.name: self._open_tool(name)
+            )
 
         info_menu = menu.addMenu("Información")
         info_menu.addAction(APPLICATION_NAME).setEnabled(False)
@@ -316,7 +337,10 @@ class BudgetMainWindow(QMainWindow):
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """Protege los cambios pendientes antes de cerrar la aplicación."""
-        if not self._confirm_project_change():
+        if (
+            not self._confirm_project_change()
+            or not self._dismiss_project_windows()
+        ):
             event.ignore()
             return
         event.accept()
@@ -443,6 +467,8 @@ class BudgetMainWindow(QMainWindow):
         )
         if not accepted or not self._confirm_project_change():
             return
+        if not self._dismiss_project_windows():
+            return
         self.budget_dataset = None
         self.budget_items = []
         self.chapter_order = []
@@ -474,6 +500,7 @@ class BudgetMainWindow(QMainWindow):
             if project_path.is_file():
                 if self._load_project_file(project_path, dataset, path):
                     return
+            if not self._dismiss_project_windows():
                 return
             self.budget_dataset = dataset
             self.source_budget_path = path
@@ -1129,6 +1156,8 @@ class BudgetMainWindow(QMainWindow):
         source_budget_path: Path | None = None,
     ) -> bool:
         """Valida y restaura un proyecto JSON."""
+        from tools.price_justification import restore_project_state
+
         try:
             document = read_project(
                 project_path,
@@ -1136,10 +1165,15 @@ class BudgetMainWindow(QMainWindow):
                 budget_dataset=budget_dataset,
                 source_budget_path=source_budget_path,
             )
+            price_justification_state = restore_project_state(
+                document.price_justification
+            )
         except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
             QMessageBox.critical(
                 self, "No se pudo abrir el proyecto", f"El archivo no es válido:\n{exc}"
             )
+            return False
+        if not self._dismiss_project_windows():
             return False
         self.budget_dataset = document.budget_dataset
         self.budget_items = document.items
@@ -1154,7 +1188,7 @@ class BudgetMainWindow(QMainWindow):
         self.rcd_state = document.rcds
         self.safety_health_state = document.safety_health
         self.pptp_state = document.pptp
-        self.price_justification_state = document.price_justification
+        self.price_justification_state = price_justification_state
         self.selected_budget_index = None
         self.selected_chapter = None
         self.refresh_budget_tree()
@@ -1188,12 +1222,55 @@ class BudgetMainWindow(QMainWindow):
             target = target.with_suffix(".json")
         return self._write_project_file(target)
 
+    def _open_tool(self, name: str) -> None:
+        """Ejecuta la versión Qt de una herramienta descubierta."""
+        tool = self.tools_by_name.get(name)
+        if tool is None or tool.open_qt is None:
+            QMessageBox.warning(self, "Herramientas", "La herramienta no está disponible.")
+            return
+        try:
+            tool.open_qt(self)
+        except (ImportError, OSError, ValueError, TypeError, AttributeError) as exc:
+            QMessageBox.critical(
+                self,
+                tool.label,
+                f"No se pudo abrir la herramienta:\n{exc}",
+            )
+
+    def _collect_tool_states(self) -> bool:
+        """Valida herramientas abiertas antes de persistir el proyecto."""
+        for tool in self.tools_by_name.values():
+            if tool.before_save_qt is None:
+                continue
+            try:
+                tool.before_save_qt(self)
+            except (TypeError, ValueError) as exc:
+                QMessageBox.critical(
+                    self,
+                    tool.label,
+                    f"No se pudo guardar el proyecto:\n{exc}",
+                )
+                return False
+        return True
+
+    def _dismiss_project_windows(self) -> bool:
+        """Cierra herramientas vinculadas al proyecto antes de sustituirlo."""
+        for window in list(self._project_windows):
+            if window.isVisible():
+                window.close()
+            if window.isVisible():
+                return False
+        self._project_windows.clear()
+        return True
+
     def _project_payload(self) -> dict:
         """Construye el formato JSON compatible con el estado Tk."""
         return build_project_payload(self)
 
     def _write_project_file(self, path: Path) -> bool:
         """Escribe el proyecto mediante sustitución atómica."""
+        if not self._collect_tool_states():
+            return False
         try:
             write_project(path, self._project_payload())
         except (OSError, TypeError, ValueError) as exc:

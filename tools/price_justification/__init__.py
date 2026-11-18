@@ -34,6 +34,40 @@ def before_project_save(app) -> None:
     app.price_justification_state = validate_state(state)
 
 
+def open_tool_qt(app) -> None:
+    """Abre o enfoca la ventana Qt de justificación de precios."""
+    from .qt_window import PriceJustificationWindowQt
+
+    if not app.budget_items:
+        from PySide6.QtWidgets import QMessageBox
+
+        QMessageBox.information(
+            app,
+            TITLE,
+            "Añade partidas al proyecto antes de justificar sus precios.",
+        )
+        return
+    for window in getattr(app, "_project_windows", []):
+        if isinstance(window, PriceJustificationWindowQt) and window.isVisible():
+            window.raise_()
+            window.activateWindow()
+            return
+    window = PriceJustificationWindowQt(app)
+    app._project_windows.append(window)
+    window.show()
+
+
+def before_project_save_qt(app) -> None:
+    """Recoge el formulario Qt antes de serializar el proyecto."""
+    from .qt_window import PriceJustificationWindowQt
+
+    state = app.price_justification_state
+    for window in getattr(app, "_project_windows", []):
+        if isinstance(window, PriceJustificationWindowQt) and window.isVisible():
+            state = window.collect()
+    app.price_justification_state = validate_state(state)
+
+
 def open_tool(app) -> None:
     """Abre una única ventana vinculada al proyecto presupuestario actual."""
     if not app.budget_items:

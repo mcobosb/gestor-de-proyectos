@@ -27,6 +27,8 @@ class Tool:
     available: Callable[[BudgetApp], bool] | None = None
     restore: Callable[[dict], dict] | None = None
     before_save: Callable[[BudgetApp], None] | None = None
+    open_qt: Callable | None = None
+    before_save_qt: Callable | None = None
 
 
 def _optional_hook(module: ModuleType, name: str) -> Callable | None:
@@ -92,6 +94,8 @@ def discover_tools(directory: Path) -> tuple[list[Tool], list[str]]:
                 _optional_hook(module, "is_available"),
                 _optional_hook(module, "restore_project_state"),
                 _optional_hook(module, "before_project_save"),
+                _optional_hook(module, "open_tool_qt"),
+                _optional_hook(module, "before_project_save_qt"),
             ))
         except (ImportError, OSError, SyntaxError, ValueError, TypeError, AttributeError, RuntimeError, SystemExit) as exc:
             errors.append(f"{candidate.name}: {type(exc).__name__}: {exc}")

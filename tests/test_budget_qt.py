@@ -11,12 +11,14 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QDialogButtonBox
+from PySide6.QtWidgets import QApplication, QDialogButtonBox, QMessageBox
 
 from budget_core import Bc3Dataset
+from budget_core import ProjectItem
 from budget_qt_settings import SettingsDialog
 from budget_qt_window import BudgetMainWindow
 from budget_reports import ReportSettings
+from tools.price_justification.qt_window import PriceJustificationWindowQt
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -150,6 +152,69 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertTrue((folder / "preferencias.json").is_file())
             preferences = json.loads((folder / "preferencias.json").read_text(encoding="utf-8"))
             self.assertEqual(preferences, {"language": "fr", "theme": "dark"})
+            window.is_dirty = False
+            window.close()
+            self.application.processEvents()
+
+    def test_price_justification_qt_roundtrips_state_and_reuses_window(self) -> None:
+        """Migra el anejo a Qt sin cambiar el estado persistente compatible."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            window.budget_items = [
+                ProjectItem("P1", "01#", "ud", "Partida", 1, 10)
+            ]
+            window.chapter_order = ["01#"]
+            window._reset_history()
+            window._open_tool("price_justification")
+            tool = window._project_windows[-1]
+            self.assertIsInstance(tool, PriceJustificationWindowQt)
+            window._open_tool("price_justification")
+            self.assertEqual(len(window._project_windows), 1)
+            self.assertEqual(len(tool.variables), 14)
+            self.assertTrue(tool.variables["agreement"].isEditable())
+            tool.variables["price_source"].setText("Fuente Qt")
+            tool.variables["agreement"].setEditText("Convenio editable")
+            self.assertTrue(window.is_dirty)
+            self.assertTrue(window._collect_tool_states())
+            target = Path(directory) / "proyecto.json"
+            self.assertTrue(window._write_project_file(target))
+            payload = json.loads(target.read_text(encoding="utf-8"))
+            self.assertEqual(
+                payload["price_justification"]["price_source"],
+                "Fuente Qt",
+            )
+            self.assertEqual(
+                payload["price_justification"]["agreement"],
+                "Convenio editable",
+            )
+            tool.reject()
+            window.is_dirty = False
+            window.close()
+            self.application.processEvents()
+
+    def test_price_justification_qt_rejects_invalid_state_before_save(self) -> None:
+        """Impide serializar una fecha o jornada no válida desde Qt."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            window.budget_items = [
+                ProjectItem("P1", "01#", "ud", "Partida", 1, 10)
+            ]
+            window._open_tool("price_justification")
+            tool = window._project_windows[-1]
+            tool.variables["annual_hours"].setEditText("NaN")
+            with patch.object(QMessageBox, "critical") as error:
+                self.assertFalse(window._collect_tool_states())
+            error.assert_called_once()
+            tool.variables["annual_hours"].setEditText("1736")
+            tool.variables["reference_date"].setText("2026-02-31")
+            with patch.object(QMessageBox, "critical") as error:
+                self.assertFalse(window._collect_tool_states())
+            error.assert_called_once()
+            tool.reject()
             window.is_dirty = False
             window.close()
             self.application.processEvents()

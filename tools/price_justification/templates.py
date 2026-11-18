@@ -39,7 +39,7 @@ def general_variables(app) -> dict[str, str]:
 
 def template_variables(app, state: dict) -> dict[str, str]:
     """Combina los datos específicos con los valores generales, que siempre prevalecen."""
-    from bc3_gui import currency_label, fmt_number
+    from budget_core import currency_label, fmt_number
 
     values = {key: value for key, value in state.items() if isinstance(value, str)}
     for key, value in general_variables(app).items():
