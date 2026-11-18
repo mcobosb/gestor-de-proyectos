@@ -260,16 +260,24 @@ class PriceWindowTests(unittest.TestCase):
     def test_first_menu_entry_and_edit_save_load_undo_and_legacy_project(self):
         """Comprueba la ventana real, el guardado, la carga y la independencia del presupuesto."""
         self.assertEqual(self.app.tools_menu.entrycget(0, "label"), "Justificación de precios")
+        self.app.price_justification_state = {
+            "agreement": "", "annual_hours": "", "materials_notes": "Suministro documentado",
+        }
         open_tool(self.app)
         window = self.app._project_windows[-1]
         open_tool(self.app)
         self.assertEqual(len(self.app._project_windows), 1)
         self.assertNotIn("territory", window.variables)
-        self.assertIn("Para la determinación de los costes", window.preview.get("1.0", "end"))
+        self.assertEqual(
+            [window.notebook.tab(tab, "text") for tab in window.notebook.tabs()],
+            ["Datos específicos"],
+        )
+        self.assertTrue(all(variable.get() for variable in window.variables.values()))
+        self.assertEqual(window.variables["agreement"].get(), "PENDIENTE DE DEFINIR Y VERIFICAR")
+        self.assertEqual(window.variables["annual_hours"].get(), "PENDIENTE DE DEFINIR Y VERIFICAR")
         window.variables["price_source"].set("Fuente de prueba")
         self.assertTrue(self.app.is_dirty)
         self.assertEqual(self.app.price_justification_state["price_source"], "Fuente de prueba")
-        window.texts["materials_notes"].insert("1.0", "Suministro documentado")
         before_project_save(self.app)
         self.assertEqual(self.app.price_justification_state["materials_notes"], "Suministro documentado")
         target = self.folder / "project.json"
@@ -339,7 +347,7 @@ class PriceWindowTests(unittest.TestCase):
             source = read_markdown(library, member)
             write_markdown(library, member, source + "\n\nRevisión visible en el asistente.\n", _signature(library))
             window._reload_library()
-            self.assertIn("Revisión visible", window.preview.get("1.0", "end"))
+            self.assertIn("Revisión visible", dict(load_documents(library))[member])
             window.library_editor.dirty = True
             with (
                 patch("tools.price_justification.messagebox.showerror") as error,

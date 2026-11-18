@@ -7,9 +7,7 @@ from tkinter import ttk
 
 from localization import filedialog, messagebox
 from .document import FIELDS, TITLE, restore_state, validate_state, write_document
-from .templates import (
-    DOCUMENTS, LIBRARY_PATH, document_blocks, general_variables, load_documents, template_variables,
-)
+from .templates import DOCUMENTS, LIBRARY_PATH, load_documents
 
 
 TOOL_LABEL = TITLE
@@ -44,16 +42,14 @@ def open_tool(app) -> None:
 
 
 class PriceJustificationWindow(tk.Toplevel):
-    """Muestra el texto base y sus fórmulas antes de generar el anejo."""
+    """Edita los datos específicos del anejo y permite generar su documento."""
 
     def __init__(self, app):
-        """Carga la biblioteca y construye la revisión de documentos y datos específicos."""
+        """Construye el formulario de datos específicos y carga sus valores predeterminados."""
         state = FIELDS | restore_state(app.price_justification_state)
-        documents = dict(load_documents(LIBRARY_PATH))
         super().__init__(app.root)
         self.app = app
         self._state = state
-        self.documents = documents
         self.library_editor = None
         self.title(TITLE)
         self.geometry("1120x760")
@@ -62,8 +58,10 @@ class PriceJustificationWindow(tk.Toplevel):
         self._loading = True
         if not state["reference_date"]:
             state["reference_date"] = date.today().isoformat()
+        for key in ("agreement", "wage_reference", "contributions", "calendar", "annual_hours"):
+            if not state[key]:
+                state[key] = FIELDS[key]
         self.variables: dict[str, tk.StringVar] = {}
-        self.texts: dict[str, tk.Text] = {}
         self.contracts = {"Contratación pública": "public", "Contratación privada": "private"}
         self.methods = {
             "Precios de la fuente presupuestaria": "budget",
@@ -74,35 +72,14 @@ class PriceJustificationWindow(tk.Toplevel):
         ttk.Label(container, text=TITLE, font=("", 14, "bold")).pack(anchor="w")
         ttk.Label(
             container, wraplength=1030,
-            text="Revisa los documentos base con su texto y fórmulas, como en el PPTP. "
-                 "La biblioteca se puede editar; los listados se toman del presupuesto actual.",
+            text="Completa los datos específicos de la justificación. "
+                 "Los textos base se editan desde la biblioteca de documentos.",
         ).pack(anchor="w", pady=(5, 8))
         self.general_info = tk.StringVar(self)
         ttk.Label(container, textvariable=self.general_info, wraplength=1030).pack(anchor="w", pady=(0, 10))
-        notebook = ttk.Notebook(container)
-        notebook.pack(fill="both", expand=True)
-        documents_page = ttk.Frame(notebook, padding=8)
-        notebook.add(documents_page, text="Documentos base")
-        panes = ttk.Panedwindow(documents_page, orient="horizontal")
-        panes.pack(fill="both", expand=True)
-        self.document_tree = ttk.Treeview(panes, show="tree", selectmode="browse")
-        self.document_tree.column("#0", width=265, minwidth=200)
-        panes.add(self.document_tree, weight=1)
-        preview_frame = ttk.Frame(panes)
-        panes.add(preview_frame, weight=3)
-        self.preview = tk.Text(preview_frame, wrap="word", state="disabled", padx=12, pady=10)
-        scrollbar = ttk.Scrollbar(preview_frame, orient="vertical", command=self.preview.yview)
-        self.preview.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side="right", fill="y")
-        self.preview.pack(fill="both", expand=True)
-        for name, title in DOCUMENTS:
-            self.document_tree.insert("", "end", iid=name, text=title)
-        self.document_tree.bind("<<TreeviewSelect>>", self._refresh_preview)
-        self.document_tree.selection_set(DOCUMENTS[0][0])
-        ttk.Button(
-            documents_page, text="Editar biblioteca de documentos…", command=self.open_library_editor,
-        ).pack(anchor="e", pady=(8, 0))
-        specific = self._tab(notebook, "Datos específicos")
+        self.notebook = ttk.Notebook(container)
+        self.notebook.pack(fill="both", expand=True)
+        specific = self._tab(self.notebook, "Datos específicos")
         self._entry(specific, "reference_date", "Fecha de referencia (AAAA-MM-DD)", state)
         self._choice(specific, "contract_type", "Régimen de contratación", state, self.contracts)
         self._entry(specific, "price_source", "Fuente de precios y fecha / edición", state)
@@ -111,53 +88,22 @@ class PriceJustificationWindow(tk.Toplevel):
             ("wage_reference", "Referencia salarial / SMI aplicable"),
             ("contributions", "Cotizaciones y contingencias profesionales"),
             ("calendar", "Calendario laboral aplicable"),
-            ("annual_hours", "Jornada anual efectiva (horas, opcional)"),
+            ("annual_hours", "Jornada anual efectiva (horas)"),
         ):
             self._entry(specific, key, label, state)
         self._choice(specific, "machinery_method", "Criterio de maquinaria", state, self.methods)
-        complements = self._tab(notebook, "Complementos opcionales")
-        ttk.Label(
-            complements, wraplength=970,
-            text="Estos datos complementan el texto base. No sustituyen sus apartados y se "
-                 "conservan las notas introducidas con la versión anterior de la herramienta.",
-        ).pack(anchor="w", pady=(0, 10))
-        for key, label in (
-            ("legislation_notes", "Referencias normativas adicionales"),
-            ("composition_notes", "Criterios particulares de composición"),
-            ("indirect_staff", "Personal técnico y administrativo"),
-            ("indirect_installations", "Instalaciones y medios comunes"),
-            ("indirect_technical", "Trabajos técnicos, ensayos y controles"),
-            ("indirect_other", "Otros costes y justificación del porcentaje"),
-            ("labor_notes", "Criterios particulares de mano de obra"),
-            ("materials_notes", "Procedencias y condiciones de suministro"),
-            ("machinery_parameters", "Parámetros y fuentes de maquinaria"),
-            ("machinery_consumption", "Operarios y consumos"),
-            ("machinery_notes", "Otros criterios de maquinaria"),
-        ):
-            self._text(complements, key, label, state, 4)
-        output = self._tab(notebook, "Listados y salida")
-        ttk.Label(
-            output, justify="left", wraplength=970,
-            text="El anejo reúne los documentos base y sus fórmulas, seguidos de:\n\n"
-                 "3. Precios elementales: mano de obra, maquinaria y materiales identificados.\n"
-                 "4. Precios auxiliares utilizados en el proyecto.\n"
-                 "5. Precios descompuestos por capítulos.\n\n"
-                 "Se utilizan la plantilla, el formato PDF/ODT, la autoría, la entidad, "
-                 "el expediente y el emplazamiento de la configuración general. "
-                 "Los municipios aportan sus provincias y comunidades autónomas.\n\n"
-                 "Las fórmulas se incorporan como texto editable con subíndices y exponentes, "
-                 "no como imágenes. No recalculan ni modifican los precios del presupuesto. "
-                 "Los costes indirectos se toman de la configuración sin aplicar otro recargo.",
-        ).pack(anchor="w")
         actions = ttk.Frame(container)
         actions.pack(fill="x", pady=(10, 0))
         ttk.Label(actions, text="Datos comunes: Archivo → Configuración…").pack(side="left")
         ttk.Button(actions, text="Cerrar", command=self._close).pack(side="right")
         ttk.Button(actions, text="Guardar anejo…", command=self._export).pack(side="right", padx=8)
+        ttk.Button(
+            actions, text="Editar biblioteca de documentos…", command=self.open_library_editor,
+        ).pack(side="right", padx=8)
         self.protocol("WM_DELETE_WINDOW", self._close)
         self._loading = False
-        self.bind("<FocusIn>", self._refresh_preview)
-        self._refresh_preview()
+        self.bind("<FocusIn>", self._refresh_general_info)
+        self._refresh_general_info()
 
     def _tab(self, notebook, title):
         """Crea un panel desplazable para conservar todos los campos en pantallas pequeñas."""
@@ -193,32 +139,10 @@ class PriceJustificationWindow(tk.Toplevel):
         )
         variable.trace_add("write", self._changed)
 
-    def _text(self, parent, key, label, state, height):
-        """Conserva las notas particulares como complementos opcionales del documento base."""
-        ttk.Label(parent, text=label, wraplength=950).pack(anchor="w")
-        frame = ttk.Frame(parent)
-        frame.pack(fill="both", expand=True, pady=(2, 8))
-        text = tk.Text(frame, height=height, wrap="word", undo=True)
-        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
-        text.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side="right", fill="y")
-        text.pack(fill="both", expand=True)
-        text.insert("1.0", state[key])
-        text.edit_modified(False)
-        text.bind("<<Modified>>", self._text_changed)
-        self.texts[key] = text
-
-    def _text_changed(self, event):
-        """Consume la marca de modificación sin convertir su restablecimiento en otra edición."""
-        if event.widget.edit_modified():
-            event.widget.edit_modified(False)
-            self._changed()
-
     def _collect(self) -> dict:
-        """Recoge los datos específicos conservando los complementos y campos desconocidos."""
+        """Recoge los datos específicos sin descartar datos guardados por versiones anteriores."""
         state = dict(self._state)
         state.update({key: variable.get() for key, variable in self.variables.items()})
-        state.update({key: widget.get("1.0", "end-1c") for key, widget in self.texts.items()})
         state["contract_type"] = self.contracts[state["contract_type"]]
         state["machinery_method"] = self.methods[state["machinery_method"]]
         return state
@@ -228,12 +152,13 @@ class PriceJustificationWindow(tk.Toplevel):
         if not self._loading:
             self.app.price_justification_state = self._collect()
             self.app._mark_dirty()
-            self._refresh_preview()
 
-    def _refresh_preview(self, _event=None):
-        """Actualiza el texto seleccionado con la configuración general vigente."""
+    def _refresh_general_info(self, _event=None):
+        """Actualiza el resumen de los datos generales del proyecto."""
         if self._loading:
             return
+        from .templates import general_variables
+
         general = general_variables(self.app)
         self.general_info.set(
             f"Proyecto: {general['titulo_proyecto']}\n"
@@ -241,20 +166,6 @@ class PriceJustificationWindow(tk.Toplevel):
             f"Provincia: {general['provincias'] or 'Pendiente'} · "
             f"Comunidad: {general['comunidades_autonomas'] or 'Pendiente'}"
         )
-        selection = self.document_tree.selection()
-        if not selection:
-            return
-        try:
-            values = template_variables(self.app, self._collect())
-            text = "\n\n".join(
-                text for _, text in document_blocks(self.documents[selection[0]], values)
-            )
-        except ValueError as exc:
-            text = f"ERROR EN EL DOCUMENTO BASE:\n{exc}"
-        self.preview.configure(state="normal")
-        self.preview.delete("1.0", "end")
-        self.preview.insert("1.0", text)
-        self.preview.configure(state="disabled")
 
     def open_library_editor(self):
         """Abre el mismo editor ZIP con historial de revisiones utilizado por el PPTP."""
@@ -270,13 +181,11 @@ class PriceJustificationWindow(tk.Toplevel):
         )
 
     def _reload_library(self):
-        """Recarga las versiones guardadas para que la vista y el próximo anejo las utilicen."""
+        """Comprueba que la biblioteca editada conserva todos los documentos requeridos."""
         try:
-            self.documents = dict(load_documents(LIBRARY_PATH))
+            load_documents(LIBRARY_PATH)
         except (OSError, ValueError) as exc:
             messagebox.showerror(TITLE, str(exc), parent=self)
-            return
-        self._refresh_preview()
 
     def _validated(self) -> dict:
         """Valida las entradas antes de cerrar o exportar, sin copiar datos generales."""

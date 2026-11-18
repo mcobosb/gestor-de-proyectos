@@ -11,6 +11,7 @@ from .templates import (
 
 
 TITLE = "Justificación de precios"
+PENDING_VALUE = "PENDIENTE DE DEFINIR Y VERIFICAR"
 FIELDS = {
     "reference_date": "",
     "contract_type": "public",
@@ -21,11 +22,11 @@ FIELDS = {
     "indirect_installations": "",
     "indirect_technical": "",
     "indirect_other": "",
-    "agreement": "",
-    "wage_reference": "",
-    "contributions": "",
-    "calendar": "",
-    "annual_hours": "",
+    "agreement": PENDING_VALUE,
+    "wage_reference": PENDING_VALUE,
+    "contributions": PENDING_VALUE,
+    "calendar": PENDING_VALUE,
+    "annual_hours": PENDING_VALUE,
     "labor_notes": "",
     "materials_notes": "",
     "machinery_method": "budget",
@@ -70,7 +71,7 @@ def validate_state(data) -> dict:
                 raise ValueError("La fecha no está en formato ISO extendido.")
         except ValueError as exc:
             raise ValueError("La fecha de referencia debe tener formato AAAA-MM-DD.") from exc
-    if state["annual_hours"]:
+    if state["annual_hours"] and state["annual_hours"] != PENDING_VALUE:
         try:
             hours = Decimal(state["annual_hours"].replace(",", "."))
         except InvalidOperation as exc:
