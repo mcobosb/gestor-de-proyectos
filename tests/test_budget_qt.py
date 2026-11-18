@@ -29,6 +29,7 @@ from tools.safety_health.qt_window import (
     SafetyHealthWindowQt,
 )
 from tools.pptp.qt_window import PptpWindowQt
+from tools.certifications.qt_window import CertificationWindowQt
 from decimal import Decimal
 
 
@@ -416,6 +417,46 @@ class BudgetQtWindowTests(unittest.TestCase):
                 tool.manual_table.selectRow(0)
                 tool.add_sheet()
                 self.assertEqual(len(tool.unmatched), before + 1)
+            tool.reject()
+            window.is_dirty = False
+            window.close()
+            self.application.processEvents()
+
+    def test_certifications_qt_reconciles_plan_edits_and_justification(self) -> None:
+        """Migra plan mensual, certificación, conciliación y justificación."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            window.budget_items = [
+                ProjectItem(
+                    "P", "01#", "m2", "Partida",
+                    measurement=100, unit_price=10, rendimiento=.5,
+                )
+            ]
+            window.chapter_order = ["01#"]
+            window._open_tool("certifications")
+            tool = window._project_windows[-1]
+            self.assertIsInstance(tool, CertificationWindowQt)
+            window._open_tool("certifications")
+            self.assertEqual(len(window._project_windows), 1)
+            self.assertEqual(tool.table.rowCount(), 1)
+            self.assertEqual(tool.table.columnCount(), 52)
+            month = tool.months[0]
+            initial_next = tool.plan[0][1]
+            tool.commit_certification(0, 0, str(tool.plan[0][0] - 25))
+            self.assertEqual(tool.items[0].certifications[month.key], tool.plan[0][0])
+            self.assertGreater(tool.plan[0][1], initial_next)
+            tool.select_certification(0, 0)
+            tool.justification.setPlainText("Medición ejecutada")
+            self.assertEqual(
+                tool.items[0].certification_justifications[month.key],
+                "Medición ejecutada",
+            )
+            self.assertTrue(tool.dirty)
+            with patch.object(QMessageBox, "critical") as error:
+                tool.commit_certification(0, 0, "-1")
+            error.assert_called_once()
             tool.reject()
             window.is_dirty = False
             window.close()

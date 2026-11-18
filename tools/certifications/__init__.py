@@ -20,9 +20,9 @@ from pathlib import Path
 from tkinter import ttk
 from typing import TYPE_CHECKING
 
-from bc3_gui import (
-    APPLICATION_NAME, ToolTip, format_currency, format_chapter_code, parse_float,
-)
+from budget_core import format_chapter_code, format_currency, parse_float
+from budget_config import APPLICATION_NAME
+from bc3_gui import ToolTip
 from localization import filedialog, localize_widget_tree, messagebox, translate
 from .._shared.scheduling import PlanParams, apply_saved_plan_state, build_activities, schedule
 from budget_reports import (
@@ -55,6 +55,26 @@ def open_tool(app: BudgetApp) -> None:
         on_dirty_change=lambda dirty: app._mark_dirty() if dirty else None,
     )
     app._project_windows.append(window)
+
+
+def open_tool_qt(app) -> None:
+    """Abre una única ventana de certificaciones para el proyecto activo."""
+    from PySide6.QtWidgets import QMessageBox
+    from .qt_window import CertificationWindowQt
+
+    if not app.budget_items:
+        QMessageBox.information(
+            app, TOOL_LABEL, "Carga o crea un presupuesto antes de certificar."
+        )
+        return
+    for window in app._project_windows:
+        if isinstance(window, CertificationWindowQt) and window.isVisible():
+            window.raise_()
+            window.activateWindow()
+            return
+    window = CertificationWindowQt(app)
+    app._project_windows.append(window)
+    window.show()
 
 
 MONTHS_IN_PLAN = 24
