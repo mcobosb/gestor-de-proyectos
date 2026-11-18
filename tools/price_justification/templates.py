@@ -70,8 +70,26 @@ def template_variables(app, state: dict) -> dict[str, str]:
             "concretos deberán justificarse para cada máquina."
         ),
     })
-    for key in ("agreement", "wage_reference", "contributions", "calendar", "annual_hours"):
+    for key in (
+        "agreement", "salary_revision", "wage_reference", "contribution_bases",
+        "contributions", "contribution_details", "pension_contribution", "calendar",
+        "work_conditions", "annual_hours",
+    ):
         values[key] = values.get(key) or "[PENDIENTE DE DEFINIR Y VERIFICAR]"
+    salary_revision = values.get("salary_revision", "")
+    if salary_revision:
+        values["agreement"] = f"{values['agreement']}\nRevisión salarial: {salary_revision}"
+    values["contributions"] = "\n".join((
+        f"Bases de cotización: {values['contribution_bases']}",
+        f"Tipos de cotización: {values['contributions']}",
+        f"Conceptos cotizables y exentos: {values['contribution_details']}",
+        "Aportación empresarial al plan de pensiones de empleo simplificado: "
+        f"{values['pension_contribution']}",
+    ))
+    values["calendar"] = "\n".join((
+        values["calendar"],
+        values["work_conditions"],
+    ))
     return values
 
 

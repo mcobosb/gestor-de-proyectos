@@ -1,4 +1,4 @@
-"""Asistente de documentos base y listados de justificación de precios."""
+"""Ventana de datos específicos y generación de justificación de precios."""
 
 from datetime import date
 from pathlib import Path
@@ -6,7 +6,13 @@ import tkinter as tk
 from tkinter import ttk
 
 from localization import filedialog, messagebox
-from .document import FIELDS, TITLE, restore_state, validate_state, write_document
+from .document import (
+    ANNUAL_HOURS_REFERENCES, CALENDAR_REFERENCES, CONSTRUCTION_AGREEMENT_REFERENCES,
+    CONTRIBUTION_BASE_REFERENCES, CONTRIBUTION_DETAIL_REFERENCES,
+    CONTRIBUTION_RATE_REFERENCES, FIELDS, PENSION_CONTRIBUTION_REFERENCES,
+    SALARY_REVISION_REFERENCES, TITLE, WAGE_REFERENCES, WORK_CONDITION_REFERENCES,
+    restore_state, validate_state, write_document,
+)
 from .templates import DOCUMENTS, LIBRARY_PATH, load_documents
 
 
@@ -58,10 +64,15 @@ class PriceJustificationWindow(tk.Toplevel):
         self._loading = True
         if not state["reference_date"]:
             state["reference_date"] = date.today().isoformat()
-        for key in ("agreement", "wage_reference", "contributions", "calendar", "annual_hours"):
+        for key in (
+            "agreement", "salary_revision", "wage_reference", "contributions",
+            "contribution_bases", "contribution_details", "pension_contribution",
+            "calendar", "work_conditions", "annual_hours",
+        ):
             if not state[key]:
                 state[key] = FIELDS[key]
         self.variables: dict[str, tk.StringVar] = {}
+        self.selectors: dict[str, ttk.Combobox] = {}
         self.contracts = {"Contratación pública": "public", "Contratación privada": "private"}
         self.methods = {
             "Precios de la fuente presupuestaria": "budget",
@@ -83,14 +94,47 @@ class PriceJustificationWindow(tk.Toplevel):
         self._entry(specific, "reference_date", "Fecha de referencia (AAAA-MM-DD)", state)
         self._choice(specific, "contract_type", "Régimen de contratación", state, self.contracts)
         self._entry(specific, "price_source", "Fuente de precios y fecha / edición", state)
-        for key, label in (
-            ("agreement", "Convenio colectivo y revisión salarial"),
-            ("wage_reference", "Referencia salarial / SMI aplicable"),
-            ("contributions", "Cotizaciones y contingencias profesionales"),
-            ("calendar", "Calendario laboral aplicable"),
-            ("annual_hours", "Jornada anual efectiva (horas)"),
-        ):
-            self._entry(specific, key, label, state)
+        self._editable_choice(
+            specific, "agreement", "Convenio colectivo y revisión salarial",
+            state, CONSTRUCTION_AGREEMENT_REFERENCES,
+        )
+        self._editable_choice(
+            specific, "salary_revision", "Revisión salarial (art. 55)",
+            state, SALARY_REVISION_REFERENCES,
+        )
+        self._editable_choice(
+            specific, "wage_reference", "Referencia salarial / SMI aplicable",
+            state, WAGE_REFERENCES,
+        )
+        self._editable_choice(
+            specific, "contribution_bases", "Bases de cotización (referencia 2026)",
+            state, CONTRIBUTION_BASE_REFERENCES,
+        )
+        self._editable_choice(
+            specific, "contributions", "Tipos de cotización (referencia 2026)",
+            state, CONTRIBUTION_RATE_REFERENCES,
+        )
+        self._editable_choice(
+            specific, "contribution_details", "Conceptos cotizables y exentos (referencia 2026)",
+            state, CONTRIBUTION_DETAIL_REFERENCES,
+        )
+        self._editable_choice(
+            specific, "pension_contribution",
+            "Aportación empresarial al plan de pensiones (art. 56; prorratear si procede)",
+            state, PENSION_CONTRIBUTION_REFERENCES,
+        )
+        self._editable_choice(
+            specific, "calendar", "Calendario laboral y días de ajuste (referencia 2026)",
+            state, CALENDAR_REFERENCES,
+        )
+        self._editable_choice(
+            specific, "work_conditions", "Vacaciones, horas extra y condiciones climáticas",
+            state, WORK_CONDITION_REFERENCES,
+        )
+        self._editable_choice(
+            specific, "annual_hours", "Jornada anual efectiva (horas)",
+            state, ANNUAL_HOURS_REFERENCES,
+        )
         self._choice(specific, "machinery_method", "Criterio de maquinaria", state, self.methods)
         actions = ttk.Frame(container)
         actions.pack(fill="x", pady=(10, 0))
@@ -137,6 +181,18 @@ class PriceJustificationWindow(tk.Toplevel):
         ttk.Combobox(parent, textvariable=variable, values=list(choices), state="readonly").pack(
             fill="x", pady=(2, 8),
         )
+        variable.trace_add("write", self._changed)
+
+    def _editable_choice(self, parent, key, label, state, choices):
+        """Ofrece datos de referencia seleccionables y permite sustituirlos por valores locales."""
+        ttk.Label(parent, text=label).pack(anchor="w")
+        variable = tk.StringVar(self, value=state[key])
+        self.variables[key] = variable
+        selector = ttk.Combobox(
+            parent, textvariable=variable, values=choices, state="normal",
+        )
+        selector.pack(fill="x", pady=(2, 8))
+        self.selectors[key] = selector
         variable.trace_add("write", self._changed)
 
     def _collect(self) -> dict:

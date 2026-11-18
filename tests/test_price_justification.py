@@ -15,7 +15,11 @@ from bc3_gui import Bc3Dataset, BudgetApp, Concept, ProjectItem
 from budget_reports import ReportSettings, _collect_report_resources
 from tools.price_justification import before_project_save, open_tool
 from tools.price_justification.document import (
-    LISTINGS, narrative, restore_state, validate_state, write_document,
+    ANNUAL_HOURS_REFERENCES, CALENDAR_REFERENCES, CONSTRUCTION_AGREEMENT_REFERENCES,
+    CONTRIBUTION_BASE_REFERENCES, CONTRIBUTION_DETAIL_REFERENCES,
+    CONTRIBUTION_RATE_REFERENCES, LISTINGS, PENSION_CONTRIBUTION_REFERENCES,
+    SALARY_REVISION_REFERENCES, WAGE_REFERENCES, WORK_CONDITION_REFERENCES, narrative,
+    restore_state, validate_state, write_document,
 )
 from tools.price_justification.templates import (
     DOCUMENTS, FORMULA_LEVEL, LIBRARY_PATH, document_blocks, formula_runs,
@@ -83,7 +87,7 @@ class PriceDocumentTests(unittest.TestCase):
         self.assertNotIn("Ley 9/2017", private)
         self.assertIn("contratación privada", private)
         self.assertIn("1736,5 horas", private)
-        self.assertIn("PENDIENTE DE DEFINIR Y VERIFICAR", private)
+        self.assertIn("20.298,22 €/año", private)
         public = "\n".join(text for _, text in narrative(self.app, {}))
         self.assertIn("Ley 9/2017", public)
         self.assertIn("6,00 %", public)
@@ -130,6 +134,24 @@ class PriceDocumentTests(unittest.TestCase):
         self.assertEqual(general_variables(self.app)["emplazamiento"], "Localidad configurada")
         self.assertEqual(general_variables(self.app)["provincias"], "")
         self.assertNotIn("territory", restore_state(state))
+
+    def test_boe_references_are_exported_without_replacing_custom_values(self):
+        """Las referencias del BOE se incorporan al anejo y admiten datos locales editables."""
+        custom = {
+            "agreement": "Convenio provincial editable",
+            "salary_revision": "Revisión provincial editable",
+            "wage_reference": "Tabla salarial provincial editable",
+            "contribution_bases": "Bases provinciales editables",
+            "pension_contribution": "Aportación revisada editable",
+            "contributions": "Cotizaciones provinciales editables",
+            "contribution_details": "Conceptos provinciales editables",
+            "calendar": "Calendario municipal editable",
+            "work_conditions": "Condiciones laborales editables",
+        }
+        text = "\n".join(value for _, value in narrative(self.app, custom))
+        for value in custom.values():
+            self.assertIn(value, text)
+        self.assertIn("Aportación empresarial al plan de pensiones", text)
 
     def test_library_edits_and_malformed_templates_are_not_ignored(self):
         """Una revisión del texto base afecta al documento y los errores se muestran sin contenido alternativo."""
@@ -273,9 +295,30 @@ class PriceWindowTests(unittest.TestCase):
             ["Datos específicos"],
         )
         self.assertTrue(all(variable.get() for variable in window.variables.values()))
-        self.assertEqual(window.variables["agreement"].get(), "PENDIENTE DE DEFINIR Y VERIFICAR")
-        self.assertEqual(window.variables["annual_hours"].get(), "PENDIENTE DE DEFINIR Y VERIFICAR")
+        self.assertEqual(window.variables["agreement"].get(), CONSTRUCTION_AGREEMENT_REFERENCES[0])
+        self.assertEqual(window.variables["salary_revision"].get(), SALARY_REVISION_REFERENCES[4])
+        self.assertEqual(window.variables["wage_reference"].get(), WAGE_REFERENCES[-1])
+        self.assertEqual(
+            window.variables["pension_contribution"].get(), PENSION_CONTRIBUTION_REFERENCES[-1],
+        )
+        self.assertEqual(window.variables["annual_hours"].get(), ANNUAL_HOURS_REFERENCES[0])
+        for key, values in (
+            ("agreement", CONSTRUCTION_AGREEMENT_REFERENCES),
+            ("salary_revision", SALARY_REVISION_REFERENCES),
+            ("wage_reference", WAGE_REFERENCES),
+            ("contribution_bases", CONTRIBUTION_BASE_REFERENCES),
+            ("contributions", CONTRIBUTION_RATE_REFERENCES),
+            ("contribution_details", CONTRIBUTION_DETAIL_REFERENCES),
+            ("pension_contribution", PENSION_CONTRIBUTION_REFERENCES),
+            ("calendar", CALENDAR_REFERENCES),
+            ("work_conditions", WORK_CONDITION_REFERENCES),
+            ("annual_hours", ANNUAL_HOURS_REFERENCES),
+        ):
+            self.assertEqual(str(window.selectors[key].cget("state")), "normal")
+            self.assertEqual(tuple(window.selectors[key]["values"]), values)
         window.variables["price_source"].set("Fuente de prueba")
+        window.variables["agreement"].set("Convenio provincial editable")
+        window.variables["salary_revision"].set("Revisión provincial editable")
         self.assertTrue(self.app.is_dirty)
         self.assertEqual(self.app.price_justification_state["price_source"], "Fuente de prueba")
         before_project_save(self.app)
@@ -284,6 +327,12 @@ class PriceWindowTests(unittest.TestCase):
         self.assertTrue(self.app._write_project_file(target))
         payload = json.loads(target.read_text(encoding="utf-8"))
         self.assertEqual(payload["price_justification"]["price_source"], "Fuente de prueba")
+        self.assertEqual(
+            payload["price_justification"]["agreement"], "Convenio provincial editable",
+        )
+        self.assertEqual(
+            payload["price_justification"]["salary_revision"], "Revisión provincial editable",
+        )
         self.app.price_justification_state["price_source"] = "Cambio"
         self.app._mark_dirty()
         self.app.undo_last_action()

@@ -12,6 +12,86 @@ from .templates import (
 
 TITLE = "Justificación de precios"
 PENDING_VALUE = "PENDIENTE DE DEFINIR Y VERIFICAR"
+CONSTRUCTION_AGREEMENT_REFERENCES = (
+    "VII Convenio Colectivo General del Sector de la Construcción "
+    "(código 99005585011900); modificación BOE-A-2025-25234, publicada el 10/12/2025.",
+)
+SALARY_REVISION_REFERENCES = (
+    "2022 — actualización del 3,00 % de las tablas de 2021 con efectos de 01/01/2022 "
+    "(art. 55.1, BOE-A-2025-25234).",
+    "2023 — actualización del 3,00 % de las tablas vigentes en 2022 con efectos de 01/01/2023 "
+    "(art. 55.1, BOE-A-2025-25234).",
+    "2024 — actualización del 2,75 % de las tablas vigentes en 2023 con efectos de 01/01/2024 "
+    "(art. 55.1, BOE-A-2025-25234).",
+    "2025 — garantía salarial del 0,40 % sobre las tablas de 2024 y actualización del 3,50 % "
+    "con efectos de 01/01/2025 (art. 55.5, BOE-A-2025-25234).",
+    "2026 — actualización del 3,00 % de las tablas vigentes en 2025 con efectos de 01/01/2026 "
+    "(art. 55.5, BOE-A-2025-25234).",
+    "Garantía 2022–2024 — si la suma de IPC supera el 10,00 % (máximo 13,00 %), el exceso "
+    "se reparte entre tablas salariales y plan de pensiones con efectos de 01/01/2025 "
+    "(art. 55.4, BOE-A-2025-25234).",
+    "Garantía 2025–2026 — si la suma de IPC supera el 7,25 % (máximo 9,25 %), el exceso "
+    "se reparte entre tablas salariales y plan de pensiones con efectos de 01/01/2027 "
+    "(art. 55.7, BOE-A-2025-25234).",
+)
+WAGE_REFERENCES = (
+    "2022 — nivel XII: 17.919,57 €/año; mínimo bruto anual de convenio, no es el SMI "
+    "(art. 53, BOE-A-2025-25234).",
+    "2023 — nivel XII: 18.457,16 €/año; mínimo bruto anual de convenio, no es el SMI "
+    "(art. 53, BOE-A-2025-25234).",
+    "2024 — nivel XII: 18.964,73 €/año; mínimo bruto anual de convenio, no es el SMI "
+    "(art. 53, BOE-A-2025-25234).",
+    "2025 — nivel XII: 19.707,01 €/año; mínimo bruto anual de convenio, no es el SMI "
+    "(art. 53, BOE-A-2025-25234).",
+    "2026 — nivel XII: 20.298,22 €/año; mínimo bruto anual de convenio, no es el SMI "
+    "(art. 53, BOE-A-2025-25234).",
+)
+PENSION_CONTRIBUTION_REFERENCES = (
+    "2022 — 1,00 % de los conceptos salariales de las tablas de 2021 "
+    "(art. 56, BOE-A-2025-25234).",
+    "2023 — 1,00 % de los conceptos salariales de las tablas de 2021 "
+    "(art. 56, BOE-A-2025-25234).",
+    "2024 — 1,00 % de las tablas de 2021 más 0,25 % de las tablas de 2023 "
+    "(art. 56, BOE-A-2025-25234).",
+    "2025 — 1,00 % de las tablas de 2021, 0,25 % de las de 2023, 0,40 % de las de 2024 "
+    "por garantía salarial y 0,50 % de las de 2024 actualizadas "
+    "(art. 56, BOE-A-2025-25234).",
+    "2026 — aportaciones de 2025 más 0,25 % de los conceptos salariales de las tablas de 2025 "
+    "(art. 56, BOE-A-2025-25234).",
+)
+ANNUAL_HOURS_REFERENCES = ("1736",)
+CALENDAR_REFERENCES = (
+    "Calendario 2026: 12 festivos nacionales/autonómicos y 2 locales; los días retribuidos "
+    "de ajuste (habitualmente 4–6) se fijan en el calendario provincial publicado en el BOP. "
+    "Compensar con descanso si se trabaja en esos días para no superar la jornada anual.",
+    "Ejemplo Córdoba 2026: días de ajuste 5 de enero, 29 de mayo, 24 y 31 de diciembre; "
+    "confirmar con el BOP y el calendario local antes de aplicarlo.",
+)
+WORK_CONDITION_REFERENCES = (
+    "Vacaciones: 30 días naturales (22 laborables/176 horas), con al menos 21 días naturales "
+    "ininterrumpidos. Horas extraordinarias: máximo 80 al año y voluntarias salvo fuerza mayor. "
+    "Con alertas AEMET naranja o roja por temperaturas extremas, adaptar horarios/exposición "
+    "sin merma salarial.",
+)
+CONTRIBUTION_BASE_REFERENCES = (
+    "2026 — base máxima: 5.101,20 €/mes (170,04 €/día). Mínimas mensuales: grupo 1, "
+    "1.989,30 €; grupo 2, 1.649,70 €; grupo 3, 1.435,20 €; grupos 4–7, 1.424,40 €. "
+    "Obra, grupos 8–10: 47,48 €/día (1.424,40 € en mes de 30 días).",
+)
+CONTRIBUTION_RATE_REFERENCES = (
+    "2026 — obra, CNAE 41/42/43, contrato indefinido: empresa/trabajador — contingencias "
+    "comunes 23,60/4,70 %; AT/EP 6,70/0 % (3,35 % IT + 3,35 % IMS); desempleo 5,50/1,55 %; "
+    "MEI 0,75/0,15 %; formación 0,60/0,10 %; FOGASA 0,20/0 %. Totales: 37,35/6,50 %.",
+    "2026 — personal administrativo exclusivamente de oficina: AT/EP empresarial 1,50 % "
+    "(0,80 % IT + 0,70 % IMS); verificar el resto de tipos según contrato y actividad.",
+)
+CONTRIBUTION_DETAIL_REFERENCES = (
+    "Cotizan salario base, plus de asistencia, prorrata de pagas extra y pluses extrasalariales "
+    "de transporte/ropa. Dietas y locomoción exentas dentro de límites legales; referencia "
+    "facilitada: 0,26 €/km. Las aportaciones al plan de pensiones están exentas de IRPF dentro "
+    "del límite legal, integran la base de cotización y pueden dar derecho a reducción empresarial "
+    "por contingencias comunes hasta el límite legal.",
+)
 FIELDS = {
     "reference_date": "",
     "contract_type": "public",
@@ -22,11 +102,16 @@ FIELDS = {
     "indirect_installations": "",
     "indirect_technical": "",
     "indirect_other": "",
-    "agreement": PENDING_VALUE,
-    "wage_reference": PENDING_VALUE,
-    "contributions": PENDING_VALUE,
-    "calendar": PENDING_VALUE,
-    "annual_hours": PENDING_VALUE,
+    "agreement": CONSTRUCTION_AGREEMENT_REFERENCES[0],
+    "salary_revision": SALARY_REVISION_REFERENCES[4],
+    "wage_reference": WAGE_REFERENCES[-1],
+    "contribution_bases": CONTRIBUTION_BASE_REFERENCES[0],
+    "contributions": CONTRIBUTION_RATE_REFERENCES[0],
+    "contribution_details": CONTRIBUTION_DETAIL_REFERENCES[0],
+    "pension_contribution": PENSION_CONTRIBUTION_REFERENCES[-1],
+    "calendar": CALENDAR_REFERENCES[0],
+    "work_conditions": WORK_CONDITION_REFERENCES[0],
+    "annual_hours": ANNUAL_HOURS_REFERENCES[0],
     "labor_notes": "",
     "materials_notes": "",
     "machinery_method": "budget",
