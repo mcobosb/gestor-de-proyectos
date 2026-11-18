@@ -26,6 +26,7 @@ from .technical_conditions import selected_technical_template, technical_review_
 from localization import translate
 from municipalities import resolve_municipalities
 from report_layout import LEFT_MARGIN, PAGE_MARGIN, RIGHT_MARGIN, ReportLayout, report_project_label
+from tools._library_history import read_revisions
 from tools._shared.document_layout import (
     DEFAULT_TOC_DEPTH, TABLE_ALTERNATE_BACKGROUND, TABLE_HEADER_BACKGROUND,
     number_headings, template_paragraph_styles,
@@ -274,7 +275,7 @@ def _read_library() -> dict[str, str]:
     try:
         with ZipFile(LIBRARY_PATH) as archive:
             return {
-                key: archive.read(member).decode("utf-8-sig")
+                key: _read_member(archive, member)
                 for key, member in _TEMPLATE_MEMBERS.items()
             }
     except (
@@ -387,10 +388,10 @@ def _chapter_label(app, chapter: str) -> str:
 
 
 def _read_member(archive: ZipFile, path: str) -> str:
-    """Lee una ficha seleccionada y expresa claramente las incidencias de la biblioteca."""
+    """Lee el texto ESS sin su historial interno e identifica el documento si falla."""
     try:
-        return archive.read(path).decode("utf-8-sig")
-    except (KeyError, UnicodeDecodeError) as exc:
+        return read_revisions(archive.read(path).decode("utf-8-sig"))[1]
+    except (KeyError, ValueError) as exc:
         raise ValueError(f"No se pudo leer la ficha ESS {path}: {exc}") from exc
 
 

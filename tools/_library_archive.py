@@ -275,8 +275,6 @@ def update_library(
                                 destination.write(chunk)
                 for name, content in changes.items():
                     target.writestr(name, content)
-            from .pptp.library import ZipLibrary
-
             if any(PurePosixPath(name).name == "catalogo.json" for name in members):
                 # El catálogo completo se valida antes de sustituir la biblioteca original.
                 with ZipFile(temporary_path) as candidate:
@@ -285,6 +283,8 @@ def update_library(
                         for name in members if PurePosixPath(name).name == "catalogo.json"
                     )
                 if is_pptp:
+                    from .pptp.library import ZipLibrary
+
                     ZipLibrary(temporary_path, archive_path.parent / "docs")
         if _signature(archive_path) != expected_signature:
             raise ValueError("La biblioteca ha cambiado durante la edición. No se guardaron los cambios.")

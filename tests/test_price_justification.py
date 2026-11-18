@@ -215,6 +215,8 @@ class PriceDocumentTests(unittest.TestCase):
                         ))
                         ReportLayoutTests.assert_odt_styles(self, archive)
                 condensed = re.sub(r"\s+", "", text)
+                self.assertNotIn("Registro de cambios", " ".join(text.split()))
+                self.assertNotIn("Biblioteca distribuida con el programa", " ".join(text.split()))
                 for title, _ in LISTINGS:
                     self.assertIn(re.sub(r"\s+", "", title), condensed)
                 for value in (

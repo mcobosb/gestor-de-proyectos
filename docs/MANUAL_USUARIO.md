@@ -406,6 +406,9 @@ En la biblioteca PPTP, todos los Markdown (documentos generales, índice y ficha
 incluyen un **Registro de cambios** inicial en amarillo, versión 1, con procedencia
 «Biblioteca incluida en el software v1.6.0» y fecha 10/11/2026. Esto identifica
 la incorporación del registro, no la autoría ni la fecha de las ediciones anteriores.
+Las bibliotecas de **Seguridad y Salud**, **RCDs** y **Justificación de precios**
+usan el mismo registro por documento, también desde la versión 1. El historial
+se guarda en la biblioteca y no se incluye en el PDF ni en el ODT.
 Encima del panel amarillo se muestran la versión y el último autor. Antes de guardar
 una modificación del texto amarillo o blanco debes introducir **Autor del cambio**
 y una fecha válida **DD/MM/AAAA** (se propone el día actual); la descripción es

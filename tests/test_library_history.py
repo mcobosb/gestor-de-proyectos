@@ -18,6 +18,17 @@ from tools.pptp.maintenance import initialize_library_history
 
 
 class RevisionTests(unittest.TestCase):
+    def test_study_libraries_ship_revision_histories_for_every_document(self):
+        """Cada ficha y plantilla distribuida arranca con un historial editable."""
+        root = Path(__file__).resolve().parents[1] / "tools"
+        for module in ("safety_health", "rcd", "price_justification"):
+            with self.subTest(module=module), ZipFile(root / module / "BIBLIOTECA.zip") as archive:
+                documents = [name for name in archive.namelist() if name.lower().endswith(".md")]
+                self.assertTrue(documents)
+                for name in documents:
+                    history, _ = read_revisions(archive.read(name).decode("utf-8-sig"))
+                    self.assertTrue(history, name)
+
     def test_initial_record_preserves_all_original_text_and_is_idempotent(self):
         """Record the distribution provenance, not an invented author of previous edits."""
         for source in ("# Documento\n\nTexto.\n", '"""\nReferencia.\n"""\n\tTexto.\n'):

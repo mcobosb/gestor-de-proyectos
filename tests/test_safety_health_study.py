@@ -164,6 +164,8 @@ class SafetyHealthStudyTests(unittest.TestCase):
                                 link.get(f"{{{ns['xlink']}}}href"), f"#ESSRef-{link.text}",
                             )
                     text = " ".join(text.split())
+                    self.assertNotIn("Registro de cambios", text)
+                    self.assertNotIn("Biblioteca distribuida con el programa", text)
                     self.assertIn("ESTUDIO BÁSICO DE SEGURIDAD Y SALUD", text)
                     self.assertIn("ÍNDICE", text)
                     self.assertIn("LUCENA (CÓRDOBA); MADRID (MADRID)", text)
@@ -682,6 +684,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
             for warnings in ((), ("Aviso de revisión.",) * 4):
                 with self.subTest(format=output_format, warnings=bool(warnings)):
                     proposal = create_autospec(SafetyProposalWindow, instance=True)
+                    proposal.library_editor = None
                     proposal.app = self.make_app(output_format)
                     units = study_work_units(proposal.app)
                     proposal.app.safety_health_state["regulatory_review"] = {
@@ -1608,6 +1611,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
     def test_cancelling_required_technical_review_prevents_export(self):
         """No permite que la selección pendiente se eluda al cancelar la revisión."""
         proposal = create_autospec(SafetyProposalWindow, instance=True)
+        proposal.library_editor = None
         proposal.app = self.make_app("pdf")
         proposal.app.safety_health_state["regulatory_review"] = {
             "context": review_context(study_work_units(proposal.app)), "laws": {}, "ntps": {},
@@ -1623,12 +1627,22 @@ class SafetyHealthStudyTests(unittest.TestCase):
     def test_cancelling_required_regulatory_review_prevents_export(self):
         """No genera ni pide ruta si se cancela la confirmacion pendiente."""
         proposal = create_autospec(SafetyProposalWindow, instance=True)
+        proposal.library_editor = None
         proposal.app = self.make_app("pdf")
         proposal.owner = SimpleNamespace(open_regulatory_review=lambda: None)
         proposal._create_chapter.return_value = True
         with patch("tools.safety_health.filedialog.asksaveasfilename") as choose:
             SafetyProposalWindow.generate_report(proposal)
         choose.assert_not_called()
+
+    def test_unsaved_library_revision_blocks_export_before_budget_changes(self):
+        """No usa una versión distinta de la que se está editando en la biblioteca."""
+        proposal = create_autospec(SafetyProposalWindow, instance=True)
+        proposal.library_editor = SimpleNamespace(winfo_exists=lambda: True, dirty=True)
+        with patch("tools.safety_health.messagebox.showerror") as warning:
+            SafetyProposalWindow.generate_report(proposal)
+        warning.assert_called_once()
+        proposal._create_chapter.assert_not_called()
 
     def test_catalogue_types_follow_native_pagination_without_forcing_category_breaks(self):
         """Repite tipo y cabecera una vez por pagina PDF y combina los grupos ODT."""

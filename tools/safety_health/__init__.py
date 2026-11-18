@@ -859,12 +859,13 @@ class SafetyProposalWindow(tk.Toplevel):
         self.tree.bind("<space>", self._toggle)
         buttons = ttk.Frame(self, padding=12)
         buttons.pack(fill="x")
-        ttk.Button(buttons, text="Cerrar", command=self.destroy).pack(side="right")
+        ttk.Button(buttons, text="Cerrar", command=self.close).pack(side="right")
         ttk.Button(buttons, text="Aceptar y crear capítulo", command=self.accept,
                    style="Accent.TButton").pack(side="right", padx=8)
         ttk.Button(buttons, text="Generar estudio completo", command=self.generate_report).pack(
             side="left"
         )
+        self.protocol("WM_DELETE_WINDOW", self.close)
         localize_widget_tree(self)
 
     def open_library_editor(self) -> None:
@@ -897,8 +898,16 @@ class SafetyProposalWindow(tk.Toplevel):
             return
         self.library_editor = LibraryEditor(
             self, LIBRARY_PATH, "Biblioteca de fichas de Seguridad y Salud",
-            used_members=used_members,
+            used_members=used_members, track_changes=True,
         )
+
+    def close(self) -> None:
+        """Respeta la decisión de guardar, descartar o seguir editando la biblioteca."""
+        if self.library_editor is not None and self.library_editor.winfo_exists():
+            self.library_editor.close()
+            if self.library_editor.winfo_exists():
+                return
+        self.destroy()
 
     def _toggle(self, event=None):
         """Alterna la inclusión de la partida seleccionada y actualiza su marca."""
@@ -936,6 +945,14 @@ class SafetyProposalWindow(tk.Toplevel):
 
     def generate_report(self) -> None:
         """Crea el capítulo integrado y genera el estudio completo desde las plantillas."""
+        if (self.library_editor is not None and self.library_editor.winfo_exists()
+                and self.library_editor.dirty):
+            messagebox.showerror(
+                "Seguridad y salud",
+                "Guarda o descarta los cambios de la biblioteca antes de generar el estudio.",
+                parent=self,
+            )
+            return
         if not self._create_chapter():
             return
         from .study_report import study_work_units

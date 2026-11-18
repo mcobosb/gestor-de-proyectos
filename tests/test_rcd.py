@@ -397,6 +397,8 @@ class RcdReportTests(unittest.TestCase):
                 "Ley 7/2022", "RD 553/2020", "13.044,62",
             ):
                 self.assertIn(value, text)
+            self.assertNotIn("Registro de cambios", text)
+            self.assertNotIn("Biblioteca distribuida con el programa", text)
             self.assertEqual(text.count("Firma única del estudio"), 1)
             self.assertNotIn("{{", text)
         self.assertEqual(state.to_dict(), original)
