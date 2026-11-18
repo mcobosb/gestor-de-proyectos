@@ -22,9 +22,18 @@ En las siguientes ocasiones basta con ejecutar el último comando. Mantén junto
 los módulos principales y las carpetas `iconos` y `tools`.
 
 Al arrancar, el programa examina `tools` junto a la aplicación y añade al menú
-**Herramientas** los módulos disponibles. Para añadir o retirar una herramienta,
+**Herramientas** los módulos disponibles. En el instalador de Windows, la
+**Instalación personalizada** permite marcar cada módulo por separado. También
+puedes instalar **Solo el programa base**, con los catálogos de Consultas.
+La lista señala que **PPTP** y **Seguridad y Salud** usan códigos BCCA para las
+correspondencias automáticas, y que en **RCDs** el cruce con BCCA2023 es opcional.
+Al actualizar, desmarcar un módulo previamente instalado lo retira del menú sin
+borrar sus bibliotecas editadas ni los datos del proyecto.
+
+Para añadir o retirar una herramienta manualmente desde el código fuente,
 coloca o mueve su carpeta completa y reinicia: `tools/pptp`, `tools/planning`,
-`tools/rcd`, `tools/safety_health`, `tools/certifications` o `tools/invoicing`.
+`tools/rcd`, `tools/safety_health`, `tools/certifications`, `tools/invoicing` o
+`tools/price_justification`.
 Cada carpeta contiene la entrada de la herramienta y sus scripts y recursos.
 En código fuente son archivos `.py`; en la versión instalada son extensiones
 `.pyd`. Conserva `tools/_shared`, que contiene cálculos y constantes comunes.

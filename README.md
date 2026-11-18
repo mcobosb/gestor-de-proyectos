@@ -860,6 +860,12 @@ Después, desde PowerShell en la carpeta del proyecto:
 ```
 
 El instalador generado aparece en `dist\GestorDeProyectos-Setup-1.7.0.exe`.
+Permite instalar todos los módulos, solo el programa base o una selección
+personalizada. Los catálogos de **Consultas** están disponibles en las tres
+modalidades. En la selección se advierte que las correspondencias automáticas de
+**PPTP** y **Seguridad y Salud** están diseñadas para códigos BCCA; en **RCDs**
+el cruce LER–BCCA2023 es complementario y no impide usar otras bases.
+
 El script usa automáticamente `.\.venv\Scripts\python.exe` si existe; en caso
 contrario, utiliza el comando `python` disponible en el sistema.
 La distribución incluye la licencia y el manual, pero no los presupuestos ni
