@@ -1160,6 +1160,7 @@ class BudgetMainWindow(QMainWindow):
         """Valida y restaura un proyecto JSON."""
         from tools.price_justification import restore_project_state
         from tools.rcd import restore_project_state as restore_rcd_state
+        from tools.safety_health import restore_project_state as restore_safety_state
 
         try:
             document = read_project(
@@ -1172,6 +1173,7 @@ class BudgetMainWindow(QMainWindow):
                 document.price_justification
             )
             rcd_state = restore_rcd_state(document.rcds)
+            safety_state = restore_safety_state(document.safety_health)
         except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
             QMessageBox.critical(
                 self, "No se pudo abrir el proyecto", f"El archivo no es válido:\n{exc}"
@@ -1190,7 +1192,7 @@ class BudgetMainWindow(QMainWindow):
         self.planning_state = document.planning
         self.invoicing_state = document.invoicing
         self.rcd_state = rcd_state
-        self.safety_health_state = document.safety_health
+        self.safety_health_state = safety_state
         self.pptp_state = document.pptp
         self.price_justification_state = price_justification_state
         self.selected_budget_index = None

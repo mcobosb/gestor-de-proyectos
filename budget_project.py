@@ -315,18 +315,23 @@ def chapter_title_for(state: Any, chapter: str) -> str:
 
 def reference_base_for(state: Any, item: ProjectItem) -> Bc3Dataset | None:
     """Selecciona la base de referencia que corresponde a una partida."""
-    for base in state.reference_bases:
+    reference_bases = getattr(state, "reference_bases", [])
+    for base in reference_bases:
         if item.reference_base and base.path.stem == item.reference_base:
             return base
-    for base in state.reference_bases:
+    for base in reference_bases:
         if item.code in base.concepts:
             return base
-    return state.reference_bases[0] if state.reference_bases else None
+    return reference_bases[0] if reference_bases else None
 
 
 def component_dataset_for(state: Any, item: ProjectItem) -> Bc3Dataset | None:
     """Selecciona la fuente válida para resolver descomposiciones."""
-    return reference_base_for(state, item) if item.source == "BCCA" else state.budget_dataset
+    return (
+        reference_base_for(state, item)
+        if item.source == "BCCA"
+        else getattr(state, "budget_dataset", None)
+    )
 
 
 def budget_concept_type(

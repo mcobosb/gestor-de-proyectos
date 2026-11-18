@@ -8,7 +8,7 @@ import tempfile
 import unicodedata
 from zipfile import BadZipFile, ZipFile
 
-from bc3_gui import Bc3Dataset, Concept
+from budget_core import Bc3Dataset, Concept
 
 RESOURCE_PREFIX = "RECURSOS/"
 

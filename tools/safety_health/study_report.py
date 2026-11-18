@@ -361,14 +361,14 @@ def _add_markdown(
 
 def _currency_label(settings) -> str:
     """Obtiene el nombre de la divisa configurada para los importes del estudio."""
-    from bc3_gui import currency_label
+    from budget_core import currency_label
 
     return currency_label(settings.currency, settings.custom_currency)
 
 
 def _format_number(value: float | Decimal) -> str:
     """Formatea una magnitud conforme al formato numerico del presupuesto."""
-    from bc3_gui import fmt_number
+    from budget_core import fmt_number
 
     return fmt_number(float(value))
 
@@ -380,7 +380,7 @@ def _format_amount(value: float | Decimal, currency: str) -> str:
 
 def _chapter_label(app, chapter: str) -> str:
     """Combina el codigo normalizado del capitulo con su titulo de presupuesto."""
-    from bc3_gui import format_chapter_code
+    from budget_core import format_chapter_code
 
     title = app._chapter_title(chapter)
     code = format_chapter_code(chapter)
@@ -1556,7 +1556,7 @@ def _write_pdf(app, target, content: _StudyContent) -> None:
 def _write_odt(app, target, content: _StudyContent) -> None:
     """Escribe el mismo estudio como documento ODT editable basado en la plantilla."""
     from xml.etree import ElementTree as ET
-    from bc3_gui import currency_label
+    from budget_core import currency_label
     from odt_reports import _new_report, _tag
 
     settings = app.report_settings

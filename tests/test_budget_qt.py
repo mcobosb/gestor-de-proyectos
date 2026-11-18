@@ -22,6 +22,13 @@ from budget_reports import ReportSettings
 from tools.price_justification.qt_window import PriceJustificationWindowQt
 from tools.rcd import RCD_BUDGET_SOURCE
 from tools.rcd.qt_window import RcdWindowQt
+from tools.safety_health import proposed_lines, serialize_state
+from tools.safety_health.qt_window import (
+    ChapterSelectionDialogQt,
+    ExternalConditionsDialogQt,
+    SafetyHealthWindowQt,
+)
+from decimal import Decimal
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -286,6 +293,83 @@ class BudgetQtWindowTests(unittest.TestCase):
             )
             self.assertTrue(window._load_project_file(path))
             self.assertEqual(window.rcd_state["documentation"]["reuse"], "Texto")
+            window.close()
+            self.application.processEvents()
+
+    def test_safety_health_qt_reviews_chapter_criteria_centers_and_conditions(self) -> None:
+        """Migra el asistente preventivo conservando estado y propuesta."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            item = ProjectItem(
+                "01AAB00001", "01#", "m2", "Demolición de bóveda",
+                measurement=10, unit_price=15.89, rendimiento=2,
+            )
+            window.budget_items = [item]
+            window.chapter_order = ["01#"]
+            state = serialize_state(
+                proposed_lines([item]),
+                Decimal("2"),
+                chapter_selection={"01#": True},
+            )
+            window.safety_health_state = state
+            tool = SafetyHealthWindowQt(window)
+            self.assertEqual(len(tool.criteria_checks), 4)
+            self.assertEqual(len(tool.lines), 3)
+            tool.summary_text.setPlainText("Resumen preventivo Qt")
+            tool.commit_basic_state()
+            self.assertEqual(
+                window.safety_health_state["resumen_actuacion"],
+                "Resumen preventivo Qt",
+            )
+            conditions = tool.open_external_conditions()
+            self.assertIsInstance(conditions, ExternalConditionsDialogQt)
+            conditions.rows["trafico_existente"][1].setCurrentIndex(
+                conditions.rows["trafico_existente"][1].findData("yes")
+            )
+            conditions.save()
+            self.assertEqual(
+                window.safety_health_state["external_conditions"][
+                    "trafico_existente"
+                ]["applicability"],
+                "yes",
+            )
+            proposal = tool.open_proposal()
+            self.assertEqual(proposal.table.rowCount(), 3)
+            with patch.object(window, "save_project", return_value=False):
+                self.assertTrue(proposal.create_chapter())
+            generated = [
+                row
+                for row in window.budget_items
+                if row.source.startswith("SS:")
+            ]
+            self.assertEqual(len(generated), 3)
+            proposal.reject()
+            tool.reject()
+            window.is_dirty = False
+            window.close()
+            self.application.processEvents()
+
+    def test_safety_health_chapter_selector_requires_nonempty_scope(self) -> None:
+        """La selección inicial Qt conserva la obligatoriedad de un capítulo."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            window.budget_items = [
+                ProjectItem("P", "01#", "ud", "Obra", 1, 10)
+            ]
+            dialog = ChapterSelectionDialogQt(window, lambda choices: None)
+            self.assertTrue(all(
+                check.isChecked() for check in dialog.choices.values()
+            ))
+            for check in dialog.choices.values():
+                check.setChecked(False)
+            with patch.object(QMessageBox, "critical") as error:
+                dialog.accept_selection()
+            error.assert_called_once()
+            dialog.reject()
             window.close()
             self.application.processEvents()
 

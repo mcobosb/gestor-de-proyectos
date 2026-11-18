@@ -101,6 +101,65 @@ def restore_project_state(data: dict) -> dict:
     )
 
 
+def open_tool_qt(app) -> None:
+    """Abre el selector de capítulos y el asistente Qt."""
+    from PySide6.QtWidgets import QMessageBox
+    from .qt_window import ChapterSelectionDialogQt, SafetyHealthWindowQt
+
+    if not app.budget_items:
+        QMessageBox.information(
+            app, TOOL_LABEL,
+            "Carga o crea un presupuesto antes de analizar Seguridad y Salud.",
+        )
+        return
+    for window in app._project_windows:
+        if isinstance(window, SafetyHealthWindowQt) and window.isVisible():
+            window.raise_()
+            return
+
+    def start(choices: dict[str, bool]) -> None:
+        """Guarda el ámbito y abre la ventana principal Qt."""
+        state = dict(app.safety_health_state)
+        previous = {
+            chapter.code for chapter in study_chapters(app)
+            if chapter.selected or "chapter_selection" not in state
+        }
+        selected = {code for code, included in choices.items() if included}
+        if not state:
+            state = serialize_state(
+                _budget_safety_lines(app),
+                Decimal(str(app.report_settings.safety_health_percentage)),
+            )
+        if selected != previous:
+            state["lines"] = []
+            state.pop("study_criteria", None)
+        state["chapter_selection"] = restore_chapter_selection(choices)
+        app.safety_health_state = state
+        app._mark_dirty()
+        try:
+            window = SafetyHealthWindowQt(app)
+        except ValueError as exc:
+            QMessageBox.critical(app, "Seguridad y salud", str(exc))
+            return
+        app._project_windows.append(window)
+        window.show()
+
+    dialog = ChapterSelectionDialogQt(app, start)
+    if dialog.exec() != dialog.DialogCode.Accepted:
+        return
+
+
+def before_project_save_qt(app) -> None:
+    """Sincroniza el capítulo preventivo generado antes de guardar."""
+    if not app.safety_health_state or app._has_external_tool_chapter("safety"):
+        return
+    from .qt_window import SafetyHealthWindowQt
+
+    for window in app._project_windows:
+        if isinstance(window, SafetyHealthWindowQt) and window.isVisible():
+            window.commit_basic_state()
+
+
 def _checked_work_summary(value: object) -> str:
     """Valida el resumen sin convertir datos incorrectos en texto de la memoria."""
     if not isinstance(value, str):
@@ -399,7 +458,7 @@ def synchronize_budget(
     resumen_actuacion: str | None = None,
 ) -> None:
     """Sustituye exclusivamente las partidas SS generadas por la revisión aceptada."""
-    from bc3_gui import MeasurementLine, ProjectItem
+    from budget_core import MeasurementLine, ProjectItem
     conditions = restore_external_conditions(
         external_conditions if external_conditions is not None
         else getattr(app, "safety_health_state", {}).get("external_conditions")
