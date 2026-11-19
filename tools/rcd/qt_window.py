@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 )
 
 from tools._library_editor_qt import LibraryEditorQt
+from tools._shared.reference_pill import add_reference_pill
 from collaborative_storage import shared_library_path
 from . import (
     GROUPS,
@@ -72,6 +73,7 @@ class RcdWindowQt(QDialog):
         self.setWindowTitle("RCDs")
         self.resize(1280, 820)
         layout = QVBoxLayout(self)
+        add_reference_pill(layout, "rcd")
         title = QLabel("RCDs — Datos de cálculo y revisión")
         title.setStyleSheet("font-size: 18px; font-weight: 600;")
         layout.addWidget(title)

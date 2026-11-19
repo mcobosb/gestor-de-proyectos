@@ -39,6 +39,7 @@ from .document import (
 )
 from .templates import DOCUMENTS, LIBRARY_PATH, general_variables, load_documents
 from tools._library_editor_qt import LibraryEditorQt
+from tools._shared.reference_pill import add_reference_pill
 from collaborative_storage import shared_library_path
 
 
@@ -60,6 +61,7 @@ class PriceJustificationWindowQt(QDialog):
         available = self.screen().availableGeometry()
         self.resize(min(1120, available.width() - 24), min(760, available.height() - 64))
         layout = QVBoxLayout(self)
+        add_reference_pill(layout, "price_justification")
         title = QLabel(TITLE)
         title.setStyleSheet("font-size: 18px; font-weight: 600;")
         layout.addWidget(title)

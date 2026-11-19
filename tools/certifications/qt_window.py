@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 from budget_core import format_chapter_code, format_currency, parse_float
 from budget_reports import CERTIFICATION_REPORT_NAMES, DEVIATION_REPORT_NAME, write_certification_pdf
 from odt_reports import write_certification_odt
+from tools._shared.reference_pill import add_reference_pill
 from tools._shared.scheduling import PlanParams, apply_saved_plan_state, build_activities
 from . import economic_months, planned_monthly_amounts, reconcile_certification
 
@@ -63,6 +64,7 @@ class CertificationWindowQt(QDialog):
         self.setWindowTitle(f"{app._project_title()} — Certificaciones")
         self.resize(1500, 780)
         layout = QVBoxLayout(self)
+        add_reference_pill(layout, "certifications")
         toolbar = QHBoxLayout()
         self.copy_button = QPushButton("Copiar plan seleccionado a su certificación")
         self.copy_button.clicked.connect(self.copy_selected_plan)

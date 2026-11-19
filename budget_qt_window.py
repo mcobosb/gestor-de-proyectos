@@ -82,6 +82,7 @@ from budget_project import (
 from budget_reports import REPORT_NAMES, ReportSettings, write_pdf
 from budget_qt_settings import SettingsDialog
 from budget_qt_theme import THEMES, apply_theme, search_icon
+from tools._shared.reference_pill import add_reference_pill
 from localization import LANGUAGES, set_language
 from qt_localization import apply_button_language
 from odt_reports import write_report_odt
@@ -246,6 +247,7 @@ class BudgetMainWindow(QMainWindow):
         self._build_toolbar()
         main = QWidget()
         layout = QVBoxLayout(main)
+        add_reference_pill(layout, "budget")
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._build_budget_panel())
         splitter.addWidget(self._build_reference_panel())

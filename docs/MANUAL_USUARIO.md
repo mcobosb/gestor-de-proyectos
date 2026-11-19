@@ -49,6 +49,10 @@ diálogos se actualizan sin reiniciar. El selector de archivos usa el diálogo
 de Qt para que sus botones y el aviso al reemplazar un archivo existente
 respeten este idioma, aunque Windows use otro.
 
+La píldora **Referencias**, en la ventana principal y en las herramientas,
+abre una nota breve y enlaces a las fuentes de consulta de esa ventana.
+Las páginas se abren en el navegador solo al pulsar un enlace.
+
 ## 2. Crear o abrir un proyecto
 
 La aplicación arranca siempre sin proyecto ni bases cargadas, aunque conserve

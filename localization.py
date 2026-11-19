@@ -947,6 +947,7 @@ _TEXT = {
     "Abrir PDF": ("Open PDF", "Ouvrir le PDF"),
     "Guardar como…": ("Save as…", "Enregistrer sous…"),
     "Cerrar": ("Close", "Fermer"),
+    "Referencias": ("References", "Références"),
     "Guardar plan de trabajo": ("Save work plan", "Enregistrer le planning des travaux"),
 }
 

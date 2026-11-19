@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 from tools._library_editor_qt import LibraryEditorQt
+from tools._shared.reference_pill import add_reference_pill
 from .library import ZipLibrary
 from .document import (
     DEFAULT_TOC_DEPTH,
@@ -90,6 +91,7 @@ class PptpWindowQt(QDialog):
         self.setWindowTitle("PPTP — Paso 1 de 3")
         self.resize(1160, 760)
         layout = QVBoxLayout(self)
+        add_reference_pill(layout, "pptp")
         self.pages = QStackedWidget()
         self.pages.addWidget(self._variables_page())
         self.pages.addWidget(self._automatic_page())

@@ -1,6 +1,8 @@
 """Ventana BIM: árbol, inspector y estado compartido con el visor."""
 from __future__ import annotations
 
+from tools._shared.reference_pill import ReferencePill
+
 from collections import defaultdict
 from typing import Iterator
 
@@ -162,6 +164,7 @@ class BimViewer(QMainWindow):
         """Añade encuadre, aislamiento y controles de corte ortogonal."""
         bar = QToolBar("Navegación BIM", self)
         self.addToolBar(bar)
+        bar.addWidget(ReferencePill("bim", bar))
         bar.addAction("Encuadrar", lambda: self.viewport.fit())
         bar.addAction("Aislar selección", self._isolate)
         bar.addAction("Mostrar todo", self._show_all)

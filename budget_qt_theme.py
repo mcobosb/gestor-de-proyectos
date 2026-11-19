@@ -140,7 +140,7 @@ class _QtDecorationFilter(QObject):
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         """Delega la decoración tras crear la jerarquía visual."""
         if event.type() == QEvent.Type.Show and isinstance(watched, QWidget):
-            QTimer.singleShot(0, lambda widget=watched: decorate_widget(widget))
+            QTimer.singleShot(0, watched, lambda widget=watched: decorate_widget(widget))
         return False
 
 
@@ -255,6 +255,17 @@ def _stylesheet(theme: str) -> str:
     }}
     QPushButton:disabled, QLineEdit:disabled, QComboBox:disabled {{
         color: {muted};
+    }}
+    QPushButton#referencePill {{
+        min-height: 18px;
+        padding: 3px 10px;
+        border: 1px solid {teal_border};
+        border-radius: 12px;
+        background: {teal_tint};
+        color: {teal_text};
+    }}
+    QPushButton#referencePill:hover, QPushButton#referencePill:focus {{
+        border-color: {teal_text};
     }}
     QLineEdit, QPlainTextEdit, QTextEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
         background: {surface};

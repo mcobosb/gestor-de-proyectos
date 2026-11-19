@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 
 from tools._library_editor import library_members
 from tools._library_editor_qt import LibraryEditorQt
+from tools._shared.reference_pill import add_reference_pill
 from collaborative_storage import shared_library_path
 from . import (
     CARE_CENTERS_URL,
@@ -274,6 +275,7 @@ class SafetyHealthWindowQt(QDialog):
         self.setWindowTitle("Seguridad y salud")
         self.resize(1120, 800)
         layout = QVBoxLayout(self)
+        add_reference_pill(layout, "safety_health")
         criteria = QGroupBox("Criterios del artículo 4.1 de la LPRL")
         criteria_layout = QVBoxLayout(criteria)
         values = saved or self.study_criteria.fulfilled

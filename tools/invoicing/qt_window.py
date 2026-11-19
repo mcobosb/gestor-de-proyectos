@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from budget_core import fmt_eur
+from tools._shared.reference_pill import add_reference_pill
 from . import (
     ALL_PERIODS,
     UNDATED_PERIOD,
@@ -81,6 +82,7 @@ class InvoicingWindowQt(QDialog):
         self.setWindowTitle("Facturación")
         self.resize(1480, 800)
         layout = QVBoxLayout(self)
+        add_reference_pill(layout, "invoicing")
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._billing_panel())
         splitter.addWidget(self._pdf_panel())

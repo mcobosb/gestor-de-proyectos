@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QApplication, QDialog, QDialogButtonBox, QFileDialog, QLabel, QLineEdit, QMainWindow, QMessageBox,
     QPushButton, QSplashScreen, QSplitter, QVBoxLayout,
 )
-from PySide6.QtCore import QCoreApplication, QEvent, Qt, QTimer
+from PySide6.QtCore import QCoreApplication, QEvent, Qt, QTimer, QUrl
 from PySide6.QtTest import QTest
 
 import qt_app
@@ -27,6 +27,7 @@ from budget_qt_theme import apply_theme
 from budget_reports import ReportSettings
 from localization import get_language, set_language
 from qt_localization import apply_button_language, localize_button
+from tools._shared.reference_pill import ReferencePill
 from tools.price_justification.qt_window import PriceJustificationWindowQt
 from tools.rcd import RCD_BUDGET_SOURCE
 from tools.rcd.qt_window import RcdWindowQt
@@ -108,6 +109,36 @@ class BudgetQtWindowTests(unittest.TestCase):
             qt_app.main()
             window_class.return_value.showMaximized.assert_called_once()
             schedule.assert_not_called()
+
+    def test_reference_pill_opens_context_and_launches_only_selected_link(self) -> None:
+        """La píldora muestra el contexto de la herramienta sin abrir páginas por sí sola."""
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("budget_qt_window.user_data_directory", return_value=Path(directory)),
+            patch("tools._shared.reference_pill.QDesktopServices.openUrl", return_value=True) as launch,
+        ):
+            window = BudgetMainWindow()
+            self.addCleanup(QCoreApplication.sendPostedEvents, None, QEvent.Type.DeferredDelete)
+            self.addCleanup(window.deleteLater)
+            main_pill = window.findChild(ReferencePill)
+            self.assertIsNotNone(main_pill)
+            window.budget_items = [ProjectItem("P1", "01#", "ud", "Partida", 1, 10)]
+            window._open_tool("price_justification")
+            tool = window._project_windows[-1]
+            pill = tool.findChild(ReferencePill)
+            self.assertIsNotNone(pill)
+            QTest.mouseClick(pill, Qt.MouseButton.LeftButton)
+            dialog = tool.findChild(QDialog, "referencePillDialog")
+            self.assertIsNotNone(dialog)
+            self.assertTrue(dialog.isVisible())
+            launch.assert_not_called()
+            link = next(label for label in dialog.findChildren(QLabel) if "artículo 130" in label.text())
+            address = "https://www.boe.es/buscar/act.php?id=BOE-A-2001-19995#a130"
+            self.assertIn(address, link.text())
+            link.linkActivated.emit(address)
+            launch.assert_called_once_with(QUrl(address))
+            dialog.reject()
+            self.assertFalse(dialog.isVisible())
 
     def test_long_panel_titles_elide_without_limiting_splitter(self) -> None:
         """Los nombres largos se recortan y no ensanchan ninguno de los paneles."""

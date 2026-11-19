@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 from budget_core import format_chapter_code, fmt_number
+from tools._shared.reference_pill import add_reference_pill
 from tools._shared.scheduling import (
     RELATIONS,
     PlanParams,
@@ -71,6 +72,7 @@ class PlanningWindowQt(QDialog):
         self.setWindowTitle(f"{self.project_title} — Planificación")
         self.resize(1320, 800)
         layout = QVBoxLayout(self)
+        add_reference_pill(layout, "planning")
         top = QHBoxLayout()
         top.addStretch()
         self.save_button = QPushButton("Guardar")
