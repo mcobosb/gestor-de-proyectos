@@ -11,12 +11,14 @@ from PySide6.QtWidgets import (
 
 if TYPE_CHECKING:
     from .engine import BimModel
+    from .scene import Scene
+    from .viewer import BimViewer
 
 
 class _LoadSignals(QObject):
     """Entrega el resultado de la carga al hilo de interfaz."""
 
-    loaded = Signal(object)
+    loaded = Signal(object, object)
     failed = Signal(str)
 
 
@@ -34,15 +36,17 @@ class _LoadIfc(QRunnable):
         """Abre el archivo y comunica errores de dependencias o de lectura."""
         try:
             from .engine import load_ifc
+            from .scene import prepare_scene
         except (ImportError, OSError) as exc:
-            self.signals.failed.emit(f"No se pudo cargar IfcOpenShell:\n{exc}")
+            self.signals.failed.emit(f"No se pudo cargar el motor IFC o VTK:\n{exc}")
             return
         try:
             model = load_ifc(self.path)
+            scene = prepare_scene(model)
         except (OSError, RuntimeError, ValueError) as exc:
             self.signals.failed.emit(f"No se pudo abrir {self.path.name}:\n{exc}")
         else:
-            self.signals.loaded.emit(model)
+            self.signals.loaded.emit(model, scene)
 
 
 class BimController(QObject):
@@ -53,6 +57,7 @@ class BimController(QObject):
         super().__init__(window)
         self._window = window
         self.model: BimModel | None = None
+        self._viewer: BimViewer | None = None
         self._loading = False
 
     def install_button(self, toolbar: QToolBar, label: str) -> None:
@@ -85,11 +90,22 @@ class BimController(QObject):
         worker.signals.failed.connect(self._failed, Qt.ConnectionType.QueuedConnection)
         QThreadPool.globalInstance().start(worker)
 
-    @Slot(object)
-    def _loaded(self, model: BimModel) -> None:
-        """Activa el modelo preparado y muestra un resumen de la geometría."""
-        self.model = model
+    @Slot(object, object)
+    def _loaded(self, model: BimModel, scene: Scene) -> None:
+        """Abre el visor para el IFC nuevo sin tirar el anterior si falla."""
         self._loading = False
+        try:
+            from .viewer import BimViewer
+            viewer = BimViewer(model, scene, self._window)
+        except (ImportError, OSError, RuntimeError) as exc:
+            self._failed(f"No se pudo abrir el visor BIM:\n{exc}")
+            return
+        if self._viewer is not None:
+            self._viewer.close()
+        self.model = model
+        self._viewer = viewer
+        viewer.closed.connect(self._viewer_closed)
+        viewer.show()
         geometry = (
             f"{len(model.meshes)} mallas, {model.triangle_count} triángulos"
             if model.meshes else "sin mallas trianguladas"
@@ -98,6 +114,12 @@ class BimController(QObject):
             f"Motor BIM: {model.path.name} ({model.source.schema_identifier}) · {geometry}",
             12000,
         )
+
+    @Slot()
+    def _viewer_closed(self) -> None:
+        """Libera la referencia al visor y sus datos al cerrarlo."""
+        self._viewer = None
+        self.model = None
 
     @Slot(str)
     def _failed(self, message: str) -> None:

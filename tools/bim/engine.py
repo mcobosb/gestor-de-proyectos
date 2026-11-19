@@ -9,7 +9,10 @@ from typing import Any
 import ifcopenshell
 import ifcopenshell.geom
 from ifcopenshell.util.element import get_materials, get_psets
-from ifcopenshell.util.shape import get_faces, get_shape_matrix, get_vertices
+from ifcopenshell.util.shape import (
+    get_faces, get_faces_material_style_ids, get_shape_material_styles,
+    get_shape_matrix, get_vertices,
+)
 import numpy as np
 from numpy.typing import NDArray
 
@@ -46,6 +49,8 @@ class TriangleMesh:
     faces: NDArray[np.int32]
     normals: NDArray[np.float32]
     transform: NDArray[np.float64]
+    geometry_id: str = ""
+    colors: NDArray[np.uint8] | None = None
 
 
 @dataclass(frozen=True)
@@ -103,6 +108,16 @@ def _face_normals(
     return normals.astype(np.float32)
 
 
+def _face_colors(geometry) -> NDArray[np.uint8]:
+    """Convierte los estilos de superficie IFC a RGB por triángulo."""
+    palette = [(172, 181, 190)]
+    for style in get_shape_material_styles(geometry):
+        rgb = style.get_color().components
+        palette.append(tuple(round(max(0.0, min(1.0, c)) * 255) for c in rgb))
+    indices = get_faces_material_style_ids(geometry)
+    return np.asarray(palette, dtype=np.uint8)[indices + 1]
+
+
 def load_ifc(path: Path) -> BimModel:
     """Abre un IFC STEP y triangula sus representaciones con el iterador paralelo."""
     if path.suffix.casefold() != ".ifc":
@@ -124,14 +139,26 @@ def load_ifc(path: Path) -> BimModel:
     # OpenCascade tarda varios minutos en algunos perfiles del ejemplo IFC 4.3.
     kernel = "cgal" if source.schema_identifier.startswith("IFC4X3") else "opencascade"
     meshes: dict[int, TriangleMesh] = {}
+    shared: dict[str, TriangleMesh] = {}
     for shape in ifcopenshell.geom.iterator(
         settings, source, num_threads=num_threads, geometry_library=kernel
     ):
-        faces = get_faces(shape.geometry)
-        if len(faces):
-            vertices = get_vertices(shape.geometry)
+        geometry = shape.geometry
+        template = shared.get(geometry.id)
+        transform = get_shape_matrix(shape)
+        if template is not None:
             meshes[shape.id] = TriangleMesh(
-                vertices, faces, _face_normals(vertices, faces), get_shape_matrix(shape)
+                template.vertices, template.faces, template.normals, transform,
+                template.geometry_id, template.colors,
             )
+            continue
+        faces = get_faces(geometry)
+        if len(faces):
+            vertices = get_vertices(geometry)
+            mesh = TriangleMesh(
+                vertices, faces, _face_normals(vertices, faces), transform,
+                geometry.id, _face_colors(geometry),
+            )
+            meshes[shape.id] = shared[geometry.id] = mesh
     triangle_count = sum(len(mesh.faces) for mesh in meshes.values())
     return BimModel(path, source, spatial_tree, meshes, triangle_count)

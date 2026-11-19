@@ -594,13 +594,20 @@ Consulta el [manual de usuario](docs/MANUAL_USUARIO.md) para el procedimiento co
 ### Motor BIM
 
 En la barra principal, elige **Motor BIM → Abrir archivo IFC…**. IfcOpenShell
-lee la jerarquía espacial y genera las mallas de triángulos en segundo plano
-con varios hilos. Al terminar, la barra de estado indica el esquema IFC y
-cuántas mallas y triángulos se han generado.
+lee y triangula el IFC en segundo plano. Al terminar se abre una ventana
+independiente con el visor VTK, el árbol espacial y el inspector de propiedades.
 
-Esta primera fase prepara el modelo para consultar Psets, cantidades y materiales
-y para un futuro visor 3D. Todavía no muestra el modelo ni lo guarda con el
-presupuesto.
+- Haz clic en una pieza del visor o del árbol para resaltarla e inspeccionar su
+  GlobalId, clase IFC, materiales y conjuntos de propiedades y cantidades.
+- Arrastra con el botón izquierdo para orbitar alrededor del último punto
+  pulsado, con el central para desplazar la vista y usa la rueda para acercarla.
+- Usa las casillas del árbol para ocultar elementos o ramas. **Aislar selección**
+  muestra solo la selección; **Fantasma** deja translúcido el resto no oculto.
+- Elige **Corte X**, **Y** o **Z** y desplaza el deslizador para ver el interior.
+  **Invertir corte** cambia el lado visible.
+
+El visor agrupa geometría y reutiliza mallas repetidas mediante instancias de GPU.
+El modelo y los cambios de visualización no se guardan con el presupuesto.
 
 ## Bases de precios de referencia
 

@@ -29,7 +29,7 @@ if ($LASTEXITCODE -eq 0) {
 if ($LASTEXITCODE -ne 0) {
     throw "Falta Nuitka. Instala las dependencias con: python -m pip install -r requirements.txt -r requirements-build.txt"
 }
-& $python -c "import cryptography, ifcopenshell.geom, numpy, pdfminer, pdfplumber, pypdfium2, PySide6"
+& $python -c "import cryptography, ifcopenshell.geom, numpy, pdfminer, pdfplumber, pypdfium2, PySide6; from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor; import vtkmodules.vtkRenderingOpenGL2"
 if ($LASTEXITCODE -ne 0) {
     throw "Faltan dependencias de ejecución. Instálalas con: python -m pip install -r requirements.txt"
 }
@@ -173,6 +173,14 @@ foreach ($tool in Get-ChildItem $toolsSource -Filter "*.py" -Recurse -File) {
     --include-module=ifcopenshell.util.shape `
     --include-module=ifcopenshell.util.element `
     --include-package-data=ifcopenshell `
+    --include-module=vtkmodules.qt.QVTKRenderWindowInteractor `
+    --include-module=vtkmodules.util.numpy_support `
+    --include-module=vtkmodules.vtkCommonCore `
+    --include-module=vtkmodules.vtkCommonDataModel `
+    --include-module=vtkmodules.vtkCommonTransforms `
+    --include-module=vtkmodules.vtkInteractionStyle `
+    --include-module=vtkmodules.vtkRenderingCore `
+    --include-module=vtkmodules.vtkRenderingOpenGL2 `
     --include-module=decimal `
     --include-module=calendar `
     --include-module=html `
