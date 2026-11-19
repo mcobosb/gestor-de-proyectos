@@ -47,7 +47,8 @@ from PySide6.QtWidgets import QTreeWidgetItemIterator
 from app_paths import application_directory, user_data_directory
 from budget_config import (
     APPLICATION_NAME, APPLICATION_RELEASE_DATE, APPLICATION_VERSION,
-    CONCEPT_TYPES, DUPLICATE_ITEM_MARKER,
+    BUY_ME_A_COFFEE_URL, CONCEPT_TYPES, DUPLICATE_ITEM_MARKER,
+    REFERENCE_PRICE_DATABASES, REPOSITORY_URL,
 )
 from budget_core import (
     Bc3Dataset,
@@ -79,6 +80,7 @@ from localization import LANGUAGES, set_language
 from odt_reports import write_report_odt
 from ods_export import write_ods
 from tool_loader import discover_tools
+from reference_search import load_reference_entries
 
 
 ROW_KIND = Qt.ItemDataRole.UserRole
@@ -97,6 +99,10 @@ class BudgetMainWindow(QMainWindow):
         self.selected_budget_index: int | None = None
         self.selected_chapter: str | None = None
         self.selected_reference: tuple[int, str] | None = None
+        self.budget_resource_filter = ""
+        self.reference_resource_filter = ""
+        self.budget_filter_buttons: dict[str, QPushButton] = {}
+        self.reference_filter_buttons: dict[str, QPushButton] = {}
         self.chapter_order: list[str] = []
         self.chapter_titles: dict[str, str] = {}
         self.planning_state: dict = {}
@@ -185,8 +191,17 @@ class BudgetMainWindow(QMainWindow):
 
         export_menu = menu.addMenu("Imprimir y exportar")
         export_menu.addAction("Vista previa del presupuesto…", self.preview_budget)
+        export_menu.addAction("Imprimir presupuesto", self.print_budget)
         export_menu.addAction("Exportar presupuesto a ODS…", self.export_budget_ods)
         export_menu.addAction("Exportar mediciones a CSV…", self.export_measurements_csv)
+        export_menu.addAction(
+            "Exportar recursos a ODS…",
+            lambda: self.export_resource_report("Recursos"),
+        )
+        export_menu.addAction(
+            "Exportar descompuestos a ODS…",
+            lambda: self.export_resource_report("Descompuestos"),
+        )
 
         reports_menu = menu.addMenu("Informes")
         for report in REPORT_NAMES:
@@ -201,13 +216,31 @@ class BudgetMainWindow(QMainWindow):
             action.triggered.connect(
                 lambda checked=False, name=tool.name: self._open_tool(name)
             )
+        references_menu = menu.addMenu("Consultas")
+        references_menu.addAction("NTP", lambda: self.open_reference_search("NTP"))
+        references_menu.addAction("UNE", lambda: self.open_reference_search("UNE"))
+        references_menu.addAction("LER", lambda: self.open_reference_search("LER"))
 
         info_menu = menu.addMenu("Información")
         info_menu.addAction(APPLICATION_NAME).setEnabled(False)
         info_menu.addAction(
             f"Versión {APPLICATION_VERSION} — {APPLICATION_RELEASE_DATE:%d/%m/%Y}"
         ).setEnabled(False)
+        price_menu = info_menu.addMenu("Bases de precios de referencia")
+        for label, url in REFERENCE_PRICE_DATABASES:
+            price_menu.addAction(
+                label,
+                lambda checked=False, selected=url: self._open_web_page(
+                    selected,
+                    "Bases de precios de referencia",
+                    "Base de precios abierta en el navegador.",
+                ),
+            )
         info_menu.addAction("Repositorio en GitHub", self.open_repository)
+        info_menu.addAction("Licencia y responsabilidad…", self.show_license_info)
+        info_menu.addAction(
+            "Apoyar el proyecto (Buy Me a Coffee)", self.open_donation_page
+        )
         info_menu.addAction("Acerca de PySide6…", self.show_about_qt)
 
     def _build_toolbar(self) -> None:
@@ -238,9 +271,24 @@ class BudgetMainWindow(QMainWindow):
         """Crea el árbol principal y los detalles de la partida seleccionada."""
         panel = QWidget()
         layout = QVBoxLayout(panel)
+        heading = QHBoxLayout()
         self.project_heading = QLabel("Proyecto: Sin título")
         self.project_heading.setStyleSheet("font-size: 16px; font-weight: 600;")
-        layout.addWidget(self.project_heading)
+        heading.addWidget(self.project_heading, 1)
+        for kind in ("2", "1", "3"):
+            button = QPushButton(CONCEPT_TYPES[kind].split()[0])
+            button.setCheckable(True)
+            button.setToolTip(
+                f"Filtrar recursos: {CONCEPT_TYPES[kind]}. "
+                "Pulsa de nuevo para mostrar todos."
+            )
+            button.clicked.connect(
+                lambda checked=False, selected=kind:
+                    self.toggle_budget_resource_filter(selected)
+            )
+            self.budget_filter_buttons[kind] = button
+            heading.addWidget(button)
+        layout.addLayout(heading)
         self.budget_search = QLineEdit()
         self.budget_search.setPlaceholderText("Filtrar presupuesto por código o texto…")
         self.budget_search.textChanged.connect(self.refresh_budget_tree)
@@ -307,9 +355,24 @@ class BudgetMainWindow(QMainWindow):
         """Crea el buscador y árbol de bases de referencia."""
         panel = QWidget()
         layout = QVBoxLayout(panel)
+        heading = QHBoxLayout()
         self.reference_heading = QLabel("Base de referencia: Sin cargar")
         self.reference_heading.setStyleSheet("font-size: 16px; font-weight: 600;")
-        layout.addWidget(self.reference_heading)
+        heading.addWidget(self.reference_heading, 1)
+        for kind in ("2", "1", "3"):
+            button = QPushButton(CONCEPT_TYPES[kind].split()[0])
+            button.setCheckable(True)
+            button.setToolTip(
+                f"Filtrar recursos: {CONCEPT_TYPES[kind]}. "
+                "Pulsa de nuevo para mostrar todos."
+            )
+            button.clicked.connect(
+                lambda checked=False, selected=kind:
+                    self.toggle_reference_resource_filter(selected)
+            )
+            self.reference_filter_buttons[kind] = button
+            heading.addWidget(button)
+        layout.addLayout(heading)
         self.reference_search = QLineEdit()
         self.reference_search.setPlaceholderText("Buscar código o texto en las bases…")
         self.reference_search.textChanged.connect(self.refresh_reference_tree)
@@ -596,6 +659,9 @@ class BudgetMainWindow(QMainWindow):
         """Reconstruye el árbol de referencia respetando el filtro actual."""
         self.reference_tree.clear()
         term = self.reference_search.text().strip().lower()
+        if self.reference_resource_filter:
+            self._refresh_reference_resources(term)
+            return
         grouped = len(self.reference_bases) > 1
         for base_index, base in enumerate(self.reference_bases):
             parent: QTreeWidgetItem = self.reference_tree.invisibleRootItem()
@@ -619,6 +685,90 @@ class BudgetMainWindow(QMainWindow):
         label = ", ".join(base.path.stem for base in self.reference_bases) or "Sin cargar"
         self.reference_heading.setText(f"Base de referencia: {label}")
 
+    def _refresh_reference_resources(self, term: str) -> None:
+        """Muestra usos de un tipo de recurso con capítulo y unidad de obra."""
+        count = 0
+        for base_index, base in enumerate(self.reference_bases):
+            reached: set[str] = set()
+
+            def visit(
+                code: str,
+                chapter: str = "",
+                work_item: str = "",
+                quantity: float | None = None,
+                path: tuple[str, ...] = (),
+                inherited_match: bool = False,
+            ):
+                """Recorre cada uso sin seguir ciclos."""
+                nonlocal count
+                if code in path or code not in base.concepts or count >= 500:
+                    return
+                reached.add(code)
+                concept = base.concepts[code]
+                matches = inherited_match or not term or term in (
+                    f"{code} {concept.summary} {concept.text}".lower()
+                )
+                if is_chapter_code(code):
+                    chapter = (
+                        f"{format_chapter_code(code)} · {concept.summary}"
+                    )
+                elif concept.ctype == "0" and not work_item:
+                    work_item = f"{code} · {concept.summary}"
+                if (
+                    concept.ctype == self.reference_resource_filter
+                    and not is_chapter_code(code)
+                    and matches
+                ):
+                    parent = self.reference_tree.invisibleRootItem()
+                    label = " · ".join(
+                        value
+                        for value in (
+                            chapter, work_item, f"{code} · {concept.summary}"
+                        )
+                        if value
+                    )
+                    self._reference_item(
+                        parent, base_index, code, quantity, label=label
+                    )
+                    count += 1
+                    if count == 500:
+                        self._set_status(
+                            "Se muestran los primeros 500 recursos. Acota la búsqueda."
+                        )
+                for child, child_quantity in concept.children:
+                    visit(
+                        child,
+                        chapter,
+                        work_item,
+                        child_quantity,
+                        (*path, code),
+                        matches,
+                    )
+
+            roots = [
+                code for code in base.concepts
+                if not any(
+                    child == code
+                    for concept in base.concepts.values()
+                    for child, _quantity in concept.children
+                )
+            ]
+            for root in (*base.root_codes, *roots, *base.concepts):
+                if root not in reached:
+                    visit(root)
+        self.reference_heading.setText(
+            f"Base de referencia: {CONCEPT_TYPES[self.reference_resource_filter]}"
+        )
+
+    def toggle_reference_resource_filter(self, kind: str) -> None:
+        """Alterna el filtro exclusivo de naturaleza de las bases."""
+        self.reference_resource_filter = (
+            "" if self.reference_resource_filter == kind else kind
+        )
+        for code, button in self.reference_filter_buttons.items():
+            button.setChecked(code == self.reference_resource_filter)
+        self.refresh_reference_tree()
+
     def _insert_reference_branch(
         self, parent: QTreeWidgetItem, base_index: int, base: Bc3Dataset, code: str
     ) -> QTreeWidgetItem:
@@ -640,11 +790,15 @@ class BudgetMainWindow(QMainWindow):
         base_index: int,
         code: str,
         quantity: float | None,
+        *,
+        label: str | None = None,
     ) -> QTreeWidgetItem:
         """Crea una fila de referencia con sus metadatos de selección."""
         concept = self.reference_bases[base_index].concepts.get(code, Concept(code))
         item = QTreeWidgetItem(parent)
-        item.setText(0, f"{code} · {concept.summary}".strip(" ·"))
+        item.setText(
+            0, label or f"{code} · {concept.summary}".strip(" ·")
+        )
         item.setText(1, fmt_number(quantity, 4) + f" {concept.unit}".strip() if quantity is not None else concept.unit)
         item.setText(2, fmt_number(self.reference_bases[base_index].calculate_rendimiento(code), 4)
                      if concept.ctype == "0" else "")
@@ -733,6 +887,9 @@ class BudgetMainWindow(QMainWindow):
         """Reconstruye capítulos y partidas manteniendo la selección visible."""
         self.budget_tree.clear()
         term = self.budget_search.text().strip().lower()
+        if self.budget_resource_filter:
+            self._refresh_budget_resources(term)
+            return
         chapter_items: dict[str, QTreeWidgetItem] = {}
         total = 0.0
         for chapter in self.chapter_order:
@@ -760,7 +917,19 @@ class BudgetMainWindow(QMainWindow):
                 branch.setExpanded(True)
                 self.budget_tree.addTopLevelItem(branch)
                 chapter_items[item.chapter] = branch
-            matches = not term or term in f"{item.code} {item.summary} {item.chapter}".lower()
+            own_text = f"{item.code} {item.summary} {item.text} {item.chapter}".lower()
+            dataset = self._component_dataset(item)
+            resources = (
+                item.cost_components(dataset, strict=False)
+                + item.indirect_components()
+            )
+            resource_matches = [
+                (concept, quantity, price)
+                for concept, quantity, price in resources
+                if not term
+                or term in f"{concept.code} {concept.summary}".lower()
+            ]
+            matches = not term or term in own_text or bool(resource_matches)
             if not matches:
                 continue
             row = QTreeWidgetItem(chapter_items[item.chapter], (
@@ -775,6 +944,20 @@ class BudgetMainWindow(QMainWindow):
             if item.code.endswith(DUPLICATE_ITEM_MARKER):
                 row.setForeground(0, Qt.GlobalColor.darkYellow)
             row.setExpanded(False)
+            for concept, quantity, price in resource_matches:
+                component = QTreeWidgetItem(row, (
+                    concept.code,
+                    CONCEPT_TYPES[self._budget_concept_type(item, concept.code)],
+                    concept.summary or concept.code,
+                    f"{fmt_number(quantity, 4)} {concept.unit}".strip(),
+                    self._format_currency(
+                        round_half_up(
+                            Decimal(str(quantity)) * Decimal(str(price))
+                        )
+                    ),
+                ))
+                component.setData(0, ROW_KIND, "resource")
+                component.setData(0, ROW_DATA, index)
             total += item.import_total
         if term:
             for chapter in self.chapter_order:
@@ -788,6 +971,71 @@ class BudgetMainWindow(QMainWindow):
             self.summary_label.setText(f"Total presupuesto: {self._format_currency(total)}")
         self._update_actions()
 
+    def _refresh_budget_resources(self, term: str) -> None:
+        """Lista recursos filtrados con capítulo y partida como contexto."""
+        count = 0
+        kind = self.budget_resource_filter
+        for index, item in enumerate(self.budget_items):
+            dataset = self._component_dataset(item)
+            resources = (
+                item.cost_components(dataset, strict=False)
+                + item.indirect_components()
+            )
+            item_context = (
+                f"{format_chapter_code(item.chapter)} · "
+                f"{self._chapter_title(item.chapter)} · "
+                f"{item.code} · {item.summary}"
+            ).lower()
+            for concept, quantity, price in resources:
+                if self._budget_concept_type(item, concept.code) != kind:
+                    continue
+                searchable = (
+                    f"{item_context} {concept.code} "
+                    f"{concept.summary} {concept.text}"
+                )
+                if term and term not in searchable.lower():
+                    continue
+                row = QTreeWidgetItem(self.budget_tree, (
+                    f"{concept.code} · {concept.summary or concept.code}",
+                    CONCEPT_TYPES[kind],
+                    (
+                        f"{format_chapter_code(item.chapter)} · "
+                        f"{self._chapter_title(item.chapter)} · "
+                        f"{item.code} · {item.summary}"
+                    ),
+                    f"{fmt_number(quantity, 4)} {concept.unit}".strip(),
+                    self._format_currency(
+                        round_half_up(
+                            Decimal(str(quantity)) * Decimal(str(price))
+                        )
+                    ),
+                ))
+                row.setData(0, ROW_KIND, "resource")
+                row.setData(0, ROW_DATA, index)
+                count += 1
+                if count >= 500:
+                    self._set_status(
+                        "Se muestran los primeros 500 recursos. Acota la búsqueda."
+                    )
+                    break
+            if count >= 500:
+                break
+        self.summary_label.setText(
+            f"Recursos de {CONCEPT_TYPES[kind]}: {count} · "
+            f"Total presupuesto: "
+            f"{self._format_currency(sum(i.import_total for i in self.budget_items))}"
+        )
+        self._update_actions()
+
+    def toggle_budget_resource_filter(self, kind: str) -> None:
+        """Alterna el filtro exclusivo de recursos del presupuesto."""
+        self.budget_resource_filter = (
+            "" if self.budget_resource_filter == kind else kind
+        )
+        for code, button in self.budget_filter_buttons.items():
+            button.setChecked(code == self.budget_resource_filter)
+        self.refresh_budget_tree()
+
     def on_budget_selection(self) -> None:
         """Sincroniza la selección con los paneles de detalle."""
         item = self.budget_tree.currentItem()
@@ -799,7 +1047,7 @@ class BudgetMainWindow(QMainWindow):
             self.selected_chapter = str(data)
             self.selected_budget_index = None
             self._show_item_details(None)
-        elif kind == "item":
+        elif kind in {"item", "resource"}:
             self.selected_chapter = None
             self.selected_budget_index = int(data)
             self._show_item_details(self.budget_items[self.selected_budget_index])
@@ -1603,6 +1851,20 @@ class BudgetMainWindow(QMainWindow):
         webbrowser.open(target.as_uri())
         self._set_status("Vista previa abierta en el navegador.")
 
+    def print_budget(self) -> None:
+        """Genera la vista previa y solicita impresión desde el navegador."""
+        if not self.budget_items:
+            QMessageBox.information(
+                self, "Presupuesto vacío", "No hay partidas que imprimir."
+            )
+            return
+        self.preview_budget()
+        QMessageBox.information(
+            self,
+            "Imprimir",
+            "Usa Ctrl+P en la vista previa abierta del navegador.",
+        )
+
     def export_budget_ods(self) -> None:
         """Exporta presupuesto y mediciones a una hoja ODS."""
         if not self.budget_items:
@@ -1680,6 +1942,79 @@ class BudgetMainWindow(QMainWindow):
             return
         self._set_status(f"Mediciones exportadas a {path}")
 
+    def export_resource_report(self, report: str) -> None:
+        """Exporta recursos o descompuestos del presupuesto a ODS."""
+        if not self.budget_items:
+            QMessageBox.information(
+                self, "Presupuesto vacío", "No hay partidas que exportar."
+            )
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            f"Exportar {report}",
+            f"{report}.ods",
+            "Hoja ODS (*.ods)",
+        )
+        if not path:
+            return
+        resources = report == "Recursos"
+        headers = (
+            ["Código", "Tipo", "Ud", "Resumen", "Precio", "Fuente", "Medición"]
+            if resources
+            else [
+                "Partida", "Recurso", "Tipo", "Ud", "Resumen",
+                "Rendimiento", "Precio", "Importe", "Fuente",
+            ]
+        )
+        rows = [headers]
+        grouped = {}
+        try:
+            for item in self.budget_items:
+                for concept, quantity, price in self._report_components(item):
+                    kind = self._budget_concept_type(item, concept.code)
+                    type_label = {
+                        "%": "%", "1": "MO", "2": "MAQ", "3": "MAT"
+                    }.get(kind, "AUX")
+                    if resources:
+                        key = (
+                            concept.code, type_label, concept.unit,
+                            concept.summary, price, item.source,
+                        )
+                        grouped[key] = grouped.get(key, Decimal(0)) + (
+                            Decimal(str(item.measurement)) * Decimal(str(quantity))
+                        )
+                    else:
+                        rows.append((
+                            item.code,
+                            concept.code,
+                            type_label,
+                            concept.unit,
+                            concept.summary,
+                            quantity,
+                            price,
+                            round_half_up(
+                                Decimal(str(quantity)) * Decimal(str(price))
+                            ),
+                            item.source,
+                        ))
+            if resources:
+                rows.extend((*key, float(value)) for key, value in grouped.items())
+            write_ods(
+                Path(path),
+                [{
+                    "name": report,
+                    "rows": rows,
+                    "header": True,
+                    "number_formats": (
+                        {4: 2, 6: 4} if resources else {5: 4, 6: 2, 7: 2}
+                    ),
+                }],
+            )
+        except (ImportError, OSError, ValueError) as exc:
+            QMessageBox.critical(self, "No se pudo exportar", str(exc))
+            return
+        self._set_status(f"{report} exportados a {path}")
+
     def generate_report(self, report: str) -> None:
         """Genera uno de los informes PDF existentes."""
         if not self.budget_items:
@@ -1715,7 +2050,70 @@ class BudgetMainWindow(QMainWindow):
 
     def open_repository(self) -> None:
         """Abre el repositorio del proyecto en el navegador."""
-        webbrowser.open("https://github.com/mcobosb/gestor-de-proyectos")
+        self._open_web_page(
+            REPOSITORY_URL, "Repositorio", "Repositorio abierto en el navegador."
+        )
+
+    def open_reference_search(self, kind: str) -> None:
+        """Abre o reutiliza cada buscador NTP/UNE."""
+        from reference_search_qt import ReferenceSearchWindowQt
+
+        for window in self._project_windows:
+            if (
+                isinstance(window, ReferenceSearchWindowQt)
+                and window.kind == kind
+                and window.isVisible()
+            ):
+                window.raise_()
+                return
+        try:
+            entries = load_reference_entries(kind)
+        except ValueError as exc:
+            QMessageBox.critical(self, f"Buscador de {kind}", str(exc))
+            return
+        window = ReferenceSearchWindowQt(self, kind, entries)
+        self._project_windows.append(window)
+        window.show()
+
+    def _open_web_page(
+        self, url: str, title: str, success_status: str
+    ) -> bool:
+        """Abre una URL HTTPS validada y reporta errores."""
+        from urllib.parse import urlsplit
+
+        if urlsplit(url).scheme not in {"http", "https"}:
+            QMessageBox.critical(self, title, "La dirección no es válida.")
+            return False
+        try:
+            if not webbrowser.open(url):
+                raise OSError("El navegador no aceptó la solicitud.")
+        except (OSError, ValueError) as exc:
+            QMessageBox.critical(
+                self, title, f"No se pudo abrir el navegador:\n{exc}"
+            )
+            return False
+        self._set_status(success_status)
+        return True
+
+    def open_donation_page(self) -> None:
+        """Abre la página de apoyo al proyecto."""
+        self._open_web_page(
+            BUY_ME_A_COFFEE_URL,
+            "Apoyar el proyecto",
+            "Página de apoyo abierta en el navegador.",
+        )
+
+    def show_license_info(self) -> None:
+        """Muestra licencia MIT y responsabilidad técnica."""
+        QMessageBox.information(
+            self,
+            "Licencia MIT y responsabilidad",
+            "Software libre · Licencia MIT\n\n"
+            "El software se proporciona «tal cual», sin garantías de ningún tipo. "
+            "La persona usuaria debe comprobar datos, cálculos, mediciones, "
+            "presupuestos y certificaciones antes de utilizarlos.\n\n"
+            "Texto íntegro: https://opensource.org/license/mit",
+        )
 
     def show_about_qt(self) -> None:
         """Muestra el diálogo de información de PySide6."""

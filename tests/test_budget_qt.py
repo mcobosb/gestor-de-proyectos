@@ -33,6 +33,8 @@ from tools.certifications.qt_window import CertificationWindowQt
 from tools.planning.qt_window import PlanningWindowQt
 from tools.invoicing import Invoice, InvoiceLine, InvoiceState
 from tools.invoicing.qt_window import InvoicingWindowQt
+from reference_search import ReferenceEntry, load_reference_entries
+from reference_search_qt import ReferenceSearchWindowQt
 from decimal import Decimal
 
 
@@ -554,6 +556,128 @@ class BudgetQtWindowTests(unittest.TestCase):
                 for index in range(len(tool.visible_rows))
             ))
             tool.reject()
+            window.is_dirty = False
+            window.close()
+            self.application.processEvents()
+
+    def test_main_qt_menus_cover_queries_exports_printing_and_information(self) -> None:
+        """No deja opciones heredadas fuera de los menús principales Qt."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            menus = {
+                action.text(): action.menu()
+                for action in window.menuBar().actions()
+            }
+            export_labels = [
+                action.text() for action in menus["Imprimir y exportar"].actions()
+            ]
+            for expected in (
+                "Vista previa del presupuesto…",
+                "Imprimir presupuesto",
+                "Exportar presupuesto a ODS…",
+                "Exportar mediciones a CSV…",
+                "Exportar recursos a ODS…",
+                "Exportar descompuestos a ODS…",
+            ):
+                self.assertIn(expected, export_labels)
+            query_labels = [
+                action.text() for action in menus["Consultas"].actions()
+            ]
+            self.assertEqual(query_labels, ["NTP", "UNE", "LER"])
+            info_labels = [
+                action.text() for action in menus["Información"].actions()
+            ]
+            self.assertIn("Bases de precios de referencia", info_labels)
+            self.assertIn("Licencia y responsabilidad…", info_labels)
+            self.assertIn("Apoyar el proyecto (Buy Me a Coffee)", info_labels)
+            window.close()
+            self.application.processEvents()
+
+    def test_reference_search_qt_filters_and_exposes_only_visible_entry(self) -> None:
+        """Consulta NTP/UNE sin conservar ventanas o datos heredados Tk."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            entries = (
+                ReferenceEntry(
+                    "NTP 1", "Seguridad", "1990", "", "",
+                    "https://www.insst.es/example",
+                ),
+                ReferenceEntry(
+                    "NTP 20", "Ruido", "1995", "", "",
+                    "https://www.insst.es/example-two",
+                ),
+            )
+            search = ReferenceSearchWindowQt(window, "NTP", entries)
+            search.query.setText("ruido")
+            self.assertEqual(search.table.rowCount(), 1)
+            search.table.selectRow(0)
+            self.assertEqual(search.selected_entry().code, "NTP 20")
+            self.assertIn("NTP 20", search.detail.toPlainText())
+            search.reject()
+            window.close()
+            self.application.processEvents()
+
+    def test_ler_reference_catalog_is_loaded_and_has_no_external_link(self) -> None:
+        """Consulta todos los niveles LER desde el CSV local."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            entries = load_reference_entries("LER")
+            self.assertGreater(len(entries), 100)
+            search = ReferenceSearchWindowQt(window, "LER", entries)
+            search.query.setText("hormigon")
+            self.assertGreater(search.table.rowCount(), 0)
+            search.table.selectRow(0)
+            self.assertTrue(search.selected_entry().code)
+            self.assertFalse(search.open_button.isEnabled())
+            search.reject()
+            window.close()
+            self.application.processEvents()
+
+    def test_budget_and_reference_resource_filters_are_visible_and_exclusive(self) -> None:
+        """Los botones de naturaleza filtran usos reales en ambos paneles."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            source = Path(ROOT / "tests" / "test.bc3")
+            window._load_budget_file(source)
+            window._load_reference_file(source)
+            self.assertEqual(
+                set(window.budget_filter_buttons), {"2", "1", "3"}
+            )
+            self.assertEqual(
+                set(window.reference_filter_buttons), {"2", "1", "3"}
+            )
+            window.toggle_budget_resource_filter("3")
+            self.assertTrue(window.budget_filter_buttons["3"].isChecked())
+            self.assertFalse(window.budget_filter_buttons["1"].isChecked())
+            self.assertGreater(window.budget_tree.topLevelItemCount(), 0)
+            self.assertTrue(all(
+                window.budget_tree.topLevelItem(index).data(
+                    0, Qt.ItemDataRole.UserRole
+                ) == "resource"
+                for index in range(window.budget_tree.topLevelItemCount())
+            ))
+            window.toggle_budget_resource_filter("3")
+            self.assertEqual(window.budget_resource_filter, "")
+            window.toggle_reference_resource_filter("2")
+            self.assertTrue(window.reference_filter_buttons["2"].isChecked())
+            self.assertGreater(
+                window.reference_tree.topLevelItemCount(), 0
+            )
+            for index in range(window.reference_tree.topLevelItemCount()):
+                self.assertEqual(
+                    window.reference_tree.topLevelItem(index).text(2),
+                    "",
+                )
+            window.toggle_reference_resource_filter("2")
+            self.assertEqual(window.reference_resource_filter, "")
             window.is_dirty = False
             window.close()
             self.application.processEvents()

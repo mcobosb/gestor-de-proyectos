@@ -670,6 +670,7 @@ migran las herramientas secundarias.
 | [tools/certifications/qt_window.py](tools/certifications/qt_window.py) | Plan económico y certificaciones migrados a PySide6 |
 | [tools/planning/qt_window.py](tools/planning/qt_window.py) | Planificación y Gantt migrados a PySide6 |
 | [tools/invoicing/qt_window.py](tools/invoicing/qt_window.py) | Facturación PDF y conciliación de costes migradas a PySide6 |
+| [reference_search_qt.py](reference_search_qt.py) | Consultas NTP, UNE y LER con PySide6 |
 | [budget_reports.py](budget_reports.py) | Configuración, cálculos e informes |
 | [report_layout.py](report_layout.py) | Estilos y maquetación PDF compartida |
 | [odt_reports.py](odt_reports.py) | Exportación editable de informes ODT |
