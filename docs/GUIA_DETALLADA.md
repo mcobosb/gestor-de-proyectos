@@ -93,7 +93,8 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
   privada, fuente de precios, convenio, salarios, cotizaciones, calendario,
   jornada anual y criterio de maquinaria. Se conservan con el proyecto y su
   historial; las notas anteriores permanecen en **Complementos opcionales**.
-- **Guardar anejo…** genera un único documento con índice, texto y listados
+- **Guardar anejo…** abre el selector de archivos para elegir nombre y destino.
+  Genera un único documento con índice, texto y listados
   de precios elementales, auxiliares y descompuestos, en la plantilla y formato
   PDF u ODT elegidos en la configuración de informes. El ODT contiene texto
   y tablas editables, no capturas. Las tablas de proyecto y referencias laborales
@@ -578,7 +579,7 @@ se guardan junto al código. La versión instalada guarda preferencias e histori
 en `%APPDATA%\Gestor de Proyectos`. No es necesario activar el entorno virtual.
 
 Al iniciar se muestra la imagen `iconos/Arranque.jpg`, centrada, sin marco y con esquinas redondeadas,
-durante unos dos segundos mientras se prepara la ventana principal. La imagen
+durante aproximadamente un segundo mientras se prepara la ventana principal. La imagen
 se retira antes de mostrar la ventana principal maximizada.
 La imagen también se incluye en la versión instalada.
 

@@ -57,15 +57,18 @@ class PriceJustificationWindowQt(QDialog):
         self._loading = True
         self.variables: dict[str, QLineEdit | QComboBox] = {}
         self.setWindowTitle(TITLE)
-        self.resize(1120, 760)
+        available = self.screen().availableGeometry()
+        self.resize(min(1120, available.width() - 24), min(760, available.height() - 64))
         layout = QVBoxLayout(self)
         title = QLabel(TITLE)
         title.setStyleSheet("font-size: 18px; font-weight: 600;")
         layout.addWidget(title)
-        layout.addWidget(QLabel(
+        instructions = QLabel(
             "Completa los datos específicos. Los textos base se editan desde "
             "la biblioteca de documentos."
-        ))
+        )
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
         self.general_info = QLabel()
         self.general_info.setWordWrap(True)
         layout.addWidget(self.general_info)
@@ -74,6 +77,7 @@ class PriceJustificationWindowQt(QDialog):
         content = QWidget()
         form = QFormLayout(content)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         self._entry(form, "reference_date", "Fecha de referencia (AAAA-MM-DD)")
         self._choice(form, "contract_type", "Régimen de contratación", {
             "public": "Contratación pública",
@@ -99,12 +103,13 @@ class PriceJustificationWindowQt(QDialog):
         })
         scroll.setWidget(content)
         layout.addWidget(scroll, 1)
-        bottom = QHBoxLayout()
-        bottom.addWidget(QLabel("Datos comunes: Archivo → Configuración…"))
-        bottom.addStretch()
+        common_info = QLabel("Datos comunes: Archivo → Configuración…")
+        common_info.setWordWrap(True)
+        layout.addWidget(common_info)
         library = QPushButton("Editar biblioteca de documentos…")
         library.clicked.connect(self.open_library_editor)
-        bottom.addWidget(library)
+        layout.addWidget(library)
+        bottom = QHBoxLayout()
         export = QPushButton("Guardar anejo…")
         export.clicked.connect(self.export)
         bottom.addWidget(export)
@@ -140,6 +145,8 @@ class PriceJustificationWindowQt(QDialog):
         """Añade referencias seleccionables que admiten texto local."""
         field = QComboBox()
         field.setEditable(True)
+        field.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        field.setMinimumContentsLength(20)
         field.addItems(references)
         field.setEditText(str(self._state[key]))
         field.editTextChanged.connect(self.changed)

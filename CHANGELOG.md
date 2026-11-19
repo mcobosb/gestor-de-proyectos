@@ -13,6 +13,8 @@
   modelo en 3D con árbol espacial, propiedades, selección, aislamiento, modo
   fantasma y planos de corte. Las equivalencias IFC 4.3 → BCCA se revisan antes
   de incorporarlas al presupuesto como mediciones vinculadas a su `GlobalId`.
+- Corregido un fallo de Qt al abrir proyectos recientes que también impedía
+  al botón «Guardar anejo…» abrir el selector de archivos.
 
 ## 1.7.0 — 2026-11-17
 

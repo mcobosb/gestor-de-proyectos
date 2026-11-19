@@ -60,5 +60,5 @@ def main() -> int:
             window.showMaximized()
             splash.close()
 
-        QTimer.singleShot(max(0, 1800 - elapsed.elapsed()), window, show_main_window)
+        QTimer.singleShot(max(0, 1000 - elapsed.elapsed()), window, show_main_window)
     return app.exec()

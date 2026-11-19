@@ -259,8 +259,10 @@ class BudgetMainWindow(QMainWindow):
         menu = self.menuBar()
         self._file_menu = file_menu = QMenu("Archivo", menu)
         menu.addMenu(file_menu)
-        self.recent_menu = file_menu.addMenu("Recientes")
-        self.recent_reference_menu = file_menu.addMenu("Bases de referencia recientes")
+        self.recent_menu = QMenu("Recientes", file_menu)
+        file_menu.addMenu(self.recent_menu)
+        self.recent_reference_menu = QMenu("Bases de referencia recientes", file_menu)
+        file_menu.addMenu(self.recent_reference_menu)
         self._refresh_recent_menu()
         self._refresh_recent_reference_menu()
         file_menu.addSeparator()
@@ -374,15 +376,15 @@ class BudgetMainWindow(QMainWindow):
         """Añade las acciones rápidas del presupuesto."""
         toolbar = QToolBar("Presupuesto")
         self.addToolBar(toolbar)
-        self.save_action = toolbar.addAction("Guardar")
+        self.save_action = self._action("Guardar", self.save_project)
+        self.save_action.setShortcut(QKeySequence.StandardKey.Save)
+        toolbar.addAction(self.save_action)
         save_button = toolbar.widgetForAction(self.save_action)
         if save_button is not None:
             save_button.setObjectName("saveBudgetButton")
-        self.save_action.triggered.connect(self.save_project)
-        self.save_action.setShortcut(QKeySequence.StandardKey.Save)
-        self.undo_action = toolbar.addAction("Deshacer")
-        self.undo_action.triggered.connect(self.undo_last_action)
+        self.undo_action = self._action("Deshacer", self.undo_last_action)
         self.undo_action.setShortcut(QKeySequence.StandardKey.Undo)
+        toolbar.addAction(self.undo_action)
         toolbar.addSeparator()
         for tool in self.tools_by_name.values():
             if tool.install_toolbar_qt is not None:

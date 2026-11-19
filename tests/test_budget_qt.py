@@ -12,10 +12,11 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import (
-    QApplication, QDialog, QDialogButtonBox, QFileDialog, QLabel, QMainWindow, QMessageBox,
+    QApplication, QDialog, QDialogButtonBox, QFileDialog, QLabel, QLineEdit, QMainWindow, QMessageBox,
     QPushButton, QSplashScreen, QSplitter, QVBoxLayout,
 )
-from PySide6.QtCore import QCoreApplication, QEvent, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, Qt, QTimer
+from PySide6.QtTest import QTest
 
 import qt_app
 from budget_core import Bc3Dataset, Concept
@@ -393,6 +394,67 @@ class BudgetQtWindowTests(unittest.TestCase):
             window.is_dirty = False
             window.close()
             self.application.processEvents()
+
+    def test_price_justification_save_button_fits_and_opens_file_picker(self) -> None:
+        """Abre un proyecto reciente y permite guardar el anejo desde una ventana estrecha."""
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("budget_qt_window.user_data_directory", return_value=Path(directory)),
+            patch.object(QMessageBox, "information"),
+            patch.object(QMessageBox, "critical") as error,
+        ):
+            window = BudgetMainWindow()
+            try:
+                window.budget_items = [ProjectItem("P1", "01#", "ud", "Partida", 1, 10)]
+                window.report_settings.output_format = "odt"
+                window.project_title = "Proyecto reciente"
+                project_path = Path(directory) / "proyecto.json"
+                self.assertTrue(window._write_project_file(project_path))
+                window.project_title = "Sin abrir"
+                window.showMaximized()
+                self.application.processEvents()
+                recent_action = window.recent_menu.actions()[0]
+                recent_action.trigger()
+                self.assertEqual(window.project_title, "Proyecto reciente")
+                self.assertFalse(window.undo_action.isEnabled())
+                self.assertIn("Proyecto abierto:", window.status_bar.currentMessage())
+                window._open_tool("price_justification")
+                tool = window._project_windows[-1]
+                tool.resize(760, 600)
+                self.application.processEvents()
+                button = next(b for b in tool.findChildren(QPushButton)
+                              if b.text() == "Guardar anejo…")
+                self.assertLessEqual(tool.width(), 760)
+                self.assertTrue(tool.rect().contains(button.mapTo(tool, button.rect().bottomRight())))
+
+                target = Path(directory) / "anejo.odt"
+                opened: list[QFileDialog.AcceptMode] = []
+
+                def choose_destination() -> None:
+                    """Confirma el archivo en el selector visible y cierra cualquier modal inesperado."""
+                    dialog = self.application.activeModalWidget()
+                    if isinstance(dialog, QFileDialog) and dialog.isVisible():
+                        name_edit = dialog.findChild(QLineEdit, "fileNameEdit")
+                        if name_edit is None:
+                            dialog.reject()
+                            return
+                        opened.append(dialog.acceptMode())
+                        dialog.setDirectory(directory)
+                        name_edit.setText(target.name)
+                        dialog.accept()
+                    elif isinstance(dialog, QDialog):
+                        dialog.reject()
+
+                QTimer.singleShot(100, choose_destination)
+                QTest.mouseClick(button, Qt.MouseButton.LeftButton)
+                self.assertEqual(opened, [QFileDialog.AcceptMode.AcceptSave])
+                error.assert_not_called()
+                self.assertTrue(target.is_file())
+                tool.close()
+                self.assertFalse(tool.isVisible())
+            finally:
+                window.deleteLater()
+                QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
     def test_price_justification_qt_rejects_invalid_state_before_save(self) -> None:
         """Impide serializar una fecha o jornada no válida desde Qt."""
