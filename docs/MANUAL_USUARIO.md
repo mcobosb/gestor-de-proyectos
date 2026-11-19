@@ -20,7 +20,7 @@ python -m venv .venv
 
 En las siguientes ocasiones basta con ejecutar el último comando. Mantén juntos
 los módulos principales y las carpetas `iconos` y `tools`.
-La aplicación utiliza PySide6. En **Archivo → Configuración → Apariencia** puedes elegir el tema **Sistema**, **Claro** u **Oscuro**. Los tres usan acentos suaves para distinguir el proyecto en azul y la base de referencia en verde azulado.
+La aplicación utiliza PySide6. En **Archivo → Configuración → Apariencia** puedes elegir el tema **Sistema**, **Claro** u **Oscuro**. Los tres usan acentos suaves: azul para el presupuesto y los botones principales, verde azulado para la base de referencia y la presencia de colaboradores, y ciruela para la pestaña activa.
 
 Al arrancar, el programa examina `tools` junto a la aplicación y añade al menú
 **Herramientas** los módulos disponibles. En el instalador de Windows, la

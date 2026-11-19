@@ -159,6 +159,12 @@ def _stylesheet(theme: str) -> str:
     blue_tint = "#29374c" if dark else "#e8f0fc"
     blue_hover = "#354a68" if dark else "#dce9fc"
     teal_text = "#8cd7ca" if dark else "#16675d"
+    teal_tint = "#233b3b" if dark else "#e7f3ef"
+    teal_border = "#3e5a59" if dark else "#b8d7ce"
+    plum_text = "#e0c5eb" if dark else "#654575"
+    plum_tint = "#3a3042" if dark else "#f0e9f5"
+    plum_border = "#63516f" if dark else "#d4c2e0"
+    selection = "#345785" if dark else "#2455a3"
     chrome = "#262d3a" if dark else "#f2f6fd"
     return f"""
     QWidget {{
@@ -184,7 +190,7 @@ def _stylesheet(theme: str) -> str:
         border-radius: 7px;
     }}
     QToolButton:hover {{
-        background: {surface_alt};
+        background: {blue_tint};
     }}
     QToolButton#saveBudgetButton {{
         background: {blue_tint};
@@ -201,12 +207,20 @@ def _stylesheet(theme: str) -> str:
         color: {teal_text};
         font-weight: 600;
     }}
+    QWidget#collaborationPresence {{
+        background: {teal_tint};
+        border: 1px solid {teal_border};
+        border-radius: 6px;
+    }}
+    QWidget#collaborationPresence QLabel {{
+        color: {teal_text};
+    }}
     QMenuBar::item, QMenu::item {{
         padding: 7px 11px;
         border-radius: 5px;
     }}
     QMenuBar::item:selected, QMenu::item:selected {{
-        background: {accent};
+        background: {selection};
         color: white;
     }}
     QPushButton {{
@@ -218,14 +232,23 @@ def _stylesheet(theme: str) -> str:
     }}
     QPushButton:hover {{
         border-color: {accent};
-        background: {surface_alt};
+        background: {blue_tint};
+    }}
+    QPushButton:default:enabled:!checked {{
+        border-color: {accent};
+        background: {blue_tint};
+        color: {blue_text};
+        font-weight: 600;
+    }}
+    QPushButton:default:enabled:!checked:hover {{
+        background: {blue_hover};
     }}
     QPushButton:pressed {{
         padding-top: 7px;
         padding-bottom: 3px;
     }}
     QPushButton:checked {{
-        background: {accent};
+        background: {selection};
         border-color: {accent};
         color: white;
         font-weight: 600;
@@ -238,7 +261,8 @@ def _stylesheet(theme: str) -> str:
         border: 1px solid {border};
         border-radius: 6px;
         padding: 6px 8px;
-        selection-background-color: {accent};
+        selection-background-color: {selection};
+        selection-color: white;
     }}
     QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QComboBox:focus {{
         border: 2px solid {accent};
@@ -259,11 +283,20 @@ def _stylesheet(theme: str) -> str:
         padding: 7px;
         font-weight: 600;
     }}
+    QTreeWidget#budgetTree QHeaderView::section {{
+        background: {blue_tint};
+        color: {blue_text};
+    }}
+    QTreeWidget#referenceTree QHeaderView::section {{
+        background: {teal_tint};
+        color: {teal_text};
+        border-bottom-color: {teal_border};
+    }}
     QTreeWidget::item, QTableWidget::item, QListWidget::item {{
         padding: 4px;
     }}
     QTreeWidget::item:selected, QTableWidget::item:selected, QListWidget::item:selected {{
-        background: {accent};
+        background: {selection};
         color: white;
     }}
     QTabWidget::pane {{
@@ -281,8 +314,9 @@ def _stylesheet(theme: str) -> str:
         margin-right: 2px;
     }}
     QTabBar::tab:selected {{
-        background: {blue_tint};
-        color: {blue_text};
+        background: {plum_tint};
+        border-color: {plum_border};
+        color: {plum_text};
         font-weight: 600;
     }}
     QGroupBox {{
@@ -296,6 +330,7 @@ def _stylesheet(theme: str) -> str:
         subcontrol-origin: margin;
         left: 12px;
         padding: 0 5px;
+        color: {blue_text};
     }}
     QScrollBar:vertical, QScrollBar:horizontal {{
         background: transparent;
@@ -345,7 +380,7 @@ def apply_theme(app: QApplication, theme: str) -> None:
                 QPalette.ColorRole.Text: "#18212f",
                 QPalette.ColorRole.Button: "#ffffff",
                 QPalette.ColorRole.ButtonText: "#18212f",
-                QPalette.ColorRole.Highlight: "#2563eb",
+                QPalette.ColorRole.Highlight: "#2455a3",
                 QPalette.ColorRole.HighlightedText: "#ffffff",
                 QPalette.ColorRole.Link: "#1d4ed8",
             }
@@ -360,7 +395,7 @@ def apply_theme(app: QApplication, theme: str) -> None:
                 QPalette.ColorRole.Text: "#f1f3f5",
                 QPalette.ColorRole.Button: "#24262b",
                 QPalette.ColorRole.ButtonText: "#f1f3f5",
-                QPalette.ColorRole.Highlight: "#4f8cff",
+                QPalette.ColorRole.Highlight: "#345785",
                 QPalette.ColorRole.HighlightedText: "#ffffff",
                 QPalette.ColorRole.Link: "#8ab4f8",
             }
