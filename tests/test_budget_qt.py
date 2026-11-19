@@ -441,6 +441,54 @@ class BudgetQtWindowTests(unittest.TestCase):
             window.close()
             self.application.processEvents()
 
+    def test_price_justification_applies_k_and_updates_existing_indirect_costs(self) -> None:
+        """Crea y actualiza %CI sin duplicarlo y guarda el mismo K en ambos archivos."""
+        from tools.price_justification.indirect import default_rows
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("budget_qt_window.user_data_directory", return_value=Path(directory)),
+            patch("budget_qt_window.apply_theme"),
+            patch.object(QMessageBox, "critical") as error,
+        ):
+            window = BudgetMainWindow()
+            item = ProjectItem("P1", "01#", "ud", "Partida", 4, 2500)
+            window.budget_items = [item]
+            window.chapter_order = ["01#"]
+            window.project_title = "Proyecto de prueba"
+            target = Path(directory) / "proyecto.json"
+            window.project_path = target
+            row = default_rows()[0] | {"monthly": 123.45}
+            window.price_justification_state = {"indirect_rows": [row]}
+            window._open_tool("price_justification")
+            tool = window._project_windows[-1]
+            try:
+                self.assertEqual(item.indirect_components(), [])
+                for monthly, percentage, price in (
+                    (123.45, 2.23, 2555.75), (400, 3.0, 2575.0), (400, 3.0, 2575.0),
+                ):
+                    tool._state["indirect_rows"] = [row | {"monthly": monthly}]
+                    tool.refresh_general_info()
+                    tool.apply_k_button.click()
+                    self.assertEqual(window.report_settings.indirect_costs, percentage)
+                    self.assertEqual(item.direct_unit_price, 2500)
+                    self.assertEqual(item.unit_price, price)
+                    self.assertEqual([(concept.code, amount) for concept, amount, _ in item.indirect_components()
+                                      if concept.code == "%CI"], [("%CI", percentage)])
+                    self.assertEqual(window._read_report_settings().indirect_costs, percentage)
+                    data = json.loads(target.read_text(encoding="utf-8"))
+                    self.assertEqual(data["report_settings"]["indirect_costs"], percentage)
+                    self.assertEqual(data["price_justification"]["indirect_rows"][0]["monthly"], monthly)
+                item.measurement = 0
+                tool.refresh_general_info()
+                self.assertFalse(tool.apply_k_button.isEnabled())
+                error.assert_not_called()
+            finally:
+                tool.reject()
+                window.is_dirty = False
+                window.close()
+                self.application.processEvents()
+
     def test_file_picker_localizes_overwrite_confirmation(self) -> None:
         """Traduce la confirmación de Qt y conserva su marcador de nombre de archivo."""
         previous_language = get_language()

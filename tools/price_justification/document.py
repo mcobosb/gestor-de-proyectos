@@ -1,5 +1,6 @@
 """Composición del anejo de justificación sin duplicar los cálculos presupuestarios."""
 
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from html import escape
@@ -8,17 +9,22 @@ import re
 import tempfile
 from xml.etree import ElementTree as ET
 from .templates import (
-    FORMULA_LEVEL, LIBRARY_PATH, NarrativeTable, document_blocks, load_documents, template_variables,
+    FORMULA_LEVEL, LIBRARY_PATH, Equation, NarrativeTable, calculated_tables, document_blocks,
+    load_documents, template_variables,
 )
 from .formula import PdfFormula, odt_formula
+from .indirect import normalize_rows
 from collaborative_storage import shared_library_path
+from tools.document_structure.catalog import PRICE_JUSTIFICATION_NUMBER
 from tools._shared.document_layout import (
-    LIST_INDENT, add_odt_blue_table_cells, add_odt_list_style, pdf_blue_table_style, pdf_list_style,
+    LIST_INDENT, TABLE_HEADER_BACKGROUND, add_odt_blue_table_cells, add_odt_list_style,
+    pdf_blue_table_style, pdf_list_style,
     split_list_item,
 )
 
 
 TITLE = "Justificación de precios"
+FOOTER_TITLE = f"ANEJO Nº {int(PRICE_JUSTIFICATION_NUMBER)}. {TITLE.upper()}"
 PENDING_VALUE = "PENDIENTE DE DEFINIR Y VERIFICAR"
 CONSTRUCTION_AGREEMENT_REFERENCES = (
     "VII Convenio Colectivo General del Sector de la Construcción "
@@ -150,6 +156,8 @@ def restore_state(data) -> dict:
         raise ValueError("El régimen de contratación no es válido.")
     if state["machinery_method"] not in {"budget", "analytical"}:
         raise ValueError("El método de valoración de maquinaria no es válido.")
+    if "indirect_rows" in state:
+        state["indirect_rows"] = normalize_rows(state["indirect_rows"])
     return state
 
 
@@ -174,10 +182,11 @@ def validate_state(data) -> dict:
     return state
 
 
-def narrative(app, data: dict) -> list[tuple[int, str | NarrativeTable]]:
+def narrative(app, data: dict) -> list[tuple[int, str | NarrativeTable | Equation]]:
     """Compone los documentos base de la biblioteca con los datos actuales del proyecto."""
     state = FIELDS | validate_state(data)
     values = template_variables(app, state)
+    tables, values["calculo_indirectos"] = calculated_tables(app, state)
     values["fuentes_cotizacion"] = (
         "Los datos de 2026 se contrastan con la [Orden PJC/297/2026, de 30 de marzo]"
         "(https://www.boe.es/buscar/act.php?id=BOE-A-2026-7296)."
@@ -190,11 +199,36 @@ def narrative(app, data: dict) -> list[tuple[int, str | NarrativeTable]]:
         "las publicaciones provinciales y locales que correspondan."
         if state["calendar"] in CALENDAR_REFERENCES else ""
     )
-    return [
+    blocks = [
         block for _, source in load_documents(
             shared_library_path(app, "price_justification", LIBRARY_PATH)
         )
-        for block in document_blocks(source, values)
+        for block in document_blocks(source, values, tables)
+    ]
+    table_numbers, equation_numbers = {}, {}
+    table_count = equation_count = 0
+    for level, block in blocks:
+        if isinstance(block, NarrativeTable):
+            table_count += 1
+            table_numbers.setdefault(block.key, table_count)
+        elif isinstance(block, Equation):
+            equation_count += 1
+            if block.key in equation_numbers:
+                raise ValueError(f"El identificador de ecuación está repetido: {block.key}.")
+            equation_numbers[block.key] = equation_count
+
+    def reference(match: re.Match[str]) -> str:
+        """Resuelve las referencias según el orden real de la biblioteca."""
+        kind, key = match.groups()
+        numbers = table_numbers if kind == "tabla" else equation_numbers
+        if key not in numbers:
+            raise ValueError(f"La referencia {kind}:{key} no tiene destino en la biblioteca.")
+        return f"(Tabla {numbers[key]})" if kind == "tabla" else f"({numbers[key]})"
+
+    return [
+        (level, replace(block, number=equation_numbers[block.key]) if isinstance(block, Equation)
+         else re.sub(r"\[\[(tabla|ec):(\w+)\]\]", reference, block) if isinstance(block, str) else block)
+        for level, block in blocks
     ]
 
 
@@ -202,9 +236,12 @@ _INLINE = re.compile(
     r"\[([^]\n]+)\]\((https?://[^)\s]+)\)|\b(BOE-A-\d{4}-\d+)\b|"
     r"\b([A-Za-z])_(intrinseco|utm|ut|ua|dm|hm|[nIaDtdhm12])\b|(\n)"
 )
+_FOOTER_CHAPTER = re.compile(r"\{\{cap[ií]tulo\}\}")
+_FOOTER_PAGE = re.compile(r"\{no_p[aá]gina\}")
+_TABLE_CITATION = re.compile(r"\(Tabla \d+\)\.$")
 
 
-def _inline_runs(text: str):
+def _plain_runs(text: str):
     """Separa enlaces, variables y saltos del texto, sin interpretar etiquetas HTML."""
     cursor = 0
     for match in _INLINE.finditer(text):
@@ -222,30 +259,42 @@ def _inline_runs(text: str):
     yield text[cursor:], "", ""
 
 
+def _inline_runs(text: str):
+    """Conserva el énfasis Markdown además de los subíndices y enlaces."""
+    for index, part in enumerate(re.split(r"\*\*([^*\n]+)\*\*", text)):
+        for value, kind, url in _plain_runs(part):
+            yield value, kind, url, bool(index % 2)
+
+
 def _odt_inline(paragraph, text: str) -> None:
     """Añade texto con enlaces activos y símbolos formateados en Writer."""
     from odt_reports import _tag
 
-    for value, kind, url in _inline_runs(text):
+    for value, kind, url, bold in _inline_runs(text):
+        parent = ET.SubElement(paragraph, _tag("text:span"), {
+            _tag("text:style-name"): "PricesBold",
+        }) if bold and value else paragraph
         if kind == "link":
-            ET.SubElement(paragraph, _tag("text:a"), {
+            ET.SubElement(parent, _tag("text:a"), {
                 _tag("xlink:href"): url, _tag("xlink:type"): "simple",
             }).text = value
         elif kind == "break":
-            ET.SubElement(paragraph, _tag("text:line-break"))
+            ET.SubElement(parent, _tag("text:line-break"))
         elif value:
             attrs = {_tag("text:style-name"): "PricesSubscript"} if kind == "sub" else {}
-            ET.SubElement(paragraph, _tag("text:span"), attrs).text = value
+            ET.SubElement(parent, _tag("text:span"), attrs).text = value
 
 
 def _pdf_inline(text: str) -> str:
     """Convierte únicamente las marcas admitidas en formato de párrafo PDF."""
-    return "".join(
-        f'<link href="{escape(url)}" color="#174B83"><u>{escape(value)}</u></link>' if kind == "link" else
-        f"<sub>{escape(value)}</sub>" if kind == "sub" else
-        "<br/>" if kind == "break" else escape(value)
-        for value, kind, url in _inline_runs(text)
-    )
+    parts = []
+    for value, kind, url, bold in _inline_runs(text):
+        markup = (
+            f'<link href="{escape(url)}" color="#174B83"><u>{escape(value)}</u></link>' if kind == "link" else
+            f"<sub>{escape(value)}</sub>" if kind == "sub" else "<br/>" if kind == "break" else escape(value)
+        )
+        parts.append(f"<b>{markup}</b>" if bold and markup else markup)
+    return "".join(parts)
 
 
 def write_document(app, target: Path, data: dict) -> None:
@@ -276,18 +325,23 @@ def _add_odt_table_styles(document) -> None:
     from odt_reports import _tag
 
     add_odt_blue_table_cells(document, "Prices")
-    for name, bold in (("PricesTableText", False), ("PricesTableHeader", True)):
+    for name, bold in (("PricesTableText", False), ("PricesTableTextNumber", False),
+                       ("PricesTableTextCentered", False), ("PricesTableHeader", True),
+                       ("PricesTableHeaderCentered", True), ("PricesTableTotal", True)):
         style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
             _tag("style:name"): name, _tag("style:family"): "paragraph",
             _tag("style:parent-style-name"): "ReportBody",
         })
         ET.SubElement(style, _tag("style:paragraph-properties"), {
-            _tag("fo:text-align"): "start", _tag("fo:margin"): "0pt",
+            _tag("fo:text-align"): (
+                "center" if name.endswith("Centered") else "end" if name.endswith("Number") else "start"
+            ),
+            _tag("fo:margin"): "0pt",
             _tag("fo:text-indent"): "0pt", _tag("fo:line-height"): "115%",
         })
         ET.SubElement(style, _tag("style:text-properties"), {
             _tag("fo:font-weight"): "bold" if bold else "normal",
-            _tag("fo:color"): "#FFFFFF" if bold else "#000000",
+            _tag("fo:color"): "#FFFFFF" if name.startswith("PricesTableHeader") else "#000000",
             _tag("fo:font-size"): "9.5pt",
         })
     style = ET.SubElement(document.automatic_styles, _tag("text:list-style"), {
@@ -299,24 +353,34 @@ def _add_odt_table_styles(document) -> None:
     ET.SubElement(level, _tag("style:list-level-properties"), {
         _tag("text:space-before"): "0pt", _tag("text:min-label-width"): f"{LIST_INDENT}pt",
     })
+    style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+        _tag("style:name"): "PricesTableTextIndented", _tag("style:family"): "paragraph",
+        _tag("style:parent-style-name"): "PricesTableText",
+    })
+    ET.SubElement(style, _tag("style:paragraph-properties"), {_tag("fo:margin-left"): "14pt"})
 
 
 def _write_odt_table(document, table: NarrativeTable) -> None:
     """Aplica el estilo común y conserva enlaces y listas nativas en las celdas."""
     from odt_reports import _tag
 
-    document.table(["Concepto", "Detalle"], table.rows, ratios=(0.3, 0.7),
-                   body_text_style="PricesTableText")
+    document.table(table.headers, table.rows, ratios=table.ratios, width_fraction=table.width,
+                   body_text_style="PricesTableText", centered=table.centered)
     element = document.body[-1]
-    for cell in element.find(_tag("table:table-header-rows")).iter(_tag("table:table-cell")):
-        cell.set(_tag("table:style-name"), "PricesHeaderCell")
-        cell[0].set(_tag("text:style-name"), "PricesTableHeader")
+    headers = element.find(_tag("table:table-header-rows"))
+    if headers is not None:
+        for cell in headers.iter(_tag("table:table-cell")):
+            cell.set(_tag("table:style-name"), "PricesHeaderCell")
+            cell[0].set(_tag("text:style-name"), "PricesTableHeaderCentered" if table.centered else "PricesTableHeader")
     for index, row in enumerate(element.findall(_tag("table:table-row"))):
-        for cell, value in zip(row, table.rows[index], strict=True):
-            cell.set(_tag("table:style-name"), "PricesBlueCell" if index % 2 == 0 else "PricesWhiteCell")
+        subheader = index in table.subheaders
+        for column, (cell, value) in enumerate(zip(row, table.rows[index], strict=True)):
+            band = index in table.bands
+            cell.set(_tag("table:style-name"), "PricesHeaderCell" if subheader else
+                     "PricesBlueCell" if band or index % 2 == 0 else "PricesWhiteCell")
             cell.remove(cell[0])
             bullets = None
-            for line in value.splitlines():
+            for line in value.splitlines() or [""]:
                 if line.startswith(("• ", "- ")):
                     if bullets is None:
                         bullets = ET.SubElement(cell, _tag("text:list"), {
@@ -328,18 +392,41 @@ def _write_odt_table(document, table: NarrativeTable) -> None:
                     bullets = None
                     parent = cell
                 _odt_inline(ET.SubElement(parent, _tag("text:p"), {
-                    _tag("text:style-name"): "PricesTableText",
-                }), line)
+                    _tag("text:style-name"): (
+                        "PricesTableHeader" if subheader else
+                        "PricesTableTextCentered" if table.centered else
+                        "PricesTableTextIndented" if line.startswith("\t") else
+                        "PricesTableTextNumber" if column in table.numeric else
+                        "PricesTableTotal" if band else "PricesTableText"
+                    ),
+                }), line.lstrip("\t"))
 
 
-def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]) -> None:
+def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable | Equation]]) -> None:
     """Conserva texto, índice y listados como elementos nativos editables de ODF."""
+    from copy import deepcopy
     from odt_reports import _new_report, _tag, append_report_odt
 
     document = _new_report(
         TITLE.upper(), app._project_title(), app.report_settings,
-        footer_title=TITLE.upper(), template_title=TITLE, repeat_titles=False,
+        footer_title=FOOTER_TITLE, template_title=TITLE, repeat_titles=False,
     )
+    document.table_references = False
+    if document.template_footer is None:
+        document.footer = FOOTER_TITLE
+    else:
+        footer = deepcopy(document.template_footer)
+        footer_text = "".join(footer.itertext())
+        has_title = bool(_FOOTER_CHAPTER.search(footer_text))
+        has_page = bool(_FOOTER_PAGE.search(footer_text)) or footer.find(f".//{_tag('text:page-number')}") is not None
+        if not has_title or not has_page:
+            if not has_title and not app.report_settings.template_path:
+                document.template_footer = None
+                document.footer = FOOTER_TITLE
+            else:
+                missing = (["{{capitulo}}"] if not has_title else []) + (["{{no_pagina}}"] if not has_page else [])
+                ET.SubElement(footer, _tag("text:p"), {_tag("text:style-name"): "FooterText"}).text = " — ".join(missing)
+                document.template_footer = footer
     _add_odt_table_styles(document)
     for level in range(1, 7):
         name = f"PricesHeading{level}"
@@ -360,6 +447,10 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
     ET.SubElement(style, _tag("style:text-properties"), {
         _tag("style:text-position"): "sub 75%",
     })
+    style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+        _tag("style:name"): "PricesBold", _tag("style:family"): "text",
+    })
+    ET.SubElement(style, _tag("style:text-properties"), {_tag("fo:font-weight"): "bold"})
 
     def paragraph(name):
         """Crea un párrafo de la narrativa con el estilo indicado."""
@@ -370,6 +461,7 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
                            _tag("fo:margin-bottom"): "9pt"}),
         ("PricesCaption", {_tag("fo:keep-with-next"): "always", _tag("fo:margin-top"): "6pt",
                            _tag("fo:margin-bottom"): "4pt"}),
+        ("PricesTableReference", {_tag("fo:keep-with-next"): "always"}),
     ):
         style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
             _tag("style:name"): name, _tag("style:family"): "paragraph",
@@ -377,7 +469,9 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
         })
         ET.SubElement(style, _tag("style:paragraph-properties"), properties)
         if name == "PricesCaption":
-            ET.SubElement(style, _tag("style:text-properties"), {_tag("fo:font-weight"): "bold"})
+            ET.SubElement(style, _tag("style:text-properties"), {
+                _tag("fo:font-weight"): "normal", _tag("fo:font-size"): "9pt",
+            })
     depths = {-level for level, text in blocks if FORMULA_LEVEL < level < 0}
     for depth in sorted(depths):
         add_odt_list_style(document, f"PricesList{depth}", "ReportBody", depth - 1)
@@ -396,8 +490,6 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
     })
     heading_style = next(style for style in document.automatic_styles
                          if style.get(_tag("style:name")) == "PricesHeading1")
-    from copy import deepcopy
-
     title_style.extend(deepcopy(list(heading_style)))
     document.paragraph(TITLE.upper(), style="PricesDocumentTitle")
     document.table_of_contents(headings, max_level=3, name="PricesContents")
@@ -409,6 +501,10 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
         elif level > 0:
             document.heading(text, level, style=f"PricesHeading{level}", bookmark=f"PPTPHeading{bookmark}")
             bookmark += 1
+        elif isinstance(text, Equation):
+            item = paragraph("PricesFormula")
+            odt_formula(item, text.source)
+            _odt_inline(item, f"    ({text.number})")
         elif level == FORMULA_LEVEL:
             odt_formula(paragraph("PricesFormula"), text)
         elif level < 0:
@@ -418,7 +514,8 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
             ET.SubElement(item, _tag("text:tab"))
             _odt_inline(item, label)
         else:
-            _odt_inline(paragraph("ReportBody"), text)
+            _odt_inline(paragraph("PricesTableReference" if _TABLE_CITATION.search(text) else "ReportBody"), text)
+    document.table_caption_suffix = " (importe en €)"
     for title, report in LISTINGS:
         document.heading(title, 1, style="PricesListingHeading", bookmark=f"PPTPHeading{bookmark}")
         bookmark += 1
@@ -427,10 +524,10 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
     document.write(target)
 
 
-def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]) -> None:
+def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable | Equation]]) -> None:
     """Pagina el anejo con índice real y tablas del generador presupuestario común."""
     from reportlab.lib import colors
-    from reportlab.lib.enums import TA_JUSTIFY
+    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT, TA_RIGHT
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.platypus import PageBreak, SimpleDocTemplate, Spacer, Table
@@ -443,20 +540,36 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
     layout = ReportLayout(
         text_styles=settings.text_styles,
         template_path=settings.template_path, expediente=settings.expediente,
-        template_title=TITLE, footer_title=TITLE.upper(), repeat_titles=False,
+        template_title=TITLE, footer_title=FOOTER_TITLE, repeat_titles=False,
     )
+    layout.table_references = False
+    footer_text = "\n".join([layout.template_footer, *(
+        cell["text"] for table in layout.template_tables["footer"] for row in table["rows"] for cell in row
+    )])
+    missing = (["{{capitulo}}"] if not _FOOTER_CHAPTER.search(footer_text) else [])
+    if not _FOOTER_PAGE.search(footer_text):
+        missing.append("{{no_pagina}}")
+    if missing:
+        parts = [layout.template_footer] if settings.template_path and layout.template_footer else []
+        layout.template_footer = "\n".join([*parts, " — ".join(missing)])
     body = ParagraphStyle(
         "PricesBody", fontName="Helvetica", fontSize=10, leading=14,
         spaceAfter=7, alignment=TA_JUSTIFY,
     )
     caption_style = ParagraphStyle(
-        "PricesCaption", parent=body, fontName="Helvetica-Bold",
+        "PricesCaption", parent=body, fontSize=9, leading=12, alignment=TA_LEFT,
         spaceBefore=6, spaceAfter=4, keepWithNext=True,
     )
+    reference_style = ParagraphStyle("PricesTableReference", parent=body, keepWithNext=True)
     cell_style = ParagraphStyle("PricesTableText", parent=layout.normal, fontSize=9.5, leading=12)
+    number_style = ParagraphStyle("PricesTableTextNumber", parent=cell_style, alignment=TA_RIGHT)
+    indented_style = ParagraphStyle("PricesTableTextIndented", parent=cell_style, leftIndent=14)
+    band_style = ParagraphStyle("PricesTableTotal", parent=cell_style, fontName=layout.bold_font)
     header_style = ParagraphStyle(
         "PricesTableHeader", parent=cell_style, fontName=layout.bold_font, textColor=colors.white,
     )
+    centered_header = ParagraphStyle("PricesTableHeaderCentered", parent=header_style, alignment=TA_CENTER)
+    centered_cell = ParagraphStyle("PricesTableTextCentered", parent=cell_style, alignment=TA_CENTER)
     cell_bullet_style = pdf_list_style("PricesTableBullet", cell_style)
     list_styles = {
         level: pdf_list_style(f"PricesList{-level}", body, -level - 1)
@@ -486,17 +599,32 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
     for level, text in blocks + [(1, title) for title, _ in LISTINGS]:
         if isinstance(text, NarrativeTable):
             layout.table_caption(story, text.title, body=body, caption=caption_style)
-            cells = [[layout.text(label, header_style) for label in ("Concepto", "Detalle")]]
+            cells = [[layout.text(label, centered_header if text.centered else header_style)
+                      for label in text.headers]] if text.headers else []
             cells.extend([
                 [
                     layout.paragraph(_pdf_inline(line[2:]), cell_bullet_style, bulletText="•")
-                    if line.startswith(("• ", "- ")) else layout.paragraph(_pdf_inline(line), cell_style)
+                    if line.startswith(("• ", "- ")) else layout.paragraph(
+                        _pdf_inline(line.lstrip("\t")), header_style if row_index in text.subheaders else
+                        centered_cell if text.centered else
+                        indented_style if line.startswith("\t") else number_style if index in text.numeric else
+                        band_style if row_index in text.bands else cell_style,
+                    )
                     for line in value.splitlines()
                 ]
-                for value in row
-            ] for row in text.rows)
-            table = Table(cells, colWidths=[layout.content_width * ratio for ratio in (0.3, 0.7)],
-                          repeatRows=1, splitInRow=1, hAlign="LEFT", style=pdf_blue_table_style())
+                for index, value in enumerate(row)
+            ] for row_index, row in enumerate(text.rows))
+            style = pdf_blue_table_style()
+            if not text.headers:
+                style = [command for command in style if command[0] not in {"BACKGROUND", "ROWBACKGROUNDS"}]
+                style.append(("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.HexColor("#D9E5F5"), colors.white]))
+            for index in text.subheaders:
+                row = index + bool(text.headers)
+                style.append(("BACKGROUND", (0, row), (-1, row), colors.HexColor(TABLE_HEADER_BACKGROUND)))
+                style.append(("NOSPLIT", (0, row - 1), (-1, min(row + 1, len(cells) - 1))))
+            table = Table(cells, colWidths=[layout.content_width * text.width * ratio for ratio in text.ratios],
+                          repeatRows=1 if text.headers else 0, splitInRow=1,
+                          hAlign="CENTER" if text.centered else "LEFT", style=style)
             table.spaceAfter = 9
             story.append(table)
         elif level > 0:
@@ -508,15 +636,18 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
             story.append(paragraph)
             report = reports.get(text)
             if report:
+                layout.table_caption_suffix = " (importe en €)"
                 listing, _ = build_pdf_report(app, report, layout, embedded=True)
                 story.extend(listing)
+        elif isinstance(text, Equation):
+            story.append(PdfFormula(text.source, number=text.number))
         elif level == FORMULA_LEVEL:
             story.append(PdfFormula(text))
         elif level < 0:
             marker, label = split_list_item(text)
             story.append(layout.paragraph(_pdf_inline(label), list_styles[level], bulletText=marker))
         else:
-            story.append(layout.paragraph(_pdf_inline(text), body))
+            story.append(layout.paragraph(_pdf_inline(text), reference_style if _TABLE_CITATION.search(text) else body))
     story.extend(layout.signature_block(settings))
 
     class PricesDocument(SimpleDocTemplate):
@@ -525,7 +656,7 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
         def afterFlowable(self, flowable):
             """Registra exclusivamente los epígrafes del anejo, no los títulos presupuestarios."""
             entry = getattr(flowable, "_prices_heading", None)
-            if entry is not None:
+            if entry is not None and entry[0] < len(toc.levelStyles):
                 level, text, bookmark = entry
                 self.canv.bookmarkPage(bookmark)
                 self.notify("TOCEntry", (level, layout.index_entry(escape(text)), self.page, bookmark))

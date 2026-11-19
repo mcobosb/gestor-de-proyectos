@@ -731,6 +731,8 @@ class ReportLayout:
         self.repeat_titles = repeat_titles
         self.footer_title = footer_title
         self.data_table_number = 0
+        self.table_references = True
+        self.table_caption_suffix = ""
         self.landscape = landscape
         self.page_size = landscape_page(A4) if landscape else A4
         self.page_width, self.page_height = self.page_size
@@ -813,15 +815,15 @@ class ReportLayout:
         if number is None:
             self.data_table_number += 1
             number = self.data_table_number
-        reference, label = table_labels(number, title)
-        story.extend((
-            self.text(reference, ParagraphStyle(
+        reference, label = table_labels(number, title + self.table_caption_suffix)
+        if self.table_references:
+            story.append(self.text(reference, ParagraphStyle(
                 "TableReference", parent=body or self.normal, keepWithNext=True, spaceBefore=5,
-            )),
-            self.text(label, caption or ParagraphStyle(
-                "TableCaption", parent=self.bold, keepWithNext=True, spaceAfter=4,
-            )),
-        ))
+            )))
+        story.append(self.text(label, caption or ParagraphStyle(
+            "TableCaption", parent=self.bold if self.table_references else self.normal,
+            keepWithNext=True, spaceAfter=4,
+        )))
 
     def add_data_table(self, story, title: str, table) -> None:
         """Inserta una tabla de datos PDF con su referencia y título."""
@@ -960,7 +962,7 @@ class ReportLayout:
 
     def table(
         self, headers, rows, ratios, *, bold_rows=(), background=None, rule=False,
-        leaders=(), highlighted_rows=(), blue_header=False,
+        leaders=(), highlighted_rows=(), blue_header=False, tinted_rows=False,
     ):
         """Compone columnas fijas con alineación numérica, negritas y reglas opcionales."""
         from decimal import Decimal
@@ -1023,6 +1025,13 @@ class ReportLayout:
                 ("LINEABOVE", (0, 0), (-1, 0), 0.6, colors.black),
                 ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.black),
             ])
+        if tinted_rows and headers:
+            from tools._shared.document_layout import TABLE_ALTERNATE_BACKGROUND
+
+            tint = colors.HexColor(TABLE_ALTERNATE_BACKGROUND)
+            style.append(("BACKGROUND", (0, 0), (-1, 0), tint))
+            if rows:
+                style.append(("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, tint]))
         if background is not None:
             style.append(("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(background)))
         for index in highlighted_rows:

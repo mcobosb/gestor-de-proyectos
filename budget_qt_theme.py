@@ -215,6 +215,22 @@ def _stylesheet(theme: str) -> str:
     QWidget#collaborationPresence QLabel {{
         color: {teal_text};
     }}
+    QLabel#priceJustificationTitle {{
+        color: {blue_text};
+    }}
+    QLabel#priceJustificationProject, QLabel#priceIndirectSummary {{
+        background: {blue_tint};
+        color: {blue_text};
+        border: 1px solid {border};
+        border-radius: 6px;
+        padding: 6px 10px;
+    }}
+    QLabel#priceIndirectGroup {{
+        background: {teal_tint};
+        color: {teal_text};
+        padding: 4px 10px;
+        font-weight: 600;
+    }}
     QMenuBar::item, QMenu::item {{
         padding: 7px 11px;
         border-radius: 5px;
@@ -295,7 +311,8 @@ def _stylesheet(theme: str) -> str:
         font-weight: 600;
     }}
     QTreeWidget#budgetTree QHeaderView::section,
-    QTableWidget#rcdPreviewTable QHeaderView::section {{
+    QTableWidget#rcdPreviewTable QHeaderView::section,
+    QTableWidget#priceIndirectTable QHeaderView::section {{
         background: {blue_tint};
         color: {blue_text};
     }}

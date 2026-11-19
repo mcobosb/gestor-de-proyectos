@@ -29,6 +29,7 @@ _TEXT = {
     "Generar informe": ("Generate report", "Générer le rapport"),
     "Guardar RCDs en el proyecto": ("Save construction waste in the project", "Enregistrer les déchets de chantier dans le projet"),
     "Guardar anejo…": ("Save appendix…", "Enregistrer l’annexe…"),
+    "Aplicar K al presupuesto": ("Apply K to budget", "Appliquer K au budget"),
     "Guardar apariencia": ("Save appearance", "Enregistrer l’apparence"),
     "Guardar apodo": ("Save nickname", "Enregistrer le pseudonyme"),
     "Guardar preferencias": ("Save preferences", "Enregistrer les préférences"),

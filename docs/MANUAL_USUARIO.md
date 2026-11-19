@@ -478,6 +478,26 @@ la numeración de página. Antes de cada tabla de datos se incluye una referenci
 en el texto («Véase la Tabla X.»), seguida del título «Tabla X. …». Los elementos
 de maquetación (por ejemplo, las columnas de firma) no se numeran.
 
+En **Justificación de precios → Editar costes indirectos…**, revisa las filas de
+personal, instalaciones provisionales y levantamientos o análisis, separados
+por franjas de color. Las tarifas
+iniciales son cero: debes introducir las que correspondan a la obra. El coste
+del personal se calcula con las unidades, la tarifa mensual, los meses y la
+dedicación. Las instalaciones no llevan dedicación; para levantamientos y
+análisis se introduce directamente el importe total. Al abrir proyectos
+anteriores se conserva el importe imputado de esas filas. El anejo divide el
+total entre el coste directo de las partidas,
+limita K₁ al 2 % y añade un 1 % por imprevistos. Si el resultado difiere del
+porcentaje del presupuesto, se indica la diferencia. Pulsa **Aplicar K al
+presupuesto** para guardar el porcentaje calculado en **Configuración** y crear
+o actualizar las líneas de indirectos de las partidas sin duplicarlas. Editar
+la tabla o exportar el anejo no aplica el porcentaje automáticamente. Las tablas
+del texto se citan en el párrafo anterior. La tabla de interés equivalente
+se presenta centrada y recoge tipos del 2 %, 4 %, 6 % y 8 %. En los listados de auxiliares y
+descompuestos solo se titula la primera tabla de cada sección. Los listados de
+precios mantienen su maquetación habitual, con un relleno azul suave en
+cabeceras y filas alternas.
+
 Encima del panel amarillo se muestran la versión y el último autor. Antes de guardar
 una modificación del texto amarillo o blanco debes introducir **Autor del cambio**
 y una fecha válida **DD/MM/AAAA** (se propone el día actual); la descripción es

@@ -26,7 +26,7 @@ from tools.price_justification.document import (
     restore_state, validate_state, write_document,
 )
 from tools.price_justification.templates import (
-    DOCUMENTS, FORMULA_LEVEL, LIBRARY_PATH, NarrativeTable, document_blocks,
+    DOCUMENTS, FORMULA_LEVEL, LIBRARY_PATH, Equation, NarrativeTable, document_blocks,
     general_variables, load_documents,
 )
 
@@ -49,7 +49,7 @@ def narrative_text(app, state):
     """Reúne los textos de los párrafos y todas las celdas del anejo."""
     return "\n".join(
         "\n".join((value.title, *(part for row in value.rows for part in row)))
-        if isinstance(value, NarrativeTable) else value
+        if isinstance(value, NarrativeTable) else value.source if isinstance(value, Equation) else value
         for _, value in narrative(app, state)
     )
 
@@ -152,7 +152,8 @@ class PriceDocumentTests(unittest.TestCase):
         """El anejo contiene el método aportado, no solo notas o avisos sobre fórmulas pendientes."""
         self.assertEqual(len(load_documents(LIBRARY_PATH)), 8)
         blocks = narrative(self.app, {})
-        formulas = [text for level, text in blocks if level == FORMULA_LEVEL]
+        formulas = [text.source if isinstance(text, Equation) else text
+                    for level, text in blocks if level == FORMULA_LEVEL]
         self.assertIn(r"P_n = (1 + \frac{K}{100}) C_n", formulas)
         self.assertIn(r"C = \frac{A + B + (\frac{k}{100}) A}{H_a}", formulas)
         self.assertIn(r"T = \frac{H_ut}{H_ua}", formulas)
@@ -192,7 +193,7 @@ class PriceDocumentTests(unittest.TestCase):
     def test_project_table_omits_missing_fields_and_uses_live_configuration(self):
         """No imprime expediente ni fecha ficticios y refleja los cambios del proyecto."""
         tables = [block for _, block in narrative(self.app, {}) if isinstance(block, NarrativeTable)]
-        self.assertEqual(len(tables), 4)
+        self.assertEqual(len(tables), 5)
         self.assertEqual(tables[0].rows, (("Proyecto", "Proyecto singular"),))
         self.app.report_settings.expediente = "EXP-42"
         project = next(block for _, block in narrative(
@@ -200,6 +201,111 @@ class PriceDocumentTests(unittest.TestCase):
         ) if isinstance(block, NarrativeTable))
         self.assertEqual(dict(project.rows)["Expediente"], "EXP-42")
         self.assertEqual(dict(project.rows)["Fecha de referencia de los precios"], "2026-11-19")
+
+    def test_indirect_costs_use_direct_total_cap_and_leave_budget_unchanged(self):
+        """Cubre importe, base sin recargo, límite, discrepancia y presupuesto vacío."""
+        from tools.price_justification.indirect import calculate, default_rows, equivalent_interest
+
+        item = self.app.budget_items[0]
+        item.set_indirect_costs(6, direct_price=2500)
+        row = default_rows()[0] | {"quantity": 2, "monthly": 300, "months": 2, "dedication": 10}
+        costs = calculate(self.app, [row])
+        self.assertEqual((costs.direct, costs.total, costs.raw, costs.rate),
+                         (10000, 120, Decimal("1.2"), Decimal("2.2")))
+        row["monthly"] = 600
+        data = {"indirect_rows": [row]}
+        costs = calculate(self.app, validate_state(data)["indirect_rows"])
+        self.assertEqual((costs.raw, costs.adopted, costs.rate), (Decimal("2.4"), 2, 3))
+        self.assertTrue(costs.differs)
+        text = narrative_text(self.app, data)
+        self.assertIn("supera el 2 %", text)
+        self.assertIn("siguiendo la ecuación (3)", text)
+        self.assertIn("presupuesto conserva su porcentaje configurado de 6,00 %", text)
+        self.assertEqual(item.unit_price, 2650)
+        self.app.budget_items.clear()
+        self.assertIsNone(calculate(self.app, [row]).rate)
+        self.assertAlmostEqual(equivalent_interest(1, 4), Decimal(4))
+        self.assertEqual(equivalent_interest(20, 0), 0)
+        with self.assertRaises(ValueError):
+            validate_state({"indirect_rows": [row | {"dedication": 101}]})
+
+    def test_legacy_facilities_and_studies_keep_their_imputed_costs(self):
+        """Migra los dos grupos sin perder céntimos al retirar campos antiguos."""
+        from tools.price_justification.indirect import row_cost
+
+        legacy = {"role": "Concepto", "quantity": 3, "monthly": 10.01, "months": 1, "dedication": 50}
+        rows = validate_state({"indirect_rows": [
+            legacy | {"group": "facilities"}, legacy | {"group": "studies"},
+        ]})["indirect_rows"]
+        self.assertNotIn("dedication", rows[0])
+        self.assertEqual(set(rows[1]), {"group", "role", "total"})
+        self.assertEqual([row_cost(row) for row in rows], [Decimal("15.02")] * 2)
+        self.assertEqual(validate_state({"indirect_rows": rows})["indirect_rows"], rows)
+
+    def test_indirect_costs_dialog_updates_read_only_total_and_keeps_group_order(self):
+        """Edita los campos reales y comprueba el importe mostrado y recogido."""
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QApplication
+        from tools.price_justification.indirect import default_rows
+        from tools.price_justification.qt_window import IndirectCostsDialog
+
+        application = QApplication.instance() or QApplication([])
+        dialog = IndirectCostsDialog(None, self.app, default_rows())
+        dialog.table.cellWidget(1, 1).setCurrentText("Personal de prueba")
+        for column, value in ((0, 2), (2, 150), (3, 3), (4, 25)):
+            dialog.table.cellWidget(1, column).setValue(value)
+        total = dialog.table.item(1, 5)
+        self.assertEqual(total.text(), "225,00")
+        self.assertFalse(total.flags() & Qt.ItemFlag.ItemIsEditable)
+        self.assertIn("Aviso", dialog.summary.text())
+        dialog.group.setCurrentIndex(1)
+        dialog.add_row()
+        self.assertEqual([row["group"] for row in dialog.rows()],
+                         ["staff", "facilities", "facilities", "studies", "studies"])
+        self.assertEqual(dialog.rows()[0]["role"], "Personal de prueba")
+        for index in range(dialog.table.rowCount()):
+            role = dialog.table.cellWidget(index, 1)
+            if role is None:
+                continue
+            group = role.property("costGroup")
+            if group == "facilities":
+                self.assertIsNone(dialog.table.cellWidget(index, 4))
+            elif group == "studies":
+                for column in (0, 2, 3, 4):
+                    self.assertIsNone(dialog.table.cellWidget(index, column))
+                dialog.table.cellWidget(index, 5).setValue(12.34)
+        self.assertEqual([row["total"] for row in dialog.rows() if row["group"] == "studies"], [12.34, 12.34])
+        dialog.table.setCurrentCell(1, 5)
+        dialog.remove_row()
+        self.assertNotIn("staff", [row["group"] for row in dialog.rows()])
+        dialog.close()
+        application.processEvents()
+
+    def test_indirect_cost_rows_fit_editors_before_and_after_adding(self):
+        """Comprueba el espacio real de los controles con ambos temas de la aplicación."""
+        from PySide6.QtWidgets import QApplication
+        from budget_qt_theme import _stylesheet
+        from tools.price_justification.indirect import default_rows
+        from tools.price_justification.qt_window import IndirectCostsDialog
+
+        application = QApplication.instance() or QApplication([])
+        for theme in ("light", "dark"):
+            dialog = IndirectCostsDialog(None, self.app, default_rows())
+            dialog.setStyleSheet(_stylesheet(theme))
+            dialog.show()
+            try:
+                for added in (False, True):
+                    if added:
+                        dialog.add_row()
+                    application.processEvents()
+                    with self.subTest(theme=theme, added=added):
+                        for row in range(dialog.table.rowCount()):
+                            for column in range(dialog.table.columnCount()):
+                                widget = dialog.table.cellWidget(row, column)
+                                if widget is not None:
+                                    self.assertGreaterEqual(widget.height(), widget.sizeHint().height())
+            finally:
+                dialog.close()
 
     def test_boe_references_are_exported_without_replacing_custom_values(self):
         """Las referencias del BOE se incorporan al anejo y admiten datos locales editables."""
@@ -319,6 +425,13 @@ class PriceDocumentTests(unittest.TestCase):
                     data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
                 archive.writestr(entry, data)
         self.app.report_settings.template_path = str(template)
+        self.app.budget_dataset.concepts["AX2"] = Concept(
+            "AX2", "ud", "Segundo auxiliar", 17.25, "0", children=[("MO1", 1)],
+        )
+        self.app.budget_items.append(ProjectItem(
+            "P2", "01#", "ud", "Segunda partida", 1, 17.25,
+            source="BC3", decomposition=[("AX2", 1)],
+        ))
         original = deepcopy(self.app.budget_items)
         for output_format in ("pdf", "odt"):
             with self.subTest(output_format=output_format):
@@ -332,10 +445,10 @@ class PriceDocumentTests(unittest.TestCase):
                     reader = PdfReader(target)
                     text = "\n".join(page.extract_text() for page in reader.pages)
                     self.assertGreater(len(reader.pages), 4)
-                    for item in ("base máxima:", "grupo 2,", "contingencias comunes", "Totales:"):
-                        self.assertEqual(len(re.findall(r"[•\x7f]\s*" + re.escape(item), text)), 2)
+                    for item in ("contingencias comunes", "Totales:"):
+                        self.assertEqual(len(re.findall(r"[•\x7f]\s*" + re.escape(item), text)), 1)
                     self.assertNotIn("Placeholder for table of contents", text)
-                    self.assertIn("JUSTIFICACIÓN DE PRECIOS — 2", " ".join(text.split()))
+                    self.assertIn("ANEJO Nº 15. JUSTIFICACIÓN DE PRECIOS — 2", " ".join(text.split()))
                     links = {
                         ref.get_object().get("/A", {}).get("/URI")
                         for page in reader.pages for ref in page.get("/Annots", ())
@@ -366,12 +479,40 @@ class PriceDocumentTests(unittest.TestCase):
                         }
                         self.assertIsNotNone(content.find(".//text:table-of-content", ns))
                         self.assertTrue(content.findall(".//table:table-header-rows", ns))
-                        self.assertEqual(len(content.findall(
-                            ".//table:table-cell[@table:style-name='PricesHeaderCell']", ns,
-                        )), 8)
+                        self.assertTrue(content.findall(
+                            ".//table:table-cell[@table:style-name='TintedHeaderCell']", ns,
+                        ))
+                        for base in ("HeaderCell", "HeaderCellLast", "BodyCell", "BodyCellLast"):
+                            cell_properties = []
+                            for name in (base, "Tinted" + base):
+                                props = content.find(f".//{_tag('style:style')}[@{_tag('style:name')}='{name}']"
+                                                     f"/{_tag('style:table-cell-properties')}")
+                                properties = dict(props.attrib)
+                                properties.pop(_tag("fo:background-color"))
+                                cell_properties.append(properties)
+                            self.assertEqual(*cell_properties)
+                        indented = content.findall(".//text:p[@text:style-name='PricesTableTextIndented']", ns)
+                        self.assertTrue(any("5.101,20" in "".join(p.itertext()) for p in indented))
+                        self.assertTrue(any("grupo 2," in "".join(p.itertext()) for p in indented))
+                        interest = next(table for table in content.findall(".//table:table", ns)
+                                        if "T (años)" in "".join(table.itertext()))
+                        interest_name = interest.get(_tag("table:style-name"))
+                        props = content.find(f".//{_tag('style:style')}[@{_tag('style:name')}='{interest_name}']"
+                                             f"/{_tag('style:table-properties')}")
+                        self.assertLess(float(props.get(_tag("style:width")).removesuffix("pt")), 350)
+                        self.assertEqual(props.get(_tag("table:align")), "center")
+                        self.assertEqual(len(interest.findall("table:table-column", ns)), 5)
+                        for paragraph in interest.findall(".//text:p", ns):
+                            style_name = paragraph.get(_tag("text:style-name"))
+                            cell_props = content.find(f".//{_tag('style:style')}[@{_tag('style:name')}='{style_name}']"
+                                                      f"/{_tag('style:paragraph-properties')}")
+                            self.assertEqual(cell_props.get(_tag("fo:text-align")), "center")
+                        subtitle = next(p for p in content.findall(".//text:h", ns)
+                                        if "".join(p.itertext()).strip() == "Operarios, consumos y condiciones particulares")
+                        self.assertEqual(subtitle.get(_tag("text:outline-level")), "4")
                         lists = content.findall(".//text:list[@text:style-name='PricesTableBullets']", ns)
-                        self.assertEqual(sorted(len(items) for items in lists), [6, 6, 7, 7])
-                        self.assertEqual(" ".join(text.split()).count("47,48 €/día"), 2)
+                        self.assertEqual([len(items) for items in lists], [7])
+                        self.assertEqual(" ".join(text.split()).count("47,48 €/día"), 1)
                         self.assertTrue(content.findall(".//math:mfrac/math:mrow/math:mfrac", ns))
                         self.assertTrue(content.findall(".//math:msub", ns))
                         self.assertTrue(content.findall(".//math:msup", ns))
@@ -380,7 +521,7 @@ class PriceDocumentTests(unittest.TestCase):
                         self.assertTrue(content.findall(".//table:table-cell[@table:style-name='AuxiliaryTotalCellLast']", ns))
                         self.assertTrue(content.findall(".//text:p[@text:style-name='Signature']", ns))
                         footer = next(styles.iter(_tag("style:footer")))
-                        self.assertIn("JUSTIFICACIÓN DE PRECIOS", "".join(footer.itertext()))
+                        self.assertIn("ANEJO Nº 15. JUSTIFICACIÓN DE PRECIOS", "".join(footer.itertext()))
                         self.assertIsNotNone(footer.find(".//text:page-number", ns))
                         self.assertIn(
                             "https://www.boe.es/buscar/act.php?id=BOE-A-2001-19995#a130",
@@ -393,9 +534,21 @@ class PriceDocumentTests(unittest.TestCase):
                 self.assertNotIn("[PENDIENTE", text)
                 self.assertNotIn("2026—", condensed)
                 self.assertIn("01/01/2026", text)
-                for number in range(1, 5):
-                    reference = f"VéaselaTabla{number}."
-                    self.assertIn(f"{reference}Tabla{number}.", condensed)
+                self.assertNotIn("VéaselaTabla", condensed)
+                self.assertNotIn("Fuentedepreciosydescomposiciones", condensed)
+                self.assertNotIn("Basesytiposdecotización", condensed)
+                for number in range(1, 6):
+                    self.assertIn(f"(Tabla{number}).Tabla{number}.", condensed)
+                self.assertIn("empresa/trabajador:", text)
+                self.assertIn("Operarios,consumosycondicionesparticulares", condensed)
+                self.assertNotIn("i=0%", condensed)
+                self.assertIn("Jornadaanualefectivadereferencia1736horas", condensed)
+                self.assertNotIn("Jornadaanualefectivadereferencia:1736horas.", condensed)
+                self.assertEqual(len(re.findall(r"Tabla\d+\.(?:PreciosAuxiliares|Descompuestos)\(importeen€\)", condensed)), 2)
+                self.assertNotIn("PreciodescompuestodeP1", condensed)
+                self.assertNotIn("Componentesdelprecioauxiliar", condensed)
+                self.assertIn("Segundoauxiliar", condensed)
+                self.assertIn("Segundapartida", condensed)
                 for title, _ in LISTINGS:
                     self.assertIn(re.sub(r"\s+", "", title), condensed)
                 for value in (

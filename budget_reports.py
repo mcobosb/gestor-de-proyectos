@@ -345,6 +345,7 @@ def build_pdf_report(
     )
     text = layout.text
     table = layout.table
+    listing_caption = report if embedded else ""
     story = []
     header_title = REPORT_TITLES[report]
     page_headings = {}
@@ -398,6 +399,10 @@ def build_pdf_report(
 
     def item_heading(item, value=None):
         """Añade la partida en negrita y su descripción sangrada, con importe opcional."""
+        nonlocal listing_caption
+        if listing_caption and report == "Descompuestos":
+            layout.table_caption(story, listing_caption)
+            listing_caption = ""
         row = [item.code, item.unit, text(item.summary, layout.item_summary)]
         ratios = [50, 15, CONTENT_WIDTH - 65]
         if value is not None:
@@ -471,7 +476,7 @@ def build_pdf_report(
             subtotal_rows = [i for i, row in enumerate(rows) if str(row[3]).startswith("Grupo ")]
             layout.add_data_table(story, report, table(["CÓDIGO", "CANTIDAD", "UD.", "RESUMEN", "PRECIO/UD.", "IMPORTE"],
                                rows, [50, 45, 18, 290, 50, 57], bold_rows=subtotal_rows,
-                               highlighted_rows=subtotal_rows))
+                               highlighted_rows=subtotal_rows, tinted_rows=embedded))
         else:
             story.append(text(
                 "No hay precios elementales identificados en el proyecto."
@@ -481,6 +486,9 @@ def build_pdf_report(
         total("TOTAL", grand_total)
     elif report == "Precios Auxiliares":
         for concept, price, children in auxiliaries.values():
+            if listing_caption:
+                layout.table_caption(story, listing_caption)
+                listing_caption = ""
             p = table([], [[concept.code, concept.unit, text(concept.summary, layout.item_summary)]],
                       [50, 15, CONTENT_WIDTH - 65], bold_rows=(0,),
                       background="#8EAADB" if embedded else None)
@@ -491,8 +499,11 @@ def build_pdf_report(
             rows = [[c.code, c.unit, fmt_number(q, 3), c.summary, money(p), money(q * p), ""]
                     for c, q, p in children]
             if rows:
-                layout.add_data_table(story, f"Componentes del precio auxiliar {concept.code}",
-                                      table(column_headers if embedded else [], rows, auxiliary_widths))
+                block = table(column_headers if embedded else [], rows, auxiliary_widths, tinted_rows=embedded)
+                if embedded:
+                    story.append(block)
+                else:
+                    layout.add_data_table(story, f"Componentes del precio auxiliar {concept.code}", block)
             total("COSTE UNITARIO TOTAL", price)
             difference = money(price) - sum((money(q * p) for _, q, p in children), Decimal(0))
             if difference:
@@ -551,8 +562,12 @@ def build_pdf_report(
                         rows = [[c.code, c.unit, c.summary, fmt_number(q, 3), money(p), money(q * p), ""]
                                 for c, q, p in components(item)]
                         if rows:
-                            layout.add_data_table(story, f"Precio descompuesto de {item.code}",
-                                                  table(column_headers if embedded else [], rows, component_widths))
+                            block = table(column_headers if embedded else [], rows, component_widths,
+                                          tinted_rows=embedded)
+                            if embedded:
+                                story.append(block)
+                            else:
+                                layout.add_data_table(story, f"Precio descompuesto de {item.code}", block)
                             difference = money(item.unit_price) - sum(
                                 (money(q * p) for _, q, p in components(item)), Decimal(0))
                             if difference:

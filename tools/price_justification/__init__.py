@@ -36,6 +36,7 @@ def open_tool_qt(app) -> None:
         return
     for window in getattr(app, "_project_windows", []):
         if isinstance(window, PriceJustificationWindowQt) and window.isVisible():
+            window.refresh_general_info()
             window.raise_()
             window.activateWindow()
             return

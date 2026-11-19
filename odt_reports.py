@@ -6,7 +6,7 @@ from decimal import Decimal
 from pathlib import Path
 from xml.etree import ElementTree as ET
 from zipfile import ZIP_STORED, ZIP_DEFLATED, ZipFile
-from tools._shared.document_layout import table_labels
+from tools._shared.document_layout import TABLE_ALTERNATE_BACKGROUND, table_labels
 from document_styles import style_odt_paragraphs, style_odt_tree
 
 from budget_reports import (
@@ -77,6 +77,8 @@ class _OdtReport:
         self.template_borders: dict[str, dict[str, str]] = {}
         self.table_number = 0
         self.data_table_number = 0
+        self.table_references = True
+        self.table_caption_suffix = ""
         self.content_root = ET.Element(_tag("office:document-content"), {
             _tag("office:version"): "1.3",
         })
@@ -252,7 +254,7 @@ class _OdtReport:
         if number is None:
             self.data_table_number += 1
             number = self.data_table_number
-        reference, label = table_labels(number, title)
+        reference, label = table_labels(number, title + self.table_caption_suffix)
         reference_style = f"{body}TableReference"
         for name, bold in ((reference_style, False), ("DataTableCaption", True)):
             if any(style.get(_tag("style:name")) == name for style in self.automatic_styles):
@@ -265,9 +267,10 @@ class _OdtReport:
                 _tag("fo:keep-with-next"): "always",
                 _tag("fo:margin-top" if not bold else "fo:margin-bottom"): "4pt",
             })
-            if bold:
+            if bold and self.table_references:
                 ET.SubElement(style, _tag("style:text-properties"), {_tag("fo:font-weight"): "bold"})
-        self.paragraph(reference, reference_style)
+        if self.table_references:
+            self.paragraph(reference, reference_style)
         self.paragraph(label, caption or "DataTableCaption")
 
     def table(
@@ -275,6 +278,7 @@ class _OdtReport:
         body_text_style: str = "TableText",
         ratios=(), right_columns=(), chapter: bool = False, keep_next: bool = False,
         highlighted_rows=(), cell_style="", write_cell=None, caption: str = "",
+        width_fraction: float = 1.0, tinted_rows: bool = False, centered: bool = False,
     ) -> None:
         """Añade una tabla ODF con estilos semánticos para cabecera, texto y énfasis."""
         column_count = max(
@@ -292,15 +296,17 @@ class _OdtReport:
         })
         if self.pending_page_break or not len(self.body):
             table_style.set(_tag("style:master-page-name"), self.current_page)
+        width_points = CONTENT_WIDTH * width_fraction
         properties = {
-            _tag("style:width"): f"{CONTENT_WIDTH:.4f}pt",
-            _tag("table:align"): "left",
-            _tag("fo:margin-left"): "0pt",
+            _tag("style:width"): f"{width_points:.4f}pt",
+            _tag("table:align"): "center" if centered else "left",
             _tag("fo:margin-top"): "5.6693pt" if chapter and not (
                 self.layout and self.layout.certification
             ) else "0pt",
             _tag("fo:margin-bottom"): "0pt",
         }
+        if not centered:
+            properties[_tag("fo:margin-left")] = "0pt"
         if self.pending_page_break:
             properties[_tag("fo:break-before")] = "page"
             self.pending_page_break = False
@@ -320,7 +326,7 @@ class _OdtReport:
                 _tag("style:name"): column_name, _tag("style:family"): "table-column",
             })
             ET.SubElement(column_style, _tag("style:table-column-properties"), {
-                _tag("style:column-width"): f"{CONTENT_WIDTH * width / sum(widths):.4f}pt",
+                _tag("style:column-width"): f"{width_points * width / sum(widths):.4f}pt",
             })
             ET.SubElement(table, _tag("table:table-column"), {
                 _tag("table:style-name"): column_name,
@@ -334,16 +340,19 @@ class _OdtReport:
             index for index, label in enumerate(headers) if label in numeric_headers
         }
 
-        def append_row(values, *, header=False, bold=False, highlighted=False):
+        def append_row(values, *, header=False, bold=False, highlighted=False, alternate=False):
             """Escribe una fila y rellena las celdas que falten."""
             parent = ET.SubElement(table, _tag("table:table-header-rows")) if header else table
             row = ET.SubElement(parent, _tag("table:table-row"))
             for index, value in enumerate((*values, *("" for _ in range(column_count - len(values))))):
+                background = cell_style or (
+                    "ChapterCell" if chapter or highlighted else
+                    "HeaderCell" if header else "TotalCell" if bold else "BodyCell"
+                )
+                if tinted_rows and (header or alternate) and background in {"HeaderCell", "BodyCell", "TotalCell"}:
+                    background = "Tinted" + background
                 cell = ET.SubElement(row, _tag("table:table-cell"), {
-                    _tag("table:style-name"): (
-                        cell_style or ("ChapterCell" if chapter or highlighted else
-                        "HeaderCell" if header else "TotalCell" if bold else "BodyCell")
-                    ),
+                    _tag("table:style-name"): background,
                     _tag("office:value-type"): "string",
                 })
                 if index == column_count - 1:
@@ -374,7 +383,7 @@ class _OdtReport:
         if headers:
             append_row(headers, header=True)
         for index, row in enumerate(rows):
-            append_row(row, bold=index in bold_rows, highlighted=index in highlighted_rows)
+            append_row(row, bold=index in bold_rows, highlighted=index in highlighted_rows, alternate=index % 2 == 1)
 
     def totals(self, rows) -> None:
         """Añade las líneas económicas como filas destacadas."""
@@ -483,6 +492,9 @@ class _OdtReport:
             for style in self.template_header["automatic_styles"]:
                 automatic.append(deepcopy(style))
         for name, background in (("HeaderCell", "#FFFFFF"), ("BodyCell", "#FFFFFF"),
+                                 ("TintedHeaderCell", TABLE_ALTERNATE_BACKGROUND),
+                                 ("TintedBodyCell", TABLE_ALTERNATE_BACKGROUND),
+                                 ("TintedTotalCell", TABLE_ALTERNATE_BACKGROUND),
                                  ("AuxiliaryBandCell", "#8EAADB"), ("AuxiliaryTotalCell", "#D9E5F5"),
                                  ("NarrativeCell", "#EDF3FB"),
                                  ("TotalCell", "#FFFFFF"), ("ChapterCell", (
@@ -503,7 +515,7 @@ class _OdtReport:
                 **({
                     _tag("fo:border-top"): "0.6pt solid #000000",
                     _tag("fo:border-bottom"): "0.5pt solid #000000",
-                } if name == "HeaderCell" else {}),
+                } if name in {"HeaderCell", "TintedHeaderCell"} else {}),
             })
             self.automatic_styles.append(deepcopy(style))
             last_style = deepcopy(style)
@@ -833,6 +845,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
     )
     if not embedded:
         document.header_columns, document.header_ratios = column_headers, column_ratios
+    listing_caption = report if embedded else ""
     codes = list(dict.fromkeys([*app.chapter_order, *(item.chapter for item in app.budget_items)]))
     groups = [
         (code, [item for item in app.budget_items if item.chapter == code])
@@ -933,7 +946,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                     ratios=[50, 45, 18, 290, 50, 57],
                     bold_rows=[i for i, row in enumerate(rows) if str(row[3]).startswith("Grupo ")],
                     highlighted_rows=[i for i, row in enumerate(rows) if str(row[3]).startswith("Grupo ")],
-                    caption=report,
+                    caption=report, tinted_rows=embedded,
                 )
             else:
                 document.paragraph(
@@ -955,7 +968,9 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                     ratios=[50, 15, CONTENT_WIDTH - 65], bold_rows=(0,),
                     bold_text_style="AuxiliaryTitle", keep_next=True,
                     cell_style="AuxiliaryBandCell" if embedded else "",
+                    caption=listing_caption,
                 )
+                listing_caption = ""
                 if concept.text:
                     document.paragraph(concept.text, style="ItemDescription")
                 rows = [[
@@ -966,7 +981,8 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                     document.table(
                         column_headers if embedded else [], rows,
                         ratios=auxiliary_widths, right_columns=(2, 4, 5, 6),
-                        caption=f"Componentes del precio auxiliar {concept.code}",
+                        caption="" if embedded else f"Componentes del precio auxiliar {concept.code}",
+                        tinted_rows=embedded,
                     )
                 total("COSTE UNITARIO TOTAL", price)
                 difference = money(price) - sum(
@@ -1009,7 +1025,9 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                                 [50, 15, CONTENT_WIDTH - 65]),
                         right_columns=(3,) if shown_amount is not None else (),
                         keep_next=True,
+                        caption=listing_caption if report == "Descompuestos" else "",
                     )
+                    listing_caption = ""
                     if item.text:
                         document.paragraph(item.text, style="ItemDescription")
                     if section == 1:
@@ -1050,7 +1068,8 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                                     fmt_number(float(money(quantity * price))), "",
                                 ] for concept, quantity, price in components],
                                 ratios=component_widths, right_columns=(3, 4, 5, 6),
-                                caption=f"Precio descompuesto de {item.code}",
+                                caption="" if embedded else f"Precio descompuesto de {item.code}",
+                                tinted_rows=embedded,
                             )
                             difference = money(item.unit_price) - sum(
                                 (money(quantity * price) for _, quantity, price in components),

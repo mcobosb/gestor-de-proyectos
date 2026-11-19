@@ -7,6 +7,7 @@ import re
 from tools._library_editor import library_members, read_markdown
 from tools._library_markdown import document_markdown, text_blocks
 from tools._shared.document_layout import project_document_variables
+from .indirect import GROUPS, GROUP_HEADERS, RATIOS, LIMIT, calculate, default_rows, equivalent_interest, rate_label, row_cost
 
 
 LIBRARY_PATH = Path(__file__).resolve().parent / "BIBLIOTECA.zip"
@@ -25,10 +26,27 @@ FORMULA_LEVEL = -100
 
 @dataclass(frozen=True)
 class NarrativeTable:
-    """Tabla de dos columnas con rótulos y datos que se leen en cada exportación."""
+    """Tabla con columnas, rótulo y clave de referencia del anejo."""
 
     title: str
     rows: tuple[tuple[str, str], ...]
+    key: str = ""
+    headers: tuple[str, ...] = ("Concepto", "Detalle")
+    ratios: tuple[float, ...] = (0.3, 0.7)
+    numeric: tuple[int, ...] = ()
+    bands: tuple[int, ...] = ()
+    subheaders: tuple[int, ...] = ()
+    width: float = 1.0
+    centered: bool = False
+
+
+@dataclass(frozen=True)
+class Equation:
+    """Expresión editable con una referencia opcional."""
+
+    source: str
+    key: str
+    number: int
 
 
 _PROJECT_ROWS = (
@@ -44,15 +62,69 @@ _AGREEMENT_ROWS = (("Convenio", "convenio_texto"), ("Revisión salarial", "revis
 _TABLES = {
     "tabla_proyecto": ("Datos del proyecto", _PROJECT_ROWS),
     "tabla_convenio": ("Convenio y revisión salarial", _AGREEMENT_ROWS),
-    "tabla_cotizaciones": ("Bases y tipos de cotización", _CONTRIBUTION_ROWS),
     "tabla_mano_obra": ("Referencias adoptadas para la mano de obra", (
-        *_AGREEMENT_ROWS,
         ("Referencia salarial o SMI", "salario_texto"), *_CONTRIBUTION_ROWS,
         ("Conceptos cotizables y exentos", "contribution_details"),
         ("Aportación empresarial al plan de pensiones", "pension_texto"),
         ("Calendario laboral", "calendario_texto"), ("Condiciones de trabajo", "condiciones_texto"),
+        ("Jornada anual efectiva de referencia", "jornada_tabla"),
     )),
 }
+
+
+def calculated_tables(app, state: dict) -> tuple[dict[str, NarrativeTable], str]:
+    """Prepara los importes, el cálculo razonado de K y la sensibilidad de i_m."""
+    from budget_core import fmt_number
+
+    rows = state.get("indirect_rows", default_rows())
+    costs = calculate(app, rows)
+    detail, bands, subheaders = [], [], []
+    for group, (label, _) in GROUPS.items():
+        bands.append(len(detail))
+        detail.append(("", label, "", "", "", ""))
+        subheaders.append(len(detail))
+        detail.append(GROUP_HEADERS[group])
+        detail.extend((
+            fmt_number(row["quantity"]) if "quantity" in row else "", row["role"],
+            fmt_number(row["monthly"]) if "monthly" in row else "",
+            fmt_number(row["months"]) if "months" in row else "",
+            fmt_number(row["dedication"]) if "dedication" in row else "",
+            fmt_number(float(row_cost(row))),
+        ) for row in rows if row["group"] == group)
+    bands.append(len(detail))
+    detail.append(("", "Total de costes indirectos propios", "", "", "", fmt_number(float(costs.total))))
+    indirect = NarrativeTable(
+        "Estimación de costes indirectos propios (importe en €)", tuple(detail),
+        "tabla_indirectos", (), RATIOS, (0, 2, 3, 4, 5), tuple(bands), tuple(subheaders),
+    )
+    rates = (2, 4, 6, 8)
+    columns = len(rates) + 1
+    interest = NarrativeTable(
+        "Interés medio anual equivalente por vida económica (%)",
+        tuple((str(years), *(fmt_number(float(equivalent_interest(years, rate))) for rate in rates))
+              for years in range(1, 21)),
+        "tabla_interes", ("T (años)", *(f"i = {rate} %" for rate in rates)), (1 / columns,) * columns,
+        width=0.68, centered=True,
+    )
+    if costs.raw is None:
+        explanation = ("No se obtiene K_1 ni K porque el coste directo total del presupuesto no es positivo. "
+                       "La previsión de imprevistos K_2 es del 1 %.")
+    else:
+        decision = ("Como el resultado supera el 2 %, se adopta el límite del 2 %."
+                    if costs.raw > LIMIT else f"Como no supera el 2 %, se adopta {rate_label(costs.adopted)}.")
+        explanation = (
+            f"Según la ecuación [[ec:k1]], el total de {fmt_number(float(costs.total))} € se divide entre "
+            f"el coste directo total de {fmt_number(float(costs.direct))} €, sin indirectos, gastos generales, "
+            f"beneficio industrial ni IVA. Se obtiene un K_1 de {rate_label(costs.raw)}. {decision} "
+            f"Se añade un K_2 del 1 % por imprevistos y, siguiendo la ecuación [[ec:k]], "
+            f"se obtiene un K de {rate_label(costs.rate)}."
+        )
+        if costs.differs:
+            explanation += (
+                f" El presupuesto conserva su porcentaje configurado de {rate_label(costs.budget_rate)}; "
+                "los listados de precios reflejan ese porcentaje y no el K calculado en este apartado."
+            )
+    return {"tabla_indirectos": indirect, "tabla_interes": interest}, explanation
 
 
 def load_documents(archive_path: Path) -> list[tuple[str, str]]:
@@ -113,6 +185,8 @@ def template_variables(app, state: dict) -> dict[str, str]:
     for key in ("salary_revision", "wage_reference", "contribution_bases",
                 "contributions", "pension_contribution"):
         values[key] = re.sub(r"^2026\s+[—–-]\s+", "", values[key])
+    values["jornada_tabla"] = (values["annual_hours"] if values["annual_hours"].startswith("[")
+                              else f"{values['annual_hours']} horas")
     for key, field in (
         ("convenio_texto", "agreement"), ("revision_texto", "salary_revision"),
         ("salario_texto", "wage_reference"), ("bases_tabla", "contribution_bases"),
@@ -155,7 +229,7 @@ def substitute(source: str, values: dict[str, str]) -> str:
     return re.sub(r"\{\{([^{}]+)\}\}", replacement, source)
 
 
-def document_blocks(source: str, values: dict[str, str]) -> list[tuple[int, str | NarrativeTable]]:
+def document_blocks(source: str, values: dict[str, str], tables=None) -> list:
     """Reutiliza el Markdown del PPTP y separa las fórmulas escritas entre líneas $$."""
     source = document_markdown(source)
     parts = re.split(r"^\s*\$\$[ \t]*\r?$", source, flags=re.MULTILINE)
@@ -167,16 +241,25 @@ def document_blocks(source: str, values: dict[str, str]) -> list[tuple[int, str 
             formula = part.strip()
             if not formula or "\n" in formula:
                 raise ValueError("Cada bloque $$ debe contener una fórmula en una sola línea.")
-            blocks.append((FORMULA_LEVEL, substitute(formula, values)))
+            expression, marker, key = formula.partition(" [#")
+            if marker and re.fullmatch(r"\w+\]", key) is None:
+                raise ValueError(f"Identificador de ecuación no válido: {key}")
+            expression = substitute(expression, values)
+            blocks.append((FORMULA_LEVEL, Equation(expression, key[:-1], 0) if marker else expression))
         else:
-            for level, text in text_blocks(part, preserve_links=True):
+            for level, text in text_blocks(part, preserve_links=True, preserve_bold=True):
                 marker = re.fullmatch(r"\{\{(\w+)\}\}", text)
+                if marker and marker[1] == "tabla_cotizaciones":
+                    continue
+                if marker and tables and marker[1] in tables:
+                    blocks.append((0, tables[marker[1]]))
+                    continue
                 if marker and marker[1] in _TABLES:
                     title, fields = _TABLES[marker[1]]
                     rows = tuple((label, _table_value(key, values[key]))
                                  for label, key in fields if values[key].strip())
                     if rows:
-                        blocks.append((0, NarrativeTable(title, rows)))
+                        blocks.append((0, NarrativeTable(title, rows, marker[1])))
                     continue
                 text = substitute(text, values)
                 if text.strip():
@@ -188,15 +271,17 @@ def _table_value(key: str, value: str) -> str:
     """Desglosa las referencias corridas manteniendo intactos los textos ya estructurados."""
     if "\n" in value:
         return value
-    if key == "bases_tabla" and value.lower().startswith("base máxima:"):
-        parts = re.split(r";\s+|(?<=\.)\s+(?=Mínimas mensuales:|Obra,)", value)
+    if key == "bases_tabla" and (match := re.fullmatch(
+        r"base máxima:\s*(.+?)\.\s*Mínimas mensuales:\s*(.+?)\.\s*Obra,\s*(.+)", value, re.I,
+    )):
+        maximum, minimum, works = match.groups()
+        groups = "\n".join(f"\t{group}" for group in minimum.split("; "))
+        return f"Base máxima:\n\t{maximum}\nMínimas mensuales:\n{groups}\nObra:\n\t{works}"
     elif key == "tipos_tabla" and "empresa/trabajador — " in value:
         introduction, _, rates = value.partition("empresa/trabajador — ")
         parts = re.split(r";\s+|(?<=\.)\s+(?=Totales:)", rates)
         return introduction + "empresa/trabajador:\n" + "\n".join(f"• {part}" for part in parts)
-    else:
-        return value
-    return "\n".join(f"• {part}" for part in parts)
+    return value
 
 
 def formula_runs(source: str) -> list[tuple[str, str]]:

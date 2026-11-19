@@ -39,6 +39,7 @@ def _external(title: str, reason: str) -> Entry:
 _PLANS = "Planos preparados externamente en CAD o GIS."
 _REPORTS = "Se prepara desde Informes o a partir de los datos del presupuesto."
 _PROCEDURES = "Documentación externa o dependiente de la tramitación."
+PRICE_JUSTIFICATION_NUMBER = "15"
 
 CATALOG = (
     Entry("DOCUMENTO N.º 1: MEMORIA Y ANEJOS", "01 Memoria y anejos", children=(
@@ -75,7 +76,7 @@ CATALOG = (
             _template("12", "Accesibilidad y Supresión de Barreras Arquitectónicas", "Itinerarios y condicionantes", "Comprobaciones y medidas correctoras"),
             _template("13", "Expropiaciones y Bienes Afectados", "Parcelas y titulares", "Superficies, afecciones y documentación asociada"),
             _template("14", "Integración Ambiental y Paisajística", "Inventario y afecciones", "Medidas, restauración y seguimiento"),
-            Entry("Justificación de Precios", "15", external="Herramientas → Justificación de precios.", children=tuple(
+            Entry("Justificación de Precios", PRICE_JUSTIFICATION_NUMBER, external="Herramientas → Justificación de precios.", children=tuple(
                 Entry(title) for title in ("Mano de obra", "Maquinaria y medios auxiliares",
                                           "Materiales a pie de obra", "Precios descompuestos")
             )),

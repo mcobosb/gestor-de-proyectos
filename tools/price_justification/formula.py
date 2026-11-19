@@ -166,19 +166,21 @@ def _measure(parts: tuple[str | Fraction | Parentheses, ...], size: float) -> _B
 class PdfFormula(Flowable):
     """Dibuja texto PDF seleccionable y barras vectoriales de fracción."""
 
-    def __init__(self, source: str):
+    def __init__(self, source: str, *, number: int | None = None):
         """Prepara el árbol de la expresión una sola vez."""
         super().__init__()
         self.parts = parse_formula(source)
         self.box = _measure(self.parts, 11)
+        self.label = f"({number})" if number is not None else ""
         self.hAlign = "CENTER"
         self.spaceBefore = 6
         self.spaceAfter = 9
 
     def wrap(self, availWidth, availHeight):
         """Ajusta fórmulas anchas al ancho real del marco."""
-        self.scale = min(1.0, availWidth / max(self.box.width, 1))
-        self.width = self.box.width * self.scale
+        self.label_width = stringWidth(self.label, "Times-Roman", 10) + 10 if self.label else 0
+        self.scale = min(1.0, availWidth / max(self.box.width + self.label_width, 1))
+        self.width = (self.box.width + self.label_width) * self.scale
         self.height = (self.box.up + self.box.down) * self.scale
         return self.width, self.height
 
@@ -198,6 +200,9 @@ class PdfFormula(Flowable):
             height = top - bottom
             self.canv.bezier(end, top, control, top - height * 0.18,
                              control, bottom + height * 0.18, end, bottom)
+        if self.label:
+            self.canv.setFont("Times-Roman", 10)
+            self.canv.drawString(self.box.width + 10, self.box.down, self.label)
 
 
 _MATH_NS = "http://www.w3.org/1998/Math/MathML"
