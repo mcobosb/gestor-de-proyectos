@@ -883,6 +883,7 @@ def write_document(
             **{f"PPTPBullet{depth}": f"PPTP - Lista {depth + 1}" for depth in bullet_depths},
             **{f"PPTPContents{level}": f"PPTP - Índice {level}" for level in range(1, 7)},
         })
+        document.append_signature(settings)
         document.write(target)
     else:
         from reportlab.lib.pagesizes import A4
@@ -1026,6 +1027,7 @@ def write_document(
                     if level < toc_depth:
                         self.notify("TOCEntry", (level, escape(text), self.page, key))
 
+        story.extend(layout.signature_block(settings))
         document = PptpDocTemplate(
             str(target), pagesize=A4, leftMargin=LEFT_MARGIN, rightMargin=RIGHT_MARGIN,
             topMargin=layout.top_margin(title, project), bottomMargin=layout.bottom_margin(),

@@ -364,14 +364,7 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
         document.heading(title, 1, style="PricesListingHeading", bookmark=f"PPTPHeading{bookmark}")
         bookmark += 1
         append_report_odt(app, report, document, embedded=True)
-    settings = app.report_settings
-    signature = [value for value in (
-        settings.location, settings.role, settings.document_author, settings.organization, settings.signature,
-    ) if value]
-    if signature:
-        document.space(8 * 72 / 25.4)
-        for value in signature:
-            document.paragraph(value, "SignatureNote" if value == settings.signature else "Signature")
+    document.append_signature(app.report_settings)
     document.write(target)
 
 
@@ -381,8 +374,7 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
     from reportlab.lib.enums import TA_JUSTIFY
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle
-    from reportlab.lib.units import mm
-    from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer
+    from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer
     from reportlab.platypus.doctemplate import LayoutError
     from reportlab.platypus.tableofcontents import TableOfContents
     from budget_reports import build_pdf_report
@@ -461,14 +453,7 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
             story.append(Paragraph(_pdf_inline(label), list_styles[level], bulletText=marker))
         else:
             story.append(Paragraph(_pdf_inline(text), body))
-    signature = [value for value in (
-        settings.location, settings.role, settings.document_author, settings.organization, settings.signature,
-    ) if value]
-    if signature:
-        story.append(KeepTogether([Spacer(1, 8 * mm), *[
-            layout.text(value, layout.signature_note if value == settings.signature else layout.center)
-            for value in signature
-        ]]))
+    story.extend(layout.signature_block(settings))
 
     class PricesDocument(SimpleDocTemplate):
         """Resuelve los destinos del índice durante las pasadas de maquetación."""

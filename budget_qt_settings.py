@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPlainTextEdit,
     QPushButton,
     QMessageBox,
     QScrollArea,
@@ -204,7 +205,7 @@ class SettingsDialog(QDialog):
         self.save_language = save_language
         self.theme = theme
         self.save_theme = save_theme
-        self.report_fields: dict[str, QLineEdit] = {}
+        self.report_fields: dict[str, QLineEdit | QPlainTextEdit] = {}
         layout = QVBoxLayout(self)
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs)
@@ -250,16 +251,22 @@ class SettingsDialog(QDialog):
             ("Seguridad y salud orientativa (%)", "safety_health_percentage"),
         )
         for label, key in fields:
-            field = QLineEdit(str(values[key]))
-            self.report_fields[key] = field
             if key == "author":
+                authors = QPlainTextEdit(str(values[key]))
+                authors.setPlaceholderText("Un nombre por línea")
+                authors.setAccessibleName(label)
+                authors.setTabChangesFocus(True)
+                authors.setFixedHeight(authors.fontMetrics().lineSpacing() * 3 + 12)
+                self.report_fields[key] = authors
                 self.show_author = QCheckBox("Mostrar en los documentos")
                 self.show_author.setChecked(self.settings.show_author)
                 row = QHBoxLayout()
-                row.addWidget(field, 1)
+                row.addWidget(authors, 1)
                 row.addWidget(self.show_author)
                 form.addRow(label, row)
             else:
+                field = QLineEdit(str(values[key]))
+                self.report_fields[key] = field
                 form.addRow(label, field)
         self.output_format = QComboBox()
         self.output_format.addItems(("PDF", "ODT"))
@@ -467,7 +474,7 @@ class SettingsDialog(QDialog):
     def values(self) -> dict[str, object]:
         """Devuelve todos los valores del formulario de informes."""
         data: dict[str, object] = {
-            key: field.text()
+            key: field.toPlainText() if isinstance(field, QPlainTextEdit) else field.text()
             for key, field in self.report_fields.items()
         }
         data.update({

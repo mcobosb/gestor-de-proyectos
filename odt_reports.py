@@ -198,9 +198,9 @@ class _OdtReport:
             })
         self.paragraph("", "PPTPContentsBreak")
 
-    def paragraph(self, text: str, style: str = "ReportBody") -> None:
+    def paragraph(self, text: str, style: str = "ReportBody", *, parent=None) -> None:
         """Añade un párrafo con estilo reutilizable y conserva sus saltos de línea."""
-        paragraph = ET.SubElement(self.body, _tag("text:p"), {
+        paragraph = ET.SubElement(self.body if parent is None else parent, _tag("text:p"), {
             _tag("text:style-name"): style,
         })
         lines = str(text).splitlines()
@@ -209,6 +209,24 @@ class _OdtReport:
                 ET.SubElement(paragraph, _tag("text:line-break"))
             if line:
                 ET.SubElement(paragraph, _tag("text:span")).text = line
+
+    def append_signature(self, settings: ReportSettings, *, with_contractor: bool = False) -> None:
+        """Añade la firma común editable, a dos columnas en certificaciones."""
+        project = settings.signature_entries()
+        contractor = settings.signature_entries(contractor=True) if with_contractor else []
+        if not (project or contractor):
+            return
+        self.space(8 * 72 / 25.4)
+        if not with_contractor:
+            for value, note in project:
+                self.paragraph(value, "SignatureNote" if note else "Signature")
+            return
+        self.table([], [["", ""]], ratios=[1, 1], body_text_style="Signature")
+        for cell, entries in zip(self.body[-1].iter(_tag("table:table-cell")), (contractor, project)):
+            if entries:
+                cell.remove(cell[0])
+            for value, note in entries:
+                self.paragraph(value, "SignatureNote" if note else "Signature", parent=cell)
 
     def space(self, height: float) -> None:
         """Reserva el mismo espacio vertical explícito que el PDF."""
@@ -563,7 +581,7 @@ class _OdtReport:
                 properties[_tag("fo:margin-top")] = "2pt"
             if name == "FooterText":
                 properties[_tag("fo:line-height")] = "7pt"
-            if name in {"ChapterTitle", "TableItemTitle", "AuxiliaryTitle"}:
+            if name in {"ChapterTitle", "TableItemTitle", "AuxiliaryTitle", "Signature"}:
                 properties[_tag("fo:keep-with-next")] = "always"
             paragraph_properties = ET.SubElement(element, _tag("style:paragraph-properties"), properties)
             if name == "FooterText":
@@ -1038,18 +1056,8 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
         if report == "Presupuesto mediciones":
             total("TOTAL EJECUCIÓN MATERIAL", pem)
 
-    signature = [
-        value for value in (
-            settings.location, settings.role, settings.document_author, settings.organization,
-            settings.signature,
-        ) if value
-    ]
-    if signature and not embedded:
-        document.space(8 * 72 / 25.4)
-        for value in signature:
-            document.paragraph(
-                value, style="SignatureNote" if value == settings.signature else "Signature",
-            )
+    if not embedded:
+        document.append_signature(settings)
 
 
 def write_report_odt(app, report: str, target: Path) -> None:
@@ -1231,17 +1239,5 @@ def write_certification_odt(
             style="AmountInWords",
         )
 
-    signatures = [
-        "\n".join(filter(None, (
-            settings.contractor_representative, settings.contractor, settings.signature,
-        ))),
-        "\n".join(filter(None, (
-            settings.role, settings.document_author, settings.organization, settings.location,
-            settings.signature,
-        ))),
-    ]
-    document.space(8 * 72 / 25.4)
-    document.table(
-        [], [signatures], body_text_style="Signature", ratios=[1, 1],
-    )
+    document.append_signature(settings, with_contractor=True)
     document.write(target)

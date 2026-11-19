@@ -150,6 +150,7 @@ class SafetyHealthTests(unittest.TestCase):
             chapter_titles={},
             report_settings=ReportSettings(
                 general_expenses=0, industrial_profit=0, vat=0,
+                author="Autora Alfa\nAutor Beta", role="Cargo de prueba",
             ),
             _ensure_chapter=lambda chapter: None,
             refresh_budget_tree=lambda: None,
@@ -199,6 +200,8 @@ class SafetyHealthTests(unittest.TestCase):
             self.assertNotIn("PARTIDAS DEL PRESUPUESTO GENERAL", text)
             self.assertNotRegex(text, r"\b3\.11\b(?!\s+OBLIGACIONES\b)")
             self.assertNotIn("{{", text)
+            signature = text[text.rindex("Cargo de prueba"):]
+            self.assertRegex(signature, r"Cargo de prueba\s+Autora Alfa\s+Autor Beta")
 
 
 if __name__ == "__main__":

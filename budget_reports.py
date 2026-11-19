@@ -83,6 +83,18 @@ class ReportSettings:
         """Devuelve la autoría publicable, sin modificar los nombres guardados."""
         return self.author if self.show_author else ""
 
+    def signature_entries(self, *, contractor: bool = False) -> list[tuple[str, bool]]:
+        """Ordena las líneas de firma e identifica la nota de fecha y firma."""
+        values = (
+            (self.contractor_representative, self.contractor)
+            if contractor else
+            (self.location, self.role, *self.document_author.splitlines(), self.organization)
+        )
+        entries = [(value.strip(), False) for value in values if value.strip()]
+        if self.signature.strip():
+            entries.append((self.signature.strip(), True))
+        return entries
+
     @property
     def municipalities(self) -> tuple[Municipality, ...]:
         """Obtiene los municipios de la obra con su provincia y comunidad oficiales."""
@@ -309,7 +321,7 @@ def build_pdf_report(
     """Construye los listados reutilizables con cabeceras internas al integrarlos en un anejo."""
     from reportlab.lib.units import mm
     from reportlab.platypus import (
-        KeepTogether, PageBreak, Spacer, Flowable,
+        PageBreak, Spacer, Flowable,
     )
     from bc3_gui import fmt_number, format_chapter_code
     from report_layout import (
@@ -569,14 +581,8 @@ def build_pdf_report(
             if report == "Presupuesto mediciones":
                 total("TOTAL EJECUCIÓN MATERIAL", pem)
 
-    signature = [v for v in (
-        settings.location, settings.role, settings.document_author, settings.organization, settings.signature
-    ) if v]
-    if signature and not embedded:
-        story.append(KeepTogether([Spacer(1, 8 * mm), *[
-            text(v, layout.signature_note if v == settings.signature else layout.center)
-            for v in signature
-        ]]))
+    if not embedded:
+        story.extend(layout.signature_block(settings))
 
     def page_header(canvas, document):
         """Dibuja el logo, título de sección, cabeceras tabuladas y pie de página."""
@@ -660,7 +666,7 @@ def write_certification_pdf(
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.platypus import (
-        KeepTogether, PageBreak, SimpleDocTemplate, Spacer,
+        PageBreak, SimpleDocTemplate, Spacer,
     )
     from reportlab.platypus.doctemplate import LayoutError
     from bc3_gui import fmt_number, format_chapter_code
@@ -797,13 +803,7 @@ def write_certification_pdf(
                               totals["total"], settings.currency, settings.custom_currency
                           ), layout.words_style))
 
-    signatures = [[
-        text("\n".join(filter(None, (settings.contractor_representative, settings.contractor, settings.signature))),
-             layout.center),
-        text("\n".join(filter(None, (settings.role, settings.document_author, settings.organization,
-                                    settings.location, settings.signature))), layout.center),
-    ]]
-    story.append(KeepTogether([Spacer(1, 8 * mm), table([], signatures, [1, 1])]))
+    story.extend(layout.signature_block(settings, with_contractor=True))
 
     def page_header(canvas, document):
         """Dibuja la cabecera institucional y la identificación del mes certificado."""

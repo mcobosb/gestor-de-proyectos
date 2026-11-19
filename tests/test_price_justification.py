@@ -383,21 +383,32 @@ class PriceDocumentTests(unittest.TestCase):
     def test_author_visibility_controls_signatures_and_document_metadata(self):
         """Oculta o restaura varios autores, sin alterar el cargo ni perder los nombres."""
         from pypdf import PdfReader
-        from budget_reports import write_pdf
-        from odt_reports import _tag, write_report_odt
+        from datetime import date
+        from budget_reports import CERTIFICATION_REPORT_NAMES, write_certification_pdf, write_pdf
+        from odt_reports import _tag, write_certification_odt, write_report_odt
+        from tools._shared.scheduling import PlanActivity, PlanParams
+        from tools.planning.reports import write_planning_report
         from tools.rcd import RcdState
         from tools.rcd.study import write_study
         from tools.pptp.document import write_document as write_pptp
 
-        authors = "Autora Alfa y Autor Beta"
+        authors = "Autora Alfa\nAutor Beta"
+        names = authors.splitlines()
         role = "Cargo de prueba"
         settings = ReportSettings.from_dict({"author": authors, "role": role})
+        settings.contractor = "Contrata de prueba"
         self.app.report_settings = settings
+        activity = PlanActivity(
+            id=1, chapter="01#", chapter_name="Obra", code="P1", summary="Actividad",
+            unit="ud", quantity=1, amount=100, rendimiento=1, duration=2,
+            start_offset=0, finish_offset=2, start_date=date(2026, 11, 9), end_date=date(2026, 11, 10),
+        )
+        self.app.budget_items[0].certifications = {"2026-10-01": 100}
         for output in ("pdf", "odt"):
             settings.output_format = output
             for show in (False, True):
                 settings.show_author = show
-                for report in ("presupuesto", "anejo", "rcd", "pptp"):
+                for report in ("presupuesto", "anejo", "rcd", "pptp", "planificacion", "certificacion"):
                     with self.subTest(format=output, show_author=show, report=report):
                         target = self.folder / f"{report}.{output}"
                         if report == "presupuesto":
@@ -411,9 +422,16 @@ class PriceDocumentTests(unittest.TestCase):
                             state = RcdState()
                             state.inputs.update(surface=100, earth_volume=10, budget=1000, earth_budget=0)
                             write_study(state, self.app.project_title, settings, target)
-                        else:
+                        elif report == "pptp":
                             write_pptp("# Alcance\n\nContenido técnico.", target,
                                        {"titulo_proyecto": self.app.project_title}, settings)
+                        elif report == "planificacion":
+                            write_planning_report([activity], PlanParams(start=activity.start_date), target,
+                                                  settings, self.app.project_title, str)
+                        else:
+                            writer = write_certification_pdf if output == "pdf" else write_certification_odt
+                            writer(self.app.budget_items, self.app._chapter_title, self.app.project_title,
+                                   settings, CERTIFICATION_REPORT_NAMES[0], target, "2026-10-01", 1, "Oct 26")
                         if output == "pdf":
                             reader = PdfReader(target)
                             text = "\n".join(page.extract_text() for page in reader.pages)
@@ -424,12 +442,21 @@ class PriceDocumentTests(unittest.TestCase):
                                 text = " ".join(content.itertext())
                                 metadata = ET.fromstring(archive.read("meta.xml"))
                                 creator = metadata.findtext(f".//{_tag('dc:creator')}")
+                                signature_lines = [
+                                    "".join(paragraph.itertext()) for paragraph in content.iter(_tag("text:p"))
+                                    if paragraph.get(_tag("text:style-name")) in {"Signature", "SignatureNote"}
+                                ]
+                                self.assertEqual(signature_lines[-(4 if show else 2):],
+                                                 [role, *(names if show else []), settings.signature])
                         self.assertEqual(creator == authors, show)
-                        if report != "pptp":
-                            self.assertIn(role, text)
-                            self.assertEqual(authors in text, show)
-                            if show and report != "rcd":
-                                self.assertLess(text.index(role), text.index(authors))
+                        self.assertIn(role, text)
+                        for name in names:
+                            self.assertEqual(name in text, show)
+                        if show:
+                            signature_text = text[text.rindex(role):]
+                            self.assertLess(signature_text.index(names[0]), signature_text.index(names[1]))
+                        if report == "certificacion":
+                            self.assertIn(settings.contractor, text)
                 self.assertEqual(settings.author, authors)
 
 

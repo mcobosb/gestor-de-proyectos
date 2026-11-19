@@ -342,6 +342,7 @@ def write_planning_report(
         )
         _write_odt_chart(document, rows, periods)
         document.paragraph(description)
+        document.append_signature(settings)
         document.write(target)
         return
 
@@ -362,7 +363,8 @@ def write_planning_report(
     )
     try:
         document.build(
-            [_pdf_chart_table(layout, rows, periods), layout.text(description)],
+            [_pdf_chart_table(layout, rows, periods), layout.text(description),
+             *layout.signature_block(settings)],
             onFirstPage=lambda canvas, doc: layout.header(canvas, doc, title, project_title),
             onLaterPages=lambda canvas, doc: layout.header(canvas, doc, title, project_title),
         )

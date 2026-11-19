@@ -742,6 +742,28 @@ class ReportLayout:
 
         return Paragraph(escape(str(value)).replace("\n", "<br/>"), style or self.normal)
 
+    def signature_block(self, settings, *, with_contractor: bool = False):
+        """Compone el bloque de firma común sin separarlo al paginar."""
+        from reportlab.lib.units import mm
+        from reportlab.platypus import KeepTogether, Spacer, Table, TableStyle
+
+        def paragraphs(contractor: bool = False):
+            """Convierte cada línea en un párrafo centrado con su estilo."""
+            return [
+                self.text(value, self.signature_note if note else self.center)
+                for value, note in settings.signature_entries(contractor=contractor)
+            ]
+
+        project = paragraphs()
+        if with_contractor:
+            contractor = paragraphs(True)
+            if contractor or project:
+                project = [Table(
+                    [[contractor, project]], colWidths=[self.content_width / 2] * 2,
+                    style=TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]),
+                )]
+        return [KeepTogether([Spacer(1, 8 * mm), *project])] if project else []
+
     def description(self, value):
         """Crea una descripción con la sangría y tipografía del modelo."""
         return self.text(value, self.description_style)

@@ -1515,6 +1515,8 @@ def _write_pdf(app, target, content: _StudyContent) -> None:
                     ratios = _column_ratios(block.headers)
                     story.append(layout.table(block.headers, block.rows, ratios))
 
+    story.extend(layout.signature_block(settings))
+
     class StudyDocTemplate(SimpleDocTemplate):
         """Registra los destinos y las paginas del indice en cada pasada."""
 
@@ -1750,6 +1752,7 @@ def _write_odt(app, target, content: _StudyContent) -> None:
         **{f"ESSHeading{level}": f"ESS - Titulo {level}" for level in range(1, 5)},
         **{f"PPTPContents{level}": f"ESS - Indice {level}" for level in range(1, 3)},
     })
+    document.append_signature(settings)
     document.write(target)
 
 

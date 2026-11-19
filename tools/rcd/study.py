@@ -326,10 +326,7 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
             main_seen = main_seen or level == 1
         else:
             document.paragraph(text, "RcdBullet" if level < 0 else "ReportBody")
-    document.space(24)
-    for value in (settings.location, settings.role, settings.document_author, settings.organization, settings.signature):
-        if value:
-            document.paragraph(value, "Signature")
+    document.append_signature(settings)
     document.write(target)
 
 
@@ -337,7 +334,7 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
     """Calcula el índice real y conserva las tablas paginadas del presupuesto original."""
     from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
     from reportlab.lib.styles import ParagraphStyle
-    from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer
+    from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer
     from reportlab.platypus.doctemplate import LayoutError
     from reportlab.platypus.tableofcontents import TableOfContents
     from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
@@ -385,13 +382,7 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
             story.append(paragraph)
         else:
             story.append(Paragraph(escape(text).replace("\n", "<br/>"), bullet if level < 0 else body))
-    signatures = [
-        layout.text(value, layout.center)
-        for value in (settings.location, settings.role, settings.document_author, settings.organization, settings.signature)
-        if value
-    ]
-    if signatures:
-        story.append(KeepTogether([Spacer(1, 24), *signatures]))
+    story.extend(layout.signature_block(settings))
 
     class RcdDocument(SimpleDocTemplate):
         """Registra los epígrafes del estudio para resolver su índice multipasada."""
