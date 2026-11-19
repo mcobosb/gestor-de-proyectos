@@ -121,6 +121,33 @@ class PriceDocumentTests(unittest.TestCase):
         self.assertNotIn("2008", public)
         self.assertNotIn("2009", public)
 
+    def test_parentheses_span_nested_fractions_and_keep_the_exponent(self):
+        """Comprueba la altura en PDF y los delimitadores editables en ODT."""
+        from odt_reports import _tag
+        from tools.price_justification.formula import PdfFormula, odt_formula
+
+        source = r"(1 + \frac{A + (\frac{k}{100})}{H_a})^T + (M + C)"
+        formula = PdfFormula(source)
+        fences = sorted(formula.box.fences)
+        self.assertEqual(len(fences), 4)
+        outer_left, inner_left, inner_right, outer_right = fences
+        for left, right in ((outer_left, outer_right), (inner_left, inner_right)):
+            self.assertEqual(left[1:3], right[1:3])
+            self.assertLess(left[1], 0 if left is outer_left else 12)
+            self.assertGreater(left[2] - left[1], 16)
+        self.assertLess(outer_left[1], inner_left[1])
+        self.assertGreater(outer_left[2], inner_left[2])
+        self.assertTrue(any("(M + C)" in text for _, _, _, text in formula.box.text))
+
+        paragraph = ET.Element(_tag("text:p"))
+        odt_formula(paragraph, source)
+        ns = {"math": "http://www.w3.org/1998/Math/MathML"}
+        self.assertEqual(len(paragraph.findall(".//math:mo[@stretchy='true']", ns)), 4)
+        power = paragraph.find(".//math:msup", ns)
+        self.assertIsNotNone(power)
+        self.assertIsNotNone(power.find("./math:mrow/math:mrow/math:mfrac", ns))
+        self.assertEqual("".join(power[1].itertext()), "T")
+
     def test_base_documents_include_the_complete_method_and_formulas(self):
         """El anejo contiene el método aportado, no solo notas o avisos sobre fórmulas pendientes."""
         self.assertEqual(len(load_documents(LIBRARY_PATH)), 8)

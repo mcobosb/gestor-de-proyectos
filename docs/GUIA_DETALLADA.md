@@ -102,8 +102,9 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
   Comparten el formato de tablas de Seguridad y Salud, con cabecera azul
   y filas alternas. Las bases y los tipos de cotización se desglosan en viñetas.
   Las referencias normativas enlazan con su publicación oficial. Las fórmulas
-  tienen subíndices y fracciones apiladas; se editan en los bloques `$$` de la
-  biblioteca, con `\frac{numerador}{denominador}` para las fracciones.
+  tienen subíndices y fracciones apiladas. Los paréntesis que encierran una
+  fracción se ajustan a su altura en PDF y ODT. Las fórmulas se editan en los
+  bloques `$$` de la biblioteca, con `\frac{numerador}{denominador}`.
 - Los elementales incluyen mano de obra, maquinaria y materiales identificados.
   Se reutilizan las cantidades, precios y redondeos del presupuesto actual,
   sin cambiar el informe «Materiales» existente ni aplicar otro recargo indirecto.

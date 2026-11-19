@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from xml.etree import ElementTree as ET
 import re
 
@@ -16,13 +16,67 @@ from .templates import formula_runs
 class Fraction:
     """Numerador y denominador, que pueden contener a su vez fracciones."""
 
-    top: tuple[str | Fraction, ...]
-    bottom: tuple[str | Fraction, ...]
+    top: tuple[str | Fraction | Parentheses, ...]
+    bottom: tuple[str | Fraction | Parentheses, ...]
 
 
-def parse_formula(source: str) -> tuple[str | Fraction, ...]:
+@dataclass(frozen=True)
+class Parentheses:
+    """Delimitadores ajustables alrededor de una expresión con fracciones."""
+
+    content: tuple[str | Fraction | Parentheses, ...]
+    exponent: str = ""
+
+
+_PAREN_TOKEN = re.compile(r"\^\([^()]*\)|\(|\)(?:\^(?:\(([^()]*)\)|([A-Za-z0-9]+)))?")
+
+
+def _group_parentheses(parts: list[str | Fraction]) -> tuple[str | Fraction | Parentheses, ...]:
+    """Empareja los paréntesis sin confundirlos con la sintaxis de exponentes."""
+    groups: list[list[str | Fraction | Parentheses]] = [[]]
+
+    def add(part: str | Fraction | Parentheses) -> None:
+        """Mantiene juntos los fragmentos de texto ordinarios."""
+        current = groups[-1]
+        if isinstance(part, str) and current and isinstance(previous := current[-1], str):
+            current[-1] = previous + part
+        elif part:
+            current.append(part)
+
+    for part in parts:
+        if isinstance(part, Fraction):
+            add(part)
+            continue
+        cursor = 0
+        for match in _PAREN_TOKEN.finditer(part):
+            add(part[cursor:match.start()])
+            token = match[0]
+            cursor = match.end()
+            if token == "(":
+                groups.append([])
+            elif token.startswith(")") and len(groups) > 1:
+                children = tuple(groups.pop())
+                if any(not isinstance(child, str) for child in children):
+                    add(Parentheses(children, match[1] or match[2] or ""))
+                else:
+                    add("(")
+                    for child in children:
+                        add(child)
+                    add(token)
+            else:
+                add(token)
+        add(part[cursor:])
+    while len(groups) > 1:
+        children = groups.pop()
+        add("(")
+        for child in children:
+            add(child)
+    return tuple(groups[0])
+
+
+def parse_formula(source: str) -> tuple[str | Fraction | Parentheses, ...]:
     r"""Reconoce \frac{numerador}{denominador} sin interpretar el texto como TeX."""
-    parts = []
+    parts: list[str | Fraction] = []
     while (start := source.find(r"\frac{")) >= 0:
         parts.append(source[:start])
         arguments = []
@@ -41,7 +95,7 @@ def parse_formula(source: str) -> tuple[str | Fraction, ...]:
             cursor = end + 1
         parts.append(Fraction(*arguments))
         source = source[cursor:]
-    return tuple(part for part in (*parts, source) if part)
+    return _group_parentheses([*parts, source])
 
 
 @dataclass
@@ -53,14 +107,17 @@ class _Box:
     down: float
     text: list
     rules: list
+    fences: list[tuple[float, float, float, float, bool]] = field(default_factory=list)
 
     def place(self, child: _Box, x: float, y: float) -> None:
         """Incorpora texto y reglas de otro bloque en la posición indicada."""
         self.text.extend((x + a, y + b, size, value) for a, b, size, value in child.text)
         self.rules.extend((x + a, y + b, width) for a, b, width in child.rules)
+        self.fences.extend((x + a, y + low, y + high, width, left)
+                           for a, low, high, width, left in child.fences)
 
 
-def _measure(parts: tuple[str | Fraction, ...], size: float) -> _Box:
+def _measure(parts: tuple[str | Fraction | Parentheses, ...], size: float) -> _Box:
     """Calcula dimensiones para centrar fracciones y alinear variables por su base."""
     box = _Box(0, size * 0.8, size * 0.25, [], [])
     for part in parts:
@@ -77,6 +134,24 @@ def _measure(parts: tuple[str | Fraction, ...], size: float) -> _Box:
             box.up = max(box.up, top_y + top.up)
             box.down = max(box.down, bottom.down - bottom_y)
             box.width += width
+        elif isinstance(part, Parentheses):
+            inner = _measure(part.content, size)
+            low, high = -inner.down - 0.6, inner.up + 0.6
+            width = size * 0.36
+            box.place(inner, box.width + width + 1, 0)
+            box.fences.extend([
+                (box.width, low, high, width, True),
+                (box.width + width + inner.width + 2, low, high, width, False),
+            ])
+            box.width += inner.width + 2 * width + 2
+            box.up = max(box.up, high)
+            box.down = max(box.down, -low)
+            if part.exponent:
+                exponent_size = size * 0.72
+                y = high - size * 0.36
+                box.text.append((box.width, y, exponent_size, part.exponent))
+                box.width += stringWidth(part.exponent, "Times-Roman", exponent_size)
+                box.up = max(box.up, y + exponent_size * 0.8)
         else:
             for value, position in formula_runs(part):
                 font_size = size * 0.72 if position else size
@@ -116,6 +191,13 @@ class PdfFormula(Flowable):
             self.canv.drawString(x, y + self.box.down, text)
         for x, y, width in self.box.rules:
             self.canv.line(x, y + self.box.down, x + width, y + self.box.down)
+        for x, low, high, width, left in self.box.fences:
+            bottom, top = low + self.box.down, high + self.box.down
+            end = x + width if left else x
+            control = x - width * 0.2 if left else x + width * 1.2
+            height = top - bottom
+            self.canv.bezier(end, top, control, top - height * 0.18,
+                             control, bottom + height * 0.18, end, bottom)
 
 
 _MATH_NS = "http://www.w3.org/1998/Math/MathML"
@@ -140,6 +222,17 @@ def odt_formula(paragraph: ET.Element, source: str) -> None:
                 fraction = node(parent, "mfrac")
                 append(node(fraction, "mrow"), part.top)
                 append(node(fraction, "mrow"), part.bottom)
+                continue
+            if isinstance(part, Parentheses):
+                rendered = node(parent, "msup") if part.exponent else parent
+                group = node(rendered, "mrow")
+                for delimiter, form in (("(", "prefix"), (")", "postfix")):
+                    operator = node(group, "mo", delimiter)
+                    operator.attrib.update(fence="true", stretchy="true", form=form)
+                    if form == "prefix":
+                        append(node(group, "mrow"), part.content)
+                if part.exponent:
+                    append(node(rendered, "mrow"), (part.exponent,))
                 continue
             for match in _TOKEN.finditer(part):
                 value, subscript, exponent, simple_exponent = match.groups()
