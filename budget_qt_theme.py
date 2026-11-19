@@ -21,6 +21,7 @@ _BUDGET_INSERT_LABELS = {
     "incorporar mediciones al presupuesto",
     "llevar mediciones de demolicion a transporte a vertedero",
     "copiar mediciones y usar volumenes en rcds",
+    "insertar ensayos en el presupuesto",
 }
 
 _ICON_RULES = {
@@ -337,6 +338,7 @@ def _stylesheet(theme: str) -> str:
     }}
     QTreeWidget#budgetTree QHeaderView::section,
     QTableWidget#rcdPreviewTable QHeaderView::section,
+    QTableWidget#qualityTrialsTable QHeaderView::section,
     QTableWidget#rcdDemolitionTable QHeaderView::section,
     QTableWidget#priceIndirectTable QHeaderView::section {{
         background: {blue_tint};

@@ -394,6 +394,26 @@ descompuestos en hojas ODS editables, y las mediciones en CSV.
 Los informes no inventan precios ausentes. Si falta un recurso, carga su base de
 referencia o completa los precios necesarios antes de volver a generarlo.
 
+### Aseguramiento de la calidad
+
+En **Herramientas → Aseguramiento de la calidad**, revisa las propuestas por unidad
+de obra. Puedes añadir ensayos manualmente y cambiar el número, la frecuencia
+y el criterio de aceptación. Para los testigos de mezcla bituminosa, si la UO
+está en m², se propone un ensayo por cada 500 m² o fracción; cuando faltan datos
+de lotes, tongadas o elementos, se deja el número pendiente. Las propuestas
+deben contrastarse con el pliego y la normativa aplicable.
+
+**Confirmar revisión** registra el plan para guardarlo con el proyecto. El botón
+**+ Insertar ensayos en el presupuesto** exige precios directos positivos, usa el
+capítulo existente de **Control de Calidad** o lo crea, y se desactiva tras insertar.
+La acción no guarda el archivo del proyecto: utiliza **Guardar** para conservar
+los cambios. Para rehacer la inserción, retira primero las partidas generadas.
+
+**Editar fichas del anejo…** abre los siete apartados editables con historial.
+**Generar anejo…** exporta las fichas y la tabla revisada en PDF u ODT, según
+la configuración. El importe y el porcentaje sobre el PEM se calculan con las
+partidas incorporadas; el intervalo orientativo no se usa para fijar precios.
+
 ## 8. Estimar residuos de construcción y demolición (RCDs)
 
 En el menú **Herramientas**, **PPTP** y **Seguridad y salud** llevan la indicación

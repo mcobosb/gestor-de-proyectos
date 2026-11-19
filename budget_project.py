@@ -38,6 +38,7 @@ class ProjectDocument:
     safety_health: dict
     pptp: dict
     price_justification: dict
+    quality_assurance: dict
     missing_source: Path | None = None
     chapter_ids: dict[str, str] | None = None
 
@@ -151,6 +152,7 @@ def build_project_payload(state: Any) -> dict:
         "safety_health": state.safety_health_state,
         "pptp": state.pptp_state,
         "price_justification": state.price_justification_state,
+        "quality_assurance": getattr(state, "quality_assurance_state", {}),
         "report_settings": state.report_settings.to_dict(),
         "items": [_item_payload(item) for item in state.budget_items],
     }
@@ -303,6 +305,7 @@ def decode_project_payload(
         safety_health=dict(payload.get("safety_health", {})),
         pptp=dict(payload.get("pptp", {})),
         price_justification=dict(payload.get("price_justification", {})),
+        quality_assurance=dict(payload.get("quality_assurance", {})),
         missing_source=missing_source,
         chapter_ids=(
             {str(code): str(value) for code, value in chapter_ids.items()}

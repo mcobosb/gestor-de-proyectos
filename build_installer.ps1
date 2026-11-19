@@ -78,6 +78,7 @@ foreach ($requiredResource in @(
     "pptp\BIBLIOTECA.zip",
     "price_justification\BIBLIOTECA.zip",
     "rcd\BIBLIOTECA.zip",
+    "quality_assurance\BIBLIOTECA.zip",
     "rcd\Codigos_LER_BCCA2023.csv",
     "BCCA2023_V02.bc3"
 )) {

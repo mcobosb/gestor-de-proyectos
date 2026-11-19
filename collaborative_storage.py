@@ -290,6 +290,7 @@ class CollaborativeProjectStore:
         "safety_health": ("herramientas", "seguridad_salud.json"),
         "pptp": ("herramientas", "pptp.json"),
         "price_justification": ("herramientas", "justificacion_precios.json"),
+        "quality_assurance": ("herramientas", "aseguramiento_calidad.json"),
     }
 
     def __init__(

@@ -64,7 +64,7 @@ class BudgetQtWindowTests(unittest.TestCase):
         self.assertIsNotNone(splash)
         self.addCleanup(splash.close)
         image = splash.pixmap().toImage()
-        self.assertEqual((image.width(), image.height()), (480, 268))
+        self.assertEqual((image.width(), image.height()), (520, 290))
         right, bottom = image.width() - 1, image.height() - 1
         for x, y in ((0, 0), (right, 0), (0, bottom), (right, bottom)):
             self.assertEqual(image.pixelColor(x, y).alpha(), 0)

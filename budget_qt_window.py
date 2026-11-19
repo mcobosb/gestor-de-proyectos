@@ -166,6 +166,7 @@ class BudgetMainWindow(QMainWindow):
         self.safety_health_state: dict = {}
         self.pptp_state: dict = {}
         self.price_justification_state: dict = {}
+        self.quality_assurance_state: dict = {}
         self._project_windows: list[QDialog] = []
         self.project_session = 0
         self.project_title: str | None = None
@@ -631,6 +632,7 @@ class BudgetMainWindow(QMainWindow):
             "safety_health": self.safety_health_state,
             "pptp": self.pptp_state,
             "price_justification": self.price_justification_state,
+            "quality_assurance": self.quality_assurance_state,
             "settings": self.report_settings,
             "title": self.project_title,
         })
@@ -677,6 +679,7 @@ class BudgetMainWindow(QMainWindow):
         self.safety_health_state = state["safety_health"]
         self.pptp_state = state["pptp"]
         self.price_justification_state = state["price_justification"]
+        self.quality_assurance_state = state["quality_assurance"]
         self.report_settings = state["settings"]
         self.project_title = state["title"]
         self._history_state = state
@@ -710,6 +713,7 @@ class BudgetMainWindow(QMainWindow):
         self.source_budget_path = None
         self.planning_state = self.invoicing_state = self.rcd_state = {}
         self.safety_health_state = self.pptp_state = self.price_justification_state = {}
+        self.quality_assurance_state = {}
         self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
         self.refresh_budget_tree()
         self._show_item_details(None)
@@ -1679,6 +1683,7 @@ class BudgetMainWindow(QMainWindow):
         self.safety_health_state = safety_state
         self.pptp_state = pptp_state
         self.price_justification_state = price_justification_state
+        self.quality_assurance_state = document.quality_assurance
         self.selected_budget_index = None
         self.selected_chapter = None
         self.refresh_budget_tree()
@@ -1749,6 +1754,7 @@ class BudgetMainWindow(QMainWindow):
         self.safety_health_state = document.safety_health
         self.pptp_state = document.pptp
         self.price_justification_state = document.price_justification
+        self.quality_assurance_state = document.quality_assurance
         self.selected_budget_index = None
         self.selected_chapter = None
         self.refresh_budget_tree()
@@ -1973,6 +1979,7 @@ class BudgetMainWindow(QMainWindow):
                 self.safety_health_state = merged.safety_health
                 self.pptp_state = merged.pptp
                 self.price_justification_state = merged.price_justification
+                self.quality_assurance_state = merged.quality_assurance
                 self.report_settings = merged.settings
                 self.project_title = merged.title
                 self.refresh_budget_tree()
@@ -2119,12 +2126,14 @@ class BudgetMainWindow(QMainWindow):
             LIBRARY_PATH as PRICE_LIBRARY,
         )
         from tools.rcd.study import LIBRARY_PATH as RCD_LIBRARY
+        from tools.quality_assurance.document import LIBRARY_PATH as QUALITY_LIBRARY
         from tools.safety_health import LIBRARY_PATH as SAFETY_LIBRARY
         from tools.pptp import DOCS_ROOT, LIBRARY_PATH as PPTP_LIBRARY
 
         libraries = {
             "price_justification": PRICE_LIBRARY,
             "rcd": RCD_LIBRARY,
+            "quality_assurance": QUALITY_LIBRARY,
             "safety_health": SAFETY_LIBRARY,
             "pptp": PPTP_LIBRARY,
         }
