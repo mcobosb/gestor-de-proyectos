@@ -39,6 +39,7 @@ from .document import (
 )
 from .templates import DOCUMENTS, LIBRARY_PATH, general_variables, load_documents
 from tools._library_editor_qt import LibraryEditorQt
+from collaborative_storage import shared_library_path
 
 
 class PriceJustificationWindowQt(QDialog):
@@ -183,7 +184,9 @@ class PriceJustificationWindowQt(QDialog):
             return
         self.library_editor = LibraryEditorQt(
             self,
-            LIBRARY_PATH,
+            shared_library_path(
+                self.app, "price_justification", LIBRARY_PATH
+            ),
             "Biblioteca de Justificación de precios",
             used_members={name for name, _ in DOCUMENTS},
             on_saved=self.reload_library,
@@ -194,7 +197,9 @@ class PriceJustificationWindowQt(QDialog):
     def reload_library(self) -> None:
         """Comprueba que la biblioteca modificada contiene los ocho documentos."""
         try:
-            load_documents(LIBRARY_PATH)
+            load_documents(shared_library_path(
+                self.app, "price_justification", LIBRARY_PATH
+            ))
         except (OSError, ValueError) as exc:
             QMessageBox.critical(self, TITLE, str(exc))
 

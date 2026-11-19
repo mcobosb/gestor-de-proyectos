@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QListWidget,
     QLineEdit,
@@ -90,7 +91,9 @@ from collaborative_storage import (
     ProjectLockManager,
     StorageConflictError,
     project_directory,
+    encrypted_manifest_metadata,
 )
+from collaborative_crypto import InvalidProjectPasswordError, ProjectCrypto
 
 
 ROW_KIND = Qt.ItemDataRole.UserRole
@@ -252,6 +255,23 @@ class BudgetMainWindow(QMainWindow):
         references_menu.addAction("NTP", lambda: self.open_reference_search("NTP"))
         references_menu.addAction("UNE", lambda: self.open_reference_search("UNE"))
         references_menu.addAction("LER", lambda: self.open_reference_search("LER"))
+
+        collaboration_menu = menu.addMenu("Colaboración")
+        collaboration_menu.addAction(
+            "Abrir proyecto compartido…", self.open_collaborative_project
+        )
+        collaboration_menu.addAction(
+            "Crear o migrar proyecto compartido…", self.save_project_as
+        )
+        collaboration_menu.addAction(
+            "Cambiar protección…", self.change_collaboration_password
+        )
+        collaboration_menu.addAction(
+            "Bibliotecas compartidas…", self.open_shared_libraries
+        )
+        collaboration_menu.addAction(
+            "Estado de colaboración…", self.show_collaboration_status
+        )
 
         info_menu = menu.addMenu("Información")
         info_menu.addAction(APPLICATION_NAME).setEnabled(False)
@@ -1407,8 +1427,14 @@ class BudgetMainWindow(QMainWindow):
             QMessageBox.information(self, "Sin selección", "Selecciona una partida.")
             return
         item = self.budget_items[self.selected_budget_index]
+        if not self._acquire_item_lock(item, "measurements"):
+            return
         line = item.measurement_lines[row] if row is not None else None
         editor = MeasurementEditor(self, line)
+        editor.finished.connect(
+            lambda _result, storage_id=item.storage_id:
+                self._release_item_lock(storage_id, "measurements")
+        )
         if editor.exec() != QDialog.DialogCode.Accepted:
             return
         try:
@@ -1536,9 +1562,30 @@ class BudgetMainWindow(QMainWindow):
                 self, "Proyecto colaborativo", "La carpeta no contiene un manifiesto válido."
             )
             return False
-        store = CollaborativeProjectStore(root, self.default_report_settings)
+        crypto = None
+        metadata = encrypted_manifest_metadata(root)
+        if metadata is not None:
+            password, accepted = QInputDialog.getText(
+                self,
+                "Proyecto colaborativo",
+                "Contraseña compartida:",
+                echo=QLineEdit.EchoMode.Password,
+            )
+            if not accepted:
+                return False
+            try:
+                crypto = ProjectCrypto.from_metadata(password, metadata)
+            except ValueError as exc:
+                QMessageBox.critical(self, "Contraseña no válida", str(exc))
+                return False
+        store = CollaborativeProjectStore(
+            root, self.default_report_settings, crypto
+        )
         try:
             document = store.load()
+        except InvalidProjectPasswordError as exc:
+            QMessageBox.critical(self, "Contraseña incorrecta", str(exc))
+            return False
         except (OSError, ValueError) as exc:
             QMessageBox.critical(
                 self, "No se pudo abrir el proyecto", str(exc)
@@ -1718,8 +1765,51 @@ class BudgetMainWindow(QMainWindow):
         store = self.project_store
         try:
             if store is None or store.root != root:
+                if root.exists() and (root / "proyecto.json").is_file():
+                    metadata = encrypted_manifest_metadata(root)
+                    if metadata is not None:
+                        password, accepted = QInputDialog.getText(
+                            self,
+                            "Proyecto colaborativo",
+                            "Contraseña compartida:",
+                            echo=QLineEdit.EchoMode.Password,
+                        )
+                        if not accepted:
+                            return False
+                        crypto = ProjectCrypto.from_metadata(password, metadata)
+                    else:
+                        crypto = None
+                else:
+                    protected, accepted = self._ask_collaboration_protection()
+                    if not accepted:
+                        return False
+                    if protected:
+                        password, accepted = QInputDialog.getText(
+                            self,
+                            "Proteger proyecto colaborativo",
+                            "Nueva contraseña compartida:",
+                            echo=QLineEdit.EchoMode.Password,
+                        )
+                        if not accepted:
+                            return False
+                        confirmation, accepted = QInputDialog.getText(
+                            self,
+                            "Proteger proyecto colaborativo",
+                            "Repite la contraseña:",
+                            echo=QLineEdit.EchoMode.Password,
+                        )
+                        if not accepted or confirmation != password:
+                            QMessageBox.critical(
+                                self,
+                                "Contraseñas distintas",
+                                "Las contraseñas no coinciden.",
+                            )
+                            return False
+                        crypto = ProjectCrypto.create(password)
+                    else:
+                        crypto = None
                 store = CollaborativeProjectStore(
-                    root, self.default_report_settings
+                    root, self.default_report_settings, crypto
                 )
             if (root / "proyecto.json").is_file():
                 if project_directory(root) is None:
@@ -1729,6 +1819,25 @@ class BudgetMainWindow(QMainWindow):
                 if not store.baseline:
                     store.load()
             store.save(self)
+            if store.last_merges:
+                merged = store.load()
+                self.budget_items = merged.items
+                self.chapter_order = merged.chapter_order
+                self.chapter_titles = merged.chapter_titles
+                self.chapter_ids = merged.chapter_ids or {}
+                self.planning_state = merged.planning
+                self.invoicing_state = merged.invoicing
+                self.rcd_state = merged.rcds
+                self.safety_health_state = merged.safety_health
+                self.pptp_state = merged.pptp
+                self.price_justification_state = merged.price_justification
+                self.report_settings = merged.settings
+                self.project_title = merged.title
+                self.refresh_budget_tree()
+                self._reset_history()
+                self._set_status(
+                    "Cambios remotos y locales compatibles fusionados."
+                )
         except StorageConflictError as exc:
             answer = QMessageBox.question(
                 self,
@@ -1738,6 +1847,9 @@ class BudgetMainWindow(QMainWindow):
             )
             if answer == QMessageBox.StandardButton.Yes:
                 self._load_collaborative_project(root)
+            return False
+        except InvalidProjectPasswordError as exc:
+            QMessageBox.critical(self, "Contraseña incorrecta", str(exc))
             return False
         except (OSError, TypeError, ValueError) as exc:
             QMessageBox.critical(
@@ -1754,6 +1866,202 @@ class BudgetMainWindow(QMainWindow):
         self._start_collaboration()
         self._set_status(f"Proyecto colaborativo guardado: {root}")
         return True
+
+    def _ask_collaboration_protection(self) -> tuple[bool, bool]:
+        """Elige entre carpeta pública y protección con contraseña."""
+        selection, accepted = QInputDialog.getItem(
+            self,
+            "Proyecto colaborativo",
+            "Tipo de acceso:",
+            ("Público, sin cifrar", "Protegido con contraseña"),
+            0,
+            False,
+        )
+        return selection == "Protegido con contraseña", accepted
+
+    def change_collaboration_password(self) -> None:
+        """Activa, cambia o retira el cifrado del proyecto."""
+        if self.project_store is None:
+            QMessageBox.information(
+                self,
+                "Colaboración",
+                "Guarda primero como proyecto colaborativo.",
+            )
+            return
+        protected, accepted = self._ask_collaboration_protection()
+        if not accepted:
+            return
+        if not protected:
+            answer = QMessageBox.question(
+                self,
+                "Proyecto público",
+                "¿Retirar el cifrado? Los JSON y bibliotecas quedarán legibles.",
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            self.project_store.set_crypto(None)
+            try:
+                self.project_store.save(self, force=True)
+            except (StorageConflictError, OSError, ValueError) as exc:
+                QMessageBox.critical(self, "Colaboración", str(exc))
+                return
+            self._set_status("Proyecto colaborativo convertido a público.")
+            return
+        password, accepted = QInputDialog.getText(
+            self,
+            "Cambiar contraseña",
+            "Nueva contraseña compartida:",
+            echo=QLineEdit.EchoMode.Password,
+        )
+        if not accepted:
+            return
+        confirmation, accepted = QInputDialog.getText(
+            self,
+            "Cambiar contraseña",
+            "Repite la contraseña:",
+            echo=QLineEdit.EchoMode.Password,
+        )
+        if not accepted or confirmation != password:
+            QMessageBox.critical(
+                self, "Contraseñas distintas", "Las contraseñas no coinciden."
+            )
+            return
+        external = self.project_store.changed_paths()
+        if external:
+            QMessageBox.critical(
+                self,
+                "Cambios externos",
+                "Recarga el proyecto antes de cambiar la contraseña.",
+            )
+            return
+        new_crypto = ProjectCrypto.create(password)
+        self.project_store.set_crypto(new_crypto)
+        try:
+            self.project_store.save(self, force=True)
+        except StorageConflictError as exc:
+            QMessageBox.critical(self, "Conflictos externos", str(exc))
+            return
+        except (OSError, ValueError) as exc:
+            QMessageBox.critical(self, "Cifrado", str(exc))
+            return
+        self._set_status("Contraseña del proyecto actualizada.")
+
+    def show_collaboration_status(self) -> None:
+        """Resume cifrado, locks y ubicación compartida."""
+        if self.project_store is None:
+            QMessageBox.information(
+                self,
+                "Colaboración",
+                "El proyecto actual todavía no está guardado como colaborativo.",
+            )
+            return
+        locks = list(
+            (self.project_store.root / "partidas").glob("part_*.lock")
+        )
+        QMessageBox.information(
+            self,
+            "Estado de colaboración",
+            f"Carpeta: {self.project_store.root}\n"
+            f"Acceso: "
+            f"{'Protegido con contraseña' if self.project_store.is_encrypted else 'Público, sin cifrar'}\n"
+            f"Partidas bloqueadas: {len(locks)}\n"
+            f"Bibliotecas compartidas: "
+            f"{len(list((self.project_store.root / 'bibliotecas').glob('*/*.enc')))}",
+        )
+
+    def open_shared_libraries(self) -> None:
+        """Copia o sustituye bibliotecas usadas por las herramientas."""
+        if self.project_store is None:
+            QMessageBox.information(
+                self,
+                "Bibliotecas compartidas",
+                "Guarda primero como proyecto colaborativo.",
+            )
+            return
+        from tools.price_justification.templates import (
+            LIBRARY_PATH as PRICE_LIBRARY,
+        )
+        from tools.rcd.study import LIBRARY_PATH as RCD_LIBRARY
+        from tools.safety_health import LIBRARY_PATH as SAFETY_LIBRARY
+        from tools.pptp import DOCS_ROOT, LIBRARY_PATH as PPTP_LIBRARY
+
+        libraries = {
+            "price_justification": PRICE_LIBRARY,
+            "rcd": RCD_LIBRARY,
+            "safety_health": SAFETY_LIBRARY,
+            "pptp": PPTP_LIBRARY,
+        }
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Bibliotecas compartidas")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel(
+            "Las bibliotecas copiadas quedan dentro del proyecto y se usan "
+            "por sus herramientas, sin depender de otra instalación."
+        ))
+        for module, source in libraries.items():
+            row = QHBoxLayout()
+            label = QLabel(module.replace("_", " ").title())
+            row.addWidget(label, 1)
+            filename = (
+                source.name + ".enc"
+                if self.project_store.is_encrypted
+                else source.name
+            )
+            status = QLabel(
+                "Instalada" if (
+                    self.project_store.root
+                    / "bibliotecas" / module / filename
+                ).is_file() else "Usa biblioteca local"
+            )
+            row.addWidget(status)
+            install = QPushButton("Copiar incluida")
+            choose = QPushButton("Elegir ZIP…")
+
+            def copy_default(selected=module, path=source, label=status):
+                """Copia la biblioteca distribuida y confirma su disponibilidad."""
+                try:
+                    self.project_store.install_library(
+                        selected, Path(path)
+                    )
+                except (OSError, ValueError) as exc:
+                    QMessageBox.critical(dialog, "Bibliotecas", str(exc))
+                    return
+                if selected == "pptp":
+                    try:
+                        self.project_store.install_docs(selected, DOCS_ROOT)
+                    except (OSError, ValueError) as exc:
+                        QMessageBox.critical(dialog, "Bibliotecas", str(exc))
+                        return
+                label.setText("Instalada")
+
+            def choose_file(selected=module, label=status):
+                """Copia un ZIP seleccionado por la persona usuaria."""
+                path, _ = QFileDialog.getOpenFileName(
+                    dialog,
+                    f"Biblioteca para {selected}",
+                    "",
+                    "Biblioteca ZIP (*.zip)",
+                )
+                if not path:
+                    return
+                try:
+                    self.project_store.install_library(
+                        selected, Path(path)
+                    )
+                except (OSError, ValueError) as exc:
+                    QMessageBox.critical(dialog, "Bibliotecas", str(exc))
+                    return
+                label.setText("Instalada")
+
+            install.clicked.connect(copy_default)
+            choose.clicked.connect(choose_file)
+            row.addWidget(install)
+            row.addWidget(choose)
+            layout.addLayout(row)
+        close = QPushButton("Cerrar")
+        close.clicked.connect(dialog.accept)
+        layout.addWidget(close)
+        dialog.exec()
 
     def _start_collaboration(self) -> None:
         """Inicia vigilancia y renovación de locks para la carpeta activa."""
@@ -1778,34 +2086,38 @@ class BudgetMainWindow(QMainWindow):
     def _renew_item_locks(self) -> None:
         """Renueva los locks activos y avisa si otro usuario tomó uno."""
         lost = []
-        for storage_id, handle in list(self._active_item_locks.items()):
+        for lock_key, handle in list(self._active_item_locks.items()):
             renewed, message = self.lock_manager.renew(handle)
             if not renewed:
-                lost.append(storage_id)
+                lost.append(lock_key)
                 QMessageBox.warning(
                     self, "Bloqueo perdido", f"{message}\nGuarda con precaución."
                 )
-        for storage_id in lost:
-            self._active_item_locks.pop(storage_id, None)
+        for lock_key in lost:
+            self._active_item_locks.pop(lock_key, None)
 
-    def _acquire_item_lock(self, item: ProjectItem):
+    def _acquire_item_lock(
+        self, item: ProjectItem, scope: str = "general"
+    ) -> bool:
         """Adquiere el lock de una partida del proyecto colaborativo."""
         if self.project_store is None:
             return True
         handle, message = self.lock_manager.acquire(
-            self.project_store.item_path(item.storage_id)
+            self.project_store.item_path(item.storage_id), scope
         )
         if handle is None:
             QMessageBox.warning(
                 self, "Partida en edición", message
             )
             return False
-        self._active_item_locks[item.storage_id] = handle
+        self._active_item_locks[item.storage_id, scope] = handle
         return True
 
-    def _release_item_lock(self, storage_id: str) -> None:
+    def _release_item_lock(
+        self, storage_id: str, scope: str = "general"
+    ) -> None:
         """Libera el lock de una partida tras cerrar su editor."""
-        handle = self._active_item_locks.pop(storage_id, None)
+        handle = self._active_item_locks.pop((storage_id, scope), None)
         if handle is not None:
             self.lock_manager.release(handle)
 
@@ -1822,7 +2134,10 @@ class BudgetMainWindow(QMainWindow):
                 continue
             if path.parent.name == "partidas" and path.suffix == ".json":
                 storage_id = path.stem.removeprefix("part_")
-                if storage_id in self._active_item_locks:
+                if any(
+                    key[0] == storage_id
+                    for key in self._active_item_locks
+                ):
                     continue
                 try:
                     item_updates.append(self.project_store.load_item(storage_id))
@@ -1860,11 +2175,16 @@ class BudgetMainWindow(QMainWindow):
         folder = self.project_store.root / "partidas"
         if folder.is_dir():
             for path in folder.glob("part_*.lock"):
-                storage_id = path.stem.removeprefix("part_")
+                storage_id = path.stem.removeprefix("part_").split(".", 1)[0]
+                scope = (
+                    path.stem.split(".", 1)[1]
+                    if "." in path.stem else "general"
+                )
                 try:
                     data = json.loads(path.read_text(encoding="utf-8"))
                     locks[storage_id] = (
-                        f"En edición por {data.get('user', 'otro usuario')}"
+                        f"En edición por {data.get('user', 'otro usuario')} "
+                        f"({scope})"
                         f" · {data.get('host', '')}"
                     )
                 except (OSError, UnicodeError, json.JSONDecodeError):

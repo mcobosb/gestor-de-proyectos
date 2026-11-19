@@ -58,7 +58,12 @@ class BudgetQtWindowTests(unittest.TestCase):
             shutil.copyfile(ROOT / "tests" / "test.bc3", source)
             with patch("budget_qt_window.user_data_directory", return_value=folder):
                 window = BudgetMainWindow()
-                window._load_budget_file(source)
+                with patch.object(
+                    BudgetMainWindow,
+                    "_ask_collaboration_protection",
+                    return_value=(False, True),
+                ):
+                    window._load_budget_file(source)
                 expected_items = len(window.budget_items)
                 project_path = window.project_path
                 self.assertIsNotNone(project_path)
@@ -70,7 +75,9 @@ class BudgetQtWindowTests(unittest.TestCase):
                 window.close()
 
                 reopened = BudgetMainWindow()
-                self.assertTrue(reopened._load_collaborative_project(project_path))
+                self.assertTrue(
+                    reopened._load_collaborative_project(project_path)
+                )
                 self.assertEqual(len(reopened.budget_items), expected_items)
                 self.assertIsInstance(reopened.budget_dataset, Bc3Dataset)
                 self.assertEqual(reopened.budget_items[0].__class__.__module__, "budget_core")
@@ -658,6 +665,29 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertTrue(search.selected_entry().code)
             self.assertFalse(search.open_button.isEnabled())
             search.reject()
+            window.close()
+            self.application.processEvents()
+
+    def test_collaboration_menu_exposes_shared_project_and_libraries(self) -> None:
+        """La barra principal concentra apertura, cifrado y bibliotecas."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            menus = {
+                action.text(): action.menu()
+                for action in window.menuBar().actions()
+            }
+            labels = [
+                action.text() for action in menus["Colaboración"].actions()
+            ]
+            self.assertIn("Abrir proyecto compartido…", labels)
+            self.assertIn(
+                "Crear o migrar proyecto compartido…", labels
+            )
+            self.assertIn("Cambiar protección…", labels)
+            self.assertIn("Bibliotecas compartidas…", labels)
+            self.assertIn("Estado de colaboración…", labels)
             window.close()
             self.application.processEvents()
 

@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 )
 
 from tools._library_editor_qt import LibraryEditorQt
+from collaborative_storage import shared_library_path
 from . import (
     GROUPS,
     HEADERS,
@@ -369,7 +370,7 @@ class RcdWindowQt(QDialog):
             return
         self.library_editor = LibraryEditorQt(
             self,
-            LIBRARY_PATH,
+            shared_library_path(self.app, "rcd", LIBRARY_PATH),
             "Biblioteca del estudio RCDs",
             used_members={name for name, _ in DOCUMENTS},
             on_saved=self.reload_library,
@@ -380,7 +381,7 @@ class RcdWindowQt(QDialog):
     def reload_library(self) -> None:
         """Valida los ocho documentos necesarios tras una edición."""
         try:
-            load_documents(LIBRARY_PATH)
+            load_documents(shared_library_path(self.app, "rcd", LIBRARY_PATH))
         except (OSError, ValueError) as exc:
             QMessageBox.critical(self, "Documentación RCDs", str(exc))
 

@@ -8,6 +8,7 @@ from xml.etree import ElementTree as ET
 from .templates import (
     FORMULA_LEVEL, LIBRARY_PATH, document_blocks, formula_runs, load_documents, template_variables,
 )
+from collaborative_storage import shared_library_path
 
 
 TITLE = "Justificación de precios"
@@ -171,7 +172,9 @@ def narrative(app, data: dict) -> list[tuple[int, str]]:
     state = FIELDS | validate_state(data)
     values = template_variables(app, state)
     return [
-        block for _, source in load_documents(LIBRARY_PATH)
+        block for _, source in load_documents(
+            shared_library_path(app, "price_justification", LIBRARY_PATH)
+        )
         for block in document_blocks(source, values)
     ]
 

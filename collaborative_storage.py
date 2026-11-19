@@ -8,9 +8,12 @@ import json
 import os
 from pathlib import Path
 import socket
+import tempfile
 from typing import Any
 from uuid import uuid4
 import re
+import shutil
+from zipfile import ZipFile
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
@@ -21,6 +24,7 @@ from budget_project import (
     item_from_data,
 )
 from budget_reports import ReportSettings
+from collaborative_crypto import ProjectCrypto
 
 
 PROJECT_MANIFEST = "proyecto.json"
@@ -78,6 +82,8 @@ def _file_bytes(path: Path) -> bytes | None:
     """Lee bytes de un archivo si existe."""
     try:
         return path.read_bytes()
+    except FileNotFoundError:
+        return None
 
 
 def _merge_nonconflicting(
@@ -112,8 +118,6 @@ def _merge_nonconflicting(
                 merged[key] = value
         return merged
     raise StorageConflictError([])
-    except FileNotFoundError:
-        return None
 
 
 def _canonical_file_bytes(path: Path) -> bytes | None:
@@ -124,6 +128,37 @@ def _canonical_file_bytes(path: Path) -> bytes | None:
         return _json_bytes(_read_json(path))
     except ValueError:
         return path.read_bytes()
+
+
+def encrypted_manifest_metadata(path: Path) -> dict | None:
+    """Obtiene los parámetros públicos de un proyecto cifrado."""
+    root = project_directory(path)
+    if root is None:
+        return None
+    try:
+        manifest = json.loads(
+            (root / PROJECT_MANIFEST).read_text(encoding="utf-8")
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    metadata = manifest.get("encryption")
+    return dict(metadata) if isinstance(metadata, dict) else None
+
+
+def shared_library_path(app: Any, module: str, fallback: Path) -> Path:
+    """Usa la biblioteca compartida del proyecto si el módulo la tiene."""
+    store = getattr(app, "project_store", None)
+    if store is None:
+        return fallback
+    return store.materialize_library(module, fallback.name) or fallback
+
+
+def shared_docs_path(app: Any, module: str, fallback: Path) -> Path:
+    """Usa documentos compartidos junto a una biblioteca ZIP."""
+    store = getattr(app, "project_store", None)
+    if store is None:
+        return fallback
+    return store.materialize_docs(module) or fallback
 
 
 @dataclass(frozen=True)
@@ -247,11 +282,52 @@ class CollaborativeProjectStore:
         "price_justification": ("herramientas", "justificacion_precios.json"),
     }
 
-    def __init__(self, root: Path, default_settings: ReportSettings) -> None:
+    def __init__(
+        self,
+        root: Path,
+        default_settings: ReportSettings,
+        crypto: ProjectCrypto | None = None,
+    ) -> None:
         """Conserva raíz y configuración usada para decodificar."""
         self.root = root.resolve()
         self.default_settings = default_settings
+        self.crypto = crypto
         self.baseline: dict[Path, bytes | None] = {}
+        self.last_merges = 0
+        self._materialized: dict[tuple[str, str], tuple[int, Path]] = {}
+
+    def read_payload(self, path: Path) -> Any:
+        """Lee un JSON cifrado o transparente según el proyecto."""
+        envelope = _read_json(path)
+        if self.crypto is not None:
+            return self.crypto.decrypt(envelope)
+        if isinstance(envelope, dict) and envelope.get("format") == "gdp-encrypted-json-v1":
+            raise ValueError("Este proyecto requiere contraseña.")
+        return envelope
+
+    def write_payload(self, path: Path, payload: Any) -> None:
+        """Cifra cada entidad por separado o escribe formato transparente."""
+        if self.crypto is not None and path != self.manifest_path:
+            atomic_json_write(path, self.crypto.encrypt(payload))
+        elif self.crypto is not None:
+            outer = {
+                "format": FORMAT_NAME,
+                "format_version": FORMAT_VERSION,
+                "encryption": self.crypto.metadata,
+                "payload": self.crypto.encrypt(payload),
+            }
+            atomic_json_write(path, outer)
+        else:
+            atomic_json_write(path, payload)
+
+    def canonical_payload_bytes(self, path: Path) -> bytes | None:
+        """Normaliza una entidad descifrada para comparar conflictos."""
+        if not path.is_file():
+            return None
+        try:
+            return _json_bytes(self.read_payload(path))
+        except ValueError:
+            return path.read_bytes()
 
     @property
     def manifest_path(self) -> Path:
@@ -269,11 +345,16 @@ class CollaborativeProjectStore:
     def _capture(self, paths: set[Path]) -> None:
         """Actualiza la foto usada para detectar conflictos."""
         for path in paths:
-            self.baseline[path] = _canonical_file_bytes(path)
+            self.baseline[path] = self.canonical_payload_bytes(path)
 
     def load(self) -> ProjectDocument:
         """Ensambla el documento en memoria sin guardar totales calculados."""
-        manifest = _read_json(self.manifest_path)
+        outer = _read_json(self.manifest_path)
+        manifest = (
+            self.read_manifest_payload(outer)
+            if outer.get("format") == FORMAT_NAME and "payload" in outer
+            else outer
+        )
         if (
             not isinstance(manifest, dict)
             or manifest.get("format") != FORMAT_NAME
@@ -301,7 +382,7 @@ class CollaborativeProjectStore:
                 raise ValueError("Hay capítulos con UUID repetidos.")
             seen_chapter_ids.add(chapter_id)
             path = self.chapter_path(chapter_id)
-            data = _read_json(path)
+            data = self.read_payload(path)
             used_files.add(path)
             if data.get("id") != chapter_id or not isinstance(data.get("item_ids"), list):
                 raise ValueError(f"Capítulo inválido: {path.name}")
@@ -313,7 +394,7 @@ class CollaborativeProjectStore:
                 if not isinstance(item_id, str):
                     raise ValueError(f"UUID de partida inválido en {path.name}")
                 item_path = self.item_path(item_id)
-                item_data = _read_json(item_path)
+                item_data = self.read_payload(item_path)
                 used_files.add(item_path)
                 if item_data.get("storage_id") != item_id:
                     raise ValueError(f"Partida inválida: {item_path.name}")
@@ -331,7 +412,7 @@ class CollaborativeProjectStore:
             path = self.root.joinpath(*parts)
             used_files.add(path)
             if path.is_file():
-                payload[state_key] = _read_json(path)
+                payload[state_key] = self.read_payload(path)
             else:
                 payload[state_key] = {}
         document = decode_project_payload(
@@ -340,8 +421,26 @@ class CollaborativeProjectStore:
         self._capture(used_files)
         return document
 
-    def save(self, state: Any) -> None:
+    def read_manifest_payload(self, envelope: object) -> dict:
+        """Valida el contenedor externo del manifiesto y descifra su contenido."""
+        if not isinstance(envelope, dict):
+            raise ValueError("Manifiesto colaborativo no válido.")
+        if not (
+            envelope.get("format") == FORMAT_NAME
+            and envelope.get("format_version") == FORMAT_VERSION
+            and isinstance(envelope.get("payload"), dict)
+        ):
+            raise ValueError("La carpeta no contiene un manifiesto compatible.")
+        if self.crypto is None:
+            raise ValueError("Este proyecto está cifrado y requiere contraseña.")
+        payload = self.crypto.decrypt(envelope["payload"])
+        if not isinstance(payload, dict):
+            raise ValueError("El manifiesto descifrado no es válido.")
+        return payload
+
+    def save(self, state: Any, *, force: bool = False) -> None:
         """Guarda entidades cambiadas y detecta conflictos de edición remota."""
+        self.last_merges = 0
         payload = state._project_payload()
         chapter_ids = dict(getattr(state, "chapter_ids", {}))
         for chapter in payload["chapters"]["order"]:
@@ -388,11 +487,11 @@ class CollaborativeProjectStore:
         conflicts = []
         for path, data in files.items():
             serialized = _json_bytes(data)
-            current = _canonical_file_bytes(path)
+            current = self.canonical_payload_bytes(path)
             baseline = self.baseline.get(path)
             local_changed = serialized != baseline
             external_changed = path in self.baseline and current != baseline
-            if local_changed and external_changed:
+            if not force and local_changed and external_changed:
                 try:
                     merged = _merge_nonconflicting(
                         json.loads(baseline or b"null"),
@@ -408,6 +507,7 @@ class CollaborativeProjectStore:
                     conflicts.append(path)
                 else:
                     files[path] = merged
+                    self.last_merges += 1
         if conflicts:
             raise StorageConflictError(conflicts)
         removed = [
@@ -421,32 +521,66 @@ class CollaborativeProjectStore:
             if path.stem.removeprefix("cap_") not in chapter_file_ids
         )
         for path in removed:
-            current = _canonical_file_bytes(path)
+            current = self.canonical_payload_bytes(path)
             if path in self.baseline and current != self.baseline[path]:
                 conflicts.append(path)
         if conflicts:
             raise StorageConflictError(list(dict.fromkeys(conflicts)))
         for path, data in files.items():
-            if _json_bytes(data) != self.baseline.get(path):
-                atomic_json_write(path, data)
+            if force or _json_bytes(data) != self.baseline.get(path):
+                self.write_payload(path, data)
         for path in removed:
             path.unlink(missing_ok=True)
         state.chapter_ids = chapter_ids
         self._capture(set(files) | set(removed))
 
+    def set_crypto(self, crypto: ProjectCrypto | None) -> None:
+        """Activa o retira protección y convierte las bibliotecas asociadas."""
+        libraries = []
+        library_root = self.root / "bibliotecas"
+        if library_root.is_dir():
+            for module_dir in library_root.iterdir():
+                if not module_dir.is_dir():
+                    continue
+                for source in module_dir.iterdir():
+                    if source.is_file() and not source.name.endswith(".enc"):
+                        libraries.append((module_dir.name, source))
+                    elif source.is_file() and source.name.endswith(".enc"):
+                        filename = source.name.removesuffix(".enc")
+                        materialized = self.materialize_library(
+                            module_dir.name, filename
+                        )
+                        if materialized is not None:
+                            libraries.append((module_dir.name, materialized))
+                    elif source.is_dir() and source.name == "docs":
+                        libraries.append((module_dir.name, source))
+                encrypted_docs = module_dir / "docs.enc"
+                if encrypted_docs.is_file():
+                    docs = self.materialize_docs(module_dir.name)
+                    if docs is not None:
+                        libraries.append((module_dir.name, docs))
+        if library_root.exists():
+            shutil.rmtree(library_root)
+        self.crypto = crypto
+        for module, source in libraries:
+            if source.is_dir():
+                self.install_docs(module, source)
+            else:
+                self.install_library(module, source)
+
     def changed_paths(self) -> list[Path]:
         """Devuelve entidades modificadas externamente desde la última foto."""
         changed = []
         for path, baseline in list(self.baseline.items()):
-            if _canonical_file_bytes(path) != baseline:
+            if self.canonical_payload_bytes(path) != baseline:
                 changed.append(path)
         return changed
 
     def load_item(self, storage_id: str):
         """Recarga una sola partida externa."""
         path = self.item_path(storage_id)
-        data = _read_json(path)
-        self.baseline[path] = _canonical_file_bytes(path)
+        data = self.read_payload(path)
+        self.baseline[path] = self.canonical_payload_bytes(path)
         return item_from_data(data)
 
     @classmethod
@@ -455,12 +589,132 @@ class CollaborativeProjectStore:
         root: Path,
         state: Any,
         default_settings: ReportSettings,
+        crypto: ProjectCrypto | None = None,
     ) -> CollaborativeProjectStore:
         """Crea una carpeta colaborativa desde el estado actual."""
-        store = cls(root, default_settings)
+        store = cls(root, default_settings, crypto)
         state.chapter_ids = dict(getattr(state, "chapter_ids", {}))
         store.save(state)
         return store
+
+    @property
+    def is_encrypted(self) -> bool:
+        """Indica si la sesión dispone de una clave autenticada."""
+        return self.crypto is not None
+
+    def install_library(self, module: str, source: Path) -> Path:
+        """Copia una biblioteca al proyecto mediante escritura atómica."""
+        if not source.is_file():
+            raise ValueError(f"No existe la biblioteca seleccionada: {source}")
+        if self.crypto is None:
+            target = self.root / "bibliotecas" / module / source.name
+        else:
+            target = self.root / "bibliotecas" / module / (source.name + ".enc")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(f".{target.name}.{uuid4().hex}.tmp")
+        try:
+            if self.crypto is None:
+                shutil.copyfile(source, temporary)
+            else:
+                with temporary.open("w", encoding="utf-8") as output:
+                    json.dump(
+                        self.crypto.encrypt_bytes(source.read_bytes()),
+                        output,
+                        ensure_ascii=False,
+                    )
+                    output.flush()
+                    os.fsync(output.fileno())
+            os.replace(temporary, target)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return target
+
+    def install_docs(self, module: str, source: Path) -> Path:
+        """Copia documentos auxiliares conservando una copia completa."""
+        if not source.is_dir():
+            raise ValueError(f"No existe la carpeta seleccionada: {source}")
+        target = self.root / "bibliotecas" / module / (
+            "docs.enc" if self.crypto is not None else "docs"
+        )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary_dir = Path(tempfile.mkdtemp(prefix="gdp-docs-"))
+        archive = temporary_dir / "docs.zip"
+        try:
+            with ZipFile(archive, "w") as output:
+                for path in source.rglob("*"):
+                    if path.is_file():
+                        output.write(path, path.relative_to(source).as_posix())
+            if self.crypto is None:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                if target.exists():
+                    shutil.rmtree(target)
+                with ZipFile(archive) as bundle:
+                    bundle.extractall(target)
+            else:
+                encrypted = self.crypto.encrypt_bytes(archive.read_bytes())
+                atomic_json_write(target, encrypted)
+        finally:
+            shutil.rmtree(temporary_dir, ignore_errors=True)
+        return target
+
+    def materialize_library(self, module: str, filename: str) -> Path | None:
+        """Descifra una biblioteca a una caché temporal de esta sesión."""
+        folder = self.root / "bibliotecas" / module
+        if self.crypto is None:
+            public = folder / filename
+            return public if public.is_file() else None
+        source = folder / (filename + ".enc")
+        if not source.is_file():
+            return None
+        signature = source.stat().st_mtime_ns
+        key = module, filename
+        cached = self._materialized.get(key)
+        if cached is not None and cached[0] == signature and cached[1].is_file():
+            return cached[1]
+        target = (
+            Path(tempfile.gettempdir())
+            / "gestor-proyectos-libraries"
+            / uuid4().hex
+            / module
+            / filename
+        )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(self.crypto.decrypt_bytes(_read_json(source)))
+        self._materialized[key] = signature, target
+        return target
+
+    def materialize_docs(self, module: str) -> Path | None:
+        """Descifra y extrae documentos auxiliares de forma segura."""
+        folder = self.root / "bibliotecas" / module
+        if self.crypto is None:
+            public = folder / "docs"
+            return public if public.is_dir() else None
+        source = folder / "docs.enc"
+        if not source.is_file():
+            return None
+        signature = source.stat().st_mtime_ns
+        key = module, "docs"
+        cached = self._materialized.get(key)
+        if cached is not None and cached[0] == signature and cached[1].is_dir():
+            return cached[1]
+        base = (
+            Path(tempfile.gettempdir())
+            / "gestor-proyectos-libraries"
+            / uuid4().hex
+            / module
+        )
+        base.mkdir(parents=True, exist_ok=True)
+        archive_path = base / "docs.zip"
+        archive_path.write_bytes(self.crypto.decrypt_bytes(_read_json(source)))
+        destination = base / "docs"
+        with ZipFile(archive_path) as archive:
+            for info in archive.infolist():
+                path = Path(info.filename)
+                if path.is_absolute() or ".." in path.parts:
+                    raise ValueError("La biblioteca compartida contiene rutas no válidas.")
+            archive.extractall(destination)
+        self._materialized[key] = signature, destination
+        return destination
 
 
 class CollaborativeWatchService(QObject):

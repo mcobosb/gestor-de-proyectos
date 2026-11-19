@@ -276,6 +276,11 @@ La carpeta conserva por separado partidas, capítulos, planificación,
 certificaciones y configuración de informes. Los JSON históricos siguen
 abriéndose con **Importar proyecto JSON…**.
 
+En **Colaboración** puedes abrir proyectos compartidos, crear la carpeta,
+cambiar su contraseña y copiar las bibliotecas del proyecto. La contraseña
+cifra los JSON y las bibliotecas con AES-256-GCM; no se almacena junto al
+proyecto. Los usuarios deben introducirla al abrirlo.
+
 El **BC3 es el presupuesto de origen**: se lee, pero no se reescribe al guardar.
 La **carpeta colaborativa es el proyecto de trabajo**: para continuar otro día,
 ábrela desde **Abrir proyecto colaborativo…**. Guardar no exporta un BC3 actualizado.

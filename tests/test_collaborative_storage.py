@@ -21,6 +21,10 @@ from collaborative_storage import (
     StorageConflictError,
     project_directory,
 )
+from collaborative_crypto import (
+    InvalidProjectPasswordError,
+    ProjectCrypto,
+)
 
 
 class CollaborativeStorageTests(unittest.TestCase):
@@ -89,6 +93,27 @@ class CollaborativeStorageTests(unittest.TestCase):
             window.close()
             self.application.processEvents()
 
+    def test_disjoint_item_fields_merge_without_expanding_lock_scope(self) -> None:
+        """Dos ediciones distintas de una partida se fusionan por campo."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "obra"
+            window = self.make_window()
+            store = CollaborativeProjectStore.create_from_payload(
+                root, window, ReportSettings()
+            )
+            path = store.item_path(window.budget_items[0].storage_id)
+            external = json.loads(path.read_text(encoding="utf-8"))
+            external["unit_price"] = 12.5
+            path.write_text(json.dumps(external), encoding="utf-8")
+            window.budget_items[0].summary = "Descripción local"
+            store.save(window)
+            merged = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(merged["summary"], "Descripción local")
+            self.assertEqual(merged["unit_price"], 12.5)
+            window.is_dirty = False
+            window.close()
+            self.application.processEvents()
+
     def test_lock_rejects_other_user_and_recovers_expired_lock(self) -> None:
         """Solo el propietario renueva y los locks huérfanos caducan."""
         with tempfile.TemporaryDirectory() as directory:
@@ -127,6 +152,94 @@ class CollaborativeStorageTests(unittest.TestCase):
             window.budget_items[0].summary = "Solo una partida"
             store.save(window)
             self.assertEqual(untouched.stat().st_mtime_ns, before)
+            window.is_dirty = False
+            window.close()
+            self.application.processEvents()
+
+    def test_encrypted_project_requires_password_and_hides_json(self) -> None:
+        """Cifra manifiesto y partidas con autenticación de contraseña."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "encrypted"
+            window = self.make_window()
+            crypto = ProjectCrypto.create("contraseña compartida")
+            store = CollaborativeProjectStore.create_from_payload(
+                root, window, ReportSettings(), crypto
+            )
+            manifest = json.loads(
+                (root / "proyecto.json").read_text(encoding="utf-8")
+            )
+            self.assertNotIn("items", manifest)
+            self.assertIn("payload", manifest)
+            self.assertIn("encryption", manifest)
+            item_path = store.item_path(window.budget_items[0].storage_id)
+            encrypted_item = item_path.read_text(encoding="utf-8")
+            self.assertNotIn("Partida uno", encrypted_item)
+            with self.assertRaises(ValueError):
+                CollaborativeProjectStore(
+                    root, ReportSettings()
+                ).load()
+            metadata = manifest["encryption"]
+            wrong = ProjectCrypto.from_metadata("incorrecta", metadata)
+            with self.assertRaises(InvalidProjectPasswordError):
+                CollaborativeProjectStore(
+                    root, ReportSettings(), wrong
+                ).load()
+            reopened = CollaborativeProjectStore(
+                root,
+                ReportSettings(),
+                ProjectCrypto.from_metadata(
+                    "contraseña compartida", metadata
+                ),
+            ).load()
+            self.assertEqual(reopened.items[0].summary, "Partida uno")
+            window.is_dirty = False
+            window.close()
+            self.application.processEvents()
+
+    def test_shared_libraries_are_encrypted_inside_project(self) -> None:
+        """No deja bibliotecas ZIP en texto dentro de la carpeta compartida."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "project"
+            source = root / "source.zip"
+            source.write_bytes(b"PK-test-library")
+            window = self.make_window()
+            store = CollaborativeProjectStore.create_from_payload(
+                project, window, ReportSettings(), ProjectCrypto.create("secret")
+            )
+            target = store.install_library("pptp", source)
+            self.assertTrue(target.name.endswith(".enc"))
+            self.assertNotEqual(target.read_bytes(), source.read_bytes())
+            self.assertEqual(
+                store.materialize_library("pptp", source.name).read_bytes(),
+                source.read_bytes(),
+            )
+            window.is_dirty = False
+            window.close()
+            self.application.processEvents()
+
+    def test_public_project_and_libraries_remain_readable_without_password(self) -> None:
+        """El modo público conserva estructura colaborativa sin cifrado."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "public"
+            source = Path(directory) / "library.zip"
+            source.write_bytes(b"PK-public-library")
+            window = self.make_window()
+            store = CollaborativeProjectStore.create_from_payload(
+                root, window, ReportSettings(), None
+            )
+            manifest = json.loads(
+                (root / "proyecto.json").read_text(encoding="utf-8")
+            )
+            self.assertNotIn("payload", manifest)
+            self.assertNotIn("encryption", manifest)
+            library = store.install_library("pptp", source)
+            self.assertEqual(library.name, source.name)
+            self.assertEqual(library.read_bytes(), source.read_bytes())
+            reopened = CollaborativeProjectStore(
+                root, ReportSettings(), None
+            ).load()
+            self.assertEqual(reopened.items[0].summary, "Partida uno")
             window.is_dirty = False
             window.close()
             self.application.processEvents()

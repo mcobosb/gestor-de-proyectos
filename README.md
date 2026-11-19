@@ -664,12 +664,25 @@ y sustitución atómica. Si otro colaborador cambió la misma entidad, el guarda
 se detiene en vez de sobrescribirla. Los totales y el Gantt se calculan siempre
 en memoria.
 
+Al crear o migrar puedes elegir **Público, sin cifrar** o **Protegido con
+contraseña**. En modo protegido, cada JSON se cifra con AES-256-GCM y una clave
+PBKDF2-HMAC-SHA256; la contraseña no se guarda en la carpeta. El menú
+**Colaboración** permite abrir, migrar, cambiar protección, copiar bibliotecas
+instaladas y consultar el estado. Las bibliotecas se conservan legibles en modo
+público y cifradas en modo protegido, donde se materializan únicamente en una
+caché temporal durante la sesión.
+
+Los locks son por sección: edición general, mediciones o ciclos futuros de otra
+sección. Además, el guardado aplica una fusión de tres vías; cambios concurrentes
+en campos distintos de una misma partida se conservan automáticamente. Solo hay
+conflicto cuando dos usuarios modifican el mismo campo.
+
 Los JSON monolíticos anteriores siguen pudiendo abrirse. Usa **Guardar como
 proyecto colaborativo…** para migrarlos sin perder compatibilidad histórica.
 
 | Archivo o carpeta | Función |
 |---|---|
-| [bc3_gui.py](bc3_gui.py) | Entrada compatible y frontend heredado |
+| [bc3_gui.py](bc3_gui.py) | Entrada PySide6 y fachada del modelo |
 | [budget_qt_window.py](budget_qt_window.py) | Coordinación de la ventana principal PySide6 |
 | [budget_qt_dialogs.py](budget_qt_dialogs.py) | Diálogos reutilizables de PySide6 |
 | [budget_core.py](budget_core.py) | Modelos, cálculos y lectura FIEBDC sin GUI |

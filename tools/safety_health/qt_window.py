@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 
 from tools._library_editor import library_members
 from tools._library_editor_qt import LibraryEditorQt
+from collaborative_storage import shared_library_path
 from . import (
     CARE_CENTERS_URL,
     SAFETY_BUDGET_SOURCE,
@@ -980,7 +981,9 @@ def _used_safety_members(app) -> set[str]:
         if resource.ctype in {"2", "3"}
     }
     used = set()
-    for member in library_members(LIBRARY_PATH):
+    for member in library_members(
+        shared_library_path(app, "safety_health", LIBRARY_PATH)
+    ):
         path = PurePosixPath(member)
         if path.suffix.casefold() != ".md":
             continue

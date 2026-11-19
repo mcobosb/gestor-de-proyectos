@@ -266,7 +266,8 @@ class DistributionTests(unittest.TestCase):
         self.assertTrue((ROOT / "iconos" / "logo_odt.jpg").is_file())
         requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8").lower()
         for name in (
-            "odfpy", "openpyxl", "reportlab", "pillow", "matplotlib", "pyside6",
+            "odfpy", "openpyxl", "reportlab", "pillow", "matplotlib",
+            "pyside6", "cryptography",
         ):
             with self.subTest(package=name):
                 self.assertIn(name, requirements)
@@ -288,6 +289,8 @@ class DistributionTests(unittest.TestCase):
         self.assertIn('"tools"', build_script)
         self.assertIn('copy-item', build_script)
         self.assertIn("discover_tools", build_script)
+        self.assertNotIn("--enable-plugin=tk-inter", build_script)
+        self.assertIn("--include-package=cryptography", build_script)
         self.assertNotIn("--include-data-dir=archivos=archivos", build_script)
         self.assertNotIn("--include-data-dir=datos=datos", build_script)
         self.assertIn("get-childitem $toolssource -recurse -file", build_script)

@@ -35,6 +35,7 @@ from tools.safety_health import (
     LIBRARY_PATH, SAFETY_BUDGET_SOURCE, _study_criteria_values, evaluate_study_criteria,
     study_work_summary,
 )
+from collaborative_storage import shared_library_path
 
 if TYPE_CHECKING:
     from bc3_gui import BudgetApp, ProjectItem
@@ -270,10 +271,10 @@ def _markdown_blocks(
     return result
 
 
-def _read_library() -> dict[str, str]:
+def _read_library(archive_path: Path = LIBRARY_PATH) -> dict[str, str]:
     """Lee las plantillas necesarias sin extraer ni modificar la biblioteca."""
     try:
-        with ZipFile(LIBRARY_PATH) as archive:
+        with ZipFile(archive_path) as archive:
             return {
                 key: _read_member(archive, member)
                 for key, member in _TEMPLATE_MEMBERS.items()
@@ -281,7 +282,7 @@ def _read_library() -> dict[str, str]:
     except (
         OSError, KeyError, BadZipFile, RuntimeError, NotImplementedError, UnicodeError,
     ) as exc:
-        raise ValueError(f"No se pudo leer la biblioteca ESS {LIBRARY_PATH}: {exc}") from exc
+        raise ValueError(f"No se pudo leer la biblioteca ESS {archive_path}: {exc}") from exc
 
 
 def _rows_from_markdown(text: str) -> list[list[str]]:
@@ -436,7 +437,8 @@ def _load_selected_fiches(
 def _study_fiches(app, pending: list[str]):
     """Comparte entre revision y exportacion la misma vinculacion BCCA de las fichas."""
     work_items = study_items(app)
-    templates = _read_library()
+    library_path = shared_library_path(app, "safety_health", LIBRARY_PATH)
+    templates = _read_library(library_path)
     index = _parse_index(templates["index"])
     fiche_paths: list[str] = []
     item_fiches: list[tuple[ProjectItem, list[str]]] = []
@@ -466,7 +468,7 @@ def _study_fiches(app, pending: list[str]):
     fiche_paths.sort(key=lambda path: PurePosixPath(path).parts)
     if fiche_paths:
         try:
-            with ZipFile(LIBRARY_PATH) as archive:
+            with ZipFile(library_path) as archive:
                 fiche_references, fiche_contents = _load_selected_fiches(
                     archive, fiche_paths, pending,
                 )

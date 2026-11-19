@@ -13,6 +13,7 @@ from tools._library_editor import library_members, read_markdown
 from tools._library_markdown import document_markdown, text_blocks
 from tools._shared.document_layout import project_document_variables
 from . import ler_catalog
+from collaborative_storage import shared_library_path
 
 if TYPE_CHECKING:
     from bc3_gui import BudgetApp
@@ -215,8 +216,12 @@ def study_blocks(
     summary = work_summary(app) if app is not None else None
     links = ler_catalog.match_rows(app.budget_items) if app is not None else []
     values = study_variables(state, title, settings)
+    library_path = shared_library_path(
+        app, "rcd", LIBRARY_PATH
+    ) if app is not None else LIBRARY_PATH
     source = "\n\n".join(
-        document_markdown(text).replace("\r\n", "\n") for _, text in load_documents(LIBRARY_PATH)
+        document_markdown(text).replace("\r\n", "\n")
+        for _, text in load_documents(library_path)
     )
     marker = r"^[ \t]*\{\{(tabla_[a-z_]+)\}\}[ \t]*$"
     counts = Counter(re.findall(marker, source, flags=re.MULTILINE))

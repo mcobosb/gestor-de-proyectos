@@ -52,6 +52,7 @@ from .document import (
     write_document,
 )
 from . import DOCS_ROOT, LIBRARY_PATH, TOOL_LABEL
+from collaborative_storage import shared_docs_path, shared_library_path
 
 
 class PptpWindowQt(QDialog):
@@ -61,7 +62,11 @@ class PptpWindowQt(QDialog):
         """Lee biblioteca, propuestas y valores guardados."""
         super().__init__(app)
         self.app = app
-        self.library = ZipLibrary(LIBRARY_PATH, DOCS_ROOT)
+        self.library_path = shared_library_path(
+            app, "pptp", LIBRARY_PATH
+        )
+        self.docs_path = shared_docs_path(app, "pptp", DOCS_ROOT)
+        self.library = ZipLibrary(self.library_path, self.docs_path)
         self.catalog = load_catalog(self.library)
         self.sheets = {sheet.path: sheet for sheet in self.catalog}
         self.saved = restore_state(app.pptp_state)
@@ -493,7 +498,7 @@ class PptpWindowQt(QDialog):
             return
         self.library_editor = LibraryEditorQt(
             self,
-            LIBRARY_PATH,
+            self.library_path,
             "Biblioteca de fichas PPTP",
             used_members=used,
             on_saved=self.reload_library,
@@ -503,7 +508,11 @@ class PptpWindowQt(QDialog):
 
     def reload_library(self) -> None:
         """Recarga catálogo y conserva las decisiones por ruta."""
-        self.library = ZipLibrary(LIBRARY_PATH, DOCS_ROOT)
+        self.library_path = shared_library_path(
+            self.app, "pptp", LIBRARY_PATH
+        )
+        self.docs_path = shared_docs_path(self.app, "pptp", DOCS_ROOT)
+        self.library = ZipLibrary(self.library_path, self.docs_path)
         self.catalog = load_catalog(self.library)
         self.sheets = {sheet.path: sheet for sheet in self.catalog}
         for row in (*self.automatic, *self.unmatched):
