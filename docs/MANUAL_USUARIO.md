@@ -396,8 +396,9 @@ referencia o completa los precios necesarios antes de volver a generarlo.
 
 ### Aseguramiento de la calidad
 
-En **Herramientas → Aseguramiento de la calidad**, revisa las propuestas por unidad
-de obra. Puedes añadir ensayos manualmente y cambiar el número, la frecuencia
+En **Herramientas → Aseguramiento de la calidad**, justo antes de
+**Justificación de precios**, revisa las propuestas por unidad de obra.
+Puedes añadir ensayos manualmente y cambiar el número, la frecuencia
 y el criterio de aceptación. Para los testigos de mezcla bituminosa, si la UO
 está en m², se propone un ensayo por cada 500 m² o fracción; cuando faltan datos
 de lotes, tongadas o elementos, se deja el número pendiente. Las propuestas

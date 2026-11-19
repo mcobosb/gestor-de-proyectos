@@ -1,7 +1,7 @@
 """Herramienta de aseguramiento y control de la calidad."""
 
 TOOL_LABEL = "Aseguramiento de la calidad"
-TOOL_ORDER = 1
+TOOL_ORDER = -1
 
 
 def open_tool_qt(app) -> None:
