@@ -154,6 +154,11 @@ def _stylesheet(theme: str) -> str:
     text = "#f1f3f5" if dark else "#18212f"
     muted = "#aeb5c0" if dark else "#64748b"
     border = "#41454d" if dark else "#cbd5e1"
+    blue_text = "#a7c7ff" if dark else "#1e4f9a"
+    blue_tint = "#29374c" if dark else "#e8f0fc"
+    blue_hover = "#354a68" if dark else "#dce9fc"
+    teal_text = "#8cd7ca" if dark else "#16675d"
+    chrome = "#262d3a" if dark else "#f2f6fd"
     return f"""
     QWidget {{
         font-family: "Segoe UI", sans-serif;
@@ -168,6 +173,7 @@ def _stylesheet(theme: str) -> str:
         border: 0;
     }}
     QToolBar {{
+        background: {chrome};
         padding: 6px;
         spacing: 6px;
         border-bottom: 1px solid {border};
@@ -178,6 +184,21 @@ def _stylesheet(theme: str) -> str:
     }}
     QToolButton:hover {{
         background: {surface_alt};
+    }}
+    QToolButton#saveBudgetButton {{
+        background: {blue_tint};
+        color: {blue_text};
+    }}
+    QToolButton#saveBudgetButton:hover {{
+        background: {blue_hover};
+    }}
+    QLabel#projectCaption, QLabel#budgetTotal {{
+        color: {blue_text};
+        font-weight: 600;
+    }}
+    QLabel#referenceCaption {{
+        color: {teal_text};
+        font-weight: 600;
     }}
     QMenuBar::item, QMenu::item {{
         padding: 7px 11px;
@@ -259,8 +280,8 @@ def _stylesheet(theme: str) -> str:
         margin-right: 2px;
     }}
     QTabBar::tab:selected {{
-        background: {surface};
-        color: {accent};
+        background: {blue_tint};
+        color: {blue_text};
         font-weight: 600;
     }}
     QGroupBox {{
