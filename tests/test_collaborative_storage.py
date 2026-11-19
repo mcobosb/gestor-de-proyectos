@@ -16,6 +16,7 @@ from budget_core import ProjectItem
 from budget_qt_window import BudgetMainWindow
 from budget_reports import ReportSettings
 from collaborative_storage import (
+    CollaborativeWatchService,
     CollaborativeProjectStore,
     ProjectLockManager,
     StorageConflictError,
@@ -240,6 +241,53 @@ class CollaborativeStorageTests(unittest.TestCase):
                 root, ReportSettings(), None
             ).load()
             self.assertEqual(reopened.items[0].summary, "Partida uno")
+            window.is_dirty = False
+            window.close()
+            self.application.processEvents()
+
+    def test_presence_heartbeat_counts_multiple_nicknames_and_expires(self) -> None:
+        """La presencia muestra apodos activos sin pertenecer al documento."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "shared"
+            window = self.make_window()
+            store = CollaborativeProjectStore.create_from_payload(
+                root, window, ReportSettings(), None
+            )
+            watcher = CollaborativeWatchService(store)
+            watcher.heartbeat("a", "Alicia", "PC-1")
+            watcher.heartbeat("b", "Berto", "PC-2")
+            people = watcher._presence_snapshot()
+            self.assertEqual(
+                [person["nickname"] for person in people],
+                ["Alicia", "Berto"],
+            )
+            watcher.leave("b")
+            self.assertEqual(len(watcher._presence_snapshot()), 1)
+            window.is_dirty = False
+            window.close()
+            self.application.processEvents()
+
+    def test_presence_is_encrypted_with_protected_project(self) -> None:
+        """Los apodos también se protegen en un proyecto cifrado."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "encrypted"
+            window = self.make_window()
+            store = CollaborativeProjectStore.create_from_payload(
+                root,
+                window,
+                ReportSettings(),
+                ProjectCrypto.create("secret"),
+            )
+            watcher = CollaborativeWatchService(store)
+            watcher.heartbeat("session", "Apodo privado", "PC")
+            source = (
+                root / "presencia" / "session.json"
+            ).read_text(encoding="utf-8")
+            self.assertNotIn("Apodo privado", source)
+            self.assertEqual(
+                watcher._presence_snapshot()[0]["nickname"],
+                "Apodo privado",
+            )
             window.is_dirty = False
             window.close()
             self.application.processEvents()

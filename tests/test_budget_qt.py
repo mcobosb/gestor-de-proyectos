@@ -124,7 +124,10 @@ class BudgetQtWindowTests(unittest.TestCase):
             )
             self.assertEqual(
                 [dialog.tabs.tabText(index) for index in range(dialog.tabs.count())],
-                ["Informes", "Idioma", "Apariencia", "Emplazamiento", "CPV"],
+                [
+                    "Informes", "Idioma", "Apariencia", "Colaboración",
+                    "Emplazamiento", "CPV",
+                ],
             )
             self.assertEqual(dialog.location_selector.query.currentIndex(), -1)
             self.assertEqual(dialog.location_selector.query.currentText(), "")
@@ -686,8 +689,55 @@ class BudgetQtWindowTests(unittest.TestCase):
                 "Crear o migrar proyecto compartido…", labels
             )
             self.assertIn("Cambiar protección…", labels)
-            self.assertIn("Bibliotecas compartidas…", labels)
+            self.assertIn("Fuentes de bibliotecas…", labels)
             self.assertIn("Estado de colaboración…", labels)
+            window.close()
+            self.application.processEvents()
+
+    def test_collaborator_nickname_preference_is_saved_globally(self) -> None:
+        """El apodo se conserva aparte del documento colaborativo."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            self.assertTrue(window._save_global_preferences(
+                collaboration_nickname="Manuel"
+            ))
+            preferences = json.loads(
+                (Path(directory) / "preferencias.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(preferences["collaboration_nickname"], "Manuel")
+            window.close()
+            self.application.processEvents()
+
+    def test_presence_indicator_only_appears_for_multiple_users(self) -> None:
+        """El icono se muestra cuando hay colaboración real de dos o más personas."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            window._collaborators_changed([
+                {
+                    "id": "a", "nickname": "Alicia", "host": "PC",
+                    "timestamp": "2026-11-19T00:00:00+00:00",
+                }
+            ])
+            self.assertTrue(window._collaboration_presence.isHidden())
+            window._collaborators_changed([
+                {
+                    "id": "a", "nickname": "Alicia", "host": "PC",
+                    "timestamp": "2026-11-19T00:00:00+00:00",
+                },
+                {
+                    "id": "b", "nickname": "Berto", "host": "LAPTOP",
+                    "timestamp": "2026-11-19T00:00:00+00:00",
+                },
+            ])
+            self.assertFalse(window._collaboration_presence.isHidden())
+            self.assertIn("2 colaboradores", window._collaboration_presence_text.text())
+            self.assertFalse(window._collaboration_presence_icon.pixmap().isNull())
             window.close()
             self.application.processEvents()
 

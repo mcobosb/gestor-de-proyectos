@@ -147,6 +147,11 @@ def encrypted_manifest_metadata(path: Path) -> dict | None:
 
 def shared_library_path(app: Any, module: str, fallback: Path) -> Path:
     """Usa la biblioteca compartida del proyecto si el módulo la tiene."""
+    configured = getattr(app, "library_sources", {}).get(module, "")
+    if configured:
+        selected = Path(configured).expanduser()
+        if selected.is_file():
+            return selected
     store = getattr(app, "project_store", None)
     if store is None:
         return fallback
@@ -155,6 +160,11 @@ def shared_library_path(app: Any, module: str, fallback: Path) -> Path:
 
 def shared_docs_path(app: Any, module: str, fallback: Path) -> Path:
     """Usa documentos compartidos junto a una biblioteca ZIP."""
+    configured = getattr(app, "library_sources", {}).get(f"{module}_docs", "")
+    if configured:
+        selected = Path(configured).expanduser()
+        if selected.is_dir():
+            return selected
     store = getattr(app, "project_store", None)
     if store is None:
         return fallback
@@ -721,6 +731,7 @@ class CollaborativeWatchService(QObject):
     """Sondeo incremental compatible con carpetas locales y sincronizadas."""
 
     files_changed = Signal(list)
+    presence_changed = Signal(list)
 
     def __init__(
         self, store: CollaborativeProjectStore, *, interval_ms: int = 2500
@@ -729,6 +740,7 @@ class CollaborativeWatchService(QObject):
         super().__init__()
         self.store = store
         self.lock_snapshot = self._lock_snapshot()
+        self.presence_snapshot = self._presence_snapshot()
         self.timer = QTimer(self)
         self.timer.setInterval(interval_ms)
         self.timer.timeout.connect(self.check)
@@ -751,6 +763,10 @@ class CollaborativeWatchService(QObject):
         }
         self.lock_snapshot = locks
         changed.extend(lock_paths)
+        presence = self._presence_snapshot()
+        if presence != self.presence_snapshot:
+            self.presence_snapshot = presence
+            self.presence_changed.emit(presence)
         if changed:
             self.files_changed.emit(changed)
 
@@ -763,3 +779,52 @@ class CollaborativeWatchService(QObject):
             path: path.stat().st_mtime_ns
             for path in folder.glob("part_*.lock")
         }
+
+    def _presence_snapshot(self) -> list[dict[str, str]]:
+        """Devuelve usuarios vivos y elimina registros huérfanos."""
+        presence_dir = self.store.root / "presencia"
+        if not presence_dir.is_dir():
+            return []
+        now = datetime.now(timezone.utc)
+        active = []
+        for path in presence_dir.glob("*.json"):
+            try:
+                data = self.store.read_payload(path)
+                timestamp = datetime.fromisoformat(str(data["timestamp"]))
+                if timestamp.tzinfo is None:
+                    timestamp = timestamp.replace(tzinfo=timezone.utc)
+                if now - timestamp > timedelta(seconds=45):
+                    path.unlink(missing_ok=True)
+                    continue
+                active.append({
+                    "id": path.stem,
+                    "nickname": str(data.get("nickname", "Sin apodo")),
+                    "host": str(data.get("host", "")),
+                    "timestamp": timestamp.isoformat(),
+                })
+            except (OSError, KeyError, TypeError, ValueError):
+                continue
+        return sorted(
+            active, key=lambda row: row["nickname"].casefold()
+        )
+
+    def heartbeat(
+        self, session_id: str, nickname: str, host: str
+    ) -> None:
+        """Publica la presencia de esta sesión."""
+        directory = self.store.root / "presencia"
+        directory.mkdir(parents=True, exist_ok=True)
+        self.store.write_payload(
+            directory / f"{session_id}.json",
+            {
+                "nickname": nickname,
+                "host": host,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+
+    def leave(self, session_id: str) -> None:
+        """Retira la presencia al cerrar o salir del proyecto."""
+        (self.store.root / "presencia" / f"{session_id}.json").unlink(
+            missing_ok=True
+        )

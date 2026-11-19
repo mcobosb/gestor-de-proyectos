@@ -281,6 +281,16 @@ cambiar su contraseña y copiar las bibliotecas del proyecto. La contraseña
 cifra los JSON y las bibliotecas con AES-256-GCM; no se almacena junto al
 proyecto. Los usuarios deben introducirla al abrirlo.
 
+Cada usuario configura su apodo en **Archivo → Configuración → Colaboración**.
+La ventana principal muestra el número de personas activas y sus apodos.
+
+El indicador solo aparece cuando hay dos o más personas activas. Usa un icono
+de usuarios y muestra los apodos; al situar el cursor se añade el equipo.
+
+Las bibliotecas no obligan a copiarse al proyecto: en **Colaboración →
+Fuentes de bibliotecas…** puedes usar la incluida o indicar un ZIP externo. Para
+PPTP también puedes seleccionar una carpeta `docs` externa.
+
 El **BC3 es el presupuesto de origen**: se lee, pero no se reescribe al guardar.
 La **carpeta colaborativa es el proyecto de trabajo**: para continuar otro día,
 ábrela desde **Abrir proyecto colaborativo…**. Guardar no exporta un BC3 actualizado.

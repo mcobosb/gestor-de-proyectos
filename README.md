@@ -672,6 +672,14 @@ instaladas y consultar el estado. Las bibliotecas se conservan legibles en modo
 público y cifradas en modo protegido, donde se materializan únicamente en una
 caché temporal durante la sesión.
 
+La presencia colaborativa muestra en la barra inferior el número de usuarios
+activos y sus apodos. El apodo se configura en **Archivo → Configuración →
+Colaboración** y los heartbeats caducan automáticamente.
+
+**Colaboración → Fuentes de bibliotecas…** permite usar la biblioteca incluida
+con cada módulo o seleccionar una ruta ZIP externa en el equipo. PPTP admite
+además una carpeta `docs` externa.
+
 Los locks son por sección: edición general, mediciones o ciclos futuros de otra
 sección. Además, el guardado aplica una fusión de tres vías; cambios concurrentes
 en campos distintos de una misma partida se conservan automáticamente. Solo hay

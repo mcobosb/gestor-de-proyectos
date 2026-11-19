@@ -134,10 +134,16 @@ class BudgetMainWindow(QMainWindow):
         self.project_store: CollaborativeProjectStore | None = None
         self.project_watcher: CollaborativeWatchService | None = None
         self.lock_manager = ProjectLockManager()
+        self.collaboration_session_id = uuid4().hex
+        self.collaborators: list[dict[str, str]] = []
+        self.collaboration_nickname = "Anónimo"
         self._active_item_locks = {}
         self._lock_timer = QTimer(self)
         self._lock_timer.setInterval(120_000)
         self._lock_timer.timeout.connect(self._renew_item_locks)
+        self._presence_timer = QTimer(self)
+        self._presence_timer.setInterval(15_000)
+        self._presence_timer.timeout.connect(self._publish_presence)
         self.source_budget_path: Path | None = None
         self.is_dirty = False
         self._undo_history: list[dict] = []
@@ -148,6 +154,8 @@ class BudgetMainWindow(QMainWindow):
         self.recent_reference_bases_path = data_directory / "bases_referencia_recientes.json"
         self.preferences_path = data_directory / "preferencias.json"
         self.report_settings_path = data_directory / "configuracion_informes.json"
+        self.library_preferences_path = data_directory / "bibliotecas.json"
+        self.library_sources = self._read_library_preferences()
         self.recent_projects = self._read_recent_paths(self.recent_projects_path, 5)
         self.recent_reference_bases = self._read_recent_paths(self.recent_reference_bases_path, 3)
         self.default_report_settings = self._read_report_settings()
@@ -160,9 +168,28 @@ class BudgetMainWindow(QMainWindow):
         }
         self.language = self._read_language_preference()
         self.theme = self._read_theme_preference()
+        self.collaboration_nickname = self._read_collaboration_nickname()
         set_language(self.language)
         apply_theme(QApplication.instance(), self.theme)
         self._build_ui()
+        self._collaboration_presence = QWidget()
+        presence_layout = QHBoxLayout(self._collaboration_presence)
+        presence_layout.setContentsMargins(0, 0, 0, 0)
+        presence_layout.setSpacing(5)
+        self._collaboration_presence_icon = QLabel()
+        self._collaboration_presence_icon.setPixmap(
+            QIcon.fromTheme(
+                "system-users",
+                self.style().standardIcon(
+                    QStyle.StandardPixmap.SP_FileDialogDetailedView
+                ),
+            ).pixmap(16, 16)
+        )
+        self._collaboration_presence_text = QLabel()
+        presence_layout.addWidget(self._collaboration_presence_icon)
+        presence_layout.addWidget(self._collaboration_presence_text)
+        self.status_bar.addPermanentWidget(self._collaboration_presence)
+        self._collaboration_presence.setVisible(False)
         if tool_errors:
             QMessageBox.warning(
                 self,
@@ -267,7 +294,7 @@ class BudgetMainWindow(QMainWindow):
             "Cambiar protección…", self.change_collaboration_password
         )
         collaboration_menu.addAction(
-            "Bibliotecas compartidas…", self.open_shared_libraries
+            "Fuentes de bibliotecas…", self.open_shared_libraries
         )
         collaboration_menu.addAction(
             "Estado de colaboración…", self.show_collaboration_status
@@ -1965,19 +1992,14 @@ class BudgetMainWindow(QMainWindow):
             f"Acceso: "
             f"{'Protegido con contraseña' if self.project_store.is_encrypted else 'Público, sin cifrar'}\n"
             f"Partidas bloqueadas: {len(locks)}\n"
+            f"Participantes activos: "
+            f"{', '.join(row['nickname'] for row in self.collaborators) or 'ninguno'}\n"
             f"Bibliotecas compartidas: "
             f"{len(list((self.project_store.root / 'bibliotecas').glob('*/*.enc')))}",
         )
 
     def open_shared_libraries(self) -> None:
-        """Copia o sustituye bibliotecas usadas por las herramientas."""
-        if self.project_store is None:
-            QMessageBox.information(
-                self,
-                "Bibliotecas compartidas",
-                "Guarda primero como proyecto colaborativo.",
-            )
-            return
+        """Elige bibliotecas incluidas o rutas externas por instalación."""
         from tools.price_justification.templates import (
             LIBRARY_PATH as PRICE_LIBRARY,
         )
@@ -1992,76 +2014,133 @@ class BudgetMainWindow(QMainWindow):
             "pptp": PPTP_LIBRARY,
         }
         dialog = QDialog(self)
-        dialog.setWindowTitle("Bibliotecas compartidas")
+        dialog.setWindowTitle("Fuentes de bibliotecas")
         layout = QVBoxLayout(dialog)
         layout.addWidget(QLabel(
-            "Las bibliotecas copiadas quedan dentro del proyecto y se usan "
-            "por sus herramientas, sin depender de otra instalación."
+            "Elige para cada módulo la biblioteca incluida con la aplicación "
+            "o una ruta ZIP externa local a este equipo."
         ))
         for module, source in libraries.items():
             row = QHBoxLayout()
             label = QLabel(module.replace("_", " ").title())
             row.addWidget(label, 1)
-            filename = (
-                source.name + ".enc"
-                if self.project_store.is_encrypted
-                else source.name
+            selector = QComboBox()
+            selector.addItems(("Biblioteca incluida", "Ruta externa"))
+            selector.setCurrentText(
+                "Ruta externa"
+                if self.library_sources.get(module)
+                else "Biblioteca incluida"
             )
-            status = QLabel(
-                "Instalada" if (
-                    self.project_store.root
-                    / "bibliotecas" / module / filename
-                ).is_file() else "Usa biblioteca local"
+            path_field = QLineEdit(self.library_sources.get(module, ""))
+            path_field.setEnabled(selector.currentIndex() == 1)
+            selector.currentIndexChanged.connect(
+                lambda index, field=path_field: field.setEnabled(index == 1)
             )
-            row.addWidget(status)
-            install = QPushButton("Copiar incluida")
-            choose = QPushButton("Elegir ZIP…")
+            row.addWidget(selector)
+            row.addWidget(path_field, 2)
+            choose = QPushButton("Examinar…")
 
-            def copy_default(selected=module, path=source, label=status):
-                """Copia la biblioteca distribuida y confirma su disponibilidad."""
-                try:
-                    self.project_store.install_library(
-                        selected, Path(path)
-                    )
-                except (OSError, ValueError) as exc:
-                    QMessageBox.critical(dialog, "Bibliotecas", str(exc))
-                    return
-                if selected == "pptp":
-                    try:
-                        self.project_store.install_docs(selected, DOCS_ROOT)
-                    except (OSError, ValueError) as exc:
-                        QMessageBox.critical(dialog, "Bibliotecas", str(exc))
-                        return
-                label.setText("Instalada")
-
-            def choose_file(selected=module, label=status):
-                """Copia un ZIP seleccionado por la persona usuaria."""
+            def choose_file(field=path_field):
+                """Selecciona un ZIP local como fuente de biblioteca."""
                 path, _ = QFileDialog.getOpenFileName(
                     dialog,
-                    f"Biblioteca para {selected}",
+                    "Biblioteca externa",
                     "",
                     "Biblioteca ZIP (*.zip)",
                 )
-                if not path:
-                    return
-                try:
-                    self.project_store.install_library(
-                        selected, Path(path)
-                    )
-                except (OSError, ValueError) as exc:
-                    QMessageBox.critical(dialog, "Bibliotecas", str(exc))
-                    return
-                label.setText("Instalada")
+                if path:
+                    field.setText(path)
 
-            install.clicked.connect(copy_default)
             choose.clicked.connect(choose_file)
-            row.addWidget(install)
             row.addWidget(choose)
             layout.addLayout(row)
+            dialog.setProperty(
+                f"library_{module}",
+                (selector, path_field),
+            )
+            if module == "pptp":
+                docs_row = QHBoxLayout()
+                docs_row.addWidget(QLabel("Documentos PPTP"))
+                docs_field = QLineEdit(
+                    self.library_sources.get("pptp_docs", "")
+                )
+                docs_row.addWidget(docs_field, 1)
+                choose_docs = QPushButton("Carpeta…")
+
+                def choose_docs_folder(field=docs_field):
+                    """Selecciona una carpeta docs externa para PPTP."""
+                    path = QFileDialog.getExistingDirectory(
+                        dialog, "Documentos PPTP", ""
+                    )
+                    if path:
+                        field.setText(path)
+
+                choose_docs.clicked.connect(choose_docs_folder)
+                docs_row.addWidget(choose_docs)
+                layout.addLayout(docs_row)
+                dialog.setProperty("pptp_docs_field", docs_field)
+        save = QPushButton("Guardar preferencias")
+
+        def save_preferences() -> None:
+            """Persiste biblioteca incluida o ruta externa por módulo."""
+            sources = {}
+            for module in libraries:
+                selector, field = dialog.property(f"library_{module}")
+                if selector.currentIndex() == 1:
+                    path = field.text().strip()
+                    if not path or not Path(path).is_file():
+                        QMessageBox.critical(
+                            dialog,
+                            "Biblioteca no válida",
+                            f"Selecciona un ZIP válido para {module}.",
+                        )
+                        return
+                    sources[module] = path
+            docs_field = dialog.property("pptp_docs_field")
+            if docs_field is not None and docs_field.text().strip():
+                if not Path(docs_field.text().strip()).is_dir():
+                    QMessageBox.critical(
+                        dialog,
+                        "Documentos PPTP",
+                        "La carpeta de documentos PPTP no es válida.",
+                    )
+                    return
+                sources["pptp_docs"] = docs_field.text().strip()
+            self.library_sources = sources
+            try:
+                self.library_preferences_path.write_text(
+                    json.dumps(sources, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+            except OSError as exc:
+                QMessageBox.critical(dialog, "Bibliotecas", str(exc))
+                return
+            dialog.accept()
+
+        save.clicked.connect(save_preferences)
+        layout.addWidget(save)
         close = QPushButton("Cerrar")
         close.clicked.connect(dialog.accept)
         layout.addWidget(close)
         dialog.exec()
+
+    def _read_library_preferences(self) -> dict[str, str]:
+        """Lee rutas externas de bibliotecas configuradas para este equipo."""
+        try:
+            data = json.loads(
+                self.library_preferences_path.read_text(encoding="utf-8")
+            )
+            if not isinstance(data, dict):
+                raise ValueError("Se esperaba un objeto de rutas.")
+            return {
+                str(key): str(value)
+                for key, value in data.items()
+                if isinstance(value, str)
+            }
+        except FileNotFoundError:
+            return {}
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
+            return {}
 
     def _start_collaboration(self) -> None:
         """Inicia vigilancia y renovación de locks para la carpeta activa."""
@@ -2070,15 +2149,25 @@ class BudgetMainWindow(QMainWindow):
         self.project_watcher = CollaborativeWatchService(self.project_store)
         self.project_watcher.setParent(self)
         self.project_watcher.files_changed.connect(self._external_files_changed)
+        self.project_watcher.presence_changed.connect(
+            self._collaborators_changed
+        )
         self.project_watcher.start()
         self._lock_timer.start()
+        self._presence_timer.start()
+        self._publish_presence()
 
     def _stop_collaboration(self) -> None:
         """Detiene vigilancia y libera bloqueos propios."""
         if self.project_watcher is not None:
+            self.project_watcher.leave(self.collaboration_session_id)
             self.project_watcher.stop()
             self.project_watcher = None
         self._lock_timer.stop()
+        self._presence_timer.stop()
+        self.collaborators = []
+        if hasattr(self, "_collaboration_presence"):
+            self._collaboration_presence.setVisible(False)
         for handle in self._active_item_locks.values():
             self.lock_manager.release(handle)
         self._active_item_locks.clear()
@@ -2095,6 +2184,33 @@ class BudgetMainWindow(QMainWindow):
                 )
         for lock_key in lost:
             self._active_item_locks.pop(lock_key, None)
+
+    def _publish_presence(self) -> None:
+        """Renueva apodo y equipo en la carpeta compartida."""
+        if self.project_watcher is not None:
+            self.project_watcher.heartbeat(
+                self.collaboration_session_id,
+                self.collaboration_nickname,
+                self.lock_manager.host,
+            )
+
+    def _collaborators_changed(self, people: list[dict[str, str]]) -> None:
+        """Actualiza contador, apodos y avisos del estado colaborativo."""
+        self.collaborators = people
+        count = len(people)
+        names = ", ".join(
+            person["nickname"] for person in people
+        ) or "Sin participantes"
+        self._collaboration_presence_text.setText(
+            f"{count} colaborador{'es' if count != 1 else ''} · {names}"
+        )
+        self._collaboration_presence.setToolTip(
+            "Participantes activos:\n" + "\n".join(
+                f"{person['nickname']} ({person['host']})"
+                for person in people
+            )
+        )
+        self._collaboration_presence.setVisible(count > 1)
 
     def _acquire_item_lock(
         self, item: ProjectItem, scope: str = "general"
@@ -2316,6 +2432,19 @@ class BudgetMainWindow(QMainWindow):
             )
             return "es"
 
+    def _read_collaboration_nickname(self) -> str:
+        """Lee el apodo global o propone el usuario del sistema."""
+        try:
+            data = json.loads(
+                self.preferences_path.read_text(encoding="utf-8")
+            )
+            value = data.get("collaboration_nickname") if isinstance(data, dict) else None
+            if isinstance(value, str) and value.strip():
+                return value.strip()[:40]
+        except (FileNotFoundError, OSError, UnicodeError, json.JSONDecodeError):
+            pass
+        return self.lock_manager.user[:40]
+
     def _read_theme_preference(self) -> str:
         """Lee el tema global y usa Sistema ante datos ausentes o inválidos."""
         try:
@@ -2343,7 +2472,11 @@ class BudgetMainWindow(QMainWindow):
         return True
 
     def _save_global_preferences(
-        self, *, language: str | None = None, theme: str | None = None
+        self,
+        *,
+        language: str | None = None,
+        theme: str | None = None,
+        collaboration_nickname: str | None = None,
     ) -> bool:
         """Actualiza preferencias globales sin borrar las demás claves."""
         try:
@@ -2356,6 +2489,8 @@ class BudgetMainWindow(QMainWindow):
             current["language"] = language
         if theme is not None:
             current["theme"] = theme
+        if collaboration_nickname is not None:
+            current["collaboration_nickname"] = collaboration_nickname
         temporary: Path | None = None
         try:
             with tempfile.NamedTemporaryFile(
@@ -2380,6 +2515,8 @@ class BudgetMainWindow(QMainWindow):
             self.language = language
             set_language(language)
             self._set_status("Idioma cambiado.")
+        if collaboration_nickname is not None:
+            self.collaboration_nickname = collaboration_nickname
         return True
 
     def open_report_settings(self) -> None:

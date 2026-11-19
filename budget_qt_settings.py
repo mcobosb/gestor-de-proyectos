@@ -210,6 +210,7 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(self._reports_tab(), "Informes")
         self.tabs.addTab(self._language_tab(), "Idioma")
         self.tabs.addTab(self._appearance_tab(), "Apariencia")
+        self.tabs.addTab(self._collaboration_tab(), "Colaboración")
         self.tabs.addTab(self._location_tab(), "Emplazamiento")
         self.tabs.addTab(self._cpv_tab(), "CPV")
         buttons = QDialogButtonBox(
@@ -390,6 +391,41 @@ class SettingsDialog(QDialog):
         )
         return self.cpv_selector
 
+    def _collaboration_tab(self) -> QWidget:
+        """Configura el apodo visible para otros colaboradores."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        form = QFormLayout()
+        self.nickname_field = QLineEdit(
+            str(self.parent().collaboration_nickname)
+        )
+        self.nickname_field.setMaxLength(40)
+        form.addRow("Apodo colaborativo", self.nickname_field)
+        layout.addLayout(form)
+        note = QLabel(
+            "Este apodo y el nombre del equipo se muestran cuando abres un "
+            "proyecto colaborativo. No se incluye en los documentos técnicos."
+        )
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        save = QPushButton("Guardar apodo")
+        save.clicked.connect(self._save_nickname)
+        layout.addWidget(save, alignment=Qt.AlignmentFlag.AlignRight)
+        layout.addStretch()
+        return tab
+
+    def _save_nickname(self) -> None:
+        """Persiste el apodo global y renueva presencia inmediata."""
+        nickname = self.nickname_field.text().strip()
+        if not nickname:
+            return
+        parent = self.parent()
+        if parent._save_global_preferences(
+            collaboration_nickname=nickname
+        ):
+            parent.collaboration_nickname = nickname
+            parent._publish_presence()
+
     def _currency_changed(self) -> None:
         """Habilita la divisa personalizada solo para OTHER."""
         self.custom_currency.setEnabled(self.currency.currentData() == "OTHER")
@@ -411,8 +447,8 @@ class SettingsDialog(QDialog):
     def _accept_reports(self) -> None:
         """Valida selecciones pendientes y acepta la configuración."""
         for tab_index, selector in (
-            (3, self.location_selector),
-            (4, self.cpv_selector),
+            (4, self.location_selector),
+            (5, self.cpv_selector),
         ):
             if not selector.confirm_pending():
                 self.tabs.setCurrentIndex(tab_index)
