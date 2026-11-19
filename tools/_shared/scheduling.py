@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 
 DEFAULT_START = date(2026, 11, 9)
@@ -31,6 +31,12 @@ CONTINUOUS_CHAPTER_RE = re.compile(r"SEGURIDAD|RESIDUO", re.I)
 RELATIONS = ("FC", "CC", "FF", "CF")
 
 
+@dataclass(frozen=True)
+class PlanPhase:
+    name: str
+    lag: int = 0
+
+
 @dataclass
 class PlanParams:
     start: date = DEFAULT_START
@@ -38,6 +44,7 @@ class PlanParams:
     scale: int = 7
     plan: str = "Completo"
     holidays: list[tuple[date, str]] = field(default_factory=lambda: list(DEFAULT_HOLIDAYS))
+    phases: list[PlanPhase] = field(default_factory=list)
 
     @property
     def holiday_dates(self) -> set[date]:
@@ -67,6 +74,9 @@ class PlanActivity:
     finish_offset: int = 1
     start_date: date | None = None
     end_date: date | None = None
+    phase_shares: dict[int, float] = field(default_factory=dict)
+    segments: list[PlanActivity] = field(default_factory=list, repr=False)
+    phase_name: str = ""
 
     def computed_duration(self, hours_per_day: float) -> int:
         """Duración = medición × rendimiento / (nº equipos × horas por jornada)."""
@@ -93,11 +103,24 @@ def nth_working_day(start: date, index: int, holidays: set[date]) -> date:
 
 def schedule(activities: list[PlanActivity], params: PlanParams) -> None:
     """Calcula duraciones, desfases en días laborables y fechas de cada actividad."""
+    for activity in activities:
+        activity.segments.clear()
+    if params.phases:
+        _schedule_phases(activities, params)
+    else:
+        _schedule_rows(activities, params)
+
+
+def _schedule_rows(
+    activities: list[PlanActivity], params: PlanParams, earliest: dict[int, int] | None = None,
+) -> None:
+    """Aplica las relaciones de precedencia sin adelantar los inicios mínimos."""
+    earliest = earliest or {}
     by_id = {act.id: act for act in activities}
     for act in activities:
         act.duration = act.computed_duration(params.hours_per_day)
-        act.start_offset = 0
-        act.finish_offset = act.duration
+        act.start_offset = earliest.get(act.id, 0)
+        act.finish_offset = act.start_offset + act.duration
 
     # Varias pasadas: admite predecesoras definidas en filas posteriores.
     for _ in range(len(activities) + 1):
@@ -114,7 +137,7 @@ def schedule(activities: list[PlanActivity], params: PlanParams) -> None:
                     offset = pred.start_offset - act.duration + act.lag
                 else:  # FC
                     offset = pred.finish_offset + act.lag
-            offset = max(0, offset)
+            offset = max(earliest.get(act.id, 0), offset)
             if offset != act.start_offset:
                 act.start_offset = offset
                 changed = True
@@ -132,10 +155,96 @@ def schedule(activities: list[PlanActivity], params: PlanParams) -> None:
             act.finish_offset = base
             act.duration = base
 
+    _set_dates(activities, params)
+
+
+def _set_dates(activities: list[PlanActivity], params: PlanParams) -> None:
+    """Convierte desfases laborables en fechas con el calendario de obra."""
     holidays = params.holiday_dates
     for act in activities:
         act.start_date = nth_working_day(params.start, act.start_offset + 1, holidays)
         act.end_date = nth_working_day(params.start, max(act.finish_offset, act.start_offset + 1), holidays)
+
+
+def validate_phase_shares(shares: dict[int, float], phase_count: int) -> None:
+    """Valida índices y el reparto completo de la medición."""
+    if not shares:
+        return
+    if any(not 0 <= index < phase_count or not 0 < percent <= 100
+           for index, percent in shares.items()):
+        raise ValueError("El reparto contiene una fase o un porcentaje no válido.")
+    if not math.isclose(sum(shares.values()), 100, rel_tol=0, abs_tol=1e-8):
+        raise ValueError("Los porcentajes de la partida deben sumar 100 %.")
+
+
+def _schedule_phases(activities: list[PlanActivity], params: PlanParams) -> None:
+    """Programa fases comunes, manteniendo separados los tramos de cada partida."""
+    phase_rows: list[list[PlanActivity]] = [[] for _ in params.phases]
+    for activity in activities:
+        validate_phase_shares(activity.phase_shares, len(params.phases))
+        if activity.continuous:
+            continue
+        shares = activity.phase_shares or {0: 100.0}
+        quantity, amount, cumulative, manual_days = 0.0, 0.0, 0.0, 0
+        for position, (index, percent) in enumerate(sorted(shares.items()), start=1):
+            last = position == len(shares)
+            segment_quantity = activity.quantity - quantity if last else activity.quantity * percent / 100
+            segment_amount = activity.amount - amount if last else activity.amount * percent / 100
+            quantity += segment_quantity
+            amount += segment_amount
+            manual = None
+            if activity.manual_duration:
+                cumulative += percent
+                limit = round(max(activity.manual_duration, len(shares)) * cumulative / 100)
+                remaining = len(shares) - position
+                limit = min(limit, max(activity.manual_duration, len(shares)) - remaining)
+                manual = max(1, limit - manual_days)
+                manual_days += manual
+            segment = replace(
+                activity, quantity=segment_quantity, amount=segment_amount,
+                manual_duration=manual, phase_name=params.phases[index].name,
+                phase_shares={}, segments=[],
+            )
+            phase_rows[index].append(segment)
+            activity.segments.append(segment)
+
+    start, finish, horizon = 0, 0, 0
+    previous_finish: dict[int, int] = {}
+    for phase, rows in zip(params.phases, phase_rows, strict=True):
+        if not rows:
+            continue
+        start = max(start, finish + phase.lag) if horizon else 0
+        _schedule_rows(rows, params, {
+            row.id: max(start, previous_finish.get(row.id, 0)) for row in rows
+        })
+        previous_finish.update((row.id, row.finish_offset) for row in rows)
+        finish = max(row.finish_offset for row in rows)
+        horizon = max(horizon, finish)
+    for activity in activities:
+        if activity.continuous:
+            activity.start_offset = 0
+            activity.duration = activity.finish_offset = max(1, horizon)
+        else:
+            activity.start_offset = activity.segments[0].start_offset
+            activity.finish_offset = activity.segments[-1].finish_offset
+            activity.duration = sum(segment.duration for segment in activity.segments)
+    _set_dates(activities, params)
+
+
+def activity_segments(activities: list[PlanActivity]) -> list[PlanActivity]:
+    """Devuelve los tramos reales para dibujar el Gantt sin rellenar las pausas."""
+    return [segment for activity in activities for segment in (activity.segments or [activity])]
+
+
+def merge_date_ranges(ranges: list[tuple[date, date]]) -> list[tuple[date, date]]:
+    """Une intervalos solapados o contiguos sin pintar los huecos del calendario."""
+    merged: list[tuple[date, date]] = []
+    for start, end in sorted(ranges):
+        if merged and (start - merged[-1][1]).days <= 1:
+            merged[-1] = merged[-1][0], max(end, merged[-1][1])
+        else:
+            merged.append((start, end))
+    return merged
 
 
 def chain_sequence(activities: list[PlanActivity]) -> None:
@@ -199,6 +308,18 @@ def apply_saved_plan_state(
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError("Hay un festivo guardado con datos no válidos.") from exc
     params.holidays = holidays
+    raw_phases = raw_params.get("phases", [])
+    if not isinstance(raw_phases, list):
+        raise ValueError("Las fases guardadas no son válidas.")
+    phases: list[PlanPhase] = []
+    for entry in raw_phases:
+        if not isinstance(entry, dict) or not isinstance(entry.get("name"), str):
+            raise ValueError("Hay una fase guardada con datos no válidos.")
+        name, lag = entry["name"].strip(), entry.get("lag", 0)
+        if not name or type(lag) is not int or any(phase.name.casefold() == name.casefold() for phase in phases):
+            raise ValueError("Hay una fase guardada con nombre o desfase no válido.")
+        phases.append(PlanPhase(name, lag))
+    params.phases = phases
 
     saved_by_activity: dict[tuple[str, str], list[dict]] = {}
     for entry in state.get("activities", []):
@@ -222,6 +343,11 @@ def apply_saved_plan_state(
             relation = str(saved.get("relation", activity.relation)).upper()
             activity.relation = relation if relation in RELATIONS else "FC"
             activity.lag = int(saved.get("lag", activity.lag))
+            raw_shares = saved.get("phase_shares", {})
+            if not isinstance(raw_shares, dict):
+                raise ValueError("El reparto de fases no es válido.")
+            activity.phase_shares = {int(index): float(percent) for index, percent in raw_shares.items()}
+            validate_phase_shares(activity.phase_shares, len(params.phases))
         except (TypeError, ValueError) as exc:
             raise ValueError(
                 f"La actividad guardada {activity.code} contiene datos no válidos."

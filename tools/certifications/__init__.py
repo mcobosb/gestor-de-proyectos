@@ -115,29 +115,23 @@ def planned_monthly_amounts(activities, params: PlanParams, months: list[Economi
     plan: list[list[float]] = []
     for activity in activities:
         values = [0.0] * len(months)
-        if not activity.start_date or not activity.end_date:
-            plan.append(values)
-            continue
-        total_days = max(
-            1, _working_days(activity.start_date, activity.end_date, params.holiday_dates)
-        )
-        assigned = 0.0
-        covered_indexes = [
-            index
-            for index, month in enumerate(months)
-            if activity.start_date <= month.end and activity.end_date >= month.start
-        ]
-        for index in covered_indexes:
-            month = months[index]
-            overlap_start = max(activity.start_date, month.start)
-            overlap_end = min(activity.end_date, month.end)
-            amount = activity.amount * _working_days(
-                overlap_start, overlap_end, params.holiday_dates
-            ) / total_days
-            values[index] = amount
-            assigned += amount
-        if covered_indexes:
-            values[covered_indexes[-1]] += activity.amount - assigned
+        holidays = params.holiday_dates
+        for segment in activity.segments or [activity]:
+            start, end = segment.start_date, segment.end_date
+            if not start or not end:
+                continue
+            total_days = max(1, _working_days(start, end, holidays))
+            assigned, covered_days, last = 0.0, 0, None
+            for index, month in enumerate(months):
+                days = _working_days(max(start, month.start), min(end, month.end), holidays)
+                if days:
+                    amount = segment.amount * days / total_days
+                    values[index] += amount
+                    assigned += amount
+                    covered_days += days
+                    last = index
+            if last is not None and (not params.phases or covered_days == total_days):
+                values[last] += segment.amount - assigned
         plan.append(values)
     return plan
 

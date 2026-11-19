@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 from xml.etree import ElementTree
 
-from .._shared.scheduling import PlanActivity, PlanParams
+from .._shared.scheduling import PlanActivity, PlanParams, activity_segments, merge_date_ranges
 
 if TYPE_CHECKING:
     from budget_reports import ReportSettings
@@ -38,13 +38,19 @@ class _ChartRow:
     start: date
     end: date
     is_chapter: bool
+    active_ranges: tuple[tuple[date, date], ...] = ()
+
+    def covers(self, period: _TimelinePeriod) -> bool:
+        """Indica si el tramo del eje contiene actividad real."""
+        return any(start <= period.end and end >= period.start
+                   for start, end in (self.active_ranges or ((self.start, self.end),)))
 
 
 def _dated_activities(activities: list[PlanActivity]) -> list[tuple[PlanActivity, date, date]]:
     """Conserva las actividades que ya tienen fechas calculadas."""
     return [
         (activity, activity.start_date, activity.end_date)
-        for activity in activities
+        for activity in activity_segments(activities)
         if activity.start_date is not None and activity.end_date is not None
     ]
 
@@ -85,25 +91,22 @@ def _build_chart_rows(
         chapter_duration = max(record[0].finish_offset for record in records) - min(
             record[0].start_offset for record in records
         )
-        if plan == "Resumen":
-            rows.append(_ChartRow(
-                chapter_index, f"{first.chapter} · {first.chapter_name}",
-                f"{start:%d/%m/%Y} – {end:%d/%m/%Y}",
-                currency_formatter(sum(record[0].amount for record in records)),
-                chapter_duration, start, end, True,
-            ))
-            continue
-
+        ranges = tuple(merge_date_ranges([(begin, finish) for _, begin, finish in records])) if any(
+            activity.phase_name for activity, _, _ in records
+        ) else ()
         rows.append(_ChartRow(
             chapter_index, f"{first.chapter} · {first.chapter_name}",
             f"{start:%d/%m/%Y} – {end:%d/%m/%Y}",
             currency_formatter(sum(record[0].amount for record in records)),
-            chapter_duration, start, end, True,
+            chapter_duration, start, end, True, ranges,
         ))
+        if plan == "Resumen":
+            continue
         rows.extend(
             _ChartRow(
                 chapter_index,
-                f"{activity.id} · {activity.code}  {activity.summary}"
+                f"{activity.id} · {activity.code}  "
+                + (f"[{activity.phase_name}] " if activity.phase_name else "") + activity.summary
                 + (" (toda la obra)" if activity.continuous else ""),
                 f"{activity_start:%d/%m/%Y} – {activity_end:%d/%m/%Y}",
                 f"{_format_quantity(activity.quantity)} {activity.unit}".strip(),
@@ -230,7 +233,7 @@ def _write_odt_chart(document, rows: list[_ChartRow], periods: list[_TimelinePer
             table_row, f"{row.duration} d", row_style, "TableHeader" if row.is_chapter else "TableText",
         )
         for period in periods:
-            is_bar = row.start <= period.end and row.end >= period.start
+            is_bar = row.covers(period)
             style = (
                 f"PlanningBar{row.chapter_index % len(GANTT_PALETTE)}"
                 if is_bar else "PlanningEmptyCell"
@@ -301,7 +304,7 @@ def _pdf_chart_table(layout, rows: list[_ChartRow], periods: list[_TimelinePerio
         if row.is_chapter:
             styles.append(("BACKGROUND", (0, row_index), (1, row_index), colors.HexColor(_light_color(color))))
         for period_index, period in enumerate(periods):
-            if row.start <= period.end and row.end >= period.start:
+            if row.covers(period):
                 styles.append((
                     "BACKGROUND", (period_index + 2, row_index), (period_index + 2, row_index),
                     colors.HexColor(color),

@@ -39,6 +39,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch, Patch, Polygon, Rectangle
 from openpyxl import load_workbook
 from .reports import GANTT_PALETTE
+from .._shared.scheduling import merge_date_ranges
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 GG_RATE = 0.13
@@ -91,6 +92,7 @@ class Activity:
     start: date
     end: date
     continuous: bool
+    phased: bool = False
 
 
 def to_date(v) -> Optional[date]:
@@ -257,11 +259,16 @@ def draw(
             xs, xe = mdates.date2num(s), mdates.date2num(e)
             c = color[obj]
             h = 0.22
-            ax.add_patch(Rectangle((xs, i - h / 2), xe - xs, h, color=DARK, zorder=3))
-            for xx, sgn in ((xs, 1), (xe, -1)):
-                ax.add_patch(Polygon([[xx, i - h / 2], [xx, i + 0.36], [xx + sgn * span * 0.006, i - h / 2]],
-                                     closed=True, color=DARK, zorder=3))
-            ax.add_patch(Rectangle((xs, i - h / 2 + 0.04), xe - xs, h - 0.08, color=c, zorder=3.1))
+            ranges = merge_date_ranges([(a.start, a.end) for a in ch_acts]) if any(
+                a.phased for a in ch_acts
+            ) else [(s, e - timedelta(days=1))]
+            for begin, end in ranges:
+                left, right = mdates.date2num(begin), mdates.date2num(end + timedelta(days=1))
+                ax.add_patch(Rectangle((left, i - h / 2), right - left, h, color=DARK, zorder=3))
+                for xx, sgn in ((left, 1), (right, -1)):
+                    ax.add_patch(Polygon([[xx, i - h / 2], [xx, i + 0.36], [xx + sgn * span * 0.006, i - h / 2]],
+                                         closed=True, color=DARK, zorder=3))
+                ax.add_patch(Rectangle((left, i - h / 2 + 0.04), right - left, h - 0.08, color=c, zorder=3.1))
             amount = sum(a.amount for a in ch_acts)
             txt = f"{fmt_date(s)} → {fmt_date(e - timedelta(days=1))}  ·  {currency_formatter(amount)}"
             room_right = mdates.date2num(t1) - xe

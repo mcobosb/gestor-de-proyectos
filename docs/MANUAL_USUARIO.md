@@ -850,6 +850,12 @@ En **Parámetros**, revisa la fecha de inicio, horas por jornada, escala, modali
 del plan y festivos. Los festivos iniciales son orientativos: comprueba los del
 municipio y los del periodo real de la obra.
 
+Para programar **por fases**, pulsa **Configurar fases de obra…** en
+**Parámetros** y añade las fases en orden. Un desfase de 0 inicia la fase
+después de la anterior, uno positivo deja días laborables de pausa y uno
+negativo permite el solape. No puede adelantarse al inicio de la fase anterior.
+Las fases vacías no añaden plazo.
+
 En **Secuencia y plan de trabajo**:
 
 - Define equipos o una duración manual cuando sea necesario.
@@ -859,6 +865,14 @@ En **Secuencia y plan de trabajo**:
 - Marca las actividades que deban abarcar toda la obra.
 - El encadenado automático enlaza las actividades en secuencia.
 - Genera el diagrama de Gantt y guarda su PNG o PDF.
+
+En la columna **Reparto por fases**, asigna a cada partida porcentajes que sumen
+100 %. Si no indicas reparto, se ejecuta en la primera fase. Las actividades de
+**Toda la obra** no se reparten. La duración se calcula para la medición de cada
+tramo; si has fijado una duración manual, se reparte en días enteros con al
+menos un día por tramo. Las relaciones entre actividades se aplican dentro de
+cada fase, y dos tramos de la misma partida nunca se solapan. El Gantt detallado
+muestra un tramo por fase, y Certificaciones no imputa avance en las pausas.
 
 Revisa que la secuencia sea coherente y no tenga dependencias circulares.
 El botón del disquete guarda la planificación mediante el proyecto.

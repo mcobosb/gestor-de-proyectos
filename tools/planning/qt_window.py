@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -35,11 +37,14 @@ from tools._shared.reference_pill import add_reference_pill
 from tools._shared.scheduling import (
     RELATIONS,
     PlanParams,
+    PlanPhase,
+    activity_segments,
     apply_saved_plan_state,
     build_activities,
     chain_sequence,
     parse_date,
     schedule,
+    validate_phase_shares,
 )
 from .reports import write_planning_report
 
@@ -54,6 +59,7 @@ class PlanningWindowQt(QDialog):
         10: "pred",
         11: "relation",
         12: "lag",
+        15: "phases",
     }
 
     def __init__(self, app) -> None:
@@ -106,6 +112,9 @@ class PlanningWindowQt(QDialog):
         form.addRow("Escala del Gantt (1 = día, 7 = semana)", self.scale)
         form.addRow("Detalle de la figura", self.detail)
         layout.addLayout(form)
+        phases = QPushButton("Configurar fases de obra…")
+        phases.clicked.connect(self.edit_phases)
+        layout.addWidget(phases)
         heading = QLabel("Festivos (no laborables)")
         heading.setStyleSheet("font-weight: 600;")
         layout.addWidget(heading)
@@ -157,13 +166,13 @@ class PlanningWindowQt(QDialog):
         layout.addLayout(actions)
         layout.addWidget(QLabel(
             "Doble clic en equipos, duración, continuidad, predecesora, "
-            "tipo o desfase para editarlos."
+            "tipo, desfase o reparto por fases para editarlos."
         ))
-        self.table = QTableWidget(0, 15)
+        self.table = QTableWidget(0, 16)
         self.table.setHorizontalHeaderLabels((
             "ID", "Capítulo", "Código", "Resumen", "Medición",
             "Rend. (h/ud)", "Equipos", "Duración", "Dur. manual",
-            "Toda la obra", "Pred.", "Tipo", "Desfase", "Inicio", "Fin",
+            "Toda la obra", "Pred.", "Tipo", "Desfase", "Inicio", "Fin", "Reparto por fases",
         ))
         self.table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
@@ -191,6 +200,7 @@ class PlanningWindowQt(QDialog):
                     {"date": day.isoformat(), "description": description}
                     for day, description in self.params.holidays
                 ],
+                "phases": [{"name": phase.name, "lag": phase.lag} for phase in self.params.phases],
             },
             "activities": [
                 {
@@ -202,6 +212,7 @@ class PlanningWindowQt(QDialog):
                     "pred": activity.pred,
                     "relation": activity.relation,
                     "lag": activity.lag,
+                    "phase_shares": {str(index): percent for index, percent in activity.phase_shares.items()},
                 }
                 for activity in self.activities
             ],
@@ -293,6 +304,133 @@ class PlanningWindowQt(QDialog):
             "Actividades encadenadas una tras otra (fin-comienzo)."
         )
 
+    def edit_phases(self) -> None:
+        """Edita la lista común de fases sin perder los repartos ya asignados."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Fases de obra")
+        dialog.resize(605, 340)
+        layout = QVBoxLayout(dialog)
+        help_text = QLabel(
+            "Desfase en días laborables respecto al final de la fase anterior: "
+            "0 para empezar después, positivo para una pausa, negativo para solapar."
+        )
+        help_text.setWordWrap(True)
+        layout.addWidget(help_text)
+        table = QTableWidget(0, 2)
+        table.setHorizontalHeaderLabels(("Nombre de la fase", "Desfase"))
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        layout.addWidget(table)
+        indexes = list(range(len(self.params.phases)))
+        assigned = {index for activity in self.activities for index in activity.phase_shares}
+
+        def append(name: str, lag: int) -> None:
+            """Crea una fila editable al final de la lista."""
+            row = table.rowCount()
+            table.insertRow(row)
+            table.setItem(row, 0, QTableWidgetItem(name))
+            table.setItem(row, 1, QTableWidgetItem(str(lag)))
+
+        for phase in self.params.phases:
+            append(phase.name, phase.lag)
+
+        def add() -> None:
+            """Añade una fase consecutiva y abre la edición de su nombre."""
+            indexes.append(-1)
+            append("", 0)
+            table.editItem(table.item(table.rowCount() - 1, 0))
+
+        def remove() -> None:
+            """Evita retirar fases que todavía contienen porcentajes explícitos."""
+            row = table.currentRow()
+            if row < 0:
+                return
+            if indexes[row] in assigned:
+                QMessageBox.warning(dialog, "Fase en uso", "Retira primero los repartos asignados a esta fase.")
+                return
+            indexes.pop(row)
+            table.removeRow(row)
+            if row == 0 and table.rowCount():
+                table.item(0, 1).setText("0")
+
+        actions = QHBoxLayout()
+        for label, slot in (("Añadir fase", add), ("Eliminar fase", remove)):
+            button = QPushButton(label)
+            button.clicked.connect(slot)
+            actions.addWidget(button)
+        layout.addLayout(actions)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        phases: list[PlanPhase] = []
+
+        def accept() -> None:
+            """Valida nombres únicos y desfases antes de aceptar los cambios."""
+            phases.clear()
+            try:
+                for row in range(table.rowCount()):
+                    name = table.item(row, 0).text().strip()
+                    if not name or any(phase.name.casefold() == name.casefold() for phase in phases):
+                        raise ValueError("Cada fase debe tener un nombre distinto y no vacío.")
+                    lag = int(table.item(row, 1).text())
+                    if not -3650 <= lag <= 3650 or (row == 0 and lag):
+                        raise ValueError("Usa desfases entre −3650 y 3650 días. La primera fase debe tener 0.")
+                    phases.append(PlanPhase(name, lag))
+            except ValueError as exc:
+                QMessageBox.warning(dialog, "Fase no válida", str(exc))
+                return
+            dialog.accept()
+
+        buttons.accepted.connect(accept)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            index_map = {old: new for new, old in enumerate(indexes) if old >= 0}
+            for activity in self.activities:
+                activity.phase_shares = {index_map[index]: value for index, value in activity.phase_shares.items()}
+            self.params.phases = phases
+            self.recalculate()
+
+    def edit_phase_shares(self, activity) -> None:
+        """Edita el porcentaje de medición que se ejecuta en cada fase."""
+        if not self.params.phases or activity.continuous:
+            QMessageBox.information(
+                self, "Reparto por fases",
+                "Configura primero las fases en Parámetros. Las partidas de toda la obra no se reparten.",
+            )
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"{activity.code} — Reparto por fases")
+        layout = QVBoxLayout(dialog)
+        label = QLabel("Reparte el 100 % de la medición. Todo a 0 % usa la primera fase.")
+        layout.addWidget(label)
+        form = QFormLayout()
+        layout.addLayout(form)
+        inputs = []
+        for index, phase in enumerate(self.params.phases):
+            widget = QDoubleSpinBox()
+            widget.setRange(0, 100)
+            widget.setSuffix(" %")
+            widget.setValue(activity.phase_shares.get(index, 0))
+            form.addRow(phase.name, widget)
+            inputs.append(widget)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        def accept() -> None:
+            """Guarda exclusivamente repartos completos o el valor automático."""
+            shares = {index: widget.value() for index, widget in enumerate(inputs) if widget.value()}
+            try:
+                validate_phase_shares(shares, len(inputs))
+            except ValueError as exc:
+                QMessageBox.warning(dialog, "Reparto no válido", str(exc))
+                return
+            activity.phase_shares = shares
+            dialog.accept()
+
+        buttons.accepted.connect(accept)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.recalculate()
+
     def recalculate(self) -> None:
         """Programa fechas, repinta tabla y publica el estado."""
         schedule(self.activities, self.params)
@@ -322,6 +460,10 @@ class PlanningWindowQt(QDialog):
                 activity.lag,
                 f"{activity.start_date:%d/%m/%Y}" if activity.start_date else "",
                 f"{activity.end_date:%d/%m/%Y}" if activity.end_date else "",
+                " · ".join(f"{self.params.phases[index].name}: {percent:g} %"
+                           for index, percent in sorted(activity.phase_shares.items()))
+                if activity.phase_shares and not activity.continuous else
+                self.params.phases[0].name if self.params.phases and not activity.continuous else "",
             )
             for column, value in enumerate(values):
                 self.table.setItem(
@@ -351,6 +493,9 @@ class PlanningWindowQt(QDialog):
         if key is None:
             return
         activity = self.activities[row]
+        if key == "phases":
+            self.edit_phase_shares(activity)
+            return
         current = {
             "teams": str(activity.teams),
             "manual": str(activity.manual_duration or ""),
@@ -428,7 +573,7 @@ class PlanningWindowQt(QDialog):
                 id=activity.id,
                 chapter=activity.chapter,
                 code=activity.code,
-                summary=activity.summary,
+                summary=f"[{activity.phase_name}] {activity.summary}" if activity.phase_name else activity.summary,
                 unit=activity.unit,
                 quantity=activity.quantity,
                 amount=activity.amount,
@@ -436,8 +581,9 @@ class PlanningWindowQt(QDialog):
                 start=activity.start_date,
                 end=activity.end_date,
                 continuous=activity.continuous,
+                phased=bool(activity.phase_name),
             )
-            for activity in self.activities
+            for activity in activity_segments(self.activities)
             if activity.start_date and activity.end_date
         ]
         names = {

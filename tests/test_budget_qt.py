@@ -907,6 +907,83 @@ class BudgetQtWindowTests(unittest.TestCase):
             window.close()
             self.application.processEvents()
 
+    def test_planning_phases_keep_export_and_monthly_progress_split(self) -> None:
+        """Conserva el reparto al guardar y no imputa avance en el mes de pausa."""
+        from datetime import date
+        from xml.etree import ElementTree as ET
+        from zipfile import ZipFile
+
+        from pypdf import PdfReader
+        from tools.certifications import economic_months, planned_monthly_amounts
+        from tools.planning.reports import write_planning_report
+
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            self.addCleanup(QCoreApplication.sendPostedEvents, None, QEvent.Type.DeferredDelete)
+            self.addCleanup(window.deleteLater)
+            self.addCleanup(window.close)
+            window.budget_items = [ProjectItem("P1", "01#", "m²", "Pavimento", 100, 10, rendimiento=0.8)]
+            window.planning_state = {
+                "params": {"start": "2027-01-04", "holidays": [], "phases": [
+                    {"name": "Tramo norte"}, {"name": "Tramo sur", "lag": 40},
+                ]},
+                "activities": [{"chapter": "01#", "code": "P1", "phase_shares": {"0": 40, "1": 60}}],
+            }
+            tool = PlanningWindowQt(window)
+            activity = tool.activities[0]
+            self.assertEqual(tool.table.rowCount(), 1)
+            self.assertEqual(tool.to_state()["activities"][0]["phase_shares"], {"0": 40, "1": 60})
+            self.assertEqual([(segment.quantity, segment.duration) for segment in activity.segments], [(40, 4), (60, 6)])
+            self.assertEqual(
+                [segment.start_date for segment in activity.segments],
+                [date(2027, 1, 4), date(2027, 3, 5)],
+            )
+            self.assertEqual(planned_monthly_amounts(
+                tool.activities, tool.params, economic_months(tool.params.start, 3),
+            ), [[400, 0, 600]])
+            for output_format in ("pdf", "odt"):
+                target = Path(directory) / f"plan.{output_format}"
+                settings = ReportSettings(output_format=output_format)
+                write_planning_report(tool.activities, tool.params, target, settings, "Pavimentación", str)
+                if output_format == "pdf":
+                    text = " ".join(page.extract_text() for page in PdfReader(target).pages)
+                else:
+                    with ZipFile(target) as archive:
+                        text = " ".join(ET.fromstring(archive.read("content.xml")).itertext())
+                self.assertIn("[Tramo norte]", text)
+                self.assertIn("[Tramo sur]", text)
+            with patch("tools.planning.qt_window.tempfile.gettempdir", return_value=directory):
+                png, pdf = tool._generate_figure()
+                self.assertTrue(png.is_file())
+                self.assertTrue(pdf.is_file())
+            window.is_dirty = False
+
+    def test_overlapping_phases_do_not_overlap_segments_of_one_activity(self) -> None:
+        """Adelanta la siguiente fase sin programar dos veces a la vez la misma partida."""
+        from datetime import date
+        from tools._shared.scheduling import PlanActivity, PlanParams, PlanPhase, schedule, validate_phase_shares
+
+        items = [
+            PlanActivity(1, "01#", "", "A", "", "m", 100, 1000, 0.8, phase_shares={0: 40, 1: 60}),
+            PlanActivity(2, "01#", "", "B", "", "m", 80, 800, 1, phase_shares={0: 100}),
+            PlanActivity(3, "01#", "", "C", "", "m", 8, 80, 1, phase_shares={1: 100}),
+            PlanActivity(4, "02#", "", "D", "", "ud", 1, 30, 0, continuous=True),
+        ]
+        params = PlanParams(start=date(2027, 1, 4), holidays=[], phases=[PlanPhase("A"), PlanPhase("B", -8)])
+        schedule(items, params)
+        first, second = items[0].segments
+        self.assertEqual(first.finish_offset, second.start_offset)
+        self.assertEqual(items[2].start_offset, 2)
+        self.assertLess(items[2].start_offset, items[1].finish_offset)
+        self.assertEqual(items[3].finish_offset, 10)
+        params.phases[1] = PlanPhase("B")
+        schedule(items, params)
+        self.assertEqual(items[2].start_offset, items[1].finish_offset)
+        with self.assertRaisesRegex(ValueError, "sumar 100"):
+            validate_phase_shares({0: 40, 1: 50}, 2)
+
     def test_invoicing_qt_preserves_matrix_assignments_and_review_lines(self) -> None:
         """Migra registro, visor, matriz y asignaciones persistentes."""
         with tempfile.TemporaryDirectory() as directory, patch(
