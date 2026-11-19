@@ -249,7 +249,7 @@ class _OdtReport:
         self.paragraph("", style=name)
 
     def table_caption(self, title: str, *, number: int | str | None = None,
-                      body: str = "ReportBody", caption: str = "") -> None:
+                      body: str = "ReportBody", caption: str = "", include_reference: bool = True) -> None:
         """Añade la referencia y el título de una tabla sin separarlos de sus datos."""
         if number is None:
             self.data_table_number += 1
@@ -269,7 +269,7 @@ class _OdtReport:
             })
             if bold and self.table_references:
                 ET.SubElement(style, _tag("style:text-properties"), {_tag("fo:font-weight"): "bold"})
-        if self.table_references:
+        if self.table_references and include_reference:
             self.paragraph(reference, reference_style)
         self.paragraph(label, caption or "DataTableCaption")
 
@@ -279,6 +279,7 @@ class _OdtReport:
         ratios=(), right_columns=(), chapter: bool = False, keep_next: bool = False,
         highlighted_rows=(), cell_style="", write_cell=None, caption: str = "",
         width_fraction: float = 1.0, tinted_rows: bool = False, centered: bool = False,
+        center_columns: tuple[int, ...] = (), infer_right_columns: bool = True,
     ) -> None:
         """Añade una tabla ODF con estilos semánticos para cabecera, texto y énfasis."""
         column_count = max(
@@ -337,8 +338,10 @@ class _OdtReport:
             "MEDICIÓN TOTAL",
         }
         numeric = set(right_columns) | {
-            index for index, label in enumerate(headers) if label in numeric_headers
+            index for index, label in enumerate(headers)
+            if infer_right_columns and label in numeric_headers
         }
+        centered_styles = set()
 
         def append_row(values, *, header=False, bold=False, highlighted=False, alternate=False):
             """Escribe una fila y rellena las celdas que falten."""
@@ -367,7 +370,21 @@ class _OdtReport:
                 )
                 if not header and bold_text_style in {"TableItemTitle", "AuxiliaryTitle"} and index != 2:
                     text_style = "TableTotal"
-                if index in numeric:
+                if index in center_columns:
+                    centered_style = text_style + "Center"
+                    if centered_style not in centered_styles and not any(
+                        style.get(_tag("style:name")) == centered_style for style in self.automatic_styles
+                    ):
+                        style = ET.SubElement(self.automatic_styles, _tag("style:style"), {
+                            _tag("style:name"): centered_style, _tag("style:family"): "paragraph",
+                            _tag("style:parent-style-name"): text_style,
+                        })
+                        ET.SubElement(style, _tag("style:paragraph-properties"), {
+                            _tag("fo:text-align"): "center",
+                        })
+                    centered_styles.add(centered_style)
+                    text_style = centered_style
+                elif index in numeric:
                     text_style += "Right"
                 paragraph = ET.SubElement(cell, _tag("text:p"), {
                     _tag("text:style-name"): text_style,
@@ -639,7 +656,9 @@ class _OdtReport:
 
     def _master_page(self, master_styles, styles, name: str, title: str) -> None:
         """Repite logo, título, proyecto y pie numerado con la geometría del PDF."""
-        from report_layout import replace_footer_fields, replace_template_fields, uppercase_footer
+        from report_layout import (
+            _uppercase_footer_text, replace_footer_fields, replace_template_fields, uppercase_footer,
+        )
 
         master_page = ET.SubElement(master_styles, _tag("style:master-page"), {
             _tag("style:name"): name,
@@ -698,7 +717,7 @@ class _OdtReport:
             paragraph = ET.SubElement(footer, _tag("text:p"), {
                 _tag("text:style-name"): "FooterText",
             })
-            ET.SubElement(paragraph, _tag("text:tab")).tail = self.footer.upper()
+            ET.SubElement(paragraph, _tag("text:tab")).tail = _uppercase_footer_text(self.footer)
             ET.SubElement(paragraph, _tag("text:tab"))
             ET.SubElement(paragraph, _tag("text:page-number"), {
                 _tag("text:select-page"): "current",

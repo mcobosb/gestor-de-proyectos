@@ -604,8 +604,9 @@ def uppercase_footer(section) -> None:
 
 
 def _uppercase_footer_text(value: str) -> str:
-    """Respeta los marcadores de plantilla que no se hayan sustituido."""
-    return "".join(part if index % 2 else part.upper() for index, part in enumerate(
+    """Conserva los marcadores pendientes y la grafía de RCDs."""
+    return "".join(part if index % 2 else re.sub(r"\bRCDS\b", "RCDs", part.upper())
+                   for index, part in enumerate(
         re.split(r"(\{\{[^{}]+\}\}|\{no_p[aá]gina\})", value),
     ))
 
@@ -808,7 +809,7 @@ class ReportLayout:
         return self.text(value, self.description_style)
 
     def table_caption(self, story, title: str, *, number: int | str | None = None,
-                      body=None, caption=None) -> None:
+                      body=None, caption=None, include_reference: bool = True) -> None:
         """Añade la referencia y el título de una tabla, unidos a su primera fila."""
         from reportlab.lib.styles import ParagraphStyle
 
@@ -816,7 +817,7 @@ class ReportLayout:
             self.data_table_number += 1
             number = self.data_table_number
         reference, label = table_labels(number, title + self.table_caption_suffix)
-        if self.table_references:
+        if self.table_references and include_reference:
             story.append(self.text(reference, ParagraphStyle(
                 "TableReference", parent=body or self.normal, keepWithNext=True, spaceBefore=5,
             )))
@@ -963,10 +964,13 @@ class ReportLayout:
     def table(
         self, headers, rows, ratios, *, bold_rows=(), background=None, rule=False,
         leaders=(), highlighted_rows=(), blue_header=False, tinted_rows=False,
+        right_columns: tuple[int, ...] | None = None, width_fraction: float = 1.0,
+        centered: bool = False, center_columns: tuple[int, ...] = (),
     ):
         """Compone columnas fijas con alineación numérica, negritas y reglas opcionales."""
         from decimal import Decimal
         from reportlab.lib import colors
+        from reportlab.lib.enums import TA_CENTER
         from reportlab.lib.styles import ParagraphStyle
         from reportlab.platypus import Table, TableStyle
         from bc3_gui import fmt_number
@@ -977,14 +981,20 @@ class ReportLayout:
             "MEDICIÓN TOTAL",
             "PLAN", "CERTIFICADO", "DESVIACIÓN",
         }
-        numeric = {i for i, h in enumerate(headers) if h in numeric_headers}
-        header_styles = (self.bold, self.bold_right)
+        numeric = (set(right_columns) if right_columns is not None
+                   else {i for i, h in enumerate(headers) if h in numeric_headers})
+        if center_columns:
+            normal_center = ParagraphStyle("TableCentered", parent=self.normal, alignment=TA_CENTER)
+            bold_center = ParagraphStyle("TableBoldCentered", parent=self.bold, alignment=TA_CENTER)
+        else:
+            normal_center, bold_center = self.normal, self.bold
+        header_styles = (self.bold, self.bold_right, bold_center)
         if blue_header:
             header_styles = tuple(
                 ParagraphStyle(f"BlueTableHeader{index}", parent=style, textColor=colors.white)
                 for index, style in enumerate(header_styles)
             )
-        data = [[self.text(h, header_styles[i in numeric], role="table_header")
+        data = [[self.text(h, header_styles[2 if i in center_columns else int(i in numeric)], role="table_header")
                  for i, h in enumerate(headers)]] if headers else []
         bold_rows = set(bold_rows)
         for row_index, row in enumerate(rows):
@@ -993,20 +1003,23 @@ class ReportLayout:
                 if hasattr(value, "wrap"):
                     cells.append(value)
                     continue
-                is_number = isinstance(value, Decimal) or column in numeric or bool(
-                    re.fullmatch(r"-?\d[\d.,]*", str(value))
-                )
+                is_number = column in numeric or (right_columns is None and (
+                    isinstance(value, Decimal) or bool(re.fullmatch(r"-?\d[\d.,]*", str(value)))
+                ))
                 strong = row_index in bold_rows
-                style = (self.bold_right if strong else self.right) if is_number else (
-                    self.bold if strong else self.normal
-                )
+                if column in center_columns:
+                    style = bold_center if strong else normal_center
+                elif is_number:
+                    style = self.bold_right if strong else self.right
+                else:
+                    style = self.bold if strong else self.normal
                 render = self.leader if column in leaders and str(value) else self.text
                 cells.append(render(fmt_number(float(value)) if isinstance(value, Decimal) else value,
                                     style, role="emphasis" if strong else "table"))
             data.append(cells)
         block = Table(
-            data, colWidths=[self.content_width * r / sum(ratios) for r in ratios],
-            repeatRows=1 if headers else 0, splitInRow=1, hAlign="LEFT",
+            data, colWidths=[self.content_width * width_fraction * r / sum(ratios) for r in ratios],
+            repeatRows=1 if headers else 0, splitInRow=1, hAlign="CENTER" if centered else "LEFT",
         )
         style = [
             ("VALIGN", (0, 0), (-1, -1), "TOP"),

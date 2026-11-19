@@ -309,6 +309,7 @@ class PriceJustificationWindowQt(QDialog):
         bottom.addWidget(close)
         layout.addLayout(bottom)
         self._loading = False
+        self.app.budget_refreshed.connect(self.refresh_general_info)
         self.refresh_general_info()
 
     def _entry(self, form: QFormLayout, key: str, label: str) -> None:
@@ -376,7 +377,15 @@ class PriceJustificationWindowQt(QDialog):
         )
         costs = calculate(self.app, self._state.get("indirect_rows", default_rows()))
         self.costs_summary.setText(indirect_summary(costs))
-        self.apply_k_button.setEnabled(costs.rate is not None)
+        self.apply_k_button.setEnabled(costs.rate is not None and not self._rate_applied(costs.rate))
+
+    def _rate_applied(self, rate: Decimal) -> bool:
+        """Comprueba el K guardado y su aplicación a todas las partidas actuales."""
+        value = float(rounded_rate(rate))
+        return self.app.report_settings.indirect_costs == value and all(
+            item.indirect_costs == value and (value == 0 or item.direct_unit_price is not None)
+            for item in self.app.budget_items
+        )
 
     def apply_indirect_costs(self) -> None:
         """Guarda el K calculado por la misma vía que Archivo → Configuración."""
@@ -386,6 +395,8 @@ class PriceJustificationWindowQt(QDialog):
             rate = costs.rate
             if rate is None:
                 raise ValueError("No se puede aplicar K: el coste directo total del presupuesto no es positivo.")
+            if self._rate_applied(rate):
+                return
         except ValueError as exc:
             QMessageBox.warning(self, TITLE, str(exc))
             self.refresh_general_info()

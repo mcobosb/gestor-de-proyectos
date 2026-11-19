@@ -456,7 +456,9 @@ def transfer_demolition(app: BudgetApp, state: RcdState,
             item.measurement_detail = ""
             item.recalculate_measurement()
     if created:
-        app.budget_items.insert(app._end_of_chapter(target.chapter), target)
+        position = max((index + 1 for index, item in enumerate(app.budget_items)
+                        if item.chapter == target.chapter), default=len(app.budget_items))
+        app.budget_items.insert(position, target)
         app._ensure_chapter(target.chapter)
     state.demolition = checked
     for key, *_ in WASTES:
@@ -465,7 +467,8 @@ def transfer_demolition(app: BudgetApp, state: RcdState,
         state.evidence[key] = evidence
         if any(row.included and row.waste_key == key for row in checked):
             state.selected[key] = True
-    app._select_budget_item(target)
+    app.refresh_budget_tree()
+    app._select_budget_item(next(index for index, item in enumerate(app.budget_items) if item is target))
     return created
 
 
@@ -583,10 +586,20 @@ class RcdBudgetLine:
     cost: Decimal
 
 
-def budget_calculation(state: RcdState) -> tuple[list[RcdBudgetLine], list[list[str]]]:
-    """Calcula magnitudes económicas sin convertir los números en texto de presentación."""
-    from budget_core import fmt_number
+@dataclass(frozen=True)
+class RcdGroupEstimate:
+    """Magnitudes sin redondear para el cálculo y la comparación de umbrales."""
 
+    key: str
+    label: str
+    enabled: bool
+    weight: Decimal
+    density: Decimal
+    volume: Decimal
+
+
+def budget_calculation(state: RcdState) -> tuple[list[RcdBudgetLine], list[RcdGroupEstimate]]:
+    """Calcula magnitudes económicas y físicas sin redondeos de presentación."""
     state = RcdState.from_dict(state.to_dict())
     values = {}
     for key, label, _ in INPUTS:
@@ -620,8 +633,7 @@ def budget_calculation(state: RcdState) -> tuple[list[RcdBudgetLine], list[list[
             volume = measured[key] if enabled else Decimal(0)
             weight = volume * density
         volumes[category] += volume
-        details.append([label, "X" if enabled else "", fmt_number(float(weight)),
-                        fmt_number(float(density)), fmt_number(float(volume))])
+        details.append(RcdGroupEstimate(key, label, enabled, weight, density, volume))
     budget = values["budget"]
 
     costs = {}
@@ -649,10 +661,16 @@ def budget_calculation(state: RcdState) -> tuple[list[RcdBudgetLine], list[list[
 
 def calculate(state: RcdState) -> tuple[list[tuple[str, list[list[str]]]], list[list[str]]]:
     """Presenta los mismos importes del presupuesto en la vista previa y los informes."""
+    state = RcdState.from_dict(state.to_dict())
+    return calculation_rows(state, *budget_calculation(state))
+
+
+def calculation_rows(
+    state: RcdState, lines: list[RcdBudgetLine], groups: list[RcdGroupEstimate],
+) -> tuple[list[tuple[str, list[list[str]]]], list[list[str]]]:
+    """Formatea importes y estimaciones ya calculados para tablas e informes."""
     from budget_core import fmt_number
 
-    state = RcdState.from_dict(state.to_dict())
-    lines, details = budget_calculation(state)
     budget = Decimal(str(state.inputs["budget"]))
 
     def render(line: RcdBudgetLine) -> list[str]:
@@ -669,6 +687,11 @@ def calculate(state: RcdState) -> tuple[list[tuple[str, list[list[str]]]], list[
         ("A2. RCDs Nivel II", rows[1:4]),
         ("B. Resto de costes de gestión", rows[4:]),
         ("TOTAL PRESUPUESTO PLAN GESTIÓN RCDs", [render(total)]),
+    ]
+    details = [
+        [group.label, "X" if group.enabled else "", fmt_number(float(group.weight)),
+         fmt_number(float(group.density)), fmt_number(float(group.volume))]
+        for group in groups
     ]
     return sections, details
 

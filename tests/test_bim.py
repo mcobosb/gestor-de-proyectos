@@ -244,6 +244,17 @@ class BimTests(unittest.TestCase):
                 self.assertEqual(row.text(1), entry.code)
                 self.assertIn("sin cantidad IFC compatible", row.text(3))
                 self.assertIn("1 sin resolver", panel.summary.text())
+                self.assertFalse(panel.insert_button.isEnabled())
+                key = scene.elements[wall_id].key
+                proposal = translation.Proposal(entry, 1.5, "Revisado")
+                panel._set_proposal(key, proposal)
+                panel._update_summary()
+                self.assertTrue(panel.insert_button.isEnabled())
+                added, errors = incorporate(window, [(panel.elements[key], proposal)])
+                self.assertEqual(added, {key})
+                self.assertFalse(errors)
+                self.assertFalse(panel.insert_button.isEnabled())
+                self.assertEqual(row.text(3), "Ya incorporado")
                 viewer.close()
                 application.processEvents()
             window.is_dirty = False

@@ -19,6 +19,8 @@ _BUDGET_INSERT_LABELS = {
     "guardar rcds en el proyecto",
     "aceptar y crear capitulo",
     "incorporar mediciones al presupuesto",
+    "llevar mediciones de demolicion a transporte a vertedero",
+    "copiar mediciones y usar volumenes en rcds",
 }
 
 _ICON_RULES = {
@@ -335,15 +337,36 @@ def _stylesheet(theme: str) -> str:
     }}
     QTreeWidget#budgetTree QHeaderView::section,
     QTableWidget#rcdPreviewTable QHeaderView::section,
+    QTableWidget#rcdDemolitionTable QHeaderView::section,
     QTableWidget#priceIndirectTable QHeaderView::section {{
         background: {blue_tint};
         color: {blue_text};
     }}
     QTreeWidget#referenceTree QHeaderView::section,
+    QTableWidget#rcdLinksTable QHeaderView::section,
     QTableWidget#rcdWasteTable QHeaderView::section {{
         background: {teal_tint};
         color: {teal_text};
         border-bottom-color: {teal_border};
+    }}
+    QTableWidget#rcdPreviewTable, QTableWidget#rcdDemolitionTable {{
+        alternate-background-color: {blue_tint};
+    }}
+    QTableWidget#rcdWasteTable, QTableWidget#rcdLinksTable {{
+        alternate-background-color: {teal_tint};
+    }}
+    QGroupBox[rcdInputs="true"] {{
+        border: 1px solid {teal_border};
+        border-radius: 7px;
+        margin-top: 12px;
+        padding: 8px;
+    }}
+    QGroupBox[rcdInputs="true"]::title {{
+        subcontrol-origin: margin;
+        left: 10px;
+        padding: 0 5px;
+        color: {teal_text};
+        font-weight: 600;
     }}
     QTreeWidget::item, QTableWidget::item, QListWidget::item {{
         padding: 4px;

@@ -471,6 +471,20 @@ En RCDs, **Editar documentación del estudio…** abre ese mismo editor para los
 ocho documentos base. Guarda los cambios antes de exportar. Las tablas del
 estudio comparten las cabeceras azules, las filas alternas y los bordes suaves
 de Seguridad y Salud y Justificación de precios, tanto en PDF como en ODT.
+La **Tabla 1** cierra **1.1. Antecedentes** y deja en blanco los datos generales
+sin rellenar. **1.2. Descripción de la actuación** reutiliza la descripción
+guardada en Seguridad y Salud o, en su defecto, en el PPTP. El pie toma el número
+de anejo de Estructura documental y las citas normativas enlazan con el BOE o
+EUR-Lex. El estudio conserva los títulos numerados de las tablas sin añadir
+párrafos de «Véase la Tabla…».
+En la **Tabla 2**, cada unidad de obra aparece en su propia fila, sin repetir
+el código LER ni la descripción del residuo dentro del mismo grupo. Las tablas
+4, 5 y 6 se centran y ocupan el 80 % del ancho útil. La tabla de umbrales
+indica «Sí» solo cuando el peso estimado de la fracción supera el límite;
+no sustituye la comprobación de las obligaciones de separación.
+Los títulos de RCDs siguen la jerarquía estándar: 16 pt para el documento,
+14 pt para las secciones y 12 pt para las subsecciones de primer nivel.
+**Estilos de documentos** permite cambiarlos por separado en cada proyecto.
 
 En los documentos generados, las viñetas y las listas numeradas comparten
 tabuladores y sangría francesa. Los pies se escriben en mayúsculas sin perder
@@ -580,6 +594,8 @@ ese grupo parte directamente del volumen de excavación.
 Pulsa **Aceptar y revisar residuos** para pasar al segundo paso en la misma
 ventana. **Datos de cálculo** permite volver al formulario. Los cambios de ese
 formulario solo se aplican cuando se aceptan.
+Los textos del estudio se editan en **Editar documentación del estudio…**,
+no en el formulario de cálculo.
 
 ### Copiar las demoliciones al transporte a vertedero
 
@@ -602,9 +618,8 @@ partida de origen, cantidad, material/LER y factor de conversión:
 - Elige la partida de transporte. Si hay varias, debes seleccionar una; el
   destino debe estar medido en m³. También puedes crear una partida nueva.
 - Se mantienen las líneas manuales y los precios, rendimientos y descompuestos
-  existentes. Al repetir, se sustituyen las líneas identificadas con
-  `[RCD demolición]`, sin duplicarlas. Si cambias de destino, las líneas
-  generadas se retiran del transporte anterior.
+  existentes. El botón **+** queda desactivado mientras el presupuesto conserve
+  líneas identificadas con `[RCD demolición]`.
 
 La partida automática tiene código único, unidad m³ y **precio inicial cero**.
 Su descripción y un aviso recuerdan que debes **revisar costes, rendimiento,
@@ -623,7 +638,8 @@ transporte: no se sobrescribe un presupuesto introducido manualmente.
 Las mediciones copiadas, sus conversiones y materiales se guardan con el
 proyecto y aparecen en los informes PDF/ODT. Las marcas X del segundo paso
 permiten excluir residuos del cálculo, pero no borran las líneas del transporte.
-Si cambian las demoliciones, repite la copia para actualizar sus cantidades.
+Para volver a importar las demoliciones, retira primero las líneas traspasadas
+del presupuesto.
 Cancelar la tabla de revisión no modifica el presupuesto.
 
 ### Paso 2. Revisar residuos y guardar
@@ -657,8 +673,11 @@ proyecto para persistirlas.
 
 El icono **+** indica que una herramienta incorpora datos al presupuesto
 (RCDs, Seguridad y Salud o mediciones BIM), no que guarda un archivo.
+La acción se desactiva si los datos ya están incorporados; en BIM, sigue
+disponible si quedan mediciones nuevas válidas. **Aplicar K al presupuesto**
+se vuelve a habilitar cuando hay un valor nuevo que aplicar.
 
-Al pulsar el **disquete** o **Ctrl+S dentro de RCDs**, se crea un capítulo nuevo
+Al pulsar **Guardar RCDs en el proyecto**, se crea un capítulo nuevo
 **Gestión de residuos** en el presupuesto y se guarda junto al proyecto:
 
 - **Nivel I**: tierras y pétreos de excavación.

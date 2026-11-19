@@ -13,7 +13,7 @@ import unicodedata
 import webbrowser
 from uuid import uuid4
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QResizeEvent
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
@@ -138,6 +138,8 @@ class _PanelTitle(QLabel):
 
 class BudgetMainWindow(QMainWindow):
     """Ventana principal Qt para editar proyectos de presupuesto."""
+
+    budget_refreshed = Signal()
 
     def __init__(self) -> None:
         """Inicializa el estado, los menús y los dos paneles de presupuesto."""
@@ -1088,6 +1090,7 @@ class BudgetMainWindow(QMainWindow):
         term = self.budget_search.text().strip().lower()
         if self.budget_resource_filter:
             self._refresh_budget_resources(term)
+            self.budget_refreshed.emit()
             return
         chapter_items: dict[str, QTreeWidgetItem] = {}
         total = 0.0
@@ -1170,6 +1173,7 @@ class BudgetMainWindow(QMainWindow):
             self.summary_label.setText(f"Total presupuesto: {self._format_currency(total)}")
         self._refresh_item_lock_icons()
         self._update_actions()
+        self.budget_refreshed.emit()
 
     def _refresh_budget_resources(self, term: str) -> None:
         """Lista recursos filtrados con capítulo y partida como contexto."""

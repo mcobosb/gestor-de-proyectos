@@ -390,7 +390,7 @@ class RcdReportTests(unittest.TestCase):
             text = " ".join(text.split())
             for value in (
                 "1. MEMORIA", "2. PLIEGO DE CONDICIONES", "3. PRESUPUESTO DE GESTIÓN",
-                "1.8. INSTALACIONES Y PLANOS", "500.000,25", "421.392,81",
+                "1.9. INSTALACIONES Y PLANOS", "500.000,25", "421.392,81",
                 "Entidad configurada", "Autor configurado", "EXP-RCD", "Lucena", "Córdoba",
                 "Decreto 73/2012", "Se conservarán los elementos desmontables aptos.",
                 "PENDIENTE DE CONCRETAR: Destinos", "no genera automáticamente esos planos",

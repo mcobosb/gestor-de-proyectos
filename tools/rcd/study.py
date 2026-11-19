@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
+from decimal import Decimal
 from html import escape
 from pathlib import Path
 import re
@@ -11,6 +12,8 @@ from xml.etree import ElementTree as ET
 
 from tools._library_editor import library_members, read_markdown
 from tools._library_markdown import document_markdown, text_blocks
+from tools.document_structure.catalog import RCD_NUMBER
+from document_styles import ROLES
 from tools._shared.document_layout import (
     add_odt_blue_table_cells, add_odt_blue_table_headers, add_odt_list_style,
     pdf_list_style, project_document_variables, split_list_item, style_odt_blue_table,
@@ -25,11 +28,30 @@ if TYPE_CHECKING:
 
 
 TITLE = "ESTUDIO DE GESTIÓN DE RESIDUOS DE CONSTRUCCIÓN Y DEMOLICIÓN"
+FOOTER_TITLE = f"ANEJO Nº {int(RCD_NUMBER)}. ESTUDIO DE GESTIÓN DE RCDs"
+FOOTER_CHAPTER = re.compile(r"\{\{cap[ií]tulo\}\}")
+DESCRIPTION_HEADING = "1.2. DESCRIPCIÓN DE LA ACTUACIÓN"
+DESCRIPTION_MARKER = "{{descripcion_actuacion}}"
+COMPACT_TABLE_WIDTH = 0.80
+LAW_URLS = {
+    "Ley 7/2022": "https://www.boe.es/eli/es/l/2022/04/08/7/con",
+    "Real Decreto 105/2008": "https://www.boe.es/eli/es/rd/2008/02/01/105/con",
+    "Real Decreto 553/2020": "https://www.boe.es/eli/es/rd/2020/06/02/553/con",
+    "Real Decreto 646/2020": "https://www.boe.es/eli/es/rd/2020/07/07/646/con",
+    "Real Decreto 396/2006": "https://www.boe.es/eli/es/rd/2006/03/31/396/con",
+    "Real Decreto 108/1991": "https://www.boe.es/eli/es/rd/1991/02/01/108/con",
+    "Orden APM/1007/2017": "https://www.boe.es/eli/es/o/2017/10/10/apm1007/con",
+    "Decisión 2000/532/CE": "https://eur-lex.europa.eu/eli/dec/2000/532/oj?locale=es",
+}
+LAW_URLS.update({name.replace("Real Decreto", "RD"): url
+                 for name, url in tuple(LAW_URLS.items()) if name.startswith("Real Decreto")})
+LAW_CITATION = re.compile(r"\b(" + "|".join(map(re.escape, LAW_URLS)) + r")(?![\w/])", re.IGNORECASE)
+LAW_URLS = {name.casefold(): url for name, url in LAW_URLS.items()}
 LIBRARY_PATH = Path(__file__).resolve().parent / "BIBLIOTECA.zip"
 DOCUMENTS = (
-    ("01_memoria.md", "1. Memoria y datos del proyecto"),
-    ("02_identificacion_estimacion.md", "1.1–1.2. Identificación y estimación"),
-    ("03_medidas_gestion.md", "1.3–1.8. Medidas y operaciones de gestión"),
+    ("01_memoria.md", "1. Memoria y antecedentes"),
+    ("02_identificacion_estimacion.md", "1.3–1.4. Identificación y estimación"),
+    ("03_medidas_gestion.md", "1.5–1.10. Medidas y operaciones de gestión"),
     ("04_obligaciones.md", "2.1. Obligaciones de los agentes"),
     ("05_prescripciones.md", "2.2. Prescripciones de gestión"),
     ("06_documentacion.md", "2.3. Documentación y trazabilidad"),
@@ -57,20 +79,22 @@ class StudyTable:
     rows: list[list[str]]
     ratios: list[float]
     bold_rows: tuple[int, ...] = ()
+    right_columns: tuple[int, ...] | None = None
+    center_columns: tuple[int, ...] = ()
 
 
 StudyBlock = tuple[int, str] | StudyTable
 
 
-def work_summary(app: BudgetApp) -> tuple[str, str] | None:
+def work_summary(app: BudgetApp) -> str | None:
     """Reutiliza el resumen guardado de Seguridad y Salud o, en su defecto, el del PPTP."""
-    for data, key, label in (
-        (app.safety_health_state, "resumen_actuacion", "Seguridad y Salud"),
-        (app.pptp_state.get("variables", {}), "bullet_capitulos_obra", "PPTP"),
+    for data, key in (
+        (app.safety_health_state, "resumen_actuacion"),
+        (app.pptp_state.get("variables", {}), "bullet_capitulos_obra"),
     ):
         value = data.get(key)
         if isinstance(value, str) and value.strip():
-            return value.strip(), label
+            return value.strip()
     return None
 
 
@@ -144,14 +168,16 @@ def study_tables(
 ) -> dict[str, list[StudyTable]]:
     """Reutiliza las filas del cálculo existente sin distribuir artificialmente cantidades por LER."""
     from budget_core import currency_label, fmt_number
-    from . import GROUPS, HEADERS, INPUTS, WASTES, calculate, number
+    from . import GROUPS, HEADERS, INPUTS, WASTES, budget_calculation, calculation_rows, number
 
-    sections, details = calculate(state)
-    values = study_variables(state, title, settings)
+    lines, groups = budget_calculation(state)
+    sections, details = calculation_rows(state, lines, groups)
+    weights = {group.key: group.weight for group in groups}
+    values = project_document_variables(title, settings)
     pem = (
         f"{fmt_number(number(project_pem, 'PEM de la obra'))} "
         f"{currency_label(settings.currency, settings.custom_currency)}"
-        if project_pem is not None else "[PENDIENTE DE CONFIRMAR EN EL PRESUPUESTO DEL PROYECTO]"
+        if project_pem is not None else ""
     )
     project_rows = [
         ["Proyecto", title], ["Emplazamiento", values["emplazamiento"]],
@@ -163,10 +189,17 @@ def study_tables(
         *([["Redactor del estudio", values["autor"]]] if settings.show_author else []),
         ["Expediente", values["expediente"]],
     ]
-    waste_rows = [
-        [code, description, "; ".join(state.evidence.get(key, [])) or "Selección manual"]
-        for key, _, code, description, _ in WASTES if state.selected[key]
-    ]
+    waste_rows = []
+    for key, _, code, description, _ in WASTES:
+        if not state.selected[key]:
+            continue
+        units: dict[str, str] = {}
+        for evidence in state.evidence.get(key, []):
+            unit = re.sub(r"\s*\[(?:texto, revisar|BCCA2023 → [^,\]]+, revisar)\]\s*$", "", evidence).strip()
+            if unit:
+                units.setdefault(unit.removesuffix(" [LER]"), unit)
+        for index, unit in enumerate(units.values() or ("Selección manual",)):
+            waste_rows.append(["", "", unit] if index else [code, description, unit])
     inputs = [
         [label, fmt_number(value, 4 if key == "volume_factor" else 2)]
         for key, label, _ in INPUTS if (value := state.inputs[key]) is not None
@@ -178,7 +211,8 @@ def study_tables(
         for row in state.demolition if row.included
     ]
     return {
-        "tabla_proyecto": [StudyTable("Datos del proyecto", ["Dato", "Descripción"], project_rows, [1.4, 4])],
+        "tabla_proyecto": [StudyTable("Datos del proyecto", ["Dato", "Descripción"], project_rows, [1.4, 4],
+                                      right_columns=(0,))],
         "tabla_residuos": [StudyTable(
             "Residuos seleccionados (revisión manual)",
             ["LER (modelo ODS)", "Residuo", "Procedencia"],
@@ -198,12 +232,13 @@ def study_tables(
         )] if demolition_rows else [],
         "tabla_separacion": [StudyTable(
             "Umbrales del artículo 5.5 del RD 105/2008 (referencia complementaria)",
-            ["Fracción", "Cantidad prevista que supera el umbral (t)"],
-            [[label, amount] for label, amount in (
-                ("Hormigón", "80"), ("Ladrillos, tejas y cerámicos", "40"),
-                ("Metales", "2"), ("Madera", "1"), ("Vidrio", "1"),
-                ("Plásticos", "0,5"), ("Papel y cartón", "0,5"),
-            )], [3, 2],
+            ["Fracción", "Umbral (t)", "¿Se supera?"],
+            [[label, str(limit).replace(".", ","), "Sí" if weights[key] > limit else "No"]
+             for key, label, limit in (
+                ("concrete", "Hormigón", 80), ("ceramics", "Ladrillos, tejas y cerámicos", 40),
+                ("metals", "Metales", 2), ("wood", "Madera", 1), ("glass", "Vidrio", 1),
+                ("plastic", "Plásticos", Decimal("0.5")), ("paper", "Papel y cartón", Decimal("0.5")),
+             )], [3, 1, 1], right_columns=(0,), center_columns=(1, 2),
         )],
         "tabla_presupuesto": [
             StudyTable(label, list(HEADERS), rows, [40, 15, 17, 14, 14],
@@ -229,6 +264,15 @@ def study_blocks(
         document_markdown(text).replace("\r\n", "\n")
         for _, text in load_documents(library_path)
     )
+    source = source.replace("## 1.2. Descripción de la actuación:", f"## {DESCRIPTION_HEADING}")
+    if DESCRIPTION_MARKER not in source:
+        # Las bibliotecas anteriores no tienen el epígrafe ni su marcador.
+        source = re.sub(r"^(## 1\.)([2-9])(\. )",
+                        lambda match: f"{match[1]}{int(match[2]) + 1}{match[3]}", source,
+                        flags=re.MULTILINE)
+        source = re.sub(r"^([ \t]*\{\{tabla_proyecto\}\}[ \t]*)$",
+                        rf"\1\n\n## {DESCRIPTION_HEADING}\n\n{DESCRIPTION_MARKER}", source,
+                        flags=re.MULTILINE)
     marker = r"^[ \t]*\{\{(tabla_[a-z_]+)\}\}[ \t]*$"
     counts = Counter(re.findall(marker, source, flags=re.MULTILINE))
     if set(counts) != set(tables) or any(count != 1 for count in counts.values()):
@@ -237,12 +281,6 @@ def study_blocks(
     for index, part in enumerate(re.split(marker, source, flags=re.MULTILINE)):
         if index % 2:
             blocks.extend(tables[part])
-            if part == "tabla_proyecto" and summary is not None:
-                text, model = summary
-                blocks.append((0, f"Descripción de la actuación (según {model}):"))
-                for line in text.splitlines():
-                    if line.strip():
-                        blocks.append((0, line.strip()))
             if part == "tabla_residuos" and app is not None:
                 blocks.append((0, ler_catalog.MATCH_NOTE))
                 if links:
@@ -254,10 +292,64 @@ def study_blocks(
                     blocks.append((0, "No se han encontrado vínculos por código exacto en el presupuesto."))
         else:
             for level, text in text_blocks(part):
+                if level == 0 and text == DESCRIPTION_MARKER:
+                    blocks.extend(text_blocks(summary or ""))
+                    continue
                 text = substitute(text, values)
                 if text.strip():
                     blocks.append((level, text))
     return blocks
+
+
+def _odt_law_links(paragraph: ET.Element, text: str) -> None:
+    """Inserta enlaces externos nativos conservando el texto y sus tabulaciones."""
+    from odt_reports import _tag
+
+    last = paragraph[-1] if len(paragraph) else None
+    for index, part in enumerate(LAW_CITATION.split(text)):
+        if index % 2:
+            last = ET.SubElement(paragraph, _tag("text:a"), {
+                _tag("xlink:href"): LAW_URLS[part.casefold()], _tag("xlink:type"): "simple",
+            })
+            last.text = part
+        elif last is not None:
+            last.tail = part
+        else:
+            paragraph.text = part
+
+
+def _odt_link_paragraph_spans(paragraph: ET.Element) -> None:
+    """Conserva los saltos de línea que aplica el escritor de párrafos ODT."""
+    from odt_reports import _tag
+
+    for span in paragraph.findall(_tag("text:span")):
+        if span.text and LAW_CITATION.search(span.text):
+            _odt_law_links(span, span.text)
+
+
+def _pdf_law_links(text: str) -> str:
+    """Escapa el texto y añade vínculos únicamente a las citas conocidas."""
+    return "".join(
+        f'<link href="{escape(LAW_URLS[part.casefold()])}" color="#174B83"><u>{escape(part)}</u></link>'
+        if index % 2 else escape(part)
+        for index, part in enumerate(LAW_CITATION.split(text))
+    )
+
+
+def _table_width(number: int) -> float:
+    """Reduce el ancho de las tablas 4 a 6 sin cambiar sus proporciones."""
+    return COMPACT_TABLE_WIDTH if 4 <= number <= 6 else 1.0
+
+
+def _table_alignment(table: StudyTable, number: int) -> tuple[tuple[int, ...] | None, tuple[int, ...]]:
+    """Conserva la alineación de los umbrales aunque haya tablas opcionales."""
+    if table.center_columns:
+        return table.right_columns, table.center_columns
+    if number == 5:
+        return (0,), tuple(range(1, len(table.headers)))
+    if number == 4:
+        return (0,), ()
+    return table.right_columns, ()
 
 
 def write_study(
@@ -282,11 +374,18 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
     from odt_reports import _new_report, _tag
 
     document = _new_report(
-        TITLE, title, settings, repeat_titles=False, footer_title="Estudio de gestión de RCDs",
+        TITLE, title, settings, repeat_titles=False, footer_title=FOOTER_TITLE,
     )
+    if document.template_footer is None:
+        document.footer = FOOTER_TITLE
+    elif not FOOTER_CHAPTER.search("".join(document.template_footer.itertext())):
+        ET.SubElement(document.template_footer, _tag("text:p"), {
+            _tag("text:style-name"): "FooterText",
+        }).text = "{{capitulo}}"
     add_odt_blue_table_cells(document, "RcdTable")
-    add_odt_blue_table_headers(document, "RcdTable")
+    add_odt_blue_table_headers(document, "RcdTable", centered=True)
     for level in range(1, 7):
+        _, size, bold = ROLES[f"heading{level}"]
         style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
             _tag("style:name"): f"RcdHeading{level}", _tag("style:family"): "paragraph",
             _tag("style:parent-style-name"): "ReportBody",
@@ -296,7 +395,8 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
             _tag("fo:margin-bottom"): "6pt",
         })
         ET.SubElement(style, _tag("style:text-properties"), {
-            _tag("fo:font-weight"): "bold", _tag("fo:font-size"): f"{max(10, 15-level)}pt",
+            _tag("fo:font-weight"): "bold" if bold else "normal",
+            _tag("fo:font-size"): f"{size:g}pt",
         })
     style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
         _tag("style:name"): "RcdDocumentStart", _tag("style:family"): "paragraph",
@@ -311,6 +411,7 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
     title_style = deepcopy(next(style for style in document.automatic_styles
                                if style.get(_tag("style:name")) == "RcdHeading1"))
     title_style.set(_tag("style:name"), "RcdDocumentTitle")
+    title_style.find(_tag("style:text-properties")).set(_tag("fo:font-size"), f"{ROLES['title'][1]:g}pt")
     document.automatic_styles.append(title_style)
     document.paragraph(TITLE, "RcdDocumentTitle")
     document.table_of_contents(headings, max_level=2, name="RcdContents")
@@ -318,8 +419,15 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
     main_seen = False
     for block in blocks:
         if isinstance(block, StudyTable):
+            document.table_caption(block.caption, include_reference=False)
+            _odt_link_paragraph_spans(document.body[-1])
+            number = document.data_table_number
+            width = _table_width(number)
+            right, center = _table_alignment(block, number)
             document.table(block.headers, block.rows, ratios=block.ratios,
-                           bold_rows=block.bold_rows, caption=block.caption)
+                           bold_rows=block.bold_rows, right_columns=right or (),
+                           center_columns=center, infer_right_columns=number not in (4, 5),
+                           width_fraction=width, centered=width < 1)
             style_odt_blue_table(document.body[-1], "RcdTable")
             document.space(12)
             continue
@@ -335,9 +443,11 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
                 _tag("text:style-name"): f"RcdBullet{-level}",
             })
             paragraph.text = marker
-            ET.SubElement(paragraph, _tag("text:tab")).tail = label
+            ET.SubElement(paragraph, _tag("text:tab"))
+            _odt_law_links(paragraph, label)
         else:
             document.paragraph(text)
+            _odt_link_paragraph_spans(document.body[-1])
     document.append_signature(settings)
     document.write(target)
 
@@ -354,37 +464,56 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
     layout = ReportLayout(
         text_styles=settings.text_styles,
         template_path=settings.template_path, expediente=settings.expediente,
-        template_title=title, repeat_titles=False, footer_title="Estudio de gestión de RCDs",
+        template_title=title, repeat_titles=False, footer_title=FOOTER_TITLE,
     )
+    footer_text = "\n".join([layout.template_footer, *(
+        cell["text"] for table in layout.template_tables["footer"] for row in table["rows"] for cell in row
+    )])
+    missing = [] if FOOTER_CHAPTER.search(footer_text) else ["{{capitulo}}"]
+    if not re.search(r"\{no_p[aá]gina\}", footer_text):
+        missing.append("{{no_pagina}}")
+    if missing:
+        layout.template_footer = "\n".join(filter(None, (layout.template_footer, " — ".join(missing))))
     body = ParagraphStyle("RcdBody", fontName="Helvetica", fontSize=10,
                           leading=14, spaceAfter=7, alignment=TA_JUSTIFY)
     bullets = {
         level: pdf_list_style(f"RcdBullet{-level}", body, -level - 1)
         for level in sorted({block[0] for block in blocks if isinstance(block, tuple) and block[0] < 0})
     }
-    headings = {
-        level: ParagraphStyle(
-            f"RcdHeading{level}", parent=body, fontName="Helvetica-Bold",
-            fontSize=max(10, 15-level), leading=18, spaceBefore=12,
+    headings = {}
+    for level in range(1, 7):
+        _, size, bold = ROLES[f"heading{level}"]
+        headings[level] = ParagraphStyle(
+            f"RcdHeading{level}", parent=body, fontName="Helvetica-Bold" if bold else "Helvetica",
+            fontSize=size, leading=size * 1.28, spaceBefore=12,
             keepWithNext=True, alignment=TA_LEFT,
-        ) for level in range(1, 7)
-    }
+        )
+    title_style = ParagraphStyle("RcdDocumentTitle", parent=headings[1],
+                                 fontSize=ROLES["title"][1], leading=ROLES["title"][1] * 1.28)
     contents = TableOfContents()
     contents.levelStyles = [
         ParagraphStyle(f"RcdContents{level}", parent=body, leftIndent=12*level, alignment=TA_LEFT)
         for level in range(2)
     ]
     contents.levelStyles = layout.index_styles(contents.levelStyles)
-    story = [layout.text(TITLE, headings[1], role="title"), layout.text("ÍNDICE", headings[2], role="index"),
+    story = [layout.text(TITLE, title_style, role="title"), layout.text("ÍNDICE", headings[2], role="index"),
              contents, PageBreak()]
     heading_index = 0
     main_seen = False
     for block in blocks:
         if isinstance(block, StudyTable):
-            layout.table_caption(story, block.caption, body=body)
+            layout.table_caption(story, block.caption, body=body, include_reference=False)
+            if LAW_CITATION.search(block.caption):
+                caption = story[-1]
+                story[-1] = layout.paragraph(_pdf_law_links(caption.getPlainText()), caption.style)
+            number = layout.data_table_number
+            width = _table_width(number)
+            right, center = _table_alignment(block, number)
             story.extend([
                 layout.table(block.headers, block.rows, block.ratios,
-                             bold_rows=block.bold_rows, blue_header=True),
+                             bold_rows=block.bold_rows, blue_header=True,
+                             right_columns=right, center_columns=center,
+                             width_fraction=width, centered=width < 1),
                 Spacer(1, 12),
             ])
             continue
@@ -399,9 +528,9 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
             story.append(paragraph)
         elif level < 0:
             marker, label = split_list_item(text)
-            story.append(layout.paragraph(escape(label), bullets[level], bulletText=marker))
+            story.append(layout.paragraph(_pdf_law_links(label), bullets[level], bulletText=marker))
         else:
-            story.append(layout.text(text, body))
+            story.append(layout.paragraph(_pdf_law_links(text), body))
     story.extend(layout.signature_block(settings))
 
     class RcdDocument(SimpleDocTemplate):

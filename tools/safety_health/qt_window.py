@@ -854,10 +854,19 @@ class SafetyProposalDialogQt(QDialog):
         close = QPushButton("Cerrar")
         close.clicked.connect(self.close)
         actions.addWidget(close)
-        accept = QPushButton("Aceptar y crear capítulo")
-        accept.clicked.connect(self.accept_proposal)
-        actions.addWidget(accept)
+        self.insert_button = QPushButton("Aceptar y crear capítulo")
+        self.insert_button.clicked.connect(self.accept_proposal)
+        actions.addWidget(self.insert_button)
         layout.addLayout(actions)
+        self.app.budget_refreshed.connect(self._refresh_insert_action)
+        self._refresh_insert_action()
+
+    def _refresh_insert_action(self) -> None:
+        """Impide volver a insertar un capítulo preventivo existente."""
+        exists = any(item.source.startswith(SAFETY_BUDGET_SOURCE) for item in self.app.budget_items)
+        exists = exists or self.app._has_external_tool_chapter("safety")
+        self.insert_button.setEnabled(not exists)
+        self.insert_button.setToolTip("El presupuesto ya contiene un capítulo de Seguridad y Salud." if exists else "")
 
     def changed(self, item: QTableWidgetItem) -> None:
         """Actualiza una línea seleccionada."""

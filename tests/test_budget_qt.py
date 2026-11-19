@@ -58,12 +58,13 @@ class BudgetQtWindowTests(unittest.TestCase):
         """Crea una única aplicación Qt para las ventanas de prueba."""
         cls.application = QApplication.instance() or QApplication([])
 
-    def test_startup_image_has_transparent_corners(self) -> None:
-        """Las esquinas son transparentes aunque Windows no redondee la ventana."""
+    def test_startup_image_is_wider_with_transparent_corners(self) -> None:
+        """La imagen se amplía sin deformarse ni perder las esquinas transparentes."""
         splash = qt_app.show_startup_splash(self.application)
         self.assertIsNotNone(splash)
         self.addCleanup(splash.close)
         image = splash.pixmap().toImage()
+        self.assertEqual((image.width(), image.height()), (480, 268))
         right, bottom = image.width() - 1, image.height() - 1
         for x, y in ((0, 0), (right, 0), (0, bottom), (right, bottom)):
             self.assertEqual(image.pixelColor(x, y).alpha(), 0)
@@ -469,7 +470,10 @@ class BudgetQtWindowTests(unittest.TestCase):
                 ):
                     tool._state["indirect_rows"] = [row | {"monthly": monthly}]
                     tool.refresh_general_info()
+                    self.assertEqual(tool.apply_k_button.isEnabled(),
+                                     window.report_settings.indirect_costs != percentage)
                     tool.apply_k_button.click()
+                    self.assertFalse(tool.apply_k_button.isEnabled())
                     self.assertEqual(window.report_settings.indirect_costs, percentage)
                     self.assertEqual(item.direct_unit_price, 2500)
                     self.assertEqual(item.unit_price, price)
@@ -612,6 +616,13 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertEqual(len(window._project_windows), 1)
             self.assertEqual(tool.waste_table.rowCount(), 0)
             self.assertTrue(tool.variables["surface"].isReadOnly())
+            from PySide6.QtWidgets import QPlainTextEdit
+            from tools.rcd import demolition_measurements
+            from tools.rcd.qt_window import DemolitionDialogQt
+            from tools._shared.budget_sources import TRANSPORT_PREFIX
+
+            self.assertFalse(tool.findChildren(QPlainTextEdit))
+            self.assertTrue(tool.demolition_button.isEnabled())
             self.assertEqual(float(tool.variables["surface"].text()), 80)
             self.assertIn("PAV", tool.surface_hint.text())
             window.budget_items[1].measurement = 120
@@ -638,6 +649,27 @@ class BudgetQtWindowTests(unittest.TestCase):
                 if item.source.startswith(RCD_BUDGET_SOURCE)
             ]
             self.assertEqual(len(generated), 7)
+            self.assertFalse(tool.save_button.isEnabled())
+            dialog = DemolitionDialogQt(tool, demolition_measurements(window, tool.data))
+            self.assertFalse(dialog.apply_button.icon().isNull())
+            for include, factor, material in dialog.edits:
+                include.setChecked(True)
+                factor.setText("0,2")
+                material.setCurrentIndex(next(index for index, (_, (key, _)) in
+                                              enumerate(dialog.materials.items()) if key == "40"))
+            with patch.object(QMessageBox, "warning"), patch.object(QMessageBox, "critical") as error:
+                dialog.apply_button.click()
+                error.assert_not_called()
+            transport = next(item for item in window.budget_items if any(
+                line.comment.startswith(TRANSPORT_PREFIX) for line in item.measurement_lines
+            ))
+            self.assertAlmostEqual(transport.measurement, 24.0)
+            self.assertFalse(tool.demolition_button.isEnabled())
+            self.assertFalse(dialog.apply_button.isEnabled())
+            window.budget_tree.setCurrentItem(None)
+            window.budget_items.remove(transport)
+            window.refresh_budget_tree()
+            self.assertTrue(tool.demolition_button.isEnabled())
             tool.reject()
             window.is_dirty = False
             window.close()
@@ -671,8 +703,22 @@ class BudgetQtWindowTests(unittest.TestCase):
                         ProjectItem("EXC", "01#", "m3", "Excavación de tierras", 10, 20),
                         ProjectItem("PAV", "02#", "m²", "Pavimento", 80, 10),
                     ]
+                    window.pptp_state.setdefault("variables", {})["bullet_capitulos_obra"] = (
+                        "- Descripción singular de la obra."
+                    )
                     window._open_tool("rcd")
                     tool = window._project_windows[-1]
+                    from tools.rcd import WASTES
+
+                    waste_key = next(key for key, _, code, *_ in WASTES if code == "17 01 01")
+                    metal_key = next(key for key, group, *_ in WASTES if group == "metals")
+                    tool.data.selected = {key: key in (waste_key, metal_key) for key in tool.data.selected}
+                    tool.data.groups["metals"]["percentage"] = 20
+                    tool.data.evidence[waste_key] = [
+                        "A: Demolición de hormigón [texto, revisar]",
+                        "A: Demolición de hormigón [BCCA2023 → 17 01 01, revisar]",
+                        "B: Retirada de hormigón [BCCA2023 → 17 01 01, revisar]",
+                    ]
                     tool.open_library_editor()
                     editor = tool.library_editor
                     self.assertIsInstance(editor, LibraryEditorQt)
@@ -688,6 +734,17 @@ class BudgetQtWindowTests(unittest.TestCase):
                             error.reset_mock()
                         self.assertTrue(editor.save(), error.call_args)
                     error.assert_not_called()
+                    footer = "ANEJO Nº 18. ESTUDIO DE GESTIÓN DE RCDs"
+                    law_urls = {
+                        "https://www.boe.es/eli/es/l/2022/04/08/7/con",
+                        "https://www.boe.es/eli/es/rd/2008/02/01/105/con",
+                        "https://www.boe.es/eli/es/rd/2020/06/02/553/con",
+                        "https://www.boe.es/eli/es/rd/2020/07/07/646/con",
+                        "https://www.boe.es/eli/es/o/2017/10/10/apm1007/con",
+                        "https://www.boe.es/eli/es/rd/2006/03/31/396/con",
+                        "https://www.boe.es/eli/es/rd/1991/02/01/108/con",
+                        "https://eur-lex.europa.eu/eli/dec/2000/532/oj?locale=es",
+                    }
                     for output_format in ("odt", "pdf"):
                         window.report_settings.output_format = output_format
                         target = folder / f"estudio.{output_format}"
@@ -695,13 +752,33 @@ class BudgetQtWindowTests(unittest.TestCase):
                         if output_format == "odt":
                             with ZipFile(target) as archive:
                                 content = ET.fromstring(archive.read("content.xml"))
+                                styles = ET.fromstring(archive.read("styles.xml"))
+                            self.assertTrue(any(footer in "".join(node.itertext())
+                                                for node in styles.iter(_tag("style:footer"))))
+                            self.assertTrue(law_urls <= {link.get(_tag("xlink:href"))
+                                                         for link in content.iter(_tag("text:a"))})
                             text = " ".join(content.itertext())
                             body = content.find(f".//{_tag('office:text')}")
                             tables = [(index, table) for index, table in enumerate(body)
                                       if table.tag == _tag("table:table")]
-                            self.assertGreater(len(tables), 1)
+                            self.assertGreaterEqual(len(tables), 7)
+                            table_properties = {
+                                style.get(_tag("style:name")): style.find(_tag("style:table-properties"))
+                                for style in content.iter(_tag("style:style"))
+                                if style.get(_tag("style:family")) == "table"
+                            }
+                            widths = [
+                                float(table_properties[table.get(_tag("table:style-name"))]
+                                      .get(_tag("style:width")).removesuffix("pt"))
+                                for _, table in tables
+                            ]
                             for number, (index, table) in enumerate(tables, start=1):
-                                self.assertEqual("".join(body[index - 2].itertext()), f"Véase la Tabla {number}.")
+                                props = table_properties[table.get(_tag("table:style-name"))]
+                                is_compact = 4 <= number <= 6
+                                self.assertAlmostEqual(widths[number - 1] / widths[0],
+                                                       0.8 if is_compact else 1.0, places=5)
+                                self.assertEqual(props.get(_tag("table:align")),
+                                                 "center" if is_compact else "left")
                                 self.assertTrue("".join(body[index - 1].itertext()).startswith(f"Tabla {number}. "))
                                 header = table.find(_tag("table:table-header-rows"))
                                 self.assertIsNotNone(header)
@@ -709,19 +786,95 @@ class BudgetQtWindowTests(unittest.TestCase):
                                     cell.get(_tag("table:style-name")) == "RcdTableHeaderCell"
                                     for cell in header.iter(_tag("table:table-cell"))
                                 ))
+                            project_index, project_table = tables[0]
+                            waste_rows = [
+                                ["".join(cell.itertext()) for cell in row.findall(_tag("table:table-cell"))]
+                                for row in tables[1][1].findall(_tag("table:table-row"))
+                            ]
+                            self.assertEqual(len(waste_rows), 3)
+                            waste_rows = [row for row in waste_rows if row[2] != "Selección manual"]
+                            self.assertEqual(waste_rows[0][0], "17 01 01")
+                            self.assertEqual(waste_rows[0][2], "A: Demolición de hormigón")
+                            self.assertEqual(waste_rows[1], ["", "", "B: Retirada de hormigón"])
+                            heading_index = next(index for index, node in enumerate(body)
+                                                 if node.tag == _tag("text:h") and
+                                                 "1.2. DESCRIPCIÓN DE LA ACTUACIÓN" == "".join(node.itertext()))
+                            self.assertGreater(heading_index, project_index)
+                            description = body[heading_index + 1]
+                            self.assertIsNotNone(description.find(_tag("text:tab")))
+                            self.assertIn("Descripción singular de la obra.", "".join(description.itertext()))
+                            for row in project_table.findall(_tag("table:table-row")):
+                                label, value = row.findall(_tag("table:table-cell"))
+                                self.assertEqual(label[0].get(_tag("text:style-name")), "TableTextRight")
+                                self.assertEqual(value[0].get(_tag("text:style-name")), "TableText")
+                                if label[0].text == "Emplazamiento":
+                                    self.assertEqual("".join(value.itertext()), "")
                             backgrounds = {style.get(_tag("fo:background-color"))
                                            for style in content.iter(_tag("style:table-cell-properties"))}
                             self.assertTrue({"#4472C4", "#D9E5F5", "#FFFFFF"} <= backgrounds)
+                            for number, expected in ((4, ("Right", "")), (5, ("Right", "Center"))):
+                                row = tables[number - 1][1].find(_tag("table:table-row"))
+                                styles = [cell[0].get(_tag("text:style-name")) for cell in row]
+                                self.assertEqual(styles, ["TableText" + expected[0]] +
+                                                 ["TableText" + expected[1]] * (len(styles) - 1))
+                            threshold_table = next(table for _, table in tables
+                                                   if "Umbral (t)" in "".join(table.itertext()))
+                            headers = threshold_table.find(_tag("table:table-header-rows"))[0]
+                            self.assertEqual(["".join(cell.itertext()) for cell in headers],
+                                             ["Fracción", "Umbral (t)", "¿Se supera?"])
+                            rows = {"".join(row[0].itertext()): row
+                                    for row in threshold_table.findall(_tag("table:table-row"))}
+                            self.assertEqual("".join(rows["Hormigón"][2].itertext()), "No")
+                            self.assertEqual("".join(rows["Metales"][2].itertext()), "Sí")
+                            self.assertEqual([cell[0].get(_tag("text:style-name")) for cell in rows["Metales"]],
+                                             ["TableTextRight", "TableTextCenter", "TableTextCenter"])
+                            heading_sizes = {
+                                style.get(_tag("style:name")):
+                                    float(style.find(_tag("style:text-properties"))
+                                          .get(_tag("fo:font-size")).removesuffix("pt"))
+                                for style in content.iter(_tag("style:style"))
+                                if style.get(_tag("style:name"), "").startswith("RcdHeading")
+                            }
+                            self.assertGreater(heading_sizes["RcdHeading1"], heading_sizes["RcdHeading2"])
+                            self.assertGreater(heading_sizes["RcdHeading2"], heading_sizes["RcdHeading3"])
                         else:
                             reader = PdfReader(target)
                             text = " ".join(page.extract_text() for page in reader.pages)
-                            self.assertIn("Véase la Tabla 1. Tabla 1. Datos del proyecto", " ".join(text.split()))
+                            self.assertIn("Tabla 1. Datos del proyecto", " ".join(text.split()))
+                            for page in reader.pages:
+                                self.assertIn(footer, " ".join(page.extract_text().split()))
+                            uri_actions = [
+                                ref.get_object().get("/A", {})
+                                for page in reader.pages for ref in page.get("/Annots", ())
+                            ]
+                            self.assertTrue(law_urls <= {action.get("/URI") for action in uri_actions})
                             fills = {tuple(round(float(value) * 255) for value in operands)
                                      for page in reader.pages for operands, operator in page.get_contents().operations
                                      if operator == b"rg"}
                             self.assertTrue({(68, 114, 196), (217, 229, 245)} <= fills)
                         for index in range(8):
                             self.assertIn(f"Texto RCD revisado {index}.", text)
+                        normalized = " ".join(text.split())
+                        ordered = ("1.1. ANTECEDENTES", "proyecto (Tabla 1).",
+                                   "Tabla 1. Datos del proyecto", "1.2. DESCRIPCIÓN DE LA ACTUACIÓN",
+                                   "Descripción singular de la obra.", "1.3. IDENTIFICACIÓN DE LOS RESIDUOS")
+                        start = normalized.index("proyecto (Tabla 1).")
+                        self.assertIn(ordered[0], normalized[:start])
+                        offsets = [normalized.index(value, start) for value in ordered[1:]]
+                        self.assertEqual(offsets, sorted(offsets))
+                        self.assertNotIn("Véase la Tabla", normalized)
+                        self.assertNotIn("(según PPTP)", normalized)
+                        self.assertNotIn("DESCRIPCIÓN DE LA ACTUACIÓN:", normalized)
+                        self.assertIn("Umbral (t) ¿Se supera?", normalized)
+                        self.assertNotIn("PENDIENTE EN CONFIGURACIÓN GENERAL", normalized)
+                        self.assertNotIn("Los apartados señalados como pendientes", normalized)
+                        self.assertNotIn("[texto, revisar]", normalized)
+                        self.assertNotIn("[BCCA2023", normalized)
+                        self.assertNotIn("La selección automática es una ayuda", normalized)
+                        self.assertNotIn("Inventario e inspecciones particulares:", normalized)
+                        self.assertIn("Se realizará un inventario previo de residuos peligrosos y se preverá "
+                                      "su retirada selectiva en demolición, rehabilitación, reparación y reforma.",
+                                      normalized)
                 finally:
                     window.deleteLater()
                     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
@@ -801,6 +954,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             )
             proposal = tool.open_proposal()
             self.assertEqual(proposal.table.rowCount(), 3)
+            self.assertTrue(proposal.insert_button.isEnabled())
             with patch.object(window, "save_project", return_value=False):
                 self.assertTrue(proposal.create_chapter())
             generated = [
@@ -809,6 +963,7 @@ class BudgetQtWindowTests(unittest.TestCase):
                 if row.source.startswith("SS:")
             ]
             self.assertEqual(len(generated), 3)
+            self.assertFalse(proposal.insert_button.isEnabled())
             proposal.reject()
             tool.reject()
             window.is_dirty = False
@@ -1298,6 +1453,8 @@ class BudgetQtWindowTests(unittest.TestCase):
         labels = (
             "Guardar RCDs en el proyecto", "Aceptar y crear capítulo",
             "Incorporar mediciones al presupuesto", "Aplicar K al presupuesto",
+            "Llevar mediciones de demolición a transporte a vertedero",
+            "Copiar mediciones y usar volúmenes en RCDs",
         )
         save = icon_for_text(self.application, "Guardar anejo…").pixmap(24, 24).toImage()
         self.assertFalse(save.isNull())

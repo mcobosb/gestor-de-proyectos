@@ -103,12 +103,12 @@ def add_odt_blue_table_cells(document, prefix: str) -> None:
         })
 
 
-def add_odt_blue_table_headers(document, prefix: str) -> None:
+def add_odt_blue_table_headers(document, prefix: str, *, centered: bool = False) -> None:
     """Conserva la tipografía y alineación de las cabeceras con texto blanco."""
     from xml.etree import ElementTree as ET
     from odt_reports import _tag
 
-    for suffix in ("", "Right"):
+    for suffix in (("", "Right", "Center") if centered else ("", "Right")):
         style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
             _tag("style:name"): f"{prefix}Header{suffix}",
             _tag("style:family"): "paragraph",
@@ -127,7 +127,7 @@ def style_odt_blue_table(table, prefix: str) -> None:
             cell.set(_tag("table:style-name"), f"{prefix}HeaderCell")
             for paragraph in cell.findall(_tag("text:p")):
                 previous = paragraph.get(_tag("text:style-name"), "")
-                suffix = "Right" if previous.endswith("Right") else ""
+                suffix = "Right" if previous.endswith("Right") else "Center" if previous.endswith("Center") else ""
                 paragraph.set(_tag("text:style-name"), f"{prefix}Header{suffix}")
     for index, row in enumerate(table.findall(_tag("table:table-row"))):
         suffix = "WhiteCell" if index % 2 else "BlueCell"

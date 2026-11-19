@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import asdict, replace
+from math import isfinite
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -82,11 +83,24 @@ class TranslationPanel(QWidget):
             ("Elegir partida por código…", self._choose_entry),
             ("Guardar regla para este tipo IFC…", self._save_rule),
             ("Introducir cantidad…", self._choose_quantity),
-            ("Incorporar mediciones al presupuesto", self._apply),
         ):
             button = QPushButton(label)
             button.clicked.connect(callback)
             layout.addWidget(button)
+        self.insert_button = QPushButton("Incorporar mediciones al presupuesto")
+        self.insert_button.clicked.connect(self._apply)
+        layout.addWidget(self.insert_button)
+        self.app.budget_refreshed.connect(self._refresh_budget_links)
+        self._update_summary()
+
+    def _refresh_budget_links(self) -> None:
+        """Actualiza las filas cuando se añaden o borran mediciones en el presupuesto."""
+        linked = existing_links(self.app)
+        if linked != self._linked:
+            self._linked = linked
+            for key, proposal in self._proposals.items():
+                self._set_proposal(key, proposal)
+        self._update_summary()
 
     def add_elements(self, keys: list[str]) -> None:
         """Añade elementos de obra con GlobalId y traduce por tandas."""
@@ -255,8 +269,7 @@ class TranslationPanel(QWidget):
 
     def _update_summary(self) -> None:
         """Distingue las propuestas utilizables de las pendientes y sin resolver."""
-        ready = sum(p.quantity is not None and key not in self._linked
-                    for key, p in self._proposals.items())
+        ready = len(self._ready_rows())
         linked = len(self._rows.keys() & self._linked)
         processing = len(self._rows.keys() - self._proposals.keys() - self._linked)
         unresolved = len(self._rows) - ready - linked - processing
@@ -264,6 +277,15 @@ class TranslationPanel(QWidget):
             f"{ready} listas · {unresolved} sin resolver · "
             f"{processing} calculando · {linked} incorporadas"
         )
+        self.insert_button.setEnabled(bool(ready) and self.app.project_session == self.project_session)
+        self.insert_button.setToolTip("No hay mediciones nuevas listas para incorporar." if not ready else "")
+
+    def _ready_rows(self) -> list[tuple[Element, Proposal]]:
+        """Devuelve propuestas válidas que todavía no tienen una medición en el presupuesto."""
+        return [(self.elements[key], proposal) for key, proposal in self._proposals.items()
+                if key not in self._linked and proposal.entry is not None
+                and proposal.quantity is not None and isfinite(proposal.quantity) and proposal.quantity >= 0.01
+                and any(base is proposal.entry.base for base in self.app.reference_bases)]
 
     def _current_key(self) -> str:
         """Obtiene el resultado seleccionado o avisa de que falta seleccionarlo."""
@@ -326,8 +348,7 @@ class TranslationPanel(QWidget):
             QMessageBox.warning(self, "Motor BIM", "El presupuesto cambió. Vuelve a abrir el IFC.")
             return
         self._linked = existing_links(self.app)
-        rows = [(self.elements[key], proposal) for key, proposal in self._proposals.items()
-                if proposal.quantity is not None and key not in self._linked]
+        rows = self._ready_rows()
         if not rows:
             self._update_summary()
             QMessageBox.information(self, "Motor BIM", "No hay mediciones nuevas listas para incorporar.")

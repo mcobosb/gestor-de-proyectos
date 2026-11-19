@@ -40,6 +40,7 @@ _PLANS = "Planos preparados externamente en CAD o GIS."
 _REPORTS = "Se prepara desde Informes o a partir de los datos del presupuesto."
 _PROCEDURES = "Documentación externa o dependiente de la tramitación."
 PRICE_JUSTIFICATION_NUMBER = "15"
+RCD_NUMBER = "18"
 
 CATALOG = (
     Entry("DOCUMENTO N.º 1: MEMORIA Y ANEJOS", "01 Memoria y anejos", children=(
@@ -82,7 +83,7 @@ CATALOG = (
             )),
             Entry("Plan de Obra y Programación de los Trabajos", "16", external="Herramientas → Planificación."),
             _template("17", "Plan de Control de Calidad", "Recepción de materiales", "Ensayos, lotes y criterios de aceptación"),
-            Entry("Estudio de Gestión de Residuos de Construcción y Demolición (RCD)", "18", external="Herramientas → RCDs."),
+            Entry("Estudio de Gestión de Residuos de Construcción y Demolición (RCDs)", RCD_NUMBER, external="Herramientas → RCDs."),
             Entry("Estudio de Seguridad y Salud (ESS) o Estudio Básico (EBSS)", "19", external="Herramientas → Seguridad y Salud."),
             _template("20", "Manual de Uso, Conservación y Mantenimiento", "Inventario y condiciones de uso", "Operaciones, frecuencias y registros"),
         )),

@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
     QFormLayout,
+    QGridLayout,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -55,7 +57,8 @@ from . import (
     transfer_demolition,
     write_report,
 )
-from .study import DOCUMENT_FIELDS, DOCUMENTS, LIBRARY_PATH, load_documents
+from .._shared.budget_sources import TRANSPORT_PREFIX
+from .study import DOCUMENTS, LIBRARY_PATH, load_documents
 
 
 class RcdWindowQt(QDialog):
@@ -70,7 +73,6 @@ class RcdWindowQt(QDialog):
         self.dirty = False
         self.variables: dict[str, QLineEdit] = {}
         self.group_variables: dict[tuple[str, str], QLineEdit] = {}
-        self.documentation_texts = {}
         self.setWindowTitle("RCDs")
         self.resize(1280, 820)
         layout = QVBoxLayout(self)
@@ -84,20 +86,22 @@ class RcdWindowQt(QDialog):
         self._refresh_surface()
         self.pages.addWidget(self._build_review_page())
         self._restore_page()
+        self.app.budget_refreshed.connect(self._refresh_insert_actions)
+        self._refresh_insert_actions()
 
     def _build_inputs_page(self) -> QWidget:
-        """Crea campos numéricos, coeficientes y decisiones documentales."""
+        """Agrupa mediciones, tarifas y coeficientes; los textos se editan en la biblioteca."""
         page = QWidget()
         layout = QVBoxLayout(page)
         actions = QHBoxLayout()
         library = QPushButton("Editar documentación del estudio…")
         library.clicked.connect(self.open_library_editor)
         actions.addWidget(library)
-        demolition = QPushButton(
+        self.demolition_button = QPushButton(
             "Llevar mediciones de demolición a transporte a vertedero"
         )
-        demolition.clicked.connect(self.review_demolition)
-        actions.addWidget(demolition)
+        self.demolition_button.clicked.connect(self.review_demolition)
+        actions.addWidget(self.demolition_button)
         actions.addStretch()
         layout.addLayout(actions)
         self.measured_label = QLabel(
@@ -108,49 +112,50 @@ class RcdWindowQt(QDialog):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         content = QWidget()
-        form = QFormLayout(content)
-        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        for key, label, _ in INPUTS:
-            row = QHBoxLayout()
-            field = QLineEdit(
-                "" if self.data.inputs[key] is None else str(self.data.inputs[key])
-            )
-            field.setMaximumWidth(180)
-            self.variables[key] = field
-            row.addWidget(field)
-            source = self.data.sources.get(key, "Valor del modelo.")
-            if self.data.inputs[key] is None:
-                source = "PENDIENTE — " + source
-            hint = QLabel(source)
-            if key == "surface":
-                self.surface_hint = hint
-            hint.setWordWrap(True)
-            row.addWidget(hint, 1)
-            form.addRow(label, row)
-        for key, label, *_ in GROUPS:
-            group = QHBoxLayout()
-            for name in ("percentage", "density"):
+        sections = QVBoxLayout(content)
+        for title, inputs in (("Mediciones y presupuesto", INPUTS[:6]),
+                              ("Tarifas y otros costes", INPUTS[6:])):
+            box = QGroupBox(title)
+            box.setProperty("rcdInputs", True)
+            grid = QGridLayout(box)
+            grid.setColumnStretch(2, 1)
+            for index, (key, label, _) in enumerate(inputs):
+                field = QLineEdit("" if self.data.inputs[key] is None else str(self.data.inputs[key]))
+                field.setFixedWidth(115)
+                field.setAlignment(Qt.AlignmentFlag.AlignRight)
+                field.setAccessibleName(label)
+                self.variables[key] = field
+                label_widget = QLabel(label)
+                label_widget.setBuddy(field)
+                grid.addWidget(label_widget, index, 0)
+                grid.addWidget(field, index, 1)
+                source = self.data.sources.get(key, "Valor del modelo.")
+                hint = QLabel(("PENDIENTE — " if self.data.inputs[key] is None else "") + source)
+                if key == "surface":
+                    self.surface_hint = hint
+                hint.setWordWrap(True)
+                grid.addWidget(hint, index, 2)
+            sections.addWidget(box)
+        box = QGroupBox("Composición por grupos")
+        box.setProperty("rcdInputs", True)
+        grid = QGridLayout(box)
+        grid.setColumnStretch(3, 1)
+        grid.addWidget(QLabel("Grupo"), 0, 0)
+        grid.addWidget(QLabel("Proporción (%)"), 0, 1)
+        grid.addWidget(QLabel("Densidad (t/m³)"), 0, 2)
+        for index, (key, label, *_) in enumerate(GROUPS, 1):
+            grid.addWidget(QLabel(label), index, 0)
+            for column, (name, heading) in enumerate((("percentage", "Proporción"), ("density", "Densidad")), 1):
                 field = QLineEdit(str(self.data.groups[key][name]))
-                field.setMaximumWidth(130)
+                field.setFixedWidth(115)
+                field.setAlignment(Qt.AlignmentFlag.AlignRight)
+                field.setAccessibleName(f"{heading}: {label}")
                 if key == "earth" and name == "percentage":
                     field.setEnabled(False)
                 self.group_variables[key, name] = field
-                group.addWidget(QLabel("%" if name == "percentage" else "t/m³"))
-                group.addWidget(field)
-            form.addRow(label, group)
-        from PySide6.QtWidgets import QPlainTextEdit
-
-        heading = QLabel("Decisiones particulares de la obra")
-        heading.setStyleSheet("font-weight: 600;")
-        form.addRow(heading)
-        for key, label in DOCUMENT_FIELDS.items():
-            text = QPlainTextEdit(self.data.documentation.get(key, ""))
-            text.setMaximumHeight(110)
-            text.textChanged.connect(
-                lambda selected=key: self._documentation_changed(selected)
-            )
-            self.documentation_texts[key] = text
-            form.addRow(label, text)
+                grid.addWidget(field, index, column)
+        sections.addWidget(box)
+        sections.addStretch()
         scroll.setWidget(content)
         layout.addWidget(scroll, 1)
         actions = QHBoxLayout()
@@ -194,9 +199,8 @@ class RcdWindowQt(QDialog):
         ))
         self.waste_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.waste_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.waste_table.horizontalHeader().setSectionResizeMode(
-            5, QHeaderView.ResizeMode.Stretch
-        )
+        self.waste_table.setColumnHidden(1, True)
+        _format_table(self.waste_table, 5, (54, 0, 170, 104, 280))
         self.waste_table.itemChanged.connect(self._waste_changed)
         layout.addWidget(self.waste_table, 2)
         self.preview_table = QTableWidget(0, 5)
@@ -204,9 +208,9 @@ class RcdWindowQt(QDialog):
         self.preview_table.setAlternatingRowColors(True)
         self.preview_table.setHorizontalHeaderLabels(HEADERS)
         self.preview_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.preview_table.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeMode.Stretch
-        )
+        _format_table(self.preview_table, 0)
+        for column in range(1, 5):
+            self.preview_table.setColumnWidth(column, 125)
         layout.addWidget(self.preview_table, 1)
         self.status_label = QLabel()
         layout.addWidget(self.status_label)
@@ -218,10 +222,21 @@ class RcdWindowQt(QDialog):
         if self.app.rcd_state:
             self._populate_review()
 
-    def _documentation_changed(self, key: str) -> None:
-        """Actualiza una decisión documental y el indicador pendiente."""
-        self.data.documentation[key] = self.documentation_texts[key].toPlainText()
-        self.changed()
+    def _has_demolition_transfer(self) -> bool:
+        """Detecta el traspaso por sus mediciones, no por el nombre de la partida."""
+        return any(line.comment.startswith(TRANSPORT_PREFIX)
+                   for item in self.app.budget_items for line in item.measurement_lines)
+
+    def _refresh_insert_actions(self) -> None:
+        """Bloquea nuevas inserciones cuando el presupuesto ya contiene los datos."""
+        transferred = self._has_demolition_transfer()
+        self.demolition_button.setEnabled(not transferred)
+        self.demolition_button.setToolTip("Las mediciones ya están en el presupuesto." if transferred else "")
+        inserted = any(item.source.startswith(RCD_BUDGET_SOURCE) for item in self.app.budget_items)
+        external = self.app._has_external_tool_chapter("rcd")
+        self.save_button.setEnabled(not (inserted or external))
+        self.save_button.setToolTip("El presupuesto ya contiene un capítulo de gestión de residuos."
+                                    if inserted or external else "")
 
     def _refresh_surface(self) -> None:
         """Actualiza el campo automático según las mediciones actuales."""
@@ -250,10 +265,6 @@ class RcdWindowQt(QDialog):
             )
         for (key, name), field in self.group_variables.items():
             raw["groups"][key][name] = field.text()
-        raw["documentation"] = {
-            key: text.toPlainText()
-            for key, text in self.documentation_texts.items()
-        }
         candidate = RcdState.from_dict(raw)
         calculate(candidate)
         for key in self.variables:
@@ -330,9 +341,10 @@ class RcdWindowQt(QDialog):
             row = self.preview_table.rowCount()
             self.preview_table.insertRow(row)
             for column, value in enumerate(values):
-                self.preview_table.setItem(
-                    row, column, QTableWidgetItem(str(value))
-                )
+                item = QTableWidgetItem(str(value))
+                if column:
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                self.preview_table.setItem(row, column, item)
         self.status_label.setText(
             f"{sum(self.data.selected.values())} residuos seleccionados. "
             f"Total: {sections[-1][1][0][3]} €."
@@ -379,6 +391,9 @@ class RcdWindowQt(QDialog):
 
     def review_demolition(self) -> None:
         """Abre la revisión de mediciones que pueden pasar a transporte."""
+        if self._has_demolition_transfer():
+            self._refresh_insert_actions()
+            return
         try:
             rows = demolition_measurements(self.app, self.data)
         except ValueError as exc:
@@ -493,6 +508,17 @@ class RcdWindowQt(QDialog):
         event.accept()
 
 
+def _format_table(table: QTableWidget, stretch_column: int, widths: tuple[int, ...] = ()) -> None:
+    """Unifica la altura de fila y deja espacio al texto más largo."""
+    table.setAlternatingRowColors(True)
+    table.verticalHeader().hide()
+    table.verticalHeader().setDefaultSectionSize(34)
+    table.horizontalHeader().setSectionResizeMode(stretch_column, QHeaderView.ResizeMode.Stretch)
+    for column, width in enumerate(widths):
+        if width:
+            table.setColumnWidth(column, width)
+
+
 class LerLinksDialogQt(QDialog):
     """Tabla de indicios LER–BCCA sin modificación del modelo."""
 
@@ -506,11 +532,10 @@ class LerLinksDialogQt(QDialog):
         note.setWordWrap(True)
         layout.addWidget(note)
         table = QTableWidget(0, 4)
+        table.setObjectName("rcdLinksTable")
         table.setHorizontalHeaderLabels(ler_catalog.MATCH_HEADERS)
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        table.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.ResizeMode.Stretch
-        )
+        _format_table(table, 2, (260, 100, 0, 220))
         for values in rows:
             row = table.rowCount()
             table.insertRow(row)
@@ -566,12 +591,12 @@ class DemolitionDialogQt(QDialog):
         form.addRow("Partida de destino", self.target)
         layout.addLayout(form)
         self.table = QTableWidget(len(rows), 5)
+        self.table.setObjectName("rcdDemolitionTable")
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setHorizontalHeaderLabels((
             "Incluir", "Partida / medición", "Cantidad", "Factor a m³", "Material / LER",
         ))
-        self.table.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.ResizeMode.Stretch
-        )
+        _format_table(self.table, 1, (74, 0, 105, 115, 360))
         for index, row in enumerate(rows):
             include = QCheckBox()
             include.setChecked(row.included)
@@ -603,13 +628,25 @@ class DemolitionDialogQt(QDialog):
         cancel = QPushButton("Cancelar")
         cancel.clicked.connect(self.reject)
         actions.addWidget(cancel)
-        apply = QPushButton("Copiar mediciones y usar volúmenes en RCDs")
-        apply.clicked.connect(self.apply)
-        actions.addWidget(apply)
+        self.apply_button = QPushButton("Copiar mediciones y usar volúmenes en RCDs")
+        self.apply_button.clicked.connect(self.apply)
+        actions.addWidget(self.apply_button)
         layout.addLayout(actions)
+        self.owner.app.budget_refreshed.connect(self._refresh_insert_action)
+        self._refresh_insert_action()
+        from budget_qt_theme import decorate_widget
+
+        decorate_widget(self)
+
+    def _refresh_insert_action(self) -> None:
+        """Impide repetir el traspaso si las líneas ya están en el presupuesto."""
+        self.apply_button.setEnabled(not self.owner._has_demolition_transfer())
 
     def apply(self) -> None:
         """Valida todas las líneas y las copia sin modificar las demoliciones."""
+        if self.owner._has_demolition_transfer():
+            self._refresh_insert_action()
+            return
         choice = self.target.currentIndex()
         if choice < 0:
             QMessageBox.critical(

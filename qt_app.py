@@ -14,14 +14,12 @@ from budget_qt_window import BudgetMainWindow
 
 
 def show_startup_splash(app: QApplication) -> QSplashScreen | None:
-    """Muestra la imagen inicial mientras se construye la ventana."""
+    """Muestra la imagen inicial a 480 px de ancho, sin deformarla."""
     image_path = application_directory(__file__) / "iconos" / "Arranque.jpg"
     pixmap = QPixmap(str(image_path))
     if pixmap.isNull():
         return None
-    pixmap = pixmap.scaled(
-        612, 245, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
-    )
+    pixmap = pixmap.scaledToWidth(480, Qt.TransformationMode.SmoothTransformation)
     rounded = QPixmap(pixmap.size())
     rounded.fill(Qt.GlobalColor.transparent)
     outline = QPainterPath()
