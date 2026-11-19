@@ -257,7 +257,8 @@ class BudgetMainWindow(QMainWindow):
     def _build_menus(self) -> None:
         """Configura los menús de archivo, exportación, informes e información."""
         menu = self.menuBar()
-        file_menu = menu.addMenu("Archivo")
+        self._file_menu = file_menu = QMenu("Archivo", menu)
+        menu.addMenu(file_menu)
         self.recent_menu = file_menu.addMenu("Recientes")
         self.recent_reference_menu = file_menu.addMenu("Bases de referencia recientes")
         self._refresh_recent_menu()
@@ -285,12 +286,8 @@ class BudgetMainWindow(QMainWindow):
         file_menu.addAction(
             self._action("Guardar como proyecto colaborativo…", self.save_project_as)
         )
-        file_menu.addSeparator()
-        file_menu.addAction(self._action("Configuración…", self.open_report_settings))
-
-        export_menu = menu.addMenu("Imprimir y exportar")
-        export_menu.addAction("Vista previa del presupuesto…", self.preview_budget)
-        export_menu.addAction("Imprimir presupuesto", self.print_budget)
+        self._export_menu = export_menu = QMenu("Exportar", file_menu)
+        file_menu.addMenu(export_menu)
         export_menu.addAction("Exportar presupuesto a ODS…", self.export_budget_ods)
         export_menu.addAction("Exportar mediciones a CSV…", self.export_measurements_csv)
         export_menu.addAction(
@@ -301,6 +298,8 @@ class BudgetMainWindow(QMainWindow):
             "Exportar descompuestos a ODS…",
             lambda: self.export_resource_report("Descompuestos"),
         )
+        file_menu.addSeparator()
+        file_menu.addAction(self._action("Configuración…", self.open_report_settings))
 
         reports_menu = menu.addMenu("Informes")
         for report in REPORT_NAMES:
@@ -2642,46 +2641,6 @@ class BudgetMainWindow(QMainWindow):
             return False
         self._set_status("Configuración de informes guardada.")
         return True
-
-    def preview_budget(self) -> None:
-        """Genera una vista HTML y la abre en el navegador."""
-        if not self.budget_items:
-            QMessageBox.information(self, "Presupuesto vacío", "No hay partidas que mostrar.")
-            return
-        rows = "".join(
-            f"<tr><td>{item.code}</td><td>{item.unit}</td><td>{item.summary}</td>"
-            f"<td class='num'>{fmt_number(item.measurement)}</td>"
-            f"<td class='num'>{fmt_number(item.unit_price)}</td>"
-            f"<td class='num'>{self._format_currency(item.import_total)}</td></tr>"
-            for item in self.budget_items
-        )
-        total = self._format_currency(sum(item.import_total for item in self.budget_items))
-        target = Path(tempfile.gettempdir()) / "presupuesto_bc3_qt.html"
-        target.write_text(
-            "<html><meta charset='utf-8'><style>body{font:12px sans-serif}table{"
-            "border-collapse:collapse;width:100%}td,th{border:1px solid #aaa;padding:6px}"
-            ".num{text-align:right}</style><h1>Presupuesto</h1><table><tr><th>Código</th>"
-            "<th>Ud</th><th>Descripción</th><th>Medición</th><th>Precio</th><th>Importe</th>"
-            f"</tr>{rows}<tr><th colspan='5'>TOTAL</th><td class='num'>{total}</td></tr>"
-            "</table></html>",
-            encoding="utf-8",
-        )
-        webbrowser.open(target.as_uri())
-        self._set_status("Vista previa abierta en el navegador.")
-
-    def print_budget(self) -> None:
-        """Genera la vista previa y solicita impresión desde el navegador."""
-        if not self.budget_items:
-            QMessageBox.information(
-                self, "Presupuesto vacío", "No hay partidas que imprimir."
-            )
-            return
-        self.preview_budget()
-        QMessageBox.information(
-            self,
-            "Imprimir",
-            "Usa Ctrl+P en la vista previa abierta del navegador.",
-        )
 
     def export_budget_ods(self) -> None:
         """Exporta presupuesto y mediciones a una hoja ODS."""

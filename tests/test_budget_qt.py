@@ -763,40 +763,45 @@ class BudgetQtWindowTests(unittest.TestCase):
             window.close()
             self.application.processEvents()
 
-    def test_main_qt_menus_cover_queries_exports_printing_and_information(self) -> None:
-        """No deja opciones heredadas fuera de los menús principales Qt."""
-        with tempfile.TemporaryDirectory() as directory, patch(
-            "budget_qt_window.user_data_directory", return_value=Path(directory)
+    def test_main_qt_menus_move_exports_under_file_without_printing(self) -> None:
+        """Conserva las cuatro acciones de exportación en Archivo y retira la impresión."""
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("budget_qt_window.user_data_directory", return_value=Path(directory)),
+            patch.object(BudgetMainWindow, "export_budget_ods", autospec=True) as budget,
+            patch.object(BudgetMainWindow, "export_measurements_csv", autospec=True) as measurements,
+            patch.object(BudgetMainWindow, "export_resource_report", autospec=True) as resources,
         ):
             window = BudgetMainWindow()
             menus = {
                 action.text(): action.menu()
                 for action in window.menuBar().actions()
             }
-            export_labels = [
-                action.text() for action in menus["Imprimir y exportar"].actions()
-            ]
-            for expected in (
-                "Vista previa del presupuesto…",
-                "Imprimir presupuesto",
+            self.assertNotIn("Imprimir y exportar", menus)
+            self.assertIn("Informes", menus)
+            file_actions = {action.text(): action for action in menus["Archivo"].actions()}
+            self.assertNotIn("Imprimir presupuesto", file_actions)
+            self.assertNotIn("Vista previa del presupuesto…", file_actions)
+            export_menu = file_actions["Exportar"].menu()
+            self.assertIsNotNone(export_menu)
+            actions = export_menu.actions()
+            self.assertEqual([action.text() for action in actions], [
                 "Exportar presupuesto a ODS…",
                 "Exportar mediciones a CSV…",
                 "Exportar recursos a ODS…",
                 "Exportar descompuestos a ODS…",
-            ):
-                self.assertIn(expected, export_labels)
-            query_labels = [
-                action.text() for action in menus["Consultas"].actions()
-            ]
-            self.assertEqual(query_labels, ["NTP", "UNE", "LER"])
-            info_labels = [
-                action.text() for action in menus["Información"].actions()
-            ]
-            self.assertIn("Bases de precios de referencia", info_labels)
-            self.assertIn("Licencia y responsabilidad…", info_labels)
-            self.assertIn("Apoyar el proyecto (Buy Me a Coffee)", info_labels)
+            ])
+            for action in actions:
+                action.trigger()
+            budget.assert_called_once_with(window)
+            measurements.assert_called_once_with(window)
+            self.assertEqual([call.args for call in resources.call_args_list],
+                             [(window, "Recursos"), (window, "Descompuestos")])
+            self.assertIn("Consultas", menus)
+            self.assertIn("Información", menus)
             window.close()
-            self.application.processEvents()
+            window.deleteLater()
+            QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
     def test_query_menu_entries_have_visible_search_icons_and_open_their_catalogues(self) -> None:
         """Las lupas de Consultas no cambian cuál de los tres buscadores se abre."""

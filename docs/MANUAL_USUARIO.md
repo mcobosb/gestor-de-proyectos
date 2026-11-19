@@ -352,10 +352,8 @@ Selecciona el tipo y el destino del PDF. Al terminar, el programa intenta abrirl
 con la aplicación asociada. Si no puede abrirlo, indica dónde ha quedado guardado.
 Puedes imprimirlo desde el visor PDF.
 
-El menú **Imprimir y exportar** conserva la vista HTML del presupuesto,
-la impresión, la exportación del presupuesto, recursos y descompuestos a hojas
-ODS editables y las mediciones a CSV. La vista HTML es una salida adicional,
-no el modelo PDF maquetado.
+Desde **Archivo → Exportar** puedes guardar el presupuesto, los recursos y los
+descompuestos en hojas ODS editables, y las mediciones en CSV.
 
 Los informes no inventan precios ausentes. Si falta un recurso, carga su base de
 referencia o completa los precios necesarios antes de volver a generarlo.
