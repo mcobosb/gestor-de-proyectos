@@ -457,6 +457,17 @@ la incorporación del registro, no la autoría ni la fecha de las ediciones ante
 Las bibliotecas de **Seguridad y Salud**, **RCDs** y **Justificación de precios**
 usan el mismo registro por documento, también desde la versión 1. El historial
 se guarda en la biblioteca y no se incluye en el PDF ni en el ODT.
+En RCDs, **Editar documentación del estudio…** abre ese mismo editor para los
+ocho documentos base. Guarda los cambios antes de exportar. Las tablas del
+estudio comparten las cabeceras azules, las filas alternas y los bordes suaves
+de Seguridad y Salud y Justificación de precios, tanto en PDF como en ODT.
+
+En los documentos generados, las viñetas y las listas numeradas comparten
+tabuladores y sangría francesa. Los pies se escriben en mayúsculas sin perder
+la numeración de página. Antes de cada tabla de datos se incluye una referencia
+en el texto («Véase la Tabla X.»), seguida del título «Tabla X. …». Los elementos
+de maquetación (por ejemplo, las columnas de firma) no se numeran.
+
 Encima del panel amarillo se muestran la versión y el último autor. Antes de guardar
 una modificación del texto amarillo o blanco debes introducir **Autor del cambio**
 y una fecha válida **DD/MM/AAAA** (se propone el día actual); la descripción es
@@ -514,8 +525,9 @@ certificación de cantidades reales ni de cumplimiento normativo.
 Completa los campos pendientes (o indica cero si no proceden) y revisa los
 valores recuperados, cuya procedencia se muestra junto a cada campo:
 
-- **Superficie afectada**: manual; no se suman superficies de partidas que
-  podrían solaparse.
+- **Superficie afectada**: se usa automáticamente la mayor medición de una
+  partida de obra en m², aunque hubiese un valor guardado. No se suman
+  superficies que podrían solaparse. Si no hay partidas en m², el campo es manual.
 - **Volumen de excavación**: se propone la suma de las mediciones de partidas
   de excavación o desmonte en m³, excluyendo transporte, carga y relleno.
   No se deduce volumen a partir de superficie, toneladas u otras unidades.
@@ -585,6 +597,9 @@ Si cambian las demoliciones, repite la copia para actualizar sus cantidades.
 Cancelar la tabla de revisión no modifica el presupuesto.
 
 ### Paso 2. Revisar residuos y guardar
+
+La lista de residuos tiene cabecera verde azulada y la vista económica,
+cabecera azul. Ambas alternan el fondo de las filas para facilitar la lectura.
 
 La tabla muestra las 57 filas del modelo con **X**, grupo, código LER, descripción
 y la partida que motivó la detección:

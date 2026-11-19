@@ -215,7 +215,8 @@ class PptpSheetIndexTests(unittest.TestCase):
             paragraphs = cells[1].findall(_tag("text:p"))
             self.assertEqual(len(paragraphs), 2 if index == 0 else 1)
             for paragraph in paragraphs:
-                self.assertEqual(paragraph.text, "• ")
+                self.assertEqual(paragraph.text, "•")
+                self.assertIsNotNone(paragraph.find(_tag("text:tab")))
                 self.assertEqual(paragraph.get(_tag("text:style-name")), "PPTPIndexBullet")
                 link = paragraph.find(_tag("text:a"))
                 bookmark = link.get(_tag("xlink:href")).removeprefix("#")
@@ -225,6 +226,7 @@ class PptpSheetIndexTests(unittest.TestCase):
         self.assertEqual(list(table.iter(_tag("text:bookmark-ref"))), [])
         text = "".join(content.itertext())
         self.assertIn("Tabla 9.1. Fichas del proyecto", text)
+        self.assertIn("Véase la Tabla 9.1.", text)
         self.assertNotIn(INDEX_TOKEN, text)
 
     def test_pdf_names_link_to_actual_sheet_pages_without_section_numbers(self):

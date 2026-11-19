@@ -28,8 +28,8 @@ from municipalities import resolve_municipalities
 from report_layout import LEFT_MARGIN, PAGE_MARGIN, RIGHT_MARGIN, ReportLayout, report_project_label
 from tools._library_history import read_revisions
 from tools._shared.document_layout import (
-    DEFAULT_TOC_DEPTH, TABLE_HEADER_BACKGROUND, add_odt_blue_table_cells, pdf_blue_table_style,
-    number_headings, template_paragraph_styles,
+    DEFAULT_TOC_DEPTH, TABLE_HEADER_BACKGROUND, add_odt_blue_table_cells, add_odt_list_style,
+    number_headings, pdf_blue_table_style, pdf_list_style, template_paragraph_styles,
 )
 from tools.safety_health import (
     LIBRARY_PATH, SAFETY_BUDGET_SOURCE, _study_criteria_values, evaluate_study_criteria,
@@ -1040,6 +1040,33 @@ def _numbered_blocks(blocks: list[_Block]) -> list[_Block]:
     return result
 
 
+def _tables_with_labels(blocks: list[_Block]):
+    """Conserva las referencias del estudio y rotula las tablas sin leyenda."""
+    caption_pattern = re.compile(r"Tabla\s+(\d+(?:\.\d+)*)\.\s*(.*)")
+    used = {
+        match[1] for block in blocks if block.kind == "caption"
+        if (match := caption_pattern.fullmatch(block.text))
+    }
+    next_number = 1
+    for index, block in enumerate(blocks):
+        if block.kind == "caption" and index + 1 < len(blocks) and blocks[index + 1].kind == "table":
+            continue
+        if block.kind == "table":
+            previous = blocks[index - 1] if index else None
+            match = caption_pattern.fullmatch(previous.text) if previous and previous.kind == "caption" else None
+            if match:
+                number, title = match.groups()
+            else:
+                while str(next_number) in used:
+                    next_number += 1
+                number = str(next_number)
+                next_number += 1
+                title = previous.text if previous and previous.kind == "caption" else " / ".join(block.headers)
+            yield block, (number, title)
+        else:
+            yield block, None
+
+
 def _reference_target(reference: str) -> str:
     """Genera un destino ASCII estable para una fila del catalogo preventivo."""
     return f"ESSRef-{_normalized_text(reference).upper()}"
@@ -1153,11 +1180,7 @@ def _pdf_blue_table(block: _Block, layout: ReportLayout):
         "ESSSummaryHeader", parent=text, fontName=layout.bold_font, textColor=colors.white,
     )
     category_style = ParagraphStyle("ESSCatalogueType", parent=text)
-    cell_list_style = ParagraphStyle(
-        "ESSCellList", parent=text, leftIndent=24, firstLineIndent=0,
-        bulletIndent=18, bulletAnchor="end",
-        bulletFontName=layout.regular_font, bulletFontSize=9.5,
-    )
+    cell_list_style = pdf_list_style("ESSCellList", text)
 
     def cell_text(value, style):
         """Da sangria tambien a las listas incluidas en las celdas del resumen."""
@@ -1231,17 +1254,7 @@ def _add_odt_blue_table_styles(document) -> None:
             _tag("fo:font-size"): "9.5pt",
         })
     add_odt_blue_table_cells(document, "ESSSummary")
-    style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
-        _tag("style:name"): "ESSCellList", _tag("style:family"): "paragraph",
-        _tag("style:parent-style-name"): "ESSSummaryText",
-    })
-    properties = ET.SubElement(style, _tag("style:paragraph-properties"), {
-        _tag("fo:margin-left"): "24pt", _tag("fo:text-indent"): "-12pt",
-    })
-    tabs = ET.SubElement(properties, _tag("style:tab-stops"))
-    ET.SubElement(tabs, _tag("style:tab-stop"), {
-        _tag("style:position"): "12pt", _tag("style:type"): "left",
-    })
+    add_odt_list_style(document, "ESSCellList", "ESSSummaryText")
 
 
 def _write_odt_blue_table(document, block: _Block) -> None:
@@ -1419,11 +1432,7 @@ def _write_pdf(app, target, content: _StudyContent) -> None:
         leading=13, spaceAfter=6, alignment=TA_JUSTIFY,
     )
     list_styles = {
-        depth: ParagraphStyle(
-            f"ESSList{depth}", parent=body, leftIndent=30 + 12 * depth,
-            firstLineIndent=0, bulletIndent=24 + 12 * depth, bulletAnchor="end",
-            bulletFontName=layout.regular_font, bulletFontSize=10,
-        )
+        depth: pdf_list_style(f"ESSList{depth}", body, depth)
         for depth in {block.level for block in content.blocks if block.kind == "list_item"}
     }
     heading_styles = {
@@ -1469,7 +1478,7 @@ def _write_pdf(app, target, content: _StudyContent) -> None:
         toc.document_index = document_index
         toc.levelStyles = toc_styles
         story.extend((layout.text("ÍNDICE", layout.title_style), toc, PageBreak()))
-        for block in blocks:
+        for block, label in _tables_with_labels(blocks):
             if block.kind == "heading":
                 paragraph = layout.text(block.text, heading_styles[block.level])
                 paragraph._ess_heading = (
@@ -1487,7 +1496,9 @@ def _write_pdf(app, target, content: _StudyContent) -> None:
                 ))
             elif block.kind == "caption":
                 story.append(layout.text(block.text, caption_style))
-            elif block.kind == "table":
+            elif label is not None:
+                number, title = label
+                layout.table_caption(story, title, number=number, body=body, caption=caption_style)
                 if block.project_summary or block.blue_table:
                     story.append(_pdf_blue_table(block, layout))
                 else:
@@ -1644,18 +1655,7 @@ def _write_odt(app, target, content: _StudyContent) -> None:
                 _tag("fo:break-before"): "page" if name == "ESSDocumentNextTitle" else "auto",
             })
     for depth in {block.level for block in content.blocks if block.kind == "list_item"}:
-        style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
-            _tag("style:name"): f"ESSList{depth}", _tag("style:family"): "paragraph",
-            _tag("style:parent-style-name"): "ESSBody",
-        })
-        properties = ET.SubElement(style, _tag("style:paragraph-properties"), {
-            _tag("fo:margin-left"): f"{30 + 12 * depth}pt",
-            _tag("fo:text-indent"): "-12pt",
-        })
-        tabs = ET.SubElement(properties, _tag("style:tab-stops"))
-        ET.SubElement(tabs, _tag("style:tab-stop"), {
-            _tag("style:position"): "12pt", _tag("style:type"): "left",
-        })
+        add_odt_list_style(document, f"ESSList{depth}", "ESSBody", depth)
     _add_odt_blue_table_styles(document)
     reference_style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
         _tag("style:name"): "ESSReferenceLink", _tag("style:family"): "text",
@@ -1679,7 +1679,7 @@ def _write_odt(app, target, content: _StudyContent) -> None:
                 for level in range(1, DEFAULT_TOC_DEPTH + 1)
             } if scoped_contents else None,
         )
-        for block in blocks:
+        for block, label in _tables_with_labels(blocks):
             if block.kind == "heading":
                 style = (
                     f"ESSDocument{index}Heading{block.level}"
@@ -1701,7 +1701,9 @@ def _write_odt(app, target, content: _StudyContent) -> None:
                 ET.SubElement(paragraph, _tag("text:tab")).tail = value
             elif block.kind == "caption":
                 document.paragraph(block.text, style="ESSCaption")
-            elif block.kind == "table":
+            elif label is not None:
+                number, title = label
+                document.table_caption(title, number=number, body="ESSBody", caption="ESSCaption")
                 if block.project_summary or block.blue_table:
                     _write_odt_blue_table(document, block)
                 else:

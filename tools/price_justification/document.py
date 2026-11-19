@@ -12,7 +12,10 @@ from .templates import (
 )
 from .formula import PdfFormula, odt_formula
 from collaborative_storage import shared_library_path
-from tools._shared.document_layout import add_odt_blue_table_cells, pdf_blue_table_style
+from tools._shared.document_layout import (
+    LIST_INDENT, add_odt_blue_table_cells, add_odt_list_style, pdf_blue_table_style, pdf_list_style,
+    split_list_item,
+)
 
 
 TITLE = "Justificación de precios"
@@ -294,7 +297,7 @@ def _add_odt_table_styles(document) -> None:
         _tag("text:level"): "1", _tag("text:bullet-char"): "•",
     })
     ET.SubElement(level, _tag("style:list-level-properties"), {
-        _tag("text:space-before"): "8pt", _tag("text:min-label-width"): "12pt",
+        _tag("text:space-before"): "0pt", _tag("text:min-label-width"): f"{LIST_INDENT}pt",
     })
 
 
@@ -377,18 +380,7 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
             ET.SubElement(style, _tag("style:text-properties"), {_tag("fo:font-weight"): "bold"})
     depths = {-level for level, text in blocks if FORMULA_LEVEL < level < 0}
     for depth in sorted(depths):
-        indent = 18 * depth + 12
-        style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
-            _tag("style:name"): f"PricesList{depth}", _tag("style:family"): "paragraph",
-            _tag("style:parent-style-name"): "ReportBody",
-        })
-        props = ET.SubElement(style, _tag("style:paragraph-properties"), {
-            _tag("fo:margin-left"): f"{indent}pt", _tag("fo:text-indent"): "-22pt",
-        })
-        tabs = ET.SubElement(props, _tag("style:tab-stops"))
-        ET.SubElement(tabs, _tag("style:tab-stop"), {
-            _tag("style:position"): f"{indent}pt", _tag("style:type"): "left",
-        })
+        add_odt_list_style(document, f"PricesList{depth}", "ReportBody", depth - 1)
     style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
         _tag("style:name"): "PricesListingHeading", _tag("style:family"): "paragraph",
         _tag("style:parent-style-name"): "PricesHeading1",
@@ -401,13 +393,9 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
     document.paragraph(TITLE.upper(), style="PricesHeading1")
     document.table_of_contents(headings, max_level=3, name="PricesContents")
     bookmark = 0
-    table_index = 0
     for level, text in blocks:
         if isinstance(text, NarrativeTable):
-            table_index += 1
-            reference = f"Tabla {table_index}"
-            document.paragraph(f"Véase la {reference.lower()}: {text.title.lower()}.")
-            document.paragraph(f"{reference}. {text.title}", "PricesCaption")
+            document.table_caption(text.title, caption="PricesCaption")
             _write_odt_table(document, text)
         elif level > 0:
             document.heading(text, level, style=f"PricesHeading{level}", bookmark=f"PPTPHeading{bookmark}")
@@ -416,7 +404,7 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
             odt_formula(paragraph("PricesFormula"), text)
         elif level < 0:
             item = paragraph(f"PricesList{-level}")
-            marker, _, label = text.partition(" ")
+            marker, label = split_list_item(text)
             item.text = marker
             ET.SubElement(item, _tag("text:tab"))
             _odt_inline(item, label)
@@ -459,14 +447,10 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
     header_style = ParagraphStyle(
         "PricesTableHeader", parent=cell_style, fontName=layout.bold_font, textColor=colors.white,
     )
-    cell_bullet_style = ParagraphStyle(
-        "PricesTableBullet", parent=cell_style, leftIndent=20, bulletIndent=8,
-    )
+    cell_bullet_style = pdf_list_style("PricesTableBullet", cell_style)
     list_styles = {
-        level: ParagraphStyle(
-            f"PricesList{-level}", parent=body, leftIndent=-18 * level + 12,
-            bulletIndent=-18 * level - 10,
-        ) for level, _ in blocks if FORMULA_LEVEL < level < 0
+        level: pdf_list_style(f"PricesList{-level}", body, -level - 1)
+        for level, _ in blocks if FORMULA_LEVEL < level < 0
     }
     heading_styles = {
         level: ParagraphStyle(
@@ -487,13 +471,10 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
         Paragraph("ÍNDICE", heading_styles[2]), toc, PageBreak(),
     ]
     heading_index = 0
-    table_index = 0
     reports = dict(LISTINGS)
     for level, text in blocks + [(1, title) for title, _ in LISTINGS]:
         if isinstance(text, NarrativeTable):
-            table_index += 1
-            story.append(Paragraph(f"Véase la tabla {table_index}: {escape(text.title.lower())}.", body))
-            story.append(Paragraph(f"Tabla {table_index}. {escape(text.title)}", caption_style))
+            layout.table_caption(story, text.title, body=body, caption=caption_style)
             cells = [[Paragraph(label, header_style) for label in ("Concepto", "Detalle")]]
             cells.extend([
                 [
@@ -521,7 +502,7 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
         elif level == FORMULA_LEVEL:
             story.append(PdfFormula(text))
         elif level < 0:
-            marker, _, label = text.partition(" ")
+            marker, label = split_list_item(text)
             story.append(Paragraph(_pdf_inline(label), list_styles[level], bulletText=marker))
         else:
             story.append(Paragraph(_pdf_inline(text), body))

@@ -17,6 +17,7 @@ from xml.etree import ElementTree
 from zipfile import BadZipFile, ZipFile
 
 from app_paths import application_directory
+from tools._shared.document_layout import table_labels
 
 DEFAULT_TEMPLATE_PATH = application_directory(__file__) / "plantillas" / "plantilla.odt"
 PAGE_MARGIN = 25 * 72 / 25.4
@@ -591,6 +592,22 @@ def replace_template_fields(section, fields: dict[str, str]):
     return section
 
 
+def uppercase_footer(section) -> None:
+    """Pone en mayúsculas el texto visible sin alterar los campos ODF."""
+    for element in section.iter():
+        if element.text:
+            element.text = _uppercase_footer_text(element.text)
+        if element is not section and element.tail:
+            element.tail = _uppercase_footer_text(element.tail)
+
+
+def _uppercase_footer_text(value: str) -> str:
+    """Respeta los marcadores de plantilla que no se hayan sustituido."""
+    return "".join(part if index % 2 else part.upper() for index, part in enumerate(
+        re.split(r"(\{\{[^{}]+\}\}|\{no_p[aá]gina\})", value),
+    ))
+
+
 def replace_footer_fields(section, title: str):
     """Sustituye campos especiales del pie incluso fragmentados entre spans."""
     from copy import deepcopy
@@ -710,6 +727,7 @@ class ReportLayout:
         self.certification = certification
         self.repeat_titles = repeat_titles
         self.footer_title = footer_title
+        self.data_table_number = 0
         self.landscape = landscape
         self.page_size = landscape_page(A4) if landscape else A4
         self.page_width, self.page_height = self.page_size
@@ -767,6 +785,29 @@ class ReportLayout:
     def description(self, value):
         """Crea una descripción con la sangría y tipografía del modelo."""
         return self.text(value, self.description_style)
+
+    def table_caption(self, story, title: str, *, number: int | str | None = None,
+                      body=None, caption=None) -> None:
+        """Añade la referencia y el título de una tabla, unidos a su primera fila."""
+        from reportlab.lib.styles import ParagraphStyle
+
+        if number is None:
+            self.data_table_number += 1
+            number = self.data_table_number
+        reference, label = table_labels(number, title)
+        story.extend((
+            self.text(reference, ParagraphStyle(
+                "TableReference", parent=body or self.normal, keepWithNext=True, spaceBefore=5,
+            )),
+            self.text(label, caption or ParagraphStyle(
+                "TableCaption", parent=self.bold, keepWithNext=True, spaceAfter=4,
+            )),
+        ))
+
+    def add_data_table(self, story, title: str, table) -> None:
+        """Inserta una tabla de datos PDF con su referencia y título."""
+        self.table_caption(story, title)
+        story.append(table)
 
     def _template_table_flowable(self, template_table, section: str, table_index: int):
         """Reproduce una tabla de cabecera o pie con sus columnas, bordes y texto."""
@@ -900,11 +941,12 @@ class ReportLayout:
 
     def table(
         self, headers, rows, ratios, *, bold_rows=(), background=None, rule=False,
-        leaders=(), highlighted_rows=(),
+        leaders=(), highlighted_rows=(), blue_header=False,
     ):
         """Compone columnas fijas con alineación numérica, negritas y reglas opcionales."""
         from decimal import Decimal
         from reportlab.lib import colors
+        from reportlab.lib.styles import ParagraphStyle
         from reportlab.platypus import Table, TableStyle
         from bc3_gui import fmt_number
 
@@ -915,7 +957,13 @@ class ReportLayout:
             "PLAN", "CERTIFICADO", "DESVIACIÓN",
         }
         numeric = {i for i, h in enumerate(headers) if h in numeric_headers}
-        data = [[self.text(h, self.bold_right if i in numeric else self.bold)
+        header_styles = (self.bold, self.bold_right)
+        if blue_header:
+            header_styles = tuple(
+                ParagraphStyle(f"BlueTableHeader{index}", parent=style, textColor=colors.white)
+                for index, style in enumerate(header_styles)
+            )
+        data = [[self.text(h, header_styles[i in numeric])
                  for i, h in enumerate(headers)]] if headers else []
         bold_rows = set(bold_rows)
         for row_index, row in enumerate(rows):
@@ -946,7 +994,11 @@ class ReportLayout:
             ("TOPPADDING", (0, 0), (-1, -1), 1.5),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
         ]
-        if headers:
+        if blue_header:
+            from tools._shared.document_layout import pdf_blue_table_style
+
+            style = pdf_blue_table_style()
+        elif headers:
             style.extend([
                 ("LINEABOVE", (0, 0), (-1, 0), 0.6, colors.black),
                 ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.black),
@@ -1168,8 +1220,8 @@ class ReportLayout:
         """Resuelve los campos del pie solo en documentos que lo solicitan."""
         value = self._template_value(value)
         if not self.footer_title:
-            return value
-        return value.replace("{{capitulo}}", self.footer_title).replace(
+            return _uppercase_footer_text(value)
+        value = value.replace("{{capitulo}}", self.footer_title).replace(
             "{{capítulo}}", self.footer_title,
         ).replace(
             "{{no_pagina}}", str(self.footer_page or 1),
@@ -1178,6 +1230,7 @@ class ReportLayout:
         ).replace(
             "{no_pagina}", str(self.footer_page or 1),
         ).replace("{no_página}", str(self.footer_page or 1))
+        return _uppercase_footer_text(value)
 
     def _template_value(self, value: str) -> str:
         """Resuelve los campos configurables de cabecera y pie."""

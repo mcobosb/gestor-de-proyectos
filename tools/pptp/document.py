@@ -18,7 +18,8 @@ from .sheet_index import (
 )
 from tools._library_markdown import document_markdown, text_blocks
 from tools._shared.document_layout import (
-    DEFAULT_TOC_DEPTH, number_headings, template_paragraph_styles,
+    DEFAULT_TOC_DEPTH, add_odt_list_style, number_headings, pdf_list_style, split_list_item,
+    template_paragraph_styles,
 )
 
 if TYPE_CHECKING:
@@ -713,6 +714,15 @@ def write_document(
     toc_depth = validate_toc_depth(toc_depth)
     source, sheet_rows = extract_index(number_headings(source))
     blocks = text_blocks(source, preserve_bold=True)
+    index_label = ("1", "Fichas del proyecto por capítulo")
+    if sheet_rows:
+        index_position = blocks.index((0, INDEX_TOKEN))
+        if index_position and blocks[index_position - 1][0] == 0:
+            match = re.fullmatch(r"Tabla\s+(\d+(?:\.\d+)*)\.\s*(.+)",
+                                 blocks[index_position - 1][1].replace("**", ""))
+            if match:
+                index_label = (match[1], match[2])
+                del blocks[index_position - 1]
     title = "PLIEGO DE PRESCRIPCIONES TÉCNICAS PARTICULARES"
     project = variables["titulo_proyecto"]
     bullet_depths = sorted({-level - 1 for level, _ in blocks if level < 0})
@@ -783,21 +793,7 @@ def write_document(
                     })
             ET.SubElement(style, _tag("style:paragraph-properties"), properties)
         for depth in bullet_depths:
-            style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
-                _tag("style:name"): f"PPTPBullet{depth}", _tag("style:family"): "paragraph",
-                _tag("style:parent-style-name"): "PPTPBody",
-            })
-            ET.SubElement(style, _tag("style:paragraph-properties"), {
-                _tag("fo:margin-left"): f"{12 * (depth + 1)}pt",
-                _tag("fo:text-indent"): "-12pt",
-                _tag("fo:margin-top"): "0pt", _tag("fo:margin-bottom"): "3pt",
-                _tag("fo:text-align"): "start",
-            })
-            properties = style.find(_tag("style:paragraph-properties"))
-            tabs = ET.SubElement(properties, _tag("style:tab-stops"))
-            ET.SubElement(tabs, _tag("style:tab-stop"), {
-                _tag("style:position"): "12pt", _tag("style:type"): "left",
-            })
+            add_odt_list_style(document, f"PPTPBullet{depth}", "PPTPBody", depth)
         if sheet_rows:
             style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
                 _tag("style:name"): "PPTPIndexCaption", _tag("style:family"): "paragraph",
@@ -826,8 +822,10 @@ def write_document(
                     _tag("fo:font-weight"): "bold" if name == "PPTPContents1" else "normal",
                 })
         heading_index = 0
-        for block_index, (level, text) in enumerate(blocks):
+        for level, text in blocks:
             if level == 0 and text == INDEX_TOKEN:
+                document.table_caption(index_label[1], number=index_label[0],
+                                       body="PPTPBody", caption="PPTPIndexCaption")
                 write_odt_index(document, sheet_rows)
                 continue
             if level > 0:
@@ -842,13 +840,13 @@ def write_document(
                     f"PPTPBullet{-level - 1}" if level < 0
                     else "PPTPSeparator" if separator else "PPTPBody"
                 )
-                if block_index + 1 < len(blocks) and blocks[block_index + 1] == (0, INDEX_TOKEN):
-                    style = "PPTPIndexCaption"
                 paragraph = ET.SubElement(document.body, _tag("text:p"), {
                     _tag("text:style-name"): style,
                 })
                 if level < 0:
-                    text = re.sub(r"^(\*\*)?(\d+[.)]|•) ", r"\1\2\t ", text)
+                    marker, text = split_list_item(text)
+                    paragraph.text = marker
+                    ET.SubElement(paragraph, _tag("text:tab"))
                 for value, bold in bold_runs(text):
                     attributes = {_tag("text:style-name"): "PPTPBold"} if bold else {}
                     span = ET.SubElement(paragraph, _tag("text:span"), attributes)
@@ -888,7 +886,7 @@ def write_document(
     else:
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import ParagraphStyle
-        from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
+        from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
         from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Table
         from reportlab.platypus.doctemplate import LayoutError
         from reportlab.platypus.tableofcontents import TableOfContents
@@ -910,24 +908,21 @@ def write_document(
             ) for level in range(toc_depth)
         ]
         bullet_styles = {
-            depth: ParagraphStyle(
-                f"PPTPBullet{depth}", parent=body,
-                leftIndent=12 * (depth + 1), firstLineIndent=-12,
-            )
+            depth: pdf_list_style(f"PPTPBullet{depth}", body, depth)
             for depth in bullet_depths
         }
         story = [
             layout.text("ÍNDICE", layout.title_style), toc, PageBreak(),
         ]
 
-        def pdf_paragraph(text: str, style):
+        def pdf_paragraph(text: str, style, marker=None):
             """Crea un párrafo PDF con negritas explícitas y sin interpretar HTML del usuario."""
             markup = "".join(
                 f'<font name="{escape(layout.bold_font, quote=True)}">{escape(value)}</font>'
                 if bold else escape(value)
                 for value, bold in bold_runs(text)
             )
-            return Paragraph(markup, style)
+            return Paragraph(markup, style, bulletText=marker)
 
         tabular_rows = []
 
@@ -954,9 +949,10 @@ def write_document(
             tabular_rows.clear()
 
         heading_index = 0
-        for block_index, (level, text) in enumerate(blocks):
+        for level, text in blocks:
             if level == 0 and text == INDEX_TOKEN:
                 flush_tabular_rows()
+                layout.table_caption(story, index_label[1], number=index_label[0], body=body)
                 story.append(pdf_index(sheet_rows, layout, body))
                 continue
             if level == 0 and "\t" in text.lstrip("\t"):
@@ -977,17 +973,14 @@ def write_document(
                     "PPTPSeparator", parent=body, spaceBefore=8,
                     keepWithNext=True, alignment=TA_LEFT,
                 )
-            if block_index + 1 < len(blocks) and blocks[block_index + 1] == (0, INDEX_TOKEN):
-                style = ParagraphStyle(
-                    "PPTPIndexCaption", parent=body, keepWithNext=True, alignment=TA_CENTER,
-                )
             if text.startswith("\t"):
                 tabs = len(text) - len(text.lstrip("\t"))
                 style = ParagraphStyle(
                     style.name + "Indented", parent=style, leftIndent=style.leftIndent + 12 * tabs,
                 )
                 text = text.lstrip("\t")
-            paragraph = pdf_paragraph(text, style)
+            marker, value = split_list_item(text) if level < 0 else (None, text)
+            paragraph = pdf_paragraph(value, style, marker)
             if level > 0:
                 paragraph._pptp_heading = (
                     level - 1, text.replace("**", ""), f"PPTPHeading{heading_index}",

@@ -61,7 +61,9 @@ class DocumentStructureTests(unittest.TestCase):
             with ZipFile(destination / paths[1]) as doc:
                 styles = ET.fromstring(doc.read("styles.xml"))
                 self.assertIn("Proyecto de prueba", "".join(styles.find(f".//{_tag('style:header')}").itertext()))
-                self.assertIsNotNone(styles.find(f".//{_tag('style:footer')}//{_tag('text:page-number')}"))
+                footer = styles.find(f".//{_tag('style:footer')}")
+                self.assertIn(" · PÁGINA ", "".join(footer.itertext()))
+                self.assertIsNotNone(footer.find(f".//{_tag('text:page-number')}"))
             with ZipFile(destination / MASTER_NAME) as master:
                 self.assertEqual(master.read("mimetype"), b"application/vnd.oasis.opendocument.text-master")
                 content = ET.fromstring(master.read("content.xml"))

@@ -286,13 +286,14 @@ class PptpFormattingTests(unittest.TestCase):
                         paragraphs = content.findall(".//text:p", namespaces)
                         items = [
                             paragraph for paragraph in paragraphs
-                            if "".join(paragraph.itertext()).startswith(("1. Previos:", "2. Desmontaje/", "3. Control"))
+                            if paragraph.text in {"1.", "2.", "3."}
                         ]
                         self.assertEqual(len(items), 3)
                         for item, label in zip(items, ("Previos:", "Desmontaje/Demolición:", "Control y remate:")):
                             bold = item.find("text:span[@text:style-name='PPTPBold']", namespaces)
                             self.assertIsNotNone(bold)
                             self.assertEqual(bold.text, label)
+                            self.assertIsNotNone(item.find("text:tab", namespaces))
                         bold_properties = named_styles.find(
                             ".//style:style[@style:name='PPTPBold']/style:text-properties", namespaces,
                         )
@@ -314,8 +315,8 @@ class PptpFormattingTests(unittest.TestCase):
                             ))
                         text = "".join(piece[0] for piece in pieces)
                         starts = [
-                            next(piece for piece in pieces if piece[0].startswith(prefix))
-                            for prefix in ("1. ", "2. ", "3. ")
+                            next(piece for piece in pieces if piece[0].strip() == marker)
+                            for marker in ("1.", "2.", "3.")
                         ]
                         self.assertEqual(len({(piece[1], piece[2]) for piece in starts}), 3)
                         for label in ("Previos:", "Desmontaje/Demolición:", "Control y remate:", "Ejecución"):

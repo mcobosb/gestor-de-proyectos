@@ -66,7 +66,10 @@ def before_project_save_qt(app) -> None:
             for item in app.budget_items
         )
     ):
-        synchronize_budget(app, RcdState.from_dict(app.rcd_state))
+        state = RcdState.from_dict(app.rcd_state)
+        update_surface(state, app.budget_items)
+        synchronize_budget(app, state)
+        app.rcd_state = state.to_dict()
 
 
 # Porcentajes y densidades del modelo, no tasas de generación medidas en la obra.
@@ -466,8 +469,32 @@ def transfer_demolition(app: BudgetApp, state: RcdState,
     return created
 
 
+_SURFACE_SOURCE = "Mayor medición en m²: "
+_SURFACE_PENDING = "No hay partidas de obra medidas en m²; indica la superficie manualmente."
+
+
+def update_surface(state: RcdState, items: list[ProjectItem]) -> bool:
+    """Usa la partida de obra con más m² y conserva el dato manual si no hay ninguna."""
+    largest: tuple[float, ProjectItem] | None = None
+    for item in items:
+        if item.source.startswith(RCD_BUDGET_SOURCE) or re.sub(r"[\s^]", "", normalize(item.unit)) != "m2":
+            continue
+        measurement = number(item.measurement, f"Superficie de {item.code}")
+        if largest is None or measurement > largest[0]:
+            largest = measurement, item
+    if largest is not None:
+        state.inputs["surface"], item = largest
+        state.sources["surface"] = _SURFACE_SOURCE + f"{item.code} — {item.summary}"
+        return True
+    if state.sources.get("surface", "").startswith(_SURFACE_SOURCE):
+        state.inputs["surface"] = None
+    if state.inputs["surface"] is None:
+        state.sources["surface"] = _SURFACE_PENDING
+    return False
+
+
 def initial_state(app: BudgetApp) -> RcdState:
-    """Recupera magnitudes inequívocas y deja pendientes superficie y datos desconocidos."""
+    """Recupera magnitudes del presupuesto y deja pendientes los datos desconocidos."""
     state = RcdState()
     budget = Decimal(0)
     earth_budget = Decimal(0)
@@ -499,7 +526,7 @@ def initial_state(app: BudgetApp) -> RcdState:
     if earth_budget:
         state.inputs["earth_budget"] = number(earth_budget, "Movimiento de tierras")
         state.sources["earth_budget"] = "Estimación por descripciones y capítulos; revisar."
-    state.sources["surface"] = "Pendiente: no se suman superficies de partidas que pueden solaparse."
+    update_surface(state, app.budget_items)
     detect_wastes(state, app)
     return state
 

@@ -6,6 +6,7 @@ from decimal import Decimal
 from pathlib import Path
 from xml.etree import ElementTree as ET
 from zipfile import ZIP_STORED, ZIP_DEFLATED, ZipFile
+from tools._shared.document_layout import table_labels
 
 from budget_reports import (
     CERTIFICATION_REPORT_NAMES, DEVIATION_REPORT_NAME, REPORT_NAMES, ReportSettings,
@@ -74,6 +75,7 @@ class _OdtReport:
         self.template_resources = template_resources
         self.template_borders: dict[str, dict[str, str]] = {}
         self.table_number = 0
+        self.data_table_number = 0
         self.content_root = ET.Element(_tag("office:document-content"), {
             _tag("office:version"): "1.3",
         })
@@ -243,11 +245,35 @@ class _OdtReport:
             ET.SubElement(style, _tag("style:text-properties"), {_tag("fo:font-size"): "1pt"})
         self.paragraph("", style=name)
 
+    def table_caption(self, title: str, *, number: int | str | None = None,
+                      body: str = "ReportBody", caption: str = "") -> None:
+        """Añade la referencia y el título de una tabla sin separarlos de sus datos."""
+        if number is None:
+            self.data_table_number += 1
+            number = self.data_table_number
+        reference, label = table_labels(number, title)
+        reference_style = f"{body}TableReference"
+        for name, bold in ((reference_style, False), ("DataTableCaption", True)):
+            if any(style.get(_tag("style:name")) == name for style in self.automatic_styles):
+                continue
+            style = ET.SubElement(self.automatic_styles, _tag("style:style"), {
+                _tag("style:name"): name, _tag("style:family"): "paragraph",
+                _tag("style:parent-style-name"): "ReportBody" if bold else body,
+            })
+            ET.SubElement(style, _tag("style:paragraph-properties"), {
+                _tag("fo:keep-with-next"): "always",
+                _tag("fo:margin-top" if not bold else "fo:margin-bottom"): "4pt",
+            })
+            if bold:
+                ET.SubElement(style, _tag("style:text-properties"), {_tag("fo:font-weight"): "bold"})
+        self.paragraph(reference, reference_style)
+        self.paragraph(label, caption or "DataTableCaption")
+
     def table(
         self, headers, rows, *, bold_rows=(), bold_text_style: str = "TableTotal",
         body_text_style: str = "TableText",
         ratios=(), right_columns=(), chapter: bool = False, keep_next: bool = False,
-        highlighted_rows=(), cell_style="", write_cell=None,
+        highlighted_rows=(), cell_style="", write_cell=None, caption: str = "",
     ) -> None:
         """Añade una tabla ODF con estilos semánticos para cabecera, texto y énfasis."""
         column_count = max(
@@ -255,6 +281,8 @@ class _OdtReport:
         )
         if not column_count:
             return
+        if caption:
+            self.table_caption(caption)
         self.table_number += 1
         name = f"Table{self.table_number}"
         table_style = ET.SubElement(self.automatic_styles, _tag("style:style"), {
@@ -594,7 +622,7 @@ class _OdtReport:
 
     def _master_page(self, master_styles, styles, name: str, title: str) -> None:
         """Repite logo, título, proyecto y pie numerado con la geometría del PDF."""
-        from report_layout import replace_template_fields
+        from report_layout import replace_template_fields, uppercase_footer
 
         master_page = ET.SubElement(master_styles, _tag("style:master-page"), {
             _tag("style:name"): name,
@@ -647,17 +675,15 @@ class _OdtReport:
             if self.layout is not None and self.layout.footer_title:
                 from report_layout import replace_footer_fields
 
-                master_page.append(replace_footer_fields(
-                    footer, self.layout.footer_title,
-                ))
-            else:
-                master_page.append(footer)
+                footer = replace_footer_fields(footer, self.layout.footer_title)
+            uppercase_footer(footer)
+            master_page.append(footer)
         elif self.footer:
             footer = ET.SubElement(master_page, _tag("style:footer"))
             paragraph = ET.SubElement(footer, _tag("text:p"), {
                 _tag("text:style-name"): "FooterText",
             })
-            ET.SubElement(paragraph, _tag("text:tab")).tail = self.footer
+            ET.SubElement(paragraph, _tag("text:tab")).tail = self.footer.upper()
             ET.SubElement(paragraph, _tag("text:tab"))
             ET.SubElement(paragraph, _tag("text:page-number"), {
                 _tag("text:select-page"): "current",
@@ -839,6 +865,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
         document.table(
             ["CAPÍTULO", "RESUMEN", "IMPORTE", "%"], rows,
             ratios=[65, 328, 75, COLUMN_REFERENCE_WIDTH - 468],
+            caption="Resumen del presupuesto por capítulos",
         )
         totals = budget_totals(float(pem), settings)
         for label, amount in (
@@ -891,6 +918,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                     ratios=[50, 45, 18, 290, 50, 57],
                     bold_rows=[i for i, row in enumerate(rows) if str(row[3]).startswith("Grupo ")],
                     highlighted_rows=[i for i, row in enumerate(rows) if str(row[3]).startswith("Grupo ")],
+                    caption=report,
                 )
             else:
                 document.paragraph(
@@ -919,10 +947,12 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                     child.code, child.unit, fmt_number(quantity, 3), child.summary,
                     fmt_number(child_price), fmt_number(float(money(quantity * child_price))), "",
                 ] for child, quantity, child_price in children]
-                document.table(
-                    column_headers if embedded else [], rows,
-                    ratios=auxiliary_widths, right_columns=(2, 4, 5, 6),
-                )
+                if rows:
+                    document.table(
+                        column_headers if embedded else [], rows,
+                        ratios=auxiliary_widths, right_columns=(2, 4, 5, 6),
+                        caption=f"Componentes del precio auxiliar {concept.code}",
+                    )
                 total("COSTE UNITARIO TOTAL", price)
                 difference = money(price) - sum(
                     (money(quantity * child_price) for _, quantity, child_price in children),
@@ -947,6 +977,8 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                 document.section(f"CUADRO DE PRECIOS {section}")
             for chapter_index, (code, items) in enumerate(groups):
                 chapter(code, new_page=chapter_index > 0)
+                if section == 1:
+                    document.table_caption(f"Precios unitarios de {format_chapter_code(code)}")
                 for item in items:
                     shown_amount = (
                         item.unit_price if section == 1 else
@@ -984,6 +1016,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                                 ["RESUMEN", "IMPORTE"],
                                 [[label, fmt_number(float(amount))] for label, amount in grouped.items()],
                                 ratios=[8, 2],
+                                caption=f"Resumen de costes de {item.code}",
                             )
                             difference = money(item.unit_price) - sum(grouped.values(), money(0))
                             if difference:
@@ -1002,6 +1035,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                                     fmt_number(float(money(quantity * price))), "",
                                 ] for concept, quantity, price in components],
                                 ratios=component_widths, right_columns=(3, 4, 5, 6),
+                                caption=f"Precio descompuesto de {item.code}",
                             )
                             difference = money(item.unit_price) - sum(
                                 (money(quantity * price) for _, quantity, price in components),
@@ -1031,6 +1065,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                                  for line in item.measurement_lines],
                                 ratios=MEASUREMENT_COLUMN_RATIOS if report == "Mediciones" else
                                 [4, 1, 1, 1, 1, 0.8, 1.2],
+                                caption=f"Detalle de mediciones de {item.code}",
                             )
                         if report == "Mediciones":
                             document.table(
@@ -1039,6 +1074,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                                   fmt_number(item.measurement, 3), item.unit]],
                                 ratios=MEASUREMENT_COLUMN_RATIOS, bold_rows=(0,),
                                 right_columns=(6,),
+                                caption="" if item.measurement_lines else f"Medición de {item.code}",
                             )
                         else:
                             document.table(
@@ -1046,6 +1082,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                                 [[fmt_number(item.measurement), fmt_number(item.unit_price),
                                   fmt_number(item.import_total)]],
                                 ratios=[CONTENT_WIDTH - 100, 50, 50],
+                                caption=f"Importe de {item.code}",
                             )
                     document.space(3 * 72 / 25.4)
                 if report == "Presupuesto mediciones":
@@ -1152,6 +1189,7 @@ def write_certification_odt(
              for row in [*deviation_rows, deviation_total]],
             ratios=DEVIATION_COLUMN_RATIOS, right_columns=(3, 4, 5),
             bold_rows=(len(deviation_rows),),
+            caption="Desviaciones respecto al plan original",
         )
         document.paragraph(
             "Desviación = certificado - plan original del mes. "
@@ -1178,6 +1216,7 @@ def write_certification_odt(
                     [["", "", "", "", "", "", fmt_number(quantity, 6),
                       money_text(item.unit_price), money_text(amount)]],
                     ratios=certification_widths, right_columns=(6, 7, 8),
+                    caption=f"Medición certificada de {item.code}",
                 )
                 justification = item.certification_justifications.get(month_key, "")
                 if justification:
@@ -1208,6 +1247,7 @@ def write_certification_odt(
         document.table(
             ["CAPÍTULO", "RESUMEN", "IMPORTE", "% CERTIFICADO"], rows,
             ratios=CERTIFICATION_SUMMARY_RATIOS,
+            caption="Certificación por capítulos",
         )
         document.paragraph(
             "% certificado respecto al presupuesto de cada capítulo.",

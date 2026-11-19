@@ -394,8 +394,8 @@ class PriceDocumentTests(unittest.TestCase):
                 self.assertNotIn("2026—", condensed)
                 self.assertIn("01/01/2026", text)
                 for number in range(1, 5):
-                    self.assertIn(f"Tabla{number}.", condensed)
-                    self.assertIn(f"Véaselatabla{number}:", condensed)
+                    reference = f"VéaselaTabla{number}."
+                    self.assertIn(f"{reference}Tabla{number}.", condensed)
                 for title, _ in LISTINGS:
                     self.assertIn(re.sub(r"\s+", "", title), condensed)
                 for value in (

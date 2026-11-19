@@ -88,11 +88,11 @@ def write_odt_index(document: _OdtReport, rows: list[SheetIndexRow]) -> None:
     """Escribe una fila por capítulo y cada nombre de ficha como enlace independiente."""
     from xml.etree import ElementTree as ET
     from odt_reports import _tag
+    from tools._shared.document_layout import add_odt_list_style
 
     for name, bold in [
         ("PPTPIndexHeader", True),
         ("PPTPIndexText", False),
-        ("PPTPIndexBullet", False),
     ]:
         style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
             _tag("style:name"): name, _tag("style:family"): "paragraph",
@@ -107,10 +107,6 @@ def write_odt_index(document: _OdtReport, rows: list[SheetIndexRow]) -> None:
             _tag("fo:keep-together"): "auto",
             _tag("fo:orphans"): "2", _tag("fo:widows"): "2",
         }
-        if name == "PPTPIndexBullet":
-            properties.update({
-                _tag("fo:margin-left"): "10pt", _tag("fo:text-indent"): "-10pt",
-            })
         ET.SubElement(style, _tag("style:paragraph-properties"), properties)
         ET.SubElement(style, _tag("style:text-properties"), {
             _tag("fo:font-weight"): "bold" if bold else "normal",
@@ -119,6 +115,7 @@ def write_odt_index(document: _OdtReport, rows: list[SheetIndexRow]) -> None:
             _tag("fo:color"): "#FFFFFF" if bold else "#000000",
             _tag("fo:font-size"): "9.5pt",
         })
+    add_odt_list_style(document, "PPTPIndexBullet", "PPTPIndexText")
     for name, background in [
         ("PPTPIndexHeaderCell", HEADER_BACKGROUND),
         ("PPTPIndexBlueCell", ALTERNATE_BACKGROUND),
@@ -156,7 +153,8 @@ def write_odt_index(document: _OdtReport, rows: list[SheetIndexRow]) -> None:
             paragraph = ET.SubElement(cell, _tag("text:p"), {
                 _tag("text:style-name"): "PPTPIndexBullet",
             })
-            paragraph.text = "• "
+            paragraph.text = "•"
+            ET.SubElement(paragraph, _tag("text:tab"))
             ET.SubElement(paragraph, _tag("text:a"), {
                 _tag("xlink:href"): "#" + sheet.bookmark, _tag("xlink:type"): "simple",
             }).text = sheet.sheet
@@ -169,6 +167,7 @@ def pdf_index(rows: list[SheetIndexRow], layout: ReportLayout, body: ParagraphSt
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.platypus import FrameBreak, Paragraph, Table
     from report_layout import CONTENT_WIDTH
+    from tools._shared.document_layout import pdf_list_style
 
     normal = ParagraphStyle(
         "PPTPIndexText", parent=body, fontName=layout.normal.fontName,
@@ -177,10 +176,7 @@ def pdf_index(rows: list[SheetIndexRow], layout: ReportLayout, body: ParagraphSt
     header = ParagraphStyle(
         "PPTPIndexHeader", parent=normal, fontName=layout.bold_font, textColor=colors.white,
     )
-    bullet = ParagraphStyle(
-        "PPTPIndexBullet", parent=normal, leftIndent=10, firstLineIndent=0,
-        bulletIndent=0, bulletFontName=normal.fontName, bulletFontSize=normal.fontSize,
-    )
+    bullet = pdf_list_style("PPTPIndexBullet", normal)
     data = [[Paragraph(escape(value), header) for value in HEADERS]]
     for chapter, sheets in chapter_groups(rows).items():
         data.append([

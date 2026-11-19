@@ -98,7 +98,7 @@ class PlanningReportTests(unittest.TestCase):
         self.assertEqual(
             page_layout.attrib[f"{{{namespaces['style']}}}print-orientation"], "landscape",
         )
-        self.assertIn("Planificación", styles_text)
+        self.assertIn("PLANIFICACIÓN", styles_text)
         self.assertTrue(any(element.tag.endswith("}page-number") for element in styles.iter()))
         self.assertTrue(any(
             element.tag.endswith("}table-cell-properties")
@@ -126,7 +126,7 @@ class PlanningReportTests(unittest.TestCase):
         self.assertNotIn("PLAN DE TRABAJO", text)
         self.assertIn("Actividad más larga", text)
         self.assertIn("8 días laborables (10 días naturales)", text)
-        self.assertIn("Planificación", text)
+        self.assertIn("PLANIFICACIÓN", text)
         self.assertIn("1", text)
         from pypdf.generic import ContentStream
 

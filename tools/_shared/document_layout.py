@@ -4,6 +4,60 @@ from __future__ import annotations
 import re
 import unicodedata
 
+LIST_INDENT = 24
+LIST_DEPTH_STEP = 12
+
+
+def table_labels(number: int | str, title: str) -> tuple[str, str]:
+    """Genera la llamada en el cuerpo y el rótulo inmediatamente antes de la tabla."""
+    title = title.strip().rstrip(".")
+    return f"Véase la Tabla {number}.", f"Tabla {number}. {title}"
+
+
+def pdf_list_style(name, parent, depth: int = 0):
+    """Alinea el marcador y las líneas de continuación de una lista PDF."""
+    from reportlab.lib.enums import TA_LEFT
+    from reportlab.lib.styles import ParagraphStyle
+
+    return ParagraphStyle(
+        name, parent=parent, alignment=TA_LEFT, leftIndent=LIST_INDENT + LIST_DEPTH_STEP * depth,
+        firstLineIndent=0, bulletIndent=LIST_DEPTH_STEP * depth, bulletAnchor="start",
+        bulletFontName=parent.fontName, bulletFontSize=parent.fontSize, spaceAfter=3,
+    )
+
+
+def add_odt_list_style(document, name: str, parent: str, depth: int = 0) -> None:
+    """Define el tabulador y la sangría francesa de una lista ODT."""
+    from xml.etree import ElementTree as ET
+    from odt_reports import _tag
+
+    style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+        _tag("style:name"): name, _tag("style:family"): "paragraph",
+        _tag("style:parent-style-name"): parent,
+    })
+    indent = LIST_INDENT + LIST_DEPTH_STEP * depth
+    properties = ET.SubElement(style, _tag("style:paragraph-properties"), {
+        _tag("fo:margin-left"): f"{indent}pt", _tag("fo:text-indent"): f"-{LIST_INDENT}pt",
+        _tag("fo:margin-top"): "0pt", _tag("fo:margin-bottom"): "3pt",
+        _tag("fo:text-align"): "start",
+    })
+    tabs = ET.SubElement(properties, _tag("style:tab-stops"))
+    ET.SubElement(tabs, _tag("style:tab-stop"), {
+        _tag("style:position"): f"{indent}pt", _tag("style:type"): "left",
+    })
+
+
+def split_list_item(text: str) -> tuple[str, str]:
+    """Separa el marcador preservando el énfasis del texto de Markdown."""
+    marker, _, body = text.partition(" ")
+    if marker.startswith("**"):
+        marker = marker[2:]
+        if marker.endswith("**"):
+            marker = marker[:-2]
+        else:
+            body = "**" + body
+    return marker, body
+
 
 DEFAULT_TOC_DEPTH = 2
 TABLE_HEADER_BACKGROUND = "#4472C4"
@@ -47,6 +101,38 @@ def add_odt_blue_table_cells(document, prefix: str) -> None:
             _tag("fo:padding"): "4pt", _tag("fo:border"): f"0.5pt solid {TABLE_BORDER_COLOR}",
             _tag("style:vertical-align"): "top",
         })
+
+
+def add_odt_blue_table_headers(document, prefix: str) -> None:
+    """Conserva la tipografía y alineación de las cabeceras con texto blanco."""
+    from xml.etree import ElementTree as ET
+    from odt_reports import _tag
+
+    for suffix in ("", "Right"):
+        style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+            _tag("style:name"): f"{prefix}Header{suffix}",
+            _tag("style:family"): "paragraph",
+            _tag("style:parent-style-name"): f"TableHeader{suffix}",
+        })
+        ET.SubElement(style, _tag("style:text-properties"), {_tag("fo:color"): "#FFFFFF"})
+
+
+def style_odt_blue_table(table, prefix: str) -> None:
+    """Aplica los estilos comunes sin reconstruir el contenido de las celdas."""
+    from odt_reports import _tag
+
+    headers = table.find(_tag("table:table-header-rows"))
+    if headers is not None:
+        for cell in headers.iter(_tag("table:table-cell")):
+            cell.set(_tag("table:style-name"), f"{prefix}HeaderCell")
+            for paragraph in cell.findall(_tag("text:p")):
+                previous = paragraph.get(_tag("text:style-name"), "")
+                suffix = "Right" if previous.endswith("Right") else ""
+                paragraph.set(_tag("text:style-name"), f"{prefix}Header{suffix}")
+    for index, row in enumerate(table.findall(_tag("table:table-row"))):
+        suffix = "WhiteCell" if index % 2 else "BlueCell"
+        for cell in row.findall(_tag("table:table-cell")):
+            cell.set(_tag("table:style-name"), prefix + suffix)
 
 
 def project_document_variables(title: str, settings) -> dict[str, str]:

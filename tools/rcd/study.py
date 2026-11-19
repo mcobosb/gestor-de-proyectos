@@ -11,7 +11,10 @@ from xml.etree import ElementTree as ET
 
 from tools._library_editor import library_members, read_markdown
 from tools._library_markdown import document_markdown, text_blocks
-from tools._shared.document_layout import project_document_variables
+from tools._shared.document_layout import (
+    add_odt_blue_table_cells, add_odt_blue_table_headers, add_odt_list_style,
+    pdf_list_style, project_document_variables, split_list_item, style_odt_blue_table,
+)
 from . import ler_catalog
 from collaborative_storage import shared_library_path
 
@@ -175,7 +178,7 @@ def study_tables(
         for row in state.demolition if row.included
     ]
     return {
-        "tabla_proyecto": [StudyTable("", ["Dato", "Descripción"], project_rows, [1.4, 4])],
+        "tabla_proyecto": [StudyTable("Datos del proyecto", ["Dato", "Descripción"], project_rows, [1.4, 4])],
         "tabla_residuos": [StudyTable(
             "Residuos seleccionados (revisión manual)",
             ["LER (modelo ODS)", "Residuo", "Procedencia"],
@@ -281,6 +284,8 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
     document = _new_report(
         TITLE, title, settings, repeat_titles=False, footer_title="Estudio de gestión de RCDs",
     )
+    add_odt_blue_table_cells(document, "RcdTable")
+    add_odt_blue_table_headers(document, "RcdTable")
     for level in range(1, 7):
         style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
             _tag("style:name"): f"RcdHeading{level}", _tag("style:family"): "paragraph",
@@ -293,19 +298,13 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
         ET.SubElement(style, _tag("style:text-properties"), {
             _tag("fo:font-weight"): "bold", _tag("fo:font-size"): f"{max(10, 15-level)}pt",
         })
-    for name, parent, properties in (
-        ("RcdDocumentStart", "RcdHeading1", {_tag("fo:break-before"): "page"}),
-        ("RcdTableCaption", "ReportBody", {_tag("fo:keep-with-next"): "always"}),
-        ("RcdBullet", "ReportBody", {_tag("fo:margin-left"): "12pt",
-                                    _tag("fo:text-indent"): "-7pt"}),
-    ):
-        style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
-            _tag("style:name"): name, _tag("style:family"): "paragraph",
-            _tag("style:parent-style-name"): parent,
-        })
-        ET.SubElement(style, _tag("style:paragraph-properties"), properties)
-        if name == "RcdTableCaption":
-            ET.SubElement(style, _tag("style:text-properties"), {_tag("fo:font-weight"): "bold"})
+    style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+        _tag("style:name"): "RcdDocumentStart", _tag("style:family"): "paragraph",
+        _tag("style:parent-style-name"): "RcdHeading1",
+    })
+    ET.SubElement(style, _tag("style:paragraph-properties"), {_tag("fo:break-before"): "page"})
+    for level in sorted({block[0] for block in blocks if isinstance(block, tuple) and block[0] < 0}):
+        add_odt_list_style(document, f"RcdBullet{-level}", "ReportBody", -level - 1)
     headings = [block for block in blocks if isinstance(block, tuple) and block[0] > 0]
     document.paragraph(TITLE, "RcdHeading1")
     document.table_of_contents(headings, max_level=2, name="RcdContents")
@@ -313,9 +312,9 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
     main_seen = False
     for block in blocks:
         if isinstance(block, StudyTable):
-            if block.caption:
-                document.paragraph(block.caption, "RcdTableCaption")
-            document.table(block.headers, block.rows, ratios=block.ratios, bold_rows=block.bold_rows)
+            document.table(block.headers, block.rows, ratios=block.ratios,
+                           bold_rows=block.bold_rows, caption=block.caption)
+            style_odt_blue_table(document.body[-1], "RcdTable")
             document.space(12)
             continue
         level, text = block
@@ -324,8 +323,15 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
             document.heading(text, level, style=style, bookmark=f"PPTPHeading{heading_index}")
             heading_index += 1
             main_seen = main_seen or level == 1
+        elif level < 0:
+            marker, label = split_list_item(text)
+            paragraph = ET.SubElement(document.body, _tag("text:p"), {
+                _tag("text:style-name"): f"RcdBullet{-level}",
+            })
+            paragraph.text = marker
+            ET.SubElement(paragraph, _tag("text:tab")).tail = label
         else:
-            document.paragraph(text, "RcdBullet" if level < 0 else "ReportBody")
+            document.paragraph(text)
     document.append_signature(settings)
     document.write(target)
 
@@ -345,8 +351,10 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
     )
     body = ParagraphStyle("RcdBody", fontName="Helvetica", fontSize=10,
                           leading=14, spaceAfter=7, alignment=TA_JUSTIFY)
-    bullet = ParagraphStyle("RcdBullet", parent=body, leftIndent=12, firstLineIndent=-7)
-    caption = ParagraphStyle("RcdTableCaption", parent=layout.bold, keepWithNext=True)
+    bullets = {
+        level: pdf_list_style(f"RcdBullet{-level}", body, -level - 1)
+        for level in sorted({block[0] for block in blocks if isinstance(block, tuple) and block[0] < 0})
+    }
     headings = {
         level: ParagraphStyle(
             f"RcdHeading{level}", parent=body, fontName="Helvetica-Bold",
@@ -364,10 +372,10 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
     main_seen = False
     for block in blocks:
         if isinstance(block, StudyTable):
-            if block.caption:
-                story.append(layout.text(block.caption, caption))
+            layout.table_caption(story, block.caption, body=body)
             story.extend([
-                layout.table(block.headers, block.rows, block.ratios, bold_rows=block.bold_rows),
+                layout.table(block.headers, block.rows, block.ratios,
+                             bold_rows=block.bold_rows, blue_header=True),
                 Spacer(1, 12),
             ])
             continue
@@ -380,8 +388,11 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
             heading_index += 1
             main_seen = main_seen or level == 1
             story.append(paragraph)
+        elif level < 0:
+            marker, label = split_list_item(text)
+            story.append(Paragraph(escape(label), bullets[level], bulletText=marker))
         else:
-            story.append(Paragraph(escape(text).replace("\n", "<br/>"), bullet if level < 0 else body))
+            story.append(Paragraph(escape(text).replace("\n", "<br/>"), body))
     story.extend(layout.signature_block(settings))
 
     class RcdDocument(SimpleDocTemplate):

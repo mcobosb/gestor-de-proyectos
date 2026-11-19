@@ -539,6 +539,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             window.budget_items = [
                 ProjectItem("EXC", "01#", "m3", "Excavación de tierras", 10, 20),
                 ProjectItem("DEM", "02#", "m2", "Demolición de hormigón", 50, 10),
+                ProjectItem("PAV", "02#", "m²", "Pavimento", 80, 10),
             ]
             window.chapter_order = ["01#", "02#"]
             window._open_tool("rcd")
@@ -547,8 +548,13 @@ class BudgetQtWindowTests(unittest.TestCase):
             window._open_tool("rcd")
             self.assertEqual(len(window._project_windows), 1)
             self.assertEqual(tool.waste_table.rowCount(), 0)
-            tool.variables["surface"].setText("100")
+            self.assertTrue(tool.variables["surface"].isReadOnly())
+            self.assertEqual(float(tool.variables["surface"].text()), 80)
+            self.assertIn("PAV", tool.surface_hint.text())
+            window.budget_items[1].measurement = 120
             tool.accept_inputs()
+            self.assertEqual(tool.data.inputs["surface"], 120)
+            self.assertIn("DEM", tool.data.sources["surface"])
             self.assertEqual(tool.waste_table.rowCount(), 57)
             self.assertEqual(tool.preview_table.rowCount(), 8)
             selected = tool.data.selected["40"]
@@ -574,6 +580,89 @@ class BudgetQtWindowTests(unittest.TestCase):
             window.close()
             self.application.processEvents()
 
+    def test_rcd_editor_revisions_are_used_in_styled_exports(self) -> None:
+        """Guarda los ocho textos desde Qt y conserva su edición y estilo en PDF y ODT."""
+        from xml.etree import ElementTree as ET
+        from zipfile import ZipFile
+
+        from pypdf import PdfReader
+        from odt_reports import _tag
+        from tools._library_editor_qt import LibraryEditorQt
+        from tools.rcd import write_report
+        from tools.rcd.study import LIBRARY_PATH
+
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            library = folder / "rcd.zip"
+            shutil.copyfile(LIBRARY_PATH, library)
+            with (
+                patch("budget_qt_window.user_data_directory", return_value=folder),
+                patch("tools.rcd.qt_window.LIBRARY_PATH", library),
+                patch("tools.rcd.study.LIBRARY_PATH", library),
+                patch.object(QMessageBox, "critical") as error,
+                patch.object(QMessageBox, "information"),
+            ):
+                window = BudgetMainWindow()
+                try:
+                    window.budget_items = [
+                        ProjectItem("EXC", "01#", "m3", "Excavación de tierras", 10, 20),
+                        ProjectItem("PAV", "02#", "m²", "Pavimento", 80, 10),
+                    ]
+                    window._open_tool("rcd")
+                    tool = window._project_windows[-1]
+                    tool.open_library_editor()
+                    editor = tool.library_editor
+                    self.assertIsInstance(editor, LibraryEditorQt)
+                    self.assertTrue(editor.track_changes)
+                    self.assertEqual(editor.members.count(), 8)
+                    editor.author.setText("Autor de prueba")
+                    for index in range(8):
+                        editor.members.setCurrentRow(index)
+                        editor.editor.appendPlainText(f"Texto RCD revisado {index}.")
+                        if index == 0:
+                            tool.generate_report()
+                            self.assertIn("Guarda o descarta", error.call_args.args[2])
+                            error.reset_mock()
+                        self.assertTrue(editor.save(), error.call_args)
+                    error.assert_not_called()
+                    for output_format in ("odt", "pdf"):
+                        window.report_settings.output_format = output_format
+                        target = folder / f"estudio.{output_format}"
+                        write_report(tool.data, "Proyecto RCD", window.report_settings, target, app=window)
+                        if output_format == "odt":
+                            with ZipFile(target) as archive:
+                                content = ET.fromstring(archive.read("content.xml"))
+                            text = " ".join(content.itertext())
+                            body = content.find(f".//{_tag('office:text')}")
+                            tables = [(index, table) for index, table in enumerate(body)
+                                      if table.tag == _tag("table:table")]
+                            self.assertGreater(len(tables), 1)
+                            for number, (index, table) in enumerate(tables, start=1):
+                                self.assertEqual("".join(body[index - 2].itertext()), f"Véase la Tabla {number}.")
+                                self.assertTrue("".join(body[index - 1].itertext()).startswith(f"Tabla {number}. "))
+                                header = table.find(_tag("table:table-header-rows"))
+                                self.assertIsNotNone(header)
+                                self.assertTrue(all(
+                                    cell.get(_tag("table:style-name")) == "RcdTableHeaderCell"
+                                    for cell in header.iter(_tag("table:table-cell"))
+                                ))
+                            backgrounds = {style.get(_tag("fo:background-color"))
+                                           for style in content.iter(_tag("style:table-cell-properties"))}
+                            self.assertTrue({"#4472C4", "#D9E5F5", "#FFFFFF"} <= backgrounds)
+                        else:
+                            reader = PdfReader(target)
+                            text = " ".join(page.extract_text() for page in reader.pages)
+                            self.assertIn("Véase la Tabla 1. Tabla 1. Datos del proyecto", " ".join(text.split()))
+                            fills = {tuple(round(float(value) * 255) for value in operands)
+                                     for page in reader.pages for operands, operator in page.get_contents().operations
+                                     if operator == b"rg"}
+                            self.assertTrue({(68, 114, 196), (217, 229, 245)} <= fills)
+                        for index in range(8):
+                            self.assertIn(f"Texto RCD revisado {index}.", text)
+                finally:
+                    window.deleteLater()
+                    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
     def test_rcd_qt_restores_valid_state_and_rejects_invalid_json(self) -> None:
         """Usa el mismo validador RCDs al abrir proyectos Qt."""
         with tempfile.TemporaryDirectory() as directory, patch(
@@ -589,11 +678,22 @@ class BudgetQtWindowTests(unittest.TestCase):
                 self.assertFalse(window._load_project_file(path))
             error.assert_called_once()
             path.write_text(
-                json.dumps({"items": [], "rcds": {"documentation": {"reuse": "Texto"}}}),
+                json.dumps({"items": [], "rcds": {
+                    "documentation": {"reuse": "Texto"}, "inputs": {"surface": 500},
+                }}),
                 encoding="utf-8",
             )
             self.assertTrue(window._load_project_file(path))
             self.assertEqual(window.rcd_state["documentation"]["reuse"], "Texto")
+            window.budget_items = [ProjectItem("PAV", "01#", "m^2", "Pavimento", 80, 10)]
+            window._open_tool("rcd")
+            tool = window._project_windows[-1]
+            self.assertEqual(float(tool.variables["surface"].text()), 80)
+            self.assertTrue(tool.variables["surface"].isReadOnly())
+            window.budget_items.clear()
+            tool.show_inputs()
+            self.assertEqual(tool.variables["surface"].text(), "")
+            self.assertFalse(tool.variables["surface"].isReadOnly())
             window.close()
             self.application.processEvents()
 

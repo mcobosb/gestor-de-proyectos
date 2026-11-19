@@ -34,7 +34,7 @@ def _styles(xml: bytes, project: str, section: str) -> bytes:
     ET.SubElement(header, _tag("text:p")).text = project
     footer = ET.SubElement(page, _tag("style:footer"))
     paragraph = ET.SubElement(footer, _tag("text:p"))
-    paragraph.text = f"{section} · Página "
+    paragraph.text = f"{section.upper()} · PÁGINA "
     ET.SubElement(paragraph, _tag("text:page-number"), {
         _tag("text:select-page"): "current",
     }).text = "1"

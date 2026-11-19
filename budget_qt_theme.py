@@ -294,11 +294,13 @@ def _stylesheet(theme: str) -> str:
         padding: 7px;
         font-weight: 600;
     }}
-    QTreeWidget#budgetTree QHeaderView::section {{
+    QTreeWidget#budgetTree QHeaderView::section,
+    QTableWidget#rcdPreviewTable QHeaderView::section {{
         background: {blue_tint};
         color: {blue_text};
     }}
-    QTreeWidget#referenceTree QHeaderView::section {{
+    QTreeWidget#referenceTree QHeaderView::section,
+    QTableWidget#rcdWasteTable QHeaderView::section {{
         background: {teal_tint};
         color: {teal_text};
         border-bottom-color: {teal_border};

@@ -48,6 +48,7 @@ from . import (
     calculate,
     demolition_measurements,
     initial_state,
+    update_surface,
     ler_catalog,
     normalize,
     synchronize_budget,
@@ -80,6 +81,7 @@ class RcdWindowQt(QDialog):
         self.pages = QStackedWidget()
         layout.addWidget(self.pages, 1)
         self.pages.addWidget(self._build_inputs_page())
+        self._refresh_surface()
         self.pages.addWidget(self._build_review_page())
         self._restore_page()
 
@@ -120,6 +122,8 @@ class RcdWindowQt(QDialog):
             if self.data.inputs[key] is None:
                 source = "PENDIENTE — " + source
             hint = QLabel(source)
+            if key == "surface":
+                self.surface_hint = hint
             hint.setWordWrap(True)
             row.addWidget(hint, 1)
             form.addRow(label, row)
@@ -183,6 +187,8 @@ class RcdWindowQt(QDialog):
         help_text.setWordWrap(True)
         layout.addWidget(help_text)
         self.waste_table = QTableWidget(0, 6)
+        self.waste_table.setObjectName("rcdWasteTable")
+        self.waste_table.setAlternatingRowColors(True)
         self.waste_table.setHorizontalHeaderLabels((
             "X", "Clave", "Grupo", "LER", "Residuo", "Detectado / revisión",
         ))
@@ -194,6 +200,8 @@ class RcdWindowQt(QDialog):
         self.waste_table.itemChanged.connect(self._waste_changed)
         layout.addWidget(self.waste_table, 2)
         self.preview_table = QTableWidget(0, 5)
+        self.preview_table.setObjectName("rcdPreviewTable")
+        self.preview_table.setAlternatingRowColors(True)
         self.preview_table.setHorizontalHeaderLabels(HEADERS)
         self.preview_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.preview_table.horizontalHeader().setSectionResizeMode(
@@ -215,8 +223,23 @@ class RcdWindowQt(QDialog):
         self.data.documentation[key] = self.documentation_texts[key].toPlainText()
         self.changed()
 
+    def _refresh_surface(self) -> None:
+        """Actualiza el campo automático según las mediciones actuales."""
+        field = self.variables["surface"]
+        was_automatic = field.isReadOnly()
+        automatic = update_surface(self.data, self.app.budget_items)
+        if automatic or was_automatic:
+            value = self.data.inputs["surface"]
+            field.setText("" if value is None else str(value))
+        field.setReadOnly(automatic)
+        source = self.data.sources.get("surface", "")
+        self.surface_hint.setText(
+            "PENDIENTE — " + source if not field.text().strip() else source
+        )
+
     def collect_inputs(self) -> RcdState:
         """Valida y convierte todos los controles del primer paso."""
+        self._refresh_surface()
         raw = self.data.to_dict()
         for key, field in self.variables.items():
             value = field.text().strip()
@@ -297,6 +320,7 @@ class RcdWindowQt(QDialog):
     def refresh_preview(self) -> None:
         """Recalcula la vista con la misma función usada por los informes."""
         try:
+            self._refresh_surface()
             sections, _ = calculate(self.data)
         except ValueError:
             return
@@ -316,6 +340,10 @@ class RcdWindowQt(QDialog):
 
     def show_inputs(self) -> None:
         """Vuelve al formulario de datos sin perder las selecciones."""
+        try:
+            self._refresh_surface()
+        except ValueError as exc:
+            QMessageBox.critical(self, "RCDs", str(exc))
         self.pages.setCurrentIndex(0)
 
     def changed(self) -> None:
@@ -335,6 +363,7 @@ class RcdWindowQt(QDialog):
             )
             return
         try:
+            self._refresh_surface()
             synchronize_budget(self.app, self.data)
         except ValueError as exc:
             QMessageBox.critical(
@@ -427,6 +456,7 @@ class RcdWindowQt(QDialog):
         target = Path(target).with_suffix(extension)
         temporary: Path | None = None
         try:
+            self._refresh_surface()
             with tempfile.NamedTemporaryFile(
                 dir=target.parent, suffix=extension, delete=False
             ) as output:

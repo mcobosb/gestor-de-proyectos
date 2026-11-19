@@ -428,7 +428,8 @@ def build_pdf_report(
             amount = sum((money(i.import_total) for i in items), Decimal(0))
             percent = amount * 100 / pem if pem else Decimal(0)
             rows.append([format_chapter_code(code), app._chapter_title(code), amount, money(percent)])
-        story.append(table(["CAPÍTULO", "RESUMEN", "IMPORTE", "%"], rows,
+        layout.add_data_table(story, "Resumen del presupuesto por capítulos",
+                            table(["CAPÍTULO", "RESUMEN", "IMPORTE", "%"], rows,
                            [65, 328, 75, COLUMN_REFERENCE_WIDTH - 468], leaders=(1,)))
         totals = budget_totals(float(pem), settings)
         total("PRESUPUESTO DE EJECUCIÓN MATERIAL", totals["pem"])
@@ -463,7 +464,7 @@ def build_pdf_report(
             rows.append(["", "", "", f"Grupo {group}", "", subtotal])
         if rows:
             subtotal_rows = [i for i, row in enumerate(rows) if str(row[3]).startswith("Grupo ")]
-            story.append(table(["CÓDIGO", "CANTIDAD", "UD.", "RESUMEN", "PRECIO/UD.", "IMPORTE"],
+            layout.add_data_table(story, report, table(["CÓDIGO", "CANTIDAD", "UD.", "RESUMEN", "PRECIO/UD.", "IMPORTE"],
                                rows, [50, 45, 18, 290, 50, 57], bold_rows=subtotal_rows,
                                highlighted_rows=subtotal_rows))
         else:
@@ -484,7 +485,9 @@ def build_pdf_report(
                 story.append(layout.description(concept.text))
             rows = [[c.code, c.unit, fmt_number(q, 3), c.summary, money(p), money(q * p), ""]
                     for c, q, p in children]
-            story.append(table(column_headers if embedded else [], rows, auxiliary_widths))
+            if rows:
+                layout.add_data_table(story, f"Componentes del precio auxiliar {concept.code}",
+                                      table(column_headers if embedded else [], rows, auxiliary_widths))
             total("COSTE UNITARIO TOTAL", price)
             difference = money(price) - sum((money(q * p) for _, q, p in children), Decimal(0))
             if difference:
@@ -512,6 +515,8 @@ def build_pdf_report(
                 if chapter_index:
                     story.append(PageBreak())
                 chapter(code)
+                if section == 1:
+                    layout.table_caption(story, f"Precios unitarios de {format_chapter_code(code)}")
                 for item in items:
                     item_heading(item, item.unit_price if section == 1 else
                                  item.import_total if report == "Presupuesto mediciones" else None)
@@ -529,7 +534,8 @@ def build_pdf_report(
                                 label = f"Costes indirectos ({fmt_number(item.indirect_costs)} %)"
                             grouped[label] = grouped.get(label, Decimal(0)) + money(quantity * price)
                         if grouped:
-                            story.append(table(["RESUMEN", "IMPORTE"], list(grouped.items()), [8, 2]))
+                            layout.add_data_table(story, f"Resumen de costes de {item.code}",
+                                                  table(["RESUMEN", "IMPORTE"], list(grouped.items()), [8, 2]))
                             difference = money(item.unit_price) - sum(grouped.values(), Decimal(0))
                             if difference:
                                 total("Diferencia respecto al precio unitario", difference)
@@ -540,7 +546,8 @@ def build_pdf_report(
                         rows = [[c.code, c.unit, c.summary, fmt_number(q, 3), money(p), money(q * p), ""]
                                 for c, q, p in components(item)]
                         if rows:
-                            story.append(table(column_headers if embedded else [], rows, component_widths))
+                            layout.add_data_table(story, f"Precio descompuesto de {item.code}",
+                                                  table(column_headers if embedded else [], rows, component_widths))
                             difference = money(item.unit_price) - sum(
                                 (money(q * p) for _, q, p in components(item)), Decimal(0))
                             if difference:
@@ -556,13 +563,15 @@ def build_pdf_report(
                             ], fmt_number(line.k, 3),
                                 fmt_number(line.partial, 3) if report == "Mediciones" else money(line.partial)]
                                 for line in item.measurement_lines]
-                            story.append(table(
+                            layout.add_data_table(story, f"Detalle de mediciones de {item.code}", table(
                                 ["COMENTARIO", "UDS", "LONGITUD", "ANCHURA", "ALTURA", "K", "PARCIAL"]
                                 + ([""] if report == "Mediciones" else []),
                                 [row + [""] for row in rows] if report == "Mediciones" else rows,
                                 MEASUREMENT_COLUMN_RATIOS if report == "Mediciones" else
                                 [4, 1, 1, 1, 1, 0.8, 1.2]))
                         if report == "Mediciones":
+                            if not item.measurement_lines:
+                                layout.table_caption(story, f"Medición de {item.code}")
                             story.append(table(
                                 [],
                                 [["MEDICIÓN TOTAL", "", "", "", "", "",
@@ -570,7 +579,7 @@ def build_pdf_report(
                                 MEASUREMENT_COLUMN_RATIOS, bold_rows=(0,),
                             ))
                         else:
-                            story.append(table(
+                            layout.add_data_table(story, f"Importe de {item.code}", table(
                                 ["CANTIDAD", "PRECIO", "IMPORTE"],
                                 [[money(item.measurement), money(item.unit_price), money(item.import_total)]],
                                 [CONTENT_WIDTH - 100, 50, 50]))
@@ -738,7 +747,7 @@ def write_certification_pdf(
     }
     pem = sum(chapter_amounts.values(), Decimal(0))
     if deviation:
-        story.append(table(
+        layout.add_data_table(story, "Desviaciones respecto al plan original", table(
             DEVIATION_HEADERS, [*deviation_rows, deviation_total],
             DEVIATION_COLUMN_RATIOS, bold_rows=(len(deviation_rows),),
         ))
@@ -761,9 +770,8 @@ def write_certification_pdf(
                 if item.text:
                     story.append(layout.description(item.text))
                 quantity = Decimal(str(item.certifications[month_key])) / Decimal(str(item.unit_price))
-                story.append(table(
-                    [],
-                    [["", "", "", "", "", "", fmt_number(float(quantity), 6), money(item.unit_price), amount]],
+                layout.add_data_table(story, f"Medición certificada de {item.code}", table(
+                    [], [["", "", "", "", "", "", fmt_number(float(quantity), 6), money(item.unit_price), amount]],
                     CERTIFICATION_COLUMN_RATIOS,
                 ))
                 justification = item.certification_justifications.get(month_key, "")
@@ -784,7 +792,7 @@ def write_certification_pdf(
             budget = sum((money(i.import_total) for i in items if i.chapter == code), Decimal(0))
             percentage = fmt_number(float(chapter_amounts[code] * 100 / budget)) if budget else "No aplicable"
             rows.append([format_chapter_code(code), chapter_title(code), chapter_amounts[code], percentage])
-        story.append(table(["CAPÍTULO", "RESUMEN", "IMPORTE", "% CERTIFICADO"],
+        layout.add_data_table(story, "Certificación por capítulos", table(["CAPÍTULO", "RESUMEN", "IMPORTE", "% CERTIFICADO"],
                            rows, CERTIFICATION_SUMMARY_RATIOS, leaders=(1,)))
         story.append(text("% certificado respecto al presupuesto de cada capítulo."))
         totals = certification_totals(float(pem), settings)

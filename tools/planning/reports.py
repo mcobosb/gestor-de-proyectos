@@ -340,6 +340,7 @@ def write_planning_report(
             title, project_title, settings, repeat_titles=False,
             footer_title="Planificación", landscape=True, template_title="",
         )
+        document.table_caption("Calendario de actividades (diagrama de Gantt)")
         _write_odt_chart(document, rows, periods)
         document.paragraph(description)
         document.append_signature(settings)
@@ -362,9 +363,12 @@ def write_planning_report(
         topMargin=top_margin, bottomMargin=bottom_margin, title=title, author=settings.document_author,
     )
     try:
+        story = []
+        layout.add_data_table(story, "Calendario de actividades (diagrama de Gantt)",
+                              _pdf_chart_table(layout, rows, periods))
+        story.extend((layout.text(description), *layout.signature_block(settings)))
         document.build(
-            [_pdf_chart_table(layout, rows, periods), layout.text(description),
-             *layout.signature_block(settings)],
+            story,
             onFirstPage=lambda canvas, doc: layout.header(canvas, doc, title, project_title),
             onLaterPages=lambda canvas, doc: layout.header(canvas, doc, title, project_title),
         )
