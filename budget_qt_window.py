@@ -14,7 +14,7 @@ import webbrowser
 from uuid import uuid4
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QResizeEvent
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QStatusBar,
     QStyle,
@@ -98,6 +99,38 @@ from collaborative_crypto import InvalidProjectPasswordError, ProjectCrypto
 
 ROW_KIND = Qt.ItemDataRole.UserRole
 ROW_DATA = Qt.ItemDataRole.UserRole + 1
+
+
+class _PanelTitle(QLabel):
+    """Muestra el nombre en una línea sin imponer su ancho al panel."""
+
+    def __init__(self, title: str) -> None:
+        """Configura la etiqueta y conserva el nombre sin recortar."""
+        super().__init__()
+        self._title = title
+        self.setTextFormat(Qt.TextFormat.PlainText)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        self.setStyleSheet("font-size: 16px; font-weight: 600;")
+        self.set_title(title)
+
+    def set_title(self, title: str) -> None:
+        """Actualiza el nombre completo y su versión visible."""
+        self._title = title
+        self.setAccessibleName(title)
+        self._update_text()
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        """Recalcula el recorte al cambiar el ancho disponible."""
+        super().resizeEvent(event)
+        self._update_text()
+
+    def _update_text(self) -> None:
+        """Recorta por el ancho del texto y permite consultar el nombre completo."""
+        visible = self.fontMetrics().elidedText(
+            self._title, Qt.TextElideMode.ElideRight, self.contentsRect().width()
+        )
+        self.setText(visible)
+        self.setToolTip(self._title if visible != self._title else "")
 
 
 class BudgetMainWindow(QMainWindow):
@@ -351,9 +384,12 @@ class BudgetMainWindow(QMainWindow):
         panel = QWidget()
         layout = QVBoxLayout(panel)
         heading = QHBoxLayout()
-        self.project_heading = QLabel("Proyecto: Sin título")
-        self.project_heading.setStyleSheet("font-size: 16px; font-weight: 600;")
-        heading.addWidget(self.project_heading, 1)
+        titles = QVBoxLayout()
+        titles.setSpacing(0)
+        titles.addWidget(QLabel("Proyecto"))
+        self.project_heading = _PanelTitle("Sin título")
+        titles.addWidget(self.project_heading)
+        heading.addLayout(titles, 1)
         for kind in ("2", "1", "3"):
             button = QPushButton(CONCEPT_TYPES[kind].split()[0])
             button.setCheckable(True)
@@ -436,9 +472,12 @@ class BudgetMainWindow(QMainWindow):
         panel = QWidget()
         layout = QVBoxLayout(panel)
         heading = QHBoxLayout()
-        self.reference_heading = QLabel("Base de referencia: Sin cargar")
-        self.reference_heading.setStyleSheet("font-size: 16px; font-weight: 600;")
-        heading.addWidget(self.reference_heading, 1)
+        titles = QVBoxLayout()
+        titles.setSpacing(0)
+        titles.addWidget(QLabel("Base de referencia"))
+        self.reference_heading = _PanelTitle("Sin cargar")
+        titles.addWidget(self.reference_heading)
+        heading.addLayout(titles, 1)
         for kind in ("2", "1", "3"):
             button = QPushButton(CONCEPT_TYPES[kind].split()[0])
             button.setCheckable(True)
@@ -577,7 +616,7 @@ class BudgetMainWindow(QMainWindow):
         if hasattr(self, "undo_action"):
             self.undo_action.setEnabled(bool(self._undo_history))
         title = f"{self._project_title()} *" if self.is_dirty else self._project_title()
-        self.project_heading.setText(f"Proyecto: {title}")
+        self.project_heading.set_title(title)
         self.setWindowTitle(f"{title} — {APPLICATION_NAME}")
 
     def undo_last_action(self) -> None:
@@ -774,7 +813,7 @@ class BudgetMainWindow(QMainWindow):
             for code in base.root_codes:
                 self._insert_reference_branch(parent, base_index, base, code)
         label = ", ".join(base.path.stem for base in self.reference_bases) or "Sin cargar"
-        self.reference_heading.setText(f"Base de referencia: {label}")
+        self.reference_heading.set_title(label)
 
     def _refresh_reference_resources(self, term: str) -> None:
         """Muestra usos de un tipo de recurso con capítulo y unidad de obra."""
@@ -847,8 +886,8 @@ class BudgetMainWindow(QMainWindow):
             for root in (*base.root_codes, *roots, *base.concepts):
                 if root not in reached:
                     visit(root)
-        self.reference_heading.setText(
-            f"Base de referencia: {CONCEPT_TYPES[self.reference_resource_filter]}"
+        self.reference_heading.set_title(
+            CONCEPT_TYPES[self.reference_resource_filter]
         )
 
     def toggle_reference_resource_filter(self, kind: str) -> None:

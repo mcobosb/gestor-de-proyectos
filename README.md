@@ -585,6 +585,10 @@ No se crean copias de seguridad automáticas al abrir o importar archivos.
 después, **Guardar** y **Ctrl+S** actualizan esa misma ubicación.
 **Deshacer** (Ctrl+Z) revierte hasta las últimas 50 acciones de la sesión.
 
+Puedes ajustar el ancho de los paneles arrastrando el separador. Si el nombre
+del proyecto o de la base de referencia no cabe, se muestra con puntos
+suspensivos; pasa el ratón por encima para ver el nombre completo.
+
 Consulta el [manual de usuario](docs/MANUAL_USUARIO.md) para el procedimiento completo.
 
 ## Bases de precios de referencia

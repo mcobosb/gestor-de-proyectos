@@ -11,8 +11,10 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QDialogButtonBox, QMessageBox, QPushButton
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QApplication, QDialogButtonBox, QLabel, QMessageBox, QPushButton, QSplitter,
+)
+from PySide6.QtCore import QCoreApplication, QEvent, Qt
 
 from budget_core import Bc3Dataset, Concept
 from budget_core import ProjectItem
@@ -49,6 +51,63 @@ class BudgetQtWindowTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         """Crea una única aplicación Qt para las ventanas de prueba."""
         cls.application = QApplication.instance() or QApplication([])
+
+    def test_long_panel_titles_elide_without_limiting_splitter(self) -> None:
+        """Los nombres largos se recortan y no ensanchan ninguno de los paneles."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            self.addCleanup(QCoreApplication.sendPostedEvents, None, QEvent.Type.DeferredDelete)
+            self.addCleanup(window.deleteLater)
+            self.addCleanup(window.close)
+            window.resize(1800, 860)
+            window.show()
+            self.application.processEvents()
+            splitter = window.findChild(QSplitter)
+            self.assertIsNotNone(splitter)
+            splitter.setChildrenCollapsible(False)
+            left_narrow = [0, splitter.width()]
+            right_narrow = left_narrow[::-1]
+            splitter.setSizes(left_narrow)
+            self.application.processEvents()
+            original_range = splitter.getRange(1)
+
+            project = ("Proyecto de rehabilitación y acondicionamiento " * 8).rstrip()
+            reference = Path(directory) / (("Base regional de precios " * 6).strip() + ".bc3")
+            reference.touch()
+            window.project_title = project
+            window._update_actions()
+            window.reference_bases = [Bc3Dataset(reference)]
+            window.refresh_reference_tree()
+            self.application.processEvents()
+            self.assertEqual(splitter.getRange(1), original_range)
+
+            for index, caption_text, label, title, narrow, wide in (
+                (0, "Proyecto", window.project_heading, project, left_narrow, right_narrow),
+                (1, "Base de referencia", window.reference_heading, reference.stem,
+                 right_narrow, left_narrow),
+            ):
+                with self.subTest(panel=caption_text):
+                    caption = next(
+                        widget for widget in splitter.widget(index).findChildren(QLabel)
+                        if widget.text() == caption_text
+                    )
+                    self.assertLess(caption.geometry().bottom(), label.geometry().top())
+                    splitter.setSizes(narrow)
+                    self.application.processEvents()
+                    narrow_text = label.text()
+                    self.assertTrue(narrow_text.endswith("…"))
+                    self.assertTrue(title.startswith(narrow_text[:-1]))
+                    self.assertEqual(label.toolTip(), title)
+                    splitter.setSizes(wide)
+                    self.application.processEvents()
+                    self.assertGreater(len(label.text()), len(narrow_text))
+
+            window.reference_bases = []
+            window.refresh_reference_tree()
+            self.assertEqual(window.reference_heading.text(), "Sin cargar")
+            self.assertEqual(window.reference_heading.toolTip(), "")
 
     def test_import_and_reopen_project_uses_core_model_without_gui(self) -> None:
         """Importa un BC3, guarda el JSON y lo reabre con el mismo modelo."""
