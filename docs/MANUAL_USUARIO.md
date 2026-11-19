@@ -55,6 +55,14 @@ Las páginas se abren en el navegador solo al pulsar un enlace.
 
 ## 2. Crear o abrir un proyecto
 
+En **Herramientas → Estructura documental** puedes preparar la documentación
+incluso sin un presupuesto abierto. Marca apartados individuales o grupos y
+pulsa **Copiar plantillas…** para elegir una carpeta. Se conservan las subcarpetas
+del índice y los archivos existentes no se sobrescriben. Los planos, los trámites
+externos y los documentos que se preparan en herramientas o informes específicos
+figuran en gris. El índice es orientativo y las plantillas ODT son esquemas
+editables, no documentos técnicos terminados.
+
 La aplicación arranca siempre sin proyecto ni bases cargadas, aunque conserve
 archivos de ejemplo en su carpeta. El historial de recientes y la configuración
 guardada se mantienen; los datos se rellenan al elegir un proyecto.

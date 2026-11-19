@@ -58,6 +58,7 @@ Source: "{#AppDist}\*"; DestDir: "{app}"; Excludes: "\tools\*"; Flags: ignorever
 Source: "{#AppDist}\tools\*"; DestDir: "{app}\tools"; Flags: ignoreversion; Components: core
 Source: "{#AppDist}\tools\_shared\*"; DestDir: "{app}\tools\_shared"; Flags: ignoreversion recursesubdirs; Components: core
 Source: "{#AppDist}\tools\bim\*"; DestDir: "{app}\tools\bim"; Flags: ignoreversion recursesubdirs; Components: core
+Source: "{#AppDist}\tools\document_structure\*"; DestDir: "{app}\tools\document_structure"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: core
 ; Consultas utiliza estos CSV aun cuando no estén instalados PPTP o Seguridad y Salud.
 Source: "{#AppDist}\tools\pptp\docs\unes.csv"; DestDir: "{app}\tools\pptp\docs"; Flags: ignoreversion; Components: core
 Source: "{#AppDist}\tools\safety_health\datos\ntps.csv"; DestDir: "{app}\tools\safety_health\datos"; Flags: ignoreversion; Components: core

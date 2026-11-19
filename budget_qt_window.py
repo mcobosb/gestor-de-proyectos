@@ -310,7 +310,8 @@ class BudgetMainWindow(QMainWindow):
         for report in REPORT_NAMES:
             reports_menu.addAction(report, lambda checked=False, name=report: self.generate_report(name))
 
-        tools_menu = menu.addMenu("Herramientas")
+        self._tools_menu = tools_menu = QMenu("Herramientas", menu)
+        menu.addMenu(tools_menu)
         for tool in sorted(
             self.tools_by_name.values(),
             key=lambda entry: (entry.order, entry.label.casefold()),

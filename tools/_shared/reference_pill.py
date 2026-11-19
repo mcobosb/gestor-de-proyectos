@@ -16,6 +16,10 @@ _CONTRACTS = ("Ley 9/2017 de Contratos del Sector Público",
               "https://www.boe.es/buscar/act.php?id=BOE-A-2017-12902")
 _REGULATION = "https://www.boe.es/buscar/act.php?id=BOE-A-2001-19995"
 _REFERENCES: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
+    "document_structure": (
+        "El índice es orientativo. Adapta la documentación al alcance y a la tramitación de la obra.",
+        (("Contenido de los proyectos de obras — artículo 233 de la LCSP", f"{_CONTRACTS[1]}#a233"),),
+    ),
     "budget": (
         "El presupuesto y la base de referencia son independientes. "
         "Añadir una partida al proyecto no modifica la base original.",

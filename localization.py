@@ -948,6 +948,9 @@ _TEXT = {
     "Guardar como…": ("Save as…", "Enregistrer sous…"),
     "Cerrar": ("Close", "Fermer"),
     "Referencias": ("References", "Références"),
+    "Marcar todas": ("Select all", "Tout cocher"),
+    "Desmarcar todas": ("Clear all", "Tout décocher"),
+    "Copiar plantillas…": ("Copy templates…", "Copier les modèles…"),
     "Guardar plan de trabajo": ("Save work plan", "Enregistrer le planning des travaux"),
 }
 

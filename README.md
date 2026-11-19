@@ -14,6 +14,7 @@ Aplicación de escritorio para Windows que reúne el presupuesto, la documentaci
 
 - **Presupuestos BC3 (FIEBDC-3):** importa presupuestos y edita capítulos, partidas, mediciones, descomposiciones y precios.
 - **Bases de precios:** carga BCCA u otras bases BC3, busca por código o descripción y copia partidas al presupuesto. Las bases se descargan por separado.
+- **Estructura documental:** consulta el índice de un proyecto de obra civil y copia las plantillas ODT seleccionadas.
 - **Justificación de precios:** prepara un anejo con la composición de precios y los costes indirectos.
 - **Planificación:** organiza tareas y plazos, genera el diagrama de Gantt y expórtalo a PDF u ODT.
 - **Certificaciones:** registra previsiones y certificaciones mensuales y compara la ejecución con el presupuesto.
