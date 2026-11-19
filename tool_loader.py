@@ -10,10 +10,7 @@ import pkgutil
 import stat
 import sys
 from types import ModuleType
-from typing import TYPE_CHECKING, Callable
-
-if TYPE_CHECKING:
-    from bc3_gui import BudgetApp
+from typing import Any, Callable
 
 
 @dataclass(frozen=True)
@@ -23,10 +20,10 @@ class Tool:
     name: str
     label: str
     order: int
-    open: Callable[[BudgetApp], None]
-    available: Callable[[BudgetApp], bool] | None = None
+    open: Callable[[Any], None]
+    available: Callable[[Any], bool] | None = None
     restore: Callable[[dict], dict] | None = None
-    before_save: Callable[[BudgetApp], None] | None = None
+    before_save: Callable[[Any], None] | None = None
     open_qt: Callable | None = None
     before_save_qt: Callable | None = None
 
@@ -84,9 +81,13 @@ def discover_tools(directory: Path) -> tuple[list[Tool], list[str]]:
             module = importlib.import_module(module_name)
             label = getattr(module, "TOOL_LABEL", None)
             order = getattr(module, "TOOL_ORDER", 100)
-            opener = getattr(module, "open_tool", None)
+            opener = getattr(module, "open_tool_qt", None) or getattr(
+                module, "open_tool", None
+            )
             if not isinstance(label, str) or not label.strip() or not callable(opener):
-                raise ValueError("El modulo debe definir TOOL_LABEL y open_tool(app).")
+                raise ValueError(
+                    "El modulo debe definir TOOL_LABEL y open_tool_qt(app)."
+                )
             if not isinstance(order, int) or isinstance(order, bool):
                 raise ValueError("TOOL_ORDER debe ser un entero.")
             found.append(Tool(

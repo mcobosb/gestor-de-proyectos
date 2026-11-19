@@ -3,10 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
-import tkinter as tk
-from tkinter import ttk
 
-from localization import localize_widget_tree, messagebox
 from municipalities import municipality_search_key
 
 
@@ -73,56 +70,4 @@ def study_items(app):
     return items
 
 
-class ChapterSelectionWindow(tk.Toplevel):
-    """Permite confirmar el ambito antes de consultar matrices, fichas o planificacion."""
-
-    def __init__(self, app, on_continue):
-        """Muestra casillas por capitulo sin iniciar todavia los calculos preventivos."""
-        chapters = study_chapters(app)
-        super().__init__(app.root)
-        self.on_continue = on_continue
-        self.title("Seguridad y salud — capítulos a analizar")
-        self.geometry("850x560")
-        self.minsize(650, 400)
-        self.transient(app.root)
-        ttk.Label(
-            self, padding=12, wraplength=800,
-            text="Marca los capítulos sobre los que se realizará el estudio. Gestión o tratamiento "
-                 "de RCD y Control de Calidad se desmarcan inicialmente; puedes incluirlos expresamente. "
-                 "El capítulo de Seguridad y Salud no se analiza como unidad de obra.",
-        ).pack(fill="x")
-        frame = ttk.Frame(self)
-        frame.pack(fill="both", expand=True, padx=12)
-        canvas = tk.Canvas(frame, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=canvas.yview)
-        horizontal = ttk.Scrollbar(frame, orient="horizontal", command=canvas.xview)
-        canvas.configure(yscrollcommand=scrollbar.set, xscrollcommand=horizontal.set)
-        scrollbar.pack(side="right", fill="y")
-        horizontal.pack(side="bottom", fill="x")
-        canvas.pack(side="left", fill="both", expand=True)
-        content = ttk.Frame(canvas, padding=8)
-        canvas.create_window((0, 0), window=content, anchor="nw")
-        content.bind("<Configure>", lambda event: canvas.configure(scrollregion=canvas.bbox("all")))
-        self.choices = {}
-        for chapter in chapters:
-            variable = tk.BooleanVar(self, value=chapter.selected)
-            self.choices[chapter.code] = variable
-            ttk.Checkbutton(
-                content, variable=variable,
-                text=f"{chapter.code} — {chapter.title} ({chapter.items} partidas)",
-            ).pack(anchor="w", pady=6)
-        actions = ttk.Frame(self, padding=12)
-        actions.pack(fill="x")
-        ttk.Button(actions, text="Cancelar", command=self.destroy).pack(side="right")
-        ttk.Button(
-            actions, text="Continuar con el análisis", command=self.accept, style="Accent.TButton",
-        ).pack(side="right", padx=8)
-        localize_widget_tree(self)
-
-    def accept(self) -> None:
-        """Exige un ambito no vacio antes de guardar e iniciar el analisis."""
-        choices = {code: variable.get() for code, variable in self.choices.items()}
-        if not any(choices.values()):
-            messagebox.showerror("Seguridad y salud", "Marca al menos un capítulo para analizar.", parent=self)
-            return
-        self.on_continue(choices)
+# Las clases visuales Tk de este módulo se retiraron; la GUI vigente está en PySide6.

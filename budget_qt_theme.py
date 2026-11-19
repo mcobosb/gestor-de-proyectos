@@ -15,46 +15,42 @@ THEMES = {
 }
 
 _ICON_RULES = {
-    "guardar": QStyle.StandardPixmap.SP_DialogSaveButton,
-    "abrir": QStyle.StandardPixmap.SP_DialogOpenButton,
-    "nuevo": QStyle.StandardPixmap.SP_FileIcon,
-    "añadir": QStyle.StandardPixmap.SP_FileDialogNewFolder,
-    "eliminar": QStyle.StandardPixmap.SP_TrashIcon,
-    "quitar": QStyle.StandardPixmap.SP_TrashIcon,
-    "deshacer": QStyle.StandardPixmap.SP_ArrowBack,
-    "editar": QStyle.StandardPixmap.SP_FileDialogDetailedView,
-    "duplicar": QStyle.StandardPixmap.SP_FileDialogListView,
-    "subir": QStyle.StandardPixmap.SP_ArrowUp,
-    "bajar": QStyle.StandardPixmap.SP_ArrowDown,
-    "anterior": QStyle.StandardPixmap.SP_ArrowLeft,
-    "atras": QStyle.StandardPixmap.SP_ArrowBack,
-    "siguiente": QStyle.StandardPixmap.SP_ArrowRight,
-    "continuar": QStyle.StandardPixmap.SP_ArrowRight,
-    "aceptar": QStyle.StandardPixmap.SP_DialogApplyButton,
-    "confirmar": QStyle.StandardPixmap.SP_DialogApplyButton,
-    "cancelar": QStyle.StandardPixmap.SP_DialogCancelButton,
-    "cerrar": QStyle.StandardPixmap.SP_DialogCloseButton,
-    "carpeta": QStyle.StandardPixmap.SP_DirOpenIcon,
-    "examinar": QStyle.StandardPixmap.SP_DirOpenIcon,
-    "actualizar": QStyle.StandardPixmap.SP_BrowserReload,
-    "recalcular": QStyle.StandardPixmap.SP_BrowserReload,
-    "secuenciar": QStyle.StandardPixmap.SP_MediaSeekForward,
-    "generar": QStyle.StandardPixmap.SP_FileDialogStart,
-    "informe": QStyle.StandardPixmap.SP_FileIcon,
-    "exportar": QStyle.StandardPixmap.SP_DialogSaveButton,
-    "imprimir": QStyle.StandardPixmap.SP_FileDialogDetailedView,
-    "configuracion": QStyle.StandardPixmap.SP_FileDialogDetailedView,
-    "plantilla": QStyle.StandardPixmap.SP_DirOpenIcon,
-    "biblioteca": QStyle.StandardPixmap.SP_DirIcon,
-    "ver ": QStyle.StandardPixmap.SP_FileDialogContentsView,
-    "pdf": QStyle.StandardPixmap.SP_FileDialogContentsView,
-    "consulta": QStyle.StandardPixmap.SP_MessageBoxQuestion,
-    "referencia": QStyle.StandardPixmap.SP_DirLinkIcon,
-    "copiar": QStyle.StandardPixmap.SP_FileDialogDetailedView,
-    "revisar": QStyle.StandardPixmap.SP_MessageBoxInformation,
-    "asignar": QStyle.StandardPixmap.SP_DialogApplyButton,
-    "desasignar": QStyle.StandardPixmap.SP_DialogDiscardButton,
-    "expandir": QStyle.StandardPixmap.SP_TitleBarMaxButton,
+    "guardar": ("document-save", QStyle.StandardPixmap.SP_DialogSaveButton),
+    "abrir": ("document-open", QStyle.StandardPixmap.SP_DialogOpenButton),
+    "nuevo": ("document-new", QStyle.StandardPixmap.SP_FileIcon),
+    "añadir": ("list-add", QStyle.StandardPixmap.SP_FileDialogNewFolder),
+    "editar": ("edit", QStyle.StandardPixmap.SP_FileDialogDetailedView),
+    "duplicar": ("edit-copy", QStyle.StandardPixmap.SP_FileDialogListView),
+    "subir": ("go-up", QStyle.StandardPixmap.SP_ArrowUp),
+    "bajar": ("go-down", QStyle.StandardPixmap.SP_ArrowDown),
+    "anterior": ("go-previous", QStyle.StandardPixmap.SP_ArrowLeft),
+    "atras": ("go-previous", QStyle.StandardPixmap.SP_ArrowBack),
+    "siguiente": ("go-next", QStyle.StandardPixmap.SP_ArrowRight),
+    "continuar": ("go-next", QStyle.StandardPixmap.SP_ArrowRight),
+    "confirmar": ("dialog-ok", QStyle.StandardPixmap.SP_DialogApplyButton),
+    "cancelar": ("dialog-cancel", QStyle.StandardPixmap.SP_DialogCancelButton),
+    "cerrar": ("window-close", QStyle.StandardPixmap.SP_DialogCloseButton),
+    "carpeta": ("folder-open", QStyle.StandardPixmap.SP_DirOpenIcon),
+    "examinar": ("folder-open", QStyle.StandardPixmap.SP_DirOpenIcon),
+    "actualizar": ("view-refresh", QStyle.StandardPixmap.SP_BrowserReload),
+    "recalcular": ("view-refresh", QStyle.StandardPixmap.SP_BrowserReload),
+    "secuenciar": ("media-seek-forward", QStyle.StandardPixmap.SP_MediaSeekForward),
+    "generar": ("document-save-as", QStyle.StandardPixmap.SP_FileDialogStart),
+    "informe": ("document-print-preview", QStyle.StandardPixmap.SP_FileIcon),
+    "exportar": ("document-save-as", QStyle.StandardPixmap.SP_DialogSaveButton),
+    "imprimir": ("document-print", QStyle.StandardPixmap.SP_FileDialogDetailedView),
+    "configuracion": ("preferences-system", QStyle.StandardPixmap.SP_FileDialogDetailedView),
+    "plantilla": ("document-open", QStyle.StandardPixmap.SP_DirOpenIcon),
+    "biblioteca": ("folder", QStyle.StandardPixmap.SP_DirIcon),
+    "ver ": ("document-print-preview", QStyle.StandardPixmap.SP_FileDialogContentsView),
+    "pdf": ("application-pdf", QStyle.StandardPixmap.SP_FileDialogContentsView),
+    "consulta": ("help-browser", QStyle.StandardPixmap.SP_MessageBoxQuestion),
+    "referencia": ("internet-web-browser", QStyle.StandardPixmap.SP_DirLinkIcon),
+    "copiar": ("edit-copy", QStyle.StandardPixmap.SP_FileDialogDetailedView),
+    "revisar": ("document-properties", QStyle.StandardPixmap.SP_MessageBoxInformation),
+    "asignar": ("document-properties", QStyle.StandardPixmap.SP_DialogApplyButton),
+    "desasignar": ("edit-clear", QStyle.StandardPixmap.SP_DialogDiscardButton),
+    "expandir": ("view-fullscreen", QStyle.StandardPixmap.SP_TitleBarMaxButton),
 }
 
 
@@ -67,10 +63,23 @@ def _key(value: str) -> str:
 def icon_for_text(app: QApplication, text: str):
     """Obtiene un icono estándar según la intención principal del texto."""
     normalized = _key(text)
-    for keyword, icon in _ICON_RULES.items():
+    if "deshacer" in normalized:
+        return QIcon.fromTheme(
+            "edit-undo",
+            app.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload),
+        )
+    if "eliminar" in normalized or "quitar" in normalized:
+        return QIcon.fromTheme(
+            "edit-delete",
+            app.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon),
+        )
+    for keyword, (theme_name, fallback) in _ICON_RULES.items():
         if keyword in normalized:
-            return app.style().standardIcon(icon)
-    return app.style().standardIcon(QStyle.StandardPixmap.SP_CommandLink)
+            return QIcon.fromTheme(
+                theme_name,
+                app.style().standardIcon(fallback),
+            )
+    return QIcon()
 
 
 def decorate_widget(widget: QWidget) -> None:
@@ -79,6 +88,14 @@ def decorate_widget(widget: QWidget) -> None:
     if app is None:
         return
     for button in widget.findChildren(QPushButton):
+        normalized = _key(button.text())
+        if button.property("textOnlyIcon"):
+            button.setIcon(QIcon())
+            continue
+        if normalized in {"ok", "aceptar"}:
+            button.setText("Aceptar")
+            button.setIcon(QIcon())
+            continue
         if button.icon().isNull() and button.text().strip():
             button.setIcon(icon_for_text(app, button.text()))
             button.setIconSize(button.iconSize())

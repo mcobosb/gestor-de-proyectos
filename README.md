@@ -557,9 +557,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe bc3_gui.py
 ```
 
-La ventana principal del presupuesto usa PySide6. Durante la migración, las
-herramientas secundarias conservan temporalmente su implementación heredada en
-Tkinter y pueden abrirse con `bc3_gui.py --legacy`.
+La aplicación completa usa PySide6.
 
 En modo desarrollo, la carpeta debe permitir escritura porque las preferencias
 se guardan junto al código. La versión instalada guarda preferencias e historial
@@ -641,8 +639,7 @@ El archivo [requirements.txt](requirements.txt) contiene las dependencias de uso
 
 Los informes también se generan como ODT editable con los módulos estándar de Python.
 El formato se elige en **Archivo → Configuración…** y, de inicio, es PDF.
-Tkinter solo es necesario para la entrada heredada `--legacy` mientras se
-migran las herramientas secundarias.
+Tkinter ya no es necesario.
 
 ## Organización
 

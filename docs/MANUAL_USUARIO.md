@@ -20,10 +20,7 @@ python -m venv .venv
 
 En las siguientes ocasiones basta con ejecutar el último comando. Mantén juntos
 los módulos principales y las carpetas `iconos` y `tools`.
-La ventana principal del presupuesto utiliza PySide6. Mientras se migran las
-herramientas secundarias, puedes iniciar la versión heredada con
-`.\.venv\Scripts\python.exe bc3_gui.py --legacy`. En **Archivo → Configuración →
-Apariencia** puedes elegir el tema **Sistema**, **Claro** u **Oscuro**.
+La aplicación utiliza PySide6. En **Archivo → Configuración → Apariencia** puedes elegir el tema **Sistema**, **Claro** u **Oscuro**.
 
 Al arrancar, el programa examina `tools` junto a la aplicación y añade al menú
 **Herramientas** los módulos disponibles. En el instalador de Windows, la

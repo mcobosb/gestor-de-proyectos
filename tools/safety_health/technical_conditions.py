@@ -5,11 +5,8 @@ from dataclasses import asdict, dataclass
 import hashlib
 import json
 import re
-import tkinter as tk
-from tkinter import ttk
 import unicodedata
 
-from localization import localize_widget_tree
 from .external_conditions import restore_external_conditions
 from .regulations import WorkUnit
 
@@ -171,102 +168,4 @@ def selected_technical_template(
     return _BLOCK_RE.sub(include, template).replace(_REVIEW_MARKER, notice)
 
 
-class TechnicalReviewWindow(tk.Toplevel):
-    """Muestra todos los bloques para confirmar propuestas y añadir condiciones no detectadas."""
-
-    def __init__(self, owner, app, context, proposals, pending, base_state):
-        """Restaura inclusiones y exclusiones sin convertir indicios en una evaluación."""
-        saved = restore_technical_review(app.safety_health_state.get("technical_review"))
-        super().__init__(owner)
-        self.app, self.context, self.base_state = app, context, base_state
-        self.proposals, self.pending = proposals, pending
-        self.transient(owner)
-        self.title("Confirmar condiciones técnicas del estudio")
-        self.geometry("1060x680")
-        self.minsize(850, 550)
-        ttk.Label(
-            self, padding=10, wraplength=980,
-            text="Las condiciones generales se incluyen siempre. Confirma los bloques específicos: "
-                 "las propuestas son indicios, no una evaluación de riesgos. Puedes marcar cualquier "
-                 "bloque no detectado. La ausencia de una ficha o recurso no demuestra que sea innecesario.",
-        ).pack(fill="x")
-        if saved and not technical_review_confirmed(saved, context):
-            ttk.Label(
-                self, padding=10, wraplength=980,
-                text="Las fuentes han cambiado desde la revisión anterior. Se conservan tus "
-                     "decisiones; comprueba las propuestas actuales antes de confirmarlas de nuevo.",
-            ).pack(fill="x")
-        frame = ttk.Frame(self, padding=10)
-        frame.pack(fill="both", expand=True)
-        frame.rowconfigure(0, weight=1)
-        frame.columnconfigure(0, weight=1)
-        self.tree = ttk.Treeview(
-            frame, columns=("include", "block", "reason"), show="headings", selectmode="browse",
-        )
-        for key, label, width in (
-            ("include", "Incluir", 60), ("block", "Condición técnica", 350),
-            ("reason", "Origen de la propuesta / revisión", 580),
-        ):
-            self.tree.heading(key, text=label)
-            self.tree.column(key, width=width, stretch=key == "reason")
-        self.tree.grid(row=0, column=0, sticky="nsew")
-        for orient, command, row, column, sticky, option in (
-            ("vertical", self.tree.yview, 0, 1, "ns", "yscrollcommand"),
-            ("horizontal", self.tree.xview, 1, 0, "ew", "xscrollcommand"),
-        ):
-            scrollbar = ttk.Scrollbar(frame, orient=orient, command=command)
-            scrollbar.grid(row=row, column=column, sticky=sticky)
-            self.tree.configure(**{option: scrollbar.set})
-        previous = saved.get("blocks", {})
-        self.choices = {
-            block.key: previous.get(block.key, block.key in proposals) for block in TECHNICAL_BLOCKS
-        }
-        for block in TECHNICAL_BLOCKS:
-            self.tree.insert("", "end", iid=block.key, values=(
-                "X" if self.choices[block.key] else "", block.title,
-                proposals.get(block.key, "Sin propuesta: revisar e incluir manualmente si procede."),
-            ))
-        self.tree.bind("<ButtonRelease-1>", self._toggle)
-        self.tree.bind("<space>", self._toggle)
-        self.tree.bind("<<TreeviewSelect>>", self._show_detail)
-        self.detail = tk.Text(self, height=6, wrap="word")
-        self.detail.pack(fill="x", padx=10, pady=6)
-        self._show_detail()
-        actions = ttk.Frame(self, padding=10)
-        actions.pack(fill="x")
-        ttk.Button(actions, text="Cancelar", command=self.destroy).pack(side="right")
-        ttk.Button(
-            actions, text="Confirmar selección", command=self._accept, style="Accent.TButton",
-        ).pack(side="right", padx=8)
-        localize_widget_tree(self)
-        self.grab_set()
-
-    def _toggle(self, event=None):
-        """Alterna únicamente la casilla pulsada o la fila activa con el teclado."""
-        if event is not None and event.keysym != "space":
-            key = self.tree.identify_row(event.y) if self.tree.identify_column(event.x) == "#1" else ""
-        else:
-            key = (self.tree.selection() or ("",))[0]
-        if key in self.choices:
-            self.choices[key] = not self.choices[key]
-            self.tree.set(key, "include", "X" if self.choices[key] else "")
-        return "break"
-
-    def _accept(self):
-        """Guarda la revisión completa con su huella de ámbito y recursos."""
-        state = dict(self.app.safety_health_state) or dict(self.base_state)
-        state["technical_review"] = restore_technical_review({
-            "context": self.context, "blocks": self.choices,
-        })
-        self.app.safety_health_state = state
-        self.app._mark_dirty()
-        self.destroy()
-
-    def _show_detail(self, _event=None):
-        """Permite leer completas las razones y las carencias de las fuentes."""
-        key = (self.tree.selection() or ("",))[0]
-        reason = self.proposals.get(key, "Comprueba los equipos y procedimientos que se utilizarán realmente.")
-        self.detail.configure(state="normal")
-        self.detail.delete("1.0", "end")
-        self.detail.insert("1.0", "\n".join((reason, *self.pending)))
-        self.detail.configure(state="disabled")
+# Las clases visuales Tk de este módulo se retiraron; la GUI vigente está en PySide6.

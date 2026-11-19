@@ -2,11 +2,7 @@
 from __future__ import annotations
 
 import re
-import tkinter as tk
-from tkinter import filedialog as _tk_filedialog
-from tkinter import messagebox as _tk_messagebox
-from tkinter import simpledialog as _tk_simpledialog
-from tkinter import ttk
+
 
 
 LANGUAGES = {
@@ -1007,112 +1003,4 @@ def translate(text: str, language: str | None = None) -> str:
     return translations[0 if target == "en" else 1]
 
 
-def localize_widget_tree(root: tk.Misc) -> None:
-    """Traduce las etiquetas estáticas de widgets, menús, pestañas y tablas."""
-    for widget in _walk_widgets(root):
-        if isinstance(widget, (tk.Tk, tk.Toplevel)):
-            widget.title(translate(widget.title()))
-        if isinstance(widget, tk.Menu):
-            end = widget.index("end")
-            if end is not None:
-                for index in range(end + 1):
-                    if widget.type(index) in {"command", "cascade", "checkbutton", "radiobutton"}:
-                        label = widget.entrycget(index, "label")
-                        widget.entryconfigure(index, label=translate(label))
-        elif isinstance(widget, ttk.Notebook):
-            for tab in widget.tabs():
-                widget.tab(tab, text=translate(widget.tab(tab, "text")))
-        elif isinstance(widget, ttk.Treeview):
-            for column in widget["columns"]:
-                widget.heading(column, text=translate(widget.heading(column, "text")))
-        elif isinstance(widget, ttk.Combobox):
-            values = tuple(widget.cget("values"))
-            if not all(value in LANGUAGES.values() for value in values):
-                widget.configure(values=tuple(translate(value) for value in values))
-        if "text" in widget.keys():
-            widget.configure(text=translate(str(widget.cget("text"))))
-        if (
-            widget.winfo_class() in {"TLabel", "Label"}
-            and "textvariable" in widget.keys()
-            and widget.cget("textvariable")
-        ):
-            variable_name = widget.cget("textvariable")
-            if widget.tk.call("info", "exists", variable_name):
-                value = str(widget.tk.globalgetvar(variable_name))
-                translated = translate(value)
-                if translated != value:
-                    widget.tk.globalsetvar(variable_name, translated)
-        if "values" in widget.keys() and not isinstance(widget, ttk.Combobox):
-            values = widget.cget("values")
-            if values:
-                widget.configure(values=tuple(translate(value) for value in values))
-
-
-def _walk_widgets(root: tk.Misc):
-    """Recorre todos los widgets descendientes de una ventana Tk."""
-    yield root
-    for child in root.winfo_children():
-        yield from _walk_widgets(child)
-
-
-class _LocalizedMessagebox:
-    """Aplica las traducciones conocidas a los diálogos estándar de Tk."""
-
-    def __getattr__(self, name: str):
-        """Devuelve el diálogo solicitado con sus textos traducidos."""
-        method = getattr(_tk_messagebox, name)
-        if name not in {"showinfo", "showwarning", "showerror", "askyesno", "askokcancel", "askyesnocancel"}:
-            return method
-
-        def show(*args, **kwargs):
-            """Muestra un diálogo estándar con título y mensaje localizados."""
-            if len(args) >= 2:
-                localized_args = (translate(str(args[0])), translate(str(args[1])), *args[2:])
-                return method(*localized_args, **kwargs)
-            if "title" in kwargs:
-                kwargs["title"] = translate(str(kwargs["title"]))
-            if "message" in kwargs:
-                kwargs["message"] = translate(str(kwargs["message"]))
-            return method(*args, **kwargs)
-
-        return show
-
-
-messagebox = _LocalizedMessagebox()
-
-
-class _LocalizedNativeDialog:
-    """Localiza títulos y etiquetas de los diálogos nativos de Tk."""
-
-    def __init__(self, module, *, translate_prompt: bool = False):
-        """Asocia un módulo de diálogos y configura si se traduce su indicación."""
-        self.module = module
-        self.translate_prompt = translate_prompt
-
-    def __getattr__(self, name: str):
-        """Devuelve la función del diálogo con sus textos localizados."""
-        method = getattr(self.module, name)
-
-        def show(*args, **kwargs):
-            """Muestra el diálogo con título, filtros e indicaciones traducidos."""
-            if len(args) >= 1:
-                localized_args = [translate(str(args[0])), *args[1:]]
-                if self.translate_prompt and len(args) >= 2:
-                    localized_args[1] = translate(str(args[1]))
-                args = tuple(localized_args)
-            if "title" in kwargs:
-                kwargs["title"] = translate(str(kwargs["title"]))
-            if self.translate_prompt and "prompt" in kwargs:
-                kwargs["prompt"] = translate(str(kwargs["prompt"]))
-            if "filetypes" in kwargs:
-                kwargs["filetypes"] = tuple(
-                    (translate(str(label)), patterns)
-                    for label, patterns in kwargs["filetypes"]
-                )
-            return method(*args, **kwargs)
-
-        return show
-
-
-filedialog = _LocalizedNativeDialog(_tk_filedialog)
-simpledialog = _LocalizedNativeDialog(_tk_simpledialog, translate_prompt=True)
+# La localización de widgets Tk se retiró; la interfaz vigente usa PySide6.

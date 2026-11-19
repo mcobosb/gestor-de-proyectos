@@ -282,6 +282,7 @@ class BudgetMainWindow(QMainWindow):
         for kind in ("2", "1", "3"):
             button = QPushButton(CONCEPT_TYPES[kind].split()[0])
             button.setCheckable(True)
+            button.setProperty("textOnlyIcon", True)
             button.setToolTip(
                 f"Filtrar recursos: {CONCEPT_TYPES[kind]}. "
                 "Pulsa de nuevo para mostrar todos."
@@ -366,6 +367,7 @@ class BudgetMainWindow(QMainWindow):
         for kind in ("2", "1", "3"):
             button = QPushButton(CONCEPT_TYPES[kind].split()[0])
             button.setCheckable(True)
+            button.setProperty("textOnlyIcon", True)
             button.setToolTip(
                 f"Filtrar recursos: {CONCEPT_TYPES[kind]}. "
                 "Pulsa de nuevo para mostrar todos."

@@ -14,7 +14,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication, QDialogButtonBox, QMessageBox, QPushButton
 from PySide6.QtCore import Qt
 
-from budget_core import Bc3Dataset
+from budget_core import Bc3Dataset, Concept
 from budget_core import ProjectItem
 from budget_qt_settings import SettingsDialog
 from budget_qt_window import BudgetMainWindow
@@ -520,9 +520,29 @@ class BudgetQtWindowTests(unittest.TestCase):
             "budget_qt_window.user_data_directory", return_value=Path(directory)
         ):
             window = BudgetMainWindow()
-            from tests.test_invoicing import set_budget
-
-            set_budget(window)
+            dataset = Bc3Dataset.__new__(Bc3Dataset)
+            dataset.concepts = {
+                "MO": Concept("MO", "h", "Operario", 10, "1"),
+                "MAT": Concept("MAT", "kg", "Material", 3, "3"),
+                "MAQ": Concept("MAQ", "h", "Equipo", 5, "2"),
+                "AUX": Concept(
+                    "AUX", "ud", "Auxiliar", 8, "0",
+                    children=[("MAT", 1), ("MAQ", 1)],
+                ),
+            }
+            window.budget_dataset = dataset
+            window.budget_items = [
+                ProjectItem(
+                    "P1", "01#", "m", "Unidad uno", measurement=2,
+                    unit_price=35, decomposition=[
+                        ("MO", 2), ("MAT", 1), ("AUX", 1)
+                    ], component_prices={"MO": 12},
+                ),
+                ProjectItem("P2", "01#", "ud", "Sin descomposición", unit_price=50),
+            ]
+            window.reference_bases = []
+            window.chapter_order = ["01#"]
+            window.chapter_titles = {}
             window.invoicing_state = InvoiceState(
                 invoices=[
                     Invoice(
@@ -675,6 +695,8 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.application.processEvents()
             decorated = dialog.findChildren(QPushButton)
             self.assertTrue(all(not button.icon().isNull() for button in decorated))
+            for button in decorated:
+                self.assertNotEqual(button.text(), "OK")
             dialog.reject()
             window.close()
             self.application.processEvents()
@@ -694,6 +716,11 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertEqual(
                 set(window.reference_filter_buttons), {"2", "1", "3"}
             )
+            for button in (
+                *window.budget_filter_buttons.values(),
+                *window.reference_filter_buttons.values(),
+            ):
+                self.assertTrue(button.icon().isNull())
             window.toggle_budget_resource_filter("3")
             self.assertTrue(window.budget_filter_buttons["3"].isChecked())
             self.assertFalse(window.budget_filter_buttons["1"].isChecked())
