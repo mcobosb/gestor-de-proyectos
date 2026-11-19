@@ -83,6 +83,7 @@ from budget_reports import REPORT_NAMES, ReportSettings, write_pdf
 from budget_qt_settings import SettingsDialog
 from budget_qt_theme import THEMES, apply_theme, search_icon
 from localization import LANGUAGES, set_language
+from qt_localization import apply_button_language
 from odt_reports import write_report_odt
 from ods_export import write_ods
 from tool_loader import discover_tools
@@ -205,6 +206,7 @@ class BudgetMainWindow(QMainWindow):
         self.theme = self._read_theme_preference()
         self.collaboration_nickname = self._read_collaboration_nickname()
         set_language(self.language)
+        apply_button_language(QApplication.instance())
         apply_theme(QApplication.instance(), self.theme)
         self._build_ui()
         self._collaboration_presence = QWidget()
@@ -2581,6 +2583,7 @@ class BudgetMainWindow(QMainWindow):
         if language is not None:
             self.language = language
             set_language(language)
+            apply_button_language(QApplication.instance())
             self._set_status("Idioma cambiado.")
         if collaboration_nickname is not None:
             self.collaboration_nickname = collaboration_nickname

@@ -6,6 +6,7 @@ import unicodedata
 from PySide6.QtCore import QEvent, QLineF, QObject, QRectF, QTimer, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPalette, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QPushButton, QStyle, QWidget
+from localization import translate
 
 
 THEMES = {
@@ -102,16 +103,16 @@ def decorate_widget(widget: QWidget) -> None:
     if app is None:
         return
     for button in widget.findChildren(QPushButton):
-        normalized = _key(button.text())
+        source = button.property("sourceButtonText") or translate(button.text(), "es")
+        normalized = _key(source)
         if button.property("textOnlyIcon"):
             button.setIcon(QIcon())
             continue
         if normalized in {"ok", "aceptar"}:
-            button.setText("Aceptar")
             button.setIcon(QIcon())
             continue
         if button.icon().isNull() and button.text().strip():
-            button.setIcon(icon_for_text(app, button.text()))
+            button.setIcon(icon_for_text(app, source))
             button.setIconSize(button.iconSize())
     for action in widget.actions():
         if action.menu() is not None:

@@ -12,6 +12,56 @@ LANGUAGES = {
 }
 
 _TEXT = {
+    "Aceptar": ("OK", "OK"),
+    "Aceptar y crear capítulo": ("Confirm and create chapter", "Valider et créer le chapitre"),
+    "Aplicar parámetros y continuar →": ("Apply settings and continue →", "Appliquer les paramètres et continuer →"),
+    "Asignar NTP": ("Assign NTP", "Associer une NTP"),
+    "Añadir": ("Add", "Ajouter"),
+    "Añadir selección o rama": ("Add selection or branch", "Ajouter la sélection ou la branche"),
+    "Centros Asistenciales — abrir registro SICESS": ("Healthcare facilities — open SICESS register", "Établissements de santé — ouvrir le registre SICESS"),
+    "Confirmar selección": ("Confirm selection", "Confirmer la sélection"),
+    "Continuar con el análisis": ("Continue analysis", "Poursuivre l’analyse"),
+    "Editar": ("Edit", "Modifier"),
+    "Editar biblioteca de documentos…": ("Edit document library…", "Modifier la bibliothèque de documents…"),
+    "Editar biblioteca de fichas…": ("Edit specification sheet library…", "Modifier la bibliothèque de fiches…"),
+    "Editar documentación del estudio…": ("Edit study documentation…", "Modifier la documentation de l’étude…"),
+    "Generar informe": ("Generate report", "Générer le rapport"),
+    "Guardar RCDs en el proyecto": ("Save construction waste in the project", "Enregistrer les déchets de chantier dans le projet"),
+    "Guardar anejo…": ("Save appendix…", "Enregistrer l’annexe…"),
+    "Guardar apariencia": ("Save appearance", "Enregistrer l’apparence"),
+    "Guardar apodo": ("Save nickname", "Enregistrer le pseudonyme"),
+    "Guardar preferencias": ("Save preferences", "Enregistrer les préférences"),
+    "Quitar de la lista": ("Remove from list", "Retirer de la liste"),
+    "Ver NTP oficial": ("Open official NTP", "Ouvrir la NTP officielle"),
+    "Recalcular con las bases cargadas": ("Recalculate using loaded price databases", "Recalculer avec les bases de prix chargées"),
+    "Ver tabla IFC 4.3 → BCCA": ("View IFC 4.3 → BCCA mapping", "Afficher la correspondance IFC 4.3 → BCCA"),
+    "Elegir partida por código…": ("Choose item by code…", "Choisir un poste par code…"),
+    "Guardar regla para este tipo IFC…": ("Save rule for this IFC type…", "Enregistrer la règle pour ce type IFC…"),
+    "Introducir cantidad…": ("Enter quantity…", "Saisir une quantité…"),
+    "Incorporar mediciones al presupuesto": ("Add measurements to estimate", "Ajouter les métrés au devis"),
+    "Material": ("Material", "Matériau"),
+    "Maquinaria": ("Equipment", "Matériel"),
+    "Mano": ("Labour", "Main-d’œuvre"),
+    "Guardar planificación en plantilla": ("Save schedule using template", "Enregistrer le planning avec le modèle"),
+    "Ver detalle completo": ("View full details", "Afficher le détail complet"),
+    "Vínculos LER–BCCA…": ("LER–BCCA links…", "Correspondances LER–BCCA…"),
+    "Generar estudio RCDs": ("Generate construction waste study", "Générer l’étude des déchets de chantier"),
+    "Condicionantes externos…": ("External constraints…", "Contraintes externes…"),
+    "Normativa y NTP…": ("Regulations and NTP…", "Réglementation et NTP…"),
+    "Condiciones técnicas…": ("Technical conditions…", "Conditions techniques…"),
+    "Revisar propuesta de unidades…": ("Review proposed items…", "Vérifier les postes proposés…"),
+    "Aislar selección": ("Isolate selection", "Isoler la sélection"),
+    "Bajar": ("Move down", "Descendre"),
+    "Duplicar": ("Duplicate", "Dupliquer"),
+    "Encuadrar": ("Fit view", "Cadrer la vue"),
+    "Expandir / contraer": ("Expand / collapse", "Développer / réduire"),
+    "Fantasma": ("Ghost mode", "Mode fantôme"),
+    "Invertir corte": ("Invert section", "Inverser la coupe"),
+    "Mostrar todo": ("Show all", "Tout afficher"),
+    "Nueva partida": ("New item", "Nouveau poste"),
+    "Nuevo capítulo": ("New chapter", "Nouveau chapitre"),
+    "Subir": ("Move up", "Monter"),
+    "← Añadir referencia": ("← Add reference", "← Ajouter la référence"),
     "Resumen de la actuación": ("Work summary", "Résumé des travaux"),
     "Se toma inicialmente del resumen guardado en PPTP; puedes editarlo aquí.": (
         "Initially taken from the summary saved in PPTP; you can edit it here.",
@@ -949,10 +999,12 @@ def get_language() -> str:
     return _LANGUAGE
 
 
-def translate(text: str, language: str | None = None) -> str:
+def translate(
+    text: str, language: str | None = None, *, source_language: str | None = None,
+) -> str:
     """Traduce una etiqueta conocida desde o hacia cualquiera de los idiomas."""
     target = language or _LANGUAGE
-    source = _REVERSE.get(text, text)
+    source = text if source_language == "es" else _REVERSE.get(text, text)
     activity_summary = re.fullmatch(
         r"Actividades: (\d+)  ·  Plazo: (\d+) días laborables", source
     ) or re.fullmatch(r"Activities: (\d+)  ·  Duration: (\d+) working days", source)

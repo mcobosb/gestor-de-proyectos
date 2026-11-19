@@ -532,7 +532,9 @@ class PptpWindowQt(QDialog):
         step = self.pages.currentIndex()
         self.setWindowTitle(f"PPTP — Paso {step + 1} de 3")
         self.back_button.setEnabled(step > 0)
-        self.next_button.setText("Aceptar y generar" if step == 2 else "Aceptar")
+        from qt_localization import localize_button
+
+        localize_button(self.next_button, "Aceptar y generar" if step == 2 else "Aceptar")
 
     def back(self) -> None:
         """Vuelve al paso anterior."""

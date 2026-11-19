@@ -12,8 +12,8 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import (
-    QApplication, QDialogButtonBox, QLabel, QMainWindow, QMessageBox, QPushButton, QSplashScreen,
-    QSplitter,
+    QApplication, QDialog, QDialogButtonBox, QFileDialog, QLabel, QMainWindow, QMessageBox,
+    QPushButton, QSplashScreen, QSplitter, QVBoxLayout,
 )
 from PySide6.QtCore import QCoreApplication, QEvent, Qt
 
@@ -24,6 +24,8 @@ from budget_qt_settings import SettingsDialog
 from budget_qt_window import BudgetMainWindow
 from budget_qt_theme import apply_theme
 from budget_reports import ReportSettings
+from localization import get_language, set_language
+from qt_localization import apply_button_language, localize_button
 from tools.price_justification.qt_window import PriceJustificationWindowQt
 from tools.rcd import RCD_BUDGET_SOURCE
 from tools.rcd.qt_window import RcdWindowQt
@@ -297,6 +299,52 @@ class BudgetQtWindowTests(unittest.TestCase):
             window.is_dirty = False
             window.close()
             self.application.processEvents()
+
+    def test_button_language_updates_existing_controls_and_new_dialogs(self) -> None:
+        """Cambia y restaura el idioma de botones propios, de barra y estándar."""
+        original_language = get_language()
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("budget_qt_window.user_data_directory", return_value=Path(directory)),
+            patch("budget_qt_window.apply_theme"),
+        ):
+            window = BudgetMainWindow()
+            dialog = QDialog(window)
+            layout = QVBoxLayout(dialog)
+            button = QPushButton("Añadir selección o rama")
+            layout.addWidget(button)
+            buttons = QDialogButtonBox(
+                QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+            )
+            layout.addWidget(buttons)
+            try:
+                dialog.show()
+                for language, save, add, ok, cancel, open_ in (
+                    ("en", "Save", "Add selection or branch", "OK", "Cancel", "&Open"),
+                    ("fr", "Enregistrer", "Ajouter la sélection ou la branche", "OK", "Annuler", "&Ouvrir"),
+                    ("es", "Guardar", "Añadir selección o rama", "Aceptar", "Cancelar", "&Abrir"),
+                ):
+                    with self.subTest(language=language):
+                        self.assertTrue(window._save_language_preference(language))
+                        self.application.processEvents()
+                        self.assertEqual(window.save_action.text(), save)
+                        self.assertEqual(button.text(), add)
+                        self.assertEqual(buttons.button(QDialogButtonBox.StandardButton.Ok).text(), ok)
+                        self.assertEqual(buttons.button(QDialogButtonBox.StandardButton.Cancel).text(), cancel)
+                        picker = QFileDialog(dialog)
+                        self.assertIn(open_, [item.text() for item in picker.findChildren(QPushButton)])
+                        picker.close()
+                self.assertTrue(window._save_language_preference("fr"))
+                localize_button(button, "Aceptar y generar")
+                self.assertEqual(button.text(), "Accepter et générer")
+            finally:
+                dialog.close()
+                window.close()
+                window.deleteLater()
+                QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                set_language(original_language)
+                apply_button_language(self.application)
+                self.application.processEvents()
 
     def test_price_justification_qt_roundtrips_state_and_reuses_window(self) -> None:
         """Migra el anejo a Qt sin cambiar el estado persistente compatible."""
