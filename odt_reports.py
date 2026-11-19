@@ -734,7 +734,7 @@ def _new_report(
     image, image_path, width, height, footer = _read_report_template(settings.template_path)
     template = _read_report_template_header(settings.template_path)
     document = _OdtReport(
-        title, report_project_label(project_title), settings.author, image_data=image,
+        title, report_project_label(project_title), settings.document_author, image_data=image,
         image_path=f"Pictures/report-template{Path(image_path).suffix.lower()}",
         image_type="image/jpeg" if Path(image_path).suffix.lower() in {".jpg", ".jpeg"}
         else "image/png",
@@ -1040,7 +1040,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
 
     signature = [
         value for value in (
-            settings.location, settings.role, settings.author, settings.organization,
+            settings.location, settings.role, settings.document_author, settings.organization,
             settings.signature,
         ) if value
     ]
@@ -1236,7 +1236,7 @@ def write_certification_odt(
             settings.contractor_representative, settings.contractor, settings.signature,
         ))),
         "\n".join(filter(None, (
-            settings.role, settings.author, settings.organization, settings.location,
+            settings.role, settings.document_author, settings.organization, settings.location,
             settings.signature,
         ))),
     ]

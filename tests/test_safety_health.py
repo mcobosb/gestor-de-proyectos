@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import unittest
 
 from bc3_gui import ProjectItem
+from budget_reports import ReportSettings
 from pypdf import PdfReader
 from tools.safety_health import (
     SAFETY_BUDGET_SOURCE, SafetyLine, evaluate_study_criteria, proposed_lines, restore_state,
@@ -147,10 +148,8 @@ class SafetyHealthTests(unittest.TestCase):
             budget_items=[source],
             chapter_order=["01#"],
             chapter_titles={},
-            report_settings=SimpleNamespace(
-                indirect_costs=0, template_path="", currency="EUR", custom_currency="", author="",
-                general_expenses=0, industrial_profit=0, vat=0, expediente="",
-                output_format="pdf", organization="", contractor="", location="",
+            report_settings=ReportSettings(
+                general_expenses=0, industrial_profit=0, vat=0,
             ),
             _ensure_chapter=lambda chapter: None,
             refresh_budget_tree=lambda: None,

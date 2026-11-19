@@ -694,8 +694,9 @@ def _build_study_content(app) -> _StudyContent:
         "Provincia": provinces or missing("la provincia"),
         "Comunidad autonoma": communities or missing("la comunidad autonoma"),
         "Emplazamiento": location or missing("el emplazamiento de la obra"),
-        "Tecnico redactor": str(getattr(settings, "author", "")).strip()
-        or missing("el tecnico redactor"),
+        "Tecnico redactor": (
+            settings.document_author.strip() or missing("el tecnico redactor")
+        ) if settings.show_author else "",
         "Fecha de emision": date.today().strftime("%d/%m/%Y"),
         "Presupuesto de ejecucion material": _format_amount(totals["pem"], currency),
         "Presupuesto de licitacion": _format_amount(totals["total"], currency),
@@ -1532,7 +1533,7 @@ def _write_pdf(app, target, content: _StudyContent) -> None:
         str(target), pagesize=layout.page_size, leftMargin=LEFT_MARGIN,
         rightMargin=RIGHT_MARGIN, topMargin=layout.top_margin(content.title, project),
         bottomMargin=layout.bottom_margin(), title=content.title,
-        author=settings.author,
+        author=settings.document_author,
     )
     has_page_field = bool(re.search(r"\{no_p[aá]gina\}", footer_source))
 

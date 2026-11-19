@@ -358,7 +358,7 @@ def write_planning_report(
     bottom_margin = layout.bottom_margin()
     document = SimpleDocTemplate(
         str(target), pagesize=layout.page_size, leftMargin=LEFT_MARGIN, rightMargin=RIGHT_MARGIN,
-        topMargin=top_margin, bottomMargin=bottom_margin, title=title, author=settings.author,
+        topMargin=top_margin, bottomMargin=bottom_margin, title=title, author=settings.document_author,
     )
     try:
         document.build(

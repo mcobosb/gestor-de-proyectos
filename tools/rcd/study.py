@@ -86,7 +86,8 @@ def study_variables(state: RcdState, title: str, settings: ReportSettings) -> di
     from . import MEASURED_NOTE, NOTE, normalize
 
     values = {
-        key: value or f"[PENDIENTE EN CONFIGURACIÓN GENERAL: {key}]"
+        key: value if key == "autor" and not settings.show_author
+        else value or f"[PENDIENTE EN CONFIGURACIÓN GENERAL: {key}]"
         for key, value in project_document_variables(title, settings).items()
     }
     values.update({
@@ -152,10 +153,12 @@ def study_tables(
     project_rows = [
         ["Proyecto", title], ["Emplazamiento", values["emplazamiento"]],
         ["Promotor / entidad", values["entidad"]],
-        ["Autor del proyecto", values["autor"]], ["Titulación / cargo", values["cargo"]],
+        ["Titulación / cargo", values["cargo"]],
+        *([["Autor del proyecto", values["autor"]]] if settings.show_author else []),
         ["PEM de la obra", pem],
         ["Base de cálculo sin gestión de residuos (€)", fmt_number(state.inputs["budget"])],
-        ["Redactor del estudio", values["autor"]], ["Expediente", values["expediente"]],
+        *([["Redactor del estudio", values["autor"]]] if settings.show_author else []),
+        ["Expediente", values["expediente"]],
     ]
     waste_rows = [
         [code, description, "; ".join(state.evidence.get(key, [])) or "Selección manual"]
@@ -324,7 +327,7 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
         else:
             document.paragraph(text, "RcdBullet" if level < 0 else "ReportBody")
     document.space(24)
-    for value in (settings.location, settings.role, settings.author, settings.organization, settings.signature):
+    for value in (settings.location, settings.role, settings.document_author, settings.organization, settings.signature):
         if value:
             document.paragraph(value, "Signature")
     document.write(target)
@@ -384,7 +387,7 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
             story.append(Paragraph(escape(text).replace("\n", "<br/>"), bullet if level < 0 else body))
     signatures = [
         layout.text(value, layout.center)
-        for value in (settings.location, settings.role, settings.author, settings.organization, settings.signature)
+        for value in (settings.location, settings.role, settings.document_author, settings.organization, settings.signature)
         if value
     ]
     if signatures:
@@ -409,7 +412,7 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
     document = RcdDocument(
         str(target), pagesize=layout.page_size, leftMargin=LEFT_MARGIN-6, rightMargin=RIGHT_MARGIN-6,
         topMargin=layout.top_margin(TITLE, title), bottomMargin=layout.bottom_margin(),
-        title=f"{TITLE} - {title}", author=settings.author,
+        title=f"{TITLE} - {title}", author=settings.document_author,
     )
     try:
         document.multiBuild(story, onFirstPage=header, onLaterPages=header)

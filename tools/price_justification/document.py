@@ -366,7 +366,7 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
         append_report_odt(app, report, document, embedded=True)
     settings = app.report_settings
     signature = [value for value in (
-        settings.location, settings.role, settings.author, settings.organization, settings.signature,
+        settings.location, settings.role, settings.document_author, settings.organization, settings.signature,
     ) if value]
     if signature:
         document.space(8 * 72 / 25.4)
@@ -462,7 +462,7 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
         else:
             story.append(Paragraph(_pdf_inline(text), body))
     signature = [value for value in (
-        settings.location, settings.role, settings.author, settings.organization, settings.signature,
+        settings.location, settings.role, settings.document_author, settings.organization, settings.signature,
     ) if value]
     if signature:
         story.append(KeepTogether([Spacer(1, 8 * mm), *[
@@ -489,7 +489,7 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
         str(target), pagesize=A4, leftMargin=LEFT_MARGIN, rightMargin=RIGHT_MARGIN,
         topMargin=layout.top_margin(TITLE.upper(), app._project_title()),
         bottomMargin=layout.bottom_margin(),
-        title=TITLE, author=settings.author,
+        title=TITLE, author=settings.document_author,
     )
     try:
         document.multiBuild(story, onFirstPage=page_header, onLaterPages=page_header)

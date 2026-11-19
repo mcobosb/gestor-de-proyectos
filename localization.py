@@ -23,6 +23,7 @@ _TEXT = {
     "Continuar con el análisis": ("Continue analysis", "Poursuivre l’analyse"),
     "Editar": ("Edit", "Modifier"),
     "Editar biblioteca de documentos…": ("Edit document library…", "Modifier la bibliothèque de documents…"),
+    "Mostrar en los documentos": ("Show in documents", "Afficher dans les documents"),
     "Editar biblioteca de fichas…": ("Edit specification sheet library…", "Modifier la bibliothèque de fiches…"),
     "Editar documentación del estudio…": ("Edit study documentation…", "Modifier la documentation de l’étude…"),
     "Generar informe": ("Generate report", "Générer le rapport"),

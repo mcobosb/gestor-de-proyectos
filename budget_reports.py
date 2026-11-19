@@ -76,6 +76,12 @@ class ReportSettings:
     guarantee_period: str = ""
     municipality_codes: list[str] = field(default_factory=list)
     cpv_codes: list[str] = field(default_factory=list)
+    show_author: bool = True
+
+    @property
+    def document_author(self) -> str:
+        """Devuelve la autoría publicable, sin modificar los nombres guardados."""
+        return self.author if self.show_author else ""
 
     @property
     def municipalities(self) -> tuple[Municipality, ...]:
@@ -107,6 +113,10 @@ class ReportSettings:
                 else:
                     resolve_cpv_codes(value)
                 values[key] = list(value)
+            elif key == "show_author":
+                if not isinstance(value, bool):
+                    raise ValueError("Mostrar la autoría en los documentos debe ser verdadero o falso.")
+                values[key] = value
             elif key in PERCENTAGE_FIELDS:
                 if isinstance(value, bool):
                     raise ValueError(f"Porcentaje no válido: {key}.")
@@ -560,7 +570,7 @@ def build_pdf_report(
                 total("TOTAL EJECUCIÓN MATERIAL", pem)
 
     signature = [v for v in (
-        settings.location, settings.role, settings.author, settings.organization, settings.signature
+        settings.location, settings.role, settings.document_author, settings.organization, settings.signature
     ) if v]
     if signature and not embedded:
         story.append(KeepTogether([Spacer(1, 8 * mm), *[
@@ -609,7 +619,7 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
         str(target), pagesize=A4, rightMargin=RIGHT_MARGIN - 6, leftMargin=LEFT_MARGIN - 6,
         topMargin=layout.top_margin(header_title, project_label, column_headers, column_ratios),
         bottomMargin=layout.bottom_margin(), title=f"{report} - {title}",
-        author=settings.author,
+        author=settings.document_author,
     )
     try:
         document.build(story)
@@ -790,7 +800,7 @@ def write_certification_pdf(
     signatures = [[
         text("\n".join(filter(None, (settings.contractor_representative, settings.contractor, settings.signature))),
              layout.center),
-        text("\n".join(filter(None, (settings.role, settings.author, settings.organization,
+        text("\n".join(filter(None, (settings.role, settings.document_author, settings.organization,
                                     settings.location, settings.signature))), layout.center),
     ]]
     story.append(KeepTogether([Spacer(1, 8 * mm), table([], signatures, [1, 1])]))
@@ -813,7 +823,7 @@ def write_certification_pdf(
         str(target), pagesize=A4, leftMargin=LEFT_MARGIN - 6, rightMargin=RIGHT_MARGIN - 6,
         topMargin=layout.top_margin(heading, project_label, column_headers, column_ratios),
         bottomMargin=layout.bottom_margin(),
-        title=f"{report} - Certificación {certification_number} - {project_title}", author=settings.author,
+        title=f"{report} - Certificación {certification_number} - {project_title}", author=settings.document_author,
     )
     try:
         document.build(story, onFirstPage=page_header, onLaterPages=page_header)

@@ -1029,7 +1029,7 @@ def write_document(
         document = PptpDocTemplate(
             str(target), pagesize=A4, leftMargin=LEFT_MARGIN, rightMargin=RIGHT_MARGIN,
             topMargin=layout.top_margin(title, project), bottomMargin=layout.bottom_margin(),
-            title=title, author=settings.author,
+            title=title, author=settings.document_author,
             keepTogetherClass=PptpKeepTogether,
         )
 

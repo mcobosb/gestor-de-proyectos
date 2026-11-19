@@ -170,7 +170,10 @@ Abre **Archivo → Configuración…** y completa:
   **Informes**. Se aplica al pulsar **Guardar informes**, actualiza el encabezado
   y los informes y se conserva en el JSON del proyecto. No puede estar vacío y
   no se utiliza como título predeterminado para nuevos proyectos.
-- Autoría, cargo o titulación, entidad o servicio.
+- Autoría, cargo o titulación, entidad o servicio. Desmarca **Mostrar en los
+  documentos** junto a la autoría para ocultar los nombres al generar informes.
+  Los nombres se conservan en el proyecto; al volver a marcar la casilla,
+  aparecen de nuevo bajo el cargo en la firma.
 - Expediente de la plantilla. Puedes situar `{{expediente}}` y `{{título}}`
   (también se admite `{{titulo}}`) en la cabecera o el pie de la plantilla ODT;
   se sustituyen respectivamente por este valor y el título del proyecto en los

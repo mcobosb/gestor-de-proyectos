@@ -380,6 +380,58 @@ class PriceDocumentTests(unittest.TestCase):
         self.assertEqual(target.read_bytes(), b"previous")
         self.assertEqual(list(self.folder.iterdir()), [target])
 
+    def test_author_visibility_controls_signatures_and_document_metadata(self):
+        """Oculta o restaura varios autores, sin alterar el cargo ni perder los nombres."""
+        from pypdf import PdfReader
+        from budget_reports import write_pdf
+        from odt_reports import _tag, write_report_odt
+        from tools.rcd import RcdState
+        from tools.rcd.study import write_study
+        from tools.pptp.document import write_document as write_pptp
+
+        authors = "Autora Alfa y Autor Beta"
+        role = "Cargo de prueba"
+        settings = ReportSettings.from_dict({"author": authors, "role": role})
+        self.app.report_settings = settings
+        for output in ("pdf", "odt"):
+            settings.output_format = output
+            for show in (False, True):
+                settings.show_author = show
+                for report in ("presupuesto", "anejo", "rcd", "pptp"):
+                    with self.subTest(format=output, show_author=show, report=report):
+                        target = self.folder / f"{report}.{output}"
+                        if report == "presupuesto":
+                            if output == "pdf":
+                                write_pdf(self.app, "Presupuesto resumen", target)
+                            else:
+                                write_report_odt(self.app, "Presupuesto resumen", target)
+                        elif report == "anejo":
+                            write_document(self.app, target, {})
+                        elif report == "rcd":
+                            state = RcdState()
+                            state.inputs.update(surface=100, earth_volume=10, budget=1000, earth_budget=0)
+                            write_study(state, self.app.project_title, settings, target)
+                        else:
+                            write_pptp("# Alcance\n\nContenido técnico.", target,
+                                       {"titulo_proyecto": self.app.project_title}, settings)
+                        if output == "pdf":
+                            reader = PdfReader(target)
+                            text = "\n".join(page.extract_text() for page in reader.pages)
+                            creator = reader.metadata.author
+                        else:
+                            with ZipFile(target) as archive:
+                                content = ET.fromstring(archive.read("content.xml"))
+                                text = " ".join(content.itertext())
+                                metadata = ET.fromstring(archive.read("meta.xml"))
+                                creator = metadata.findtext(f".//{_tag('dc:creator')}")
+                        self.assertEqual(creator == authors, show)
+                        if report != "pptp":
+                            self.assertIn(role, text)
+                            self.assertEqual(authors in text, show)
+                            if show and report != "rcd":
+                                self.assertLess(text.index(role), text.index(authors))
+                self.assertEqual(settings.author, authors)
+
 
 @unittest.skipIf(BudgetApp is None, "El equivalente vigente se comprueba en test_budget_qt.")
 class PriceWindowTests(unittest.TestCase):

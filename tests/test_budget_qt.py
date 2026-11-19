@@ -258,11 +258,19 @@ class BudgetQtWindowTests(unittest.TestCase):
             )
             dialog.project_title_field.setText("Proyecto configurado")
             dialog.report_fields["author"].setText("Autor")
+            self.assertTrue(dialog.show_author.isChecked())
+            dialog.show_author.setChecked(False)
             dialog.report_fields["indirect_costs"].setText("7.5")
             dialog.output_format.setCurrentText("ODT")
             values = dialog.values()
             self.assertEqual(values["project_title"], "Proyecto configurado")
             self.assertEqual(values["author"], "Autor")
+            saved = ReportSettings.from_dict(values)
+            reopened = SettingsDialog(window, ReportSettings.from_dict(saved.to_dict()),
+                                      "Proyecto configurado", "es", lambda language: True)
+            self.assertFalse(reopened.show_author.isChecked())
+            self.assertEqual(reopened.report_fields["author"].text(), "Autor")
+            reopened.reject()
             self.assertEqual(values["indirect_costs"], "7.5")
             self.assertEqual(values["output_format"], "odt")
             dialog.reject()
@@ -280,6 +288,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             data.update({
                 "project_title": "Configuración Qt",
                 "author": "Autora",
+                "show_author": False,
                 "indirect_costs": "3.5",
                 "output_format": "odt",
                 "currency": "OTHER",
@@ -288,6 +297,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertTrue(window._save_report_settings(data))
             self.assertEqual(window.project_title, "Configuración Qt")
             self.assertEqual(window.report_settings.author, "Autora")
+            self.assertFalse(window._read_report_settings().show_author)
             self.assertEqual(window.report_settings.indirect_costs, 3.5)
             self.assertEqual(window.report_settings.output_format, "odt")
             self.assertTrue((folder / "configuracion_informes.json").is_file())
