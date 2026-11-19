@@ -14,6 +14,7 @@ import webbrowser
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QAbstractItemView,
@@ -93,6 +94,9 @@ class BudgetMainWindow(QMainWindow):
     def __init__(self) -> None:
         """Inicializa el estado, los menús y los dos paneles de presupuesto."""
         super().__init__()
+        self.setWindowIcon(
+            QIcon(str(application_directory(__file__) / "iconos" / "logo.ico"))
+        )
         self.reference_bases: list[Bc3Dataset] = []
         self.budget_dataset: Bc3Dataset | None = None
         self.budget_items: list[ProjectItem] = []

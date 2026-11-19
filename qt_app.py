@@ -5,7 +5,7 @@ import os
 import sys
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QFont, QIcon, QPixmap
 from PySide6.QtWidgets import QApplication, QSplashScreen
 
 from app_paths import application_directory
@@ -31,6 +31,11 @@ def main() -> int:
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName(APPLICATION_NAME)
     app.setOrganizationName("mcobosb")
+    app.setWindowIcon(
+        QIcon(str(application_directory(__file__) / "iconos" / "logo.ico"))
+    )
+    font = QFont("Segoe UI", 10)
+    app.setFont(font)
     splash = show_startup_splash(app)
     window = BudgetMainWindow()
     if splash is not None:

@@ -11,13 +11,14 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QDialogButtonBox, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialogButtonBox, QMessageBox, QPushButton
 from PySide6.QtCore import Qt
 
 from budget_core import Bc3Dataset
 from budget_core import ProjectItem
 from budget_qt_settings import SettingsDialog
 from budget_qt_window import BudgetMainWindow
+from budget_qt_theme import apply_theme
 from budget_reports import ReportSettings
 from tools.price_justification.qt_window import PriceJustificationWindowQt
 from tools.rcd import RCD_BUDGET_SOURCE
@@ -636,6 +637,45 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertTrue(search.selected_entry().code)
             self.assertFalse(search.open_button.isEnabled())
             search.reject()
+            window.close()
+            self.application.processEvents()
+
+    def test_modern_theme_applies_icons_to_actions_buttons_and_dialogs(self) -> None:
+        """El tema moderno echa raíces globales en botones y acciones."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            apply_theme(self.application, "light")
+            window = BudgetMainWindow()
+            window.show()
+            self.application.processEvents()
+            self.assertTrue(self.application.styleSheet())
+            self.assertFalse(window.save_action.icon().isNull())
+            self.assertFalse(window.windowIcon().isNull())
+            buttons = [
+                action
+                for action in window.menuBar().actions()[0].menu().actions()
+                if action.text()
+            ]
+            self.assertTrue(all(action.icon().isNull() for action in buttons))
+            self.assertTrue(all(
+                action.icon().isNull()
+                for top_action in window.menuBar().actions()
+                if top_action.menu() is not None
+                for action in top_action.menu().actions()
+            ))
+            dialog = SettingsDialog(
+                window,
+                ReportSettings(),
+                "Proyecto",
+                "es",
+                lambda language: True,
+            )
+            dialog.show()
+            self.application.processEvents()
+            decorated = dialog.findChildren(QPushButton)
+            self.assertTrue(all(not button.icon().isNull() for button in decorated))
+            dialog.reject()
             window.close()
             self.application.processEvents()
 
