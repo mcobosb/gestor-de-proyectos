@@ -1,0 +1,107 @@
+"""Desplegable y carga de modelos BIM fuera del hilo de interfaz."""
+from __future__ import annotations
+
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, Signal, Slot
+from PySide6.QtWidgets import (
+    QFileDialog, QMainWindow, QMenu, QMessageBox, QToolBar, QToolButton,
+)
+
+if TYPE_CHECKING:
+    from .engine import BimModel
+
+
+class _LoadSignals(QObject):
+    """Entrega el resultado de la carga al hilo de interfaz."""
+
+    loaded = Signal(object)
+    failed = Signal(str)
+
+
+class _LoadIfc(QRunnable):
+    """Ejecuta la lectura y la geometría sin acceder a widgets."""
+
+    def __init__(self, path: Path) -> None:
+        """Prepara el trabajo y sus señales."""
+        super().__init__()
+        self.path = path
+        self.signals = _LoadSignals()
+
+    @Slot()
+    def run(self) -> None:
+        """Abre el archivo y comunica errores de dependencias o de lectura."""
+        try:
+            from .engine import load_ifc
+        except (ImportError, OSError) as exc:
+            self.signals.failed.emit(f"No se pudo cargar IfcOpenShell:\n{exc}")
+            return
+        try:
+            model = load_ifc(self.path)
+        except (OSError, RuntimeError, ValueError) as exc:
+            self.signals.failed.emit(f"No se pudo abrir {self.path.name}:\n{exc}")
+        else:
+            self.signals.loaded.emit(model)
+
+
+class BimController(QObject):
+    """Gestiona el modelo IFC activo de una ventana principal."""
+
+    def __init__(self, window: QMainWindow) -> None:
+        """Vincula el controlador a la ventana que posee el modelo."""
+        super().__init__(window)
+        self._window = window
+        self.model: BimModel | None = None
+        self._loading = False
+
+    def install_button(self, toolbar: QToolBar, label: str) -> None:
+        """Crea un botón cuyo primer comando abre el explorador de archivos."""
+        button = QToolButton(toolbar)
+        button.setText(label)
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self._menu = QMenu(button)
+        self._menu.addAction("Abrir archivo IFC…", self.choose_file)
+        button.setMenu(self._menu)
+        toolbar.addWidget(button)
+
+    @Slot()
+    def choose_file(self) -> None:
+        """Solicita un IFC y arranca una sola carga a la vez."""
+        if self._loading:
+            self._window.statusBar().showMessage("Motor BIM: hay un IFC en proceso.")
+            return
+        initial = str(self.model.path.parent) if self.model is not None else ""
+        filename, _ = QFileDialog.getOpenFileName(
+            self._window, "Abrir archivo IFC", initial, "Modelos IFC (*.ifc)"
+        )
+        if not filename:
+            return
+        self._loading = True
+        path = Path(filename)
+        self._window.statusBar().showMessage(f"Motor BIM: procesando {path.name}…")
+        worker = _LoadIfc(path)
+        worker.signals.loaded.connect(self._loaded, Qt.ConnectionType.QueuedConnection)
+        worker.signals.failed.connect(self._failed, Qt.ConnectionType.QueuedConnection)
+        QThreadPool.globalInstance().start(worker)
+
+    @Slot(object)
+    def _loaded(self, model: BimModel) -> None:
+        """Activa el modelo preparado y muestra un resumen de la geometría."""
+        self.model = model
+        self._loading = False
+        geometry = (
+            f"{len(model.meshes)} mallas, {model.triangle_count} triángulos"
+            if model.meshes else "sin mallas trianguladas"
+        )
+        self._window.statusBar().showMessage(
+            f"Motor BIM: {model.path.name} ({model.source.schema_identifier}) · {geometry}",
+            12000,
+        )
+
+    @Slot(str)
+    def _failed(self, message: str) -> None:
+        """Avisa del error sin perder el IFC cargado anteriormente."""
+        self._loading = False
+        self._window.statusBar().clearMessage()
+        QMessageBox.warning(self._window, "Motor BIM", message)

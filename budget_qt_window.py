@@ -366,6 +366,9 @@ class BudgetMainWindow(QMainWindow):
         self.undo_action.triggered.connect(self.undo_last_action)
         self.undo_action.setShortcut(QKeySequence.StandardKey.Undo)
         toolbar.addSeparator()
+        for tool in self.tools_by_name.values():
+            if tool.install_toolbar_qt is not None:
+                tool.install_toolbar_qt(self, toolbar)
         toolbar.addAction("Nuevo capítulo", self.add_chapter)
         toolbar.addAction("Nueva partida", self.add_manual_item)
         toolbar.addAction("Eliminar", self.delete_selection)

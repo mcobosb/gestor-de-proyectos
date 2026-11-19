@@ -591,6 +591,17 @@ suspensivos; pasa el ratón por encima para ver el nombre completo.
 
 Consulta el [manual de usuario](docs/MANUAL_USUARIO.md) para el procedimiento completo.
 
+### Motor BIM
+
+En la barra principal, elige **Motor BIM → Abrir archivo IFC…**. IfcOpenShell
+lee la jerarquía espacial y genera las mallas de triángulos en segundo plano
+con varios hilos. Al terminar, la barra de estado indica el esquema IFC y
+cuántas mallas y triángulos se han generado.
+
+Esta primera fase prepara el modelo para consultar Psets, cantidades y materiales
+y para un futuro visor 3D. Todavía no muestra el modelo ni lo guarda con el
+presupuesto.
+
 ## Bases de precios de referencia
 
 Las bases de precios reúnen partidas, descompuestos y precios básicos de materiales,
@@ -758,7 +769,9 @@ entradas en el primer nivel de `tools`: los scripts internos de una herramienta
 no se convierten en opciones adicionales del menú.
 
 Los nombres que empiezan por `_` se reservan para auxiliares y no aparecen en el
-menú. También se admiten `is_available(app) -> bool`, para desactivar la opción,
+menú. En Qt, `open_tool_qt(app)` abre la herramienta y el punto de entrada
+opcional `install_toolbar_qt(app, toolbar)` permite añadir un botón propio a la
+barra principal. También se admiten `is_available(app) -> bool`, para desactivar la opción,
 `restore_project_state(data) -> dict`, para validar el estado de las herramientas
 integradas, y `before_project_save(app)`, para su sincronización antes de guardar.
 El núcleo conserva los estados JSON existentes aunque falte su herramienta y

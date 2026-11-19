@@ -26,6 +26,7 @@ class Tool:
     before_save: Callable[[Any], None] | None = None
     open_qt: Callable | None = None
     before_save_qt: Callable | None = None
+    install_toolbar_qt: Callable | None = None
 
 
 def _optional_hook(module: ModuleType, name: str) -> Callable | None:
@@ -97,6 +98,7 @@ def discover_tools(directory: Path) -> tuple[list[Tool], list[str]]:
                 _optional_hook(module, "before_project_save"),
                 _optional_hook(module, "open_tool_qt"),
                 _optional_hook(module, "before_project_save_qt"),
+                _optional_hook(module, "install_toolbar_qt"),
             ))
         except (ImportError, OSError, SyntaxError, ValueError, TypeError, AttributeError, RuntimeError, SystemExit) as exc:
             errors.append(f"{candidate.name}: {type(exc).__name__}: {exc}")

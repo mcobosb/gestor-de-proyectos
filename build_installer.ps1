@@ -29,7 +29,7 @@ if ($LASTEXITCODE -eq 0) {
 if ($LASTEXITCODE -ne 0) {
     throw "Falta Nuitka. Instala las dependencias con: python -m pip install -r requirements.txt -r requirements-build.txt"
 }
-& $python -c "import cryptography, pdfminer, pdfplumber, pypdfium2, PySide6"
+& $python -c "import cryptography, ifcopenshell.geom, numpy, pdfminer, pdfplumber, pypdfium2, PySide6"
 if ($LASTEXITCODE -ne 0) {
     throw "Faltan dependencias de ejecución. Instálalas con: python -m pip install -r requirements.txt"
 }
@@ -169,6 +169,10 @@ foreach ($tool in Get-ChildItem $toolsSource -Filter "*.py" -Recurse -File) {
     --include-package=pdfminer `
     --include-package=pypdfium2 `
     --include-package=pypdfium2_raw `
+    --include-module=ifcopenshell.geom.main `
+    --include-module=ifcopenshell.util.shape `
+    --include-module=ifcopenshell.util.element `
+    --include-package-data=ifcopenshell `
     --include-module=decimal `
     --include-module=calendar `
     --include-module=html `
@@ -204,6 +208,7 @@ foreach ($extension in $compiledTools) {
 }
 foreach ($resource in Get-ChildItem $toolsSource -Recurse -File) {
     if ($resource.Name -eq ".gitkeep" -or
+        $resource.FullName -eq (Join-Path $toolsSource "bim\chesapeake_bay_bridge_tunnel_4x3.ifc") -or
         $resource.Extension -in @(".py", ".pyc", ".pyo", ".pyd") -or
         $resource.FullName -match '[\\/]__pycache__[\\/]') {
         continue

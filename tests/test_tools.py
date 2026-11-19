@@ -132,7 +132,7 @@ class ToolDiscoveryTests(ToolTestCase):
         self.assertEqual(errors, [])
         self.assertEqual(
             [tool.name for tool in loaded],
-            ["price_justification", "rcd", "safety_health", "planning", "pptp", "certifications", "invoicing"],
+            ["price_justification", "rcd", "safety_health", "planning", "pptp", "certifications", "invoicing", "bim"],
         )
         labels = {tool.name: tool.label for tool in loaded}
         self.assertEqual(labels["pptp"], "PPTP (BCCA · Junta de Andalucía)")
