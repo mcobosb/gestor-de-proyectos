@@ -14,7 +14,7 @@ import numpy as np
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QEventLoop, Qt, QTimer, Signal
-from PySide6.QtWidgets import QApplication, QMainWindow, QToolButton, QWidget
+from PySide6.QtWidgets import QApplication, QMainWindow, QToolBar, QToolButton, QWidget
 
 from budget_core import Bc3Dataset, Concept
 from budget_project import _item_payload, item_from_data
@@ -152,6 +152,8 @@ class BimTests(unittest.TestCase):
                 self.assertEqual(labels[index:index + 3], ["Colaboración", "Motor BIM", "Información"])
                 tool_labels = [action.text() for action in actions["Herramientas"].menu().actions()]
                 self.assertNotIn("Motor BIM", tool_labels)
+                toolbar, = window.findChildren(QToolBar)
+                self.assertNotIn("Motor BIM", [button.text() for button in toolbar.findChildren(QToolButton)])
                 bim_menu = actions["Motor BIM"].menu()
                 open_ifc = next(action for action in bim_menu.actions()
                                 if action.text() == "Abrir archivo IFC…")
@@ -289,24 +291,15 @@ class BimTests(unittest.TestCase):
             with self.assertRaises(IfcReadError):
                 load_ifc(path)
 
-    def test_toolbar_loads_in_background_and_publishes_result(self) -> None:
+    def test_bim_loads_in_background_and_publishes_result(self) -> None:
         """Seleccionar un IFC en el desplegable no bloquea el bucle de Qt."""
         application = QApplication.instance() or QApplication([])
         window = QMainWindow()
-        toolbar = window.addToolBar("Presupuesto")
         tools, errors = discover_tools(ROOT / "tools")
         self.assertEqual(errors, [])
         bim = next(tool for tool in tools if tool.name == "bim")
-        self.assertIsNotNone(bim.install_toolbar_qt)
-        bim.install_toolbar_qt(window, toolbar)
-        button = next(button for button in toolbar.findChildren(QToolButton)
-                      if button.text() == "Motor BIM")
-        menu = button.menu()
-        self.assertIsNotNone(menu)
-        action = menu.actions()[0]
-        self.assertEqual(action.text(), "Abrir archivo IFC…")
-        controller = window.findChild(BimController)
-        self.assertIsNotNone(controller)
+        open_bim = bim.open_qt
+        assert open_bim is not None
         release_worker = Event()
         with TemporaryDirectory() as directory:
             path = Path(directory) / "edificio.ifc"
@@ -329,7 +322,9 @@ class BimTests(unittest.TestCase):
                 patch("tools.bim.qt.QMessageBox.warning") as warning,
                 patch("tools.bim.viewer.Viewport", _HeadlessViewport),
             ):
-                action.trigger()
+                open_bim(window)
+                controller = window.findChild(BimController)
+                assert controller is not None
                 self.assertIsNone(controller.model)
                 self.assertIn("procesando", status.currentMessage())
                 QTimer.singleShot(0, release_worker.set)

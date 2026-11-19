@@ -5,9 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, Signal, Slot
-from PySide6.QtWidgets import (
-    QFileDialog, QMainWindow, QMenu, QMessageBox, QToolBar, QToolButton,
-)
+from PySide6.QtWidgets import QFileDialog, QMainWindow, QMessageBox
 
 if TYPE_CHECKING:
     from .engine import BimModel
@@ -59,16 +57,6 @@ class BimController(QObject):
         self.model: BimModel | None = None
         self._viewer: BimViewer | None = None
         self._loading = False
-
-    def install_button(self, toolbar: QToolBar, label: str) -> None:
-        """Crea un botón cuyo primer comando abre el explorador de archivos."""
-        button = QToolButton(toolbar)
-        button.setText(label)
-        button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self._menu = QMenu(button)
-        self._menu.addAction("Abrir archivo IFC…", self.choose_file)
-        button.setMenu(self._menu)
-        toolbar.addWidget(button)
 
     @Slot()
     def choose_file(self) -> None:
