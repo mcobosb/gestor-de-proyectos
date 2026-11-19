@@ -4,6 +4,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
+from urllib.parse import unquote
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
@@ -14,6 +15,9 @@ from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from budget_qt_window import BudgetMainWindow
 from tools.document_structure.catalog import TEMPLATES, copy_templates, template_paths
+from tools.document_structure.generation import generate, generated_at
+from tools.document_structure.office import MASTER_NAME
+from odt_reports import _tag
 from tools.document_structure.qt_window import DocumentStructureWindow
 
 
@@ -41,8 +45,34 @@ class DocumentStructureTests(unittest.TestCase):
             self.assertEqual(copy_templates(destination, [relative]), (0, 1))
             self.assertEqual((destination / relative).read_bytes(), b"edited")
 
-    def test_menu_checklist_and_copy_without_open_project(self) -> None:
-        """Abre la primera herramienta y copia un grupo sin incluir sus filas grises."""
+    def test_generation_receipt_and_office_documents(self) -> None:
+        """Personaliza los ODT, enlaza el maestro y no permite una segunda generación."""
+        with TemporaryDirectory() as directory:
+            project = Path(directory) / "proyecto.json"
+            project.write_text("{}", encoding="utf-8")
+            destination = Path(directory) / "entrega"
+            destination.mkdir()
+            paths = list(template_paths())[:3]
+            self.assertEqual(copy_templates(destination, paths[:1]), (1, 0))
+            self.assertEqual(generate(project, destination, paths[:1], "Proyecto de prueba"), (0, 1))
+            self.assertIsNone(generated_at(project))
+            self.assertEqual(generate(project, destination, paths, "Proyecto de prueba"), (2, 1))
+            self.assertIsNotNone(generated_at(project))
+            with ZipFile(destination / paths[1]) as doc:
+                styles = ET.fromstring(doc.read("styles.xml"))
+                self.assertIn("Proyecto de prueba", "".join(styles.find(f".//{_tag('style:header')}").itertext()))
+                self.assertIsNotNone(styles.find(f".//{_tag('style:footer')}//{_tag('text:page-number')}"))
+            with ZipFile(destination / MASTER_NAME) as master:
+                self.assertEqual(master.read("mimetype"), b"application/vnd.oasis.opendocument.text-master")
+                content = ET.fromstring(master.read("content.xml"))
+                refs = [unquote(node.attrib[_tag("xlink:href")])
+                        for node in content.iter(_tag("text:section-source"))]
+                self.assertEqual(refs, [f"../{path.as_posix()}" for path in paths[1:]])
+            with self.assertRaisesRegex(ValueError, "Ya se ha generado"):
+                generate(project, destination, paths, "Proyecto de prueba")
+
+    def test_menu_checklist_and_copy(self) -> None:
+        """Abre el índice sin proyecto y exige guardarlo antes de habilitar la copia."""
         app = QApplication.instance() or QApplication([])
         with TemporaryDirectory() as directory, patch(
             "budget_qt_window.user_data_directory", return_value=Path(directory),
@@ -68,6 +98,11 @@ class DocumentStructureTests(unittest.TestCase):
                 self.assertTrue(memory.child(8).isDisabled())
                 self.assertEqual(memory.child(8).checkState(0), Qt.CheckState.Unchecked)
                 self.assertEqual(tree.topLevelItem(0).checkState(0), Qt.CheckState.PartiallyChecked)
+                self.assertFalse(dialog._copy_button.isEnabled())
+                project = Path(directory) / "proyecto.json"
+                self.assertTrue(window._write_project_file(project))
+                dialog.refresh_generation()
+                self.assertTrue(dialog._copy_button.isEnabled())
                 destination = Path(directory) / "entrega"
                 destination.mkdir()
                 with (
@@ -79,6 +114,7 @@ class DocumentStructureTests(unittest.TestCase):
                     dialog._copy_button.click()
                     result.assert_called_once()
                 self.assertEqual(len(list(destination.rglob("*.odt"))), 8)
+                self.assertFalse(dialog._copy_button.isEnabled())
                 self.assertEqual([path.name for path in (destination / "01 Memoria y anejos").iterdir()],
                                  ["01 Memoria"])
             finally:

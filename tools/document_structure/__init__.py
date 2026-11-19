@@ -10,6 +10,7 @@ def open_tool_qt(app) -> None:
 
     for window in app._project_windows:
         if isinstance(window, DocumentStructureWindow) and window.isVisible():
+            window.refresh_generation()
             window.raise_()
             window.activateWindow()
             return

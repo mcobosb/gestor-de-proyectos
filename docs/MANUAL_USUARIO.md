@@ -63,6 +63,19 @@ externos y los documentos que se preparan en herramientas o informes específico
 figuran en gris. El índice es orientativo y las plantillas ODT son esquemas
 editables, no documentos técnicos terminados.
 
+Puedes consultar el índice sin proyecto, pero para copiar las plantillas debes
+guardar el proyecto primero. La primera copia que crea algún ODT se registra
+junto al proyecto y bloquea nuevas generaciones, incluso al volver a abrirlo.
+Cancelar o no crear ningún archivo no activa el bloqueo. Los informes y las
+demás herramientas siguen disponibles.
+
+Las copias ODT incorporan el título del proyecto en la cabecera y el apartado
+y el número de página en el pie. **Documento maestro.odm** reúne las copias
+creadas mediante enlaces relativos y numera las páginas de forma continua.
+Cada ODT abierto por separado empieza en la página 1. Para actualizar el
+maestro tras editar un ODT, acepta la actualización de enlaces en LibreOffice.
+Si mueves la entrega, conserva su estructura de carpetas.
+
 La aplicación arranca siempre sin proyecto ni bases cargadas, aunque conserve
 archivos de ejemplo en su carpeta. El historial de recientes y la configuración
 guardada se mantienen; los datos se rellenan al elegir un proyecto.

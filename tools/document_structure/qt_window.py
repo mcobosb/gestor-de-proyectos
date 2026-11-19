@@ -10,15 +10,17 @@ from PySide6.QtWidgets import (
 
 from tools._shared.reference_pill import add_reference_pill
 from . import TOOL_LABEL
-from .catalog import CATALOG, Entry, copy_templates
+from .catalog import CATALOG, Entry
+from .generation import generate, generated_at
 
 
 class DocumentStructureWindow(QDialog):
-    """Presenta el índice sin modificar el presupuesto ni el proyecto."""
+    """Presenta el índice y permite una sola generación por proyecto guardado."""
 
     def __init__(self, app) -> None:
         """Crea el árbol y conecta las acciones de selección y copia."""
         super().__init__(app)
+        self.app = app
         self.setWindowTitle(TOOL_LABEL)
         self.resize(960, 680)
         layout = QVBoxLayout(self)
@@ -26,6 +28,9 @@ class DocumentStructureWindow(QDialog):
         note = QLabel("Marca las plantillas ODT que quieras copiar. Los apartados en gris solo sirven de referencia.")
         note.setWordWrap(True)
         layout.addWidget(note)
+        self._status = QLabel()
+        self._status.setWordWrap(True)
+        layout.addWidget(self._status)
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(["Documento o apartado", "Disponibilidad"])
         self.tree.setColumnWidth(0, 620)
@@ -51,7 +56,25 @@ class DocumentStructureWindow(QDialog):
         controls.addWidget(close)
         layout.addLayout(controls)
         self.tree.itemChanged.connect(self._update_selection)
-        self._copy_button.setEnabled(False)
+        self.refresh_generation()
+
+    def refresh_generation(self) -> None:
+        """Actualiza el bloqueo según el registro persistente del proyecto activo."""
+        self._generation_available = False
+        project = self.app.project_path
+        if project is None:
+            message = "Guarda el proyecto antes de copiar sus plantillas."
+        else:
+            try:
+                date = generated_at(project)
+            except (OSError, ValueError) as exc:
+                message = f"No se puede comprobar el registro de generación: {exc}"
+            else:
+                self._generation_available = date is None
+                message = (f"Documentación ya generada ({date.replace('T', ' ', 1)})."
+                           if date else "La estructura documental solo se puede generar una vez.")
+        self._status.setText(message)
+        self._refresh_copy_button()
 
     def _add_entry(
         self, parent: QTreeWidget | QTreeWidgetItem, entry: Entry, folder: Path,
@@ -100,7 +123,7 @@ class DocumentStructureWindow(QDialog):
 
     def _refresh_copy_button(self) -> None:
         """Habilita la copia solo si hay algún ODT marcado."""
-        self._copy_button.setEnabled(any(
+        self._copy_button.setEnabled(self._generation_available and any(
             item.checkState(0) == Qt.CheckState.Checked for item, _ in self._templates
         ))
 
@@ -121,6 +144,10 @@ class DocumentStructureWindow(QDialog):
 
     def _copy_selected(self) -> None:
         """Solicita una carpeta y copia las plantillas seleccionadas."""
+        self.refresh_generation()
+        project = self.app.project_path
+        if project is None or not self._generation_available:
+            return
         selected = [path for item, path in self._templates if item.checkState(0) == Qt.CheckState.Checked]
         if not selected:
             return
@@ -128,8 +155,11 @@ class DocumentStructureWindow(QDialog):
         if not folder:
             return
         try:
-            copied, skipped = copy_templates(Path(folder), selected)
+            copied, skipped = generate(project, Path(folder), selected, self.app._project_title())
         except (OSError, ValueError) as exc:
             QMessageBox.critical(self, TOOL_LABEL, f"No se completó la copia de las plantillas:\n{exc}")
             return
-        QMessageBox.information(self, TOOL_LABEL, f"Plantillas copiadas: {copied}.\nArchivos ya existentes sin modificar: {skipped}.")
+        finally:
+            self.refresh_generation()
+        master = "\nDocumento maestro de LibreOffice creado." if copied else ""
+        QMessageBox.information(self, TOOL_LABEL, f"Plantillas copiadas: {copied}.\nArchivos ya existentes sin modificar: {skipped}.{master}")

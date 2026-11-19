@@ -1,7 +1,11 @@
 """Índice de obra civil y correspondencia con los archivos ODT distribuidos."""
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import copyfileobj
+from typing import BinaryIO
+from xml.etree.ElementTree import ParseError
+from zipfile import BadZipFile
 
 TEMPLATES = Path(__file__).resolve().parent / "plantillas"
 
@@ -135,7 +139,11 @@ def template_paths(entries: tuple[Entry, ...] = CATALOG, folder: Path = Path()) 
     return result
 
 
-def copy_templates(destination: Path, selected: list[Path]) -> tuple[int, int]:
+def copy_templates(
+    destination: Path, selected: list[Path], *,
+    record: Callable[[list[Path]], None] | None = None,
+    prepare: Callable[[Path, BinaryIO, str], None] | None = None,
+) -> tuple[int, int]:
     """Copia solo rutas del catálogo, sin sobrescribir y con comprobación previa."""
     destination = destination.resolve(strict=True)
     if not destination.is_dir():
@@ -151,21 +159,28 @@ def copy_templates(destination: Path, selected: list[Path]) -> tuple[int, int]:
         target = destination / relative
         if not target.parent.resolve().is_relative_to(destination):
             raise ValueError(f"La carpeta de salida queda fuera del destino: {target.parent}")
-        files.append((source, target))
-    copied = skipped = 0
-    for source, target in files:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with source.open("rb") as original:
-            try:
-                output = target.open("xb")
-            except FileExistsError:
-                skipped += 1
-                continue
-            try:
+        files.append((source, target, allowed[relative].title))
+    created: list[Path] = []
+    skipped = 0
+    try:
+        for source, target, title in files:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with source.open("rb") as original:
+                try:
+                    output = target.open("xb")
+                except FileExistsError:
+                    skipped += 1
+                    continue
+                created.append(target)
                 with output:
-                    copyfileobj(original, output)
-            except OSError:
-                target.unlink(missing_ok=True)
-                raise
-        copied += 1
-    return copied, skipped
+                    if prepare is None:
+                        copyfileobj(original, output)
+                    else:
+                        prepare(source, output, title)
+        if created and record is not None:
+            record([target.relative_to(destination) for target in created])
+    except (OSError, ValueError, ParseError, BadZipFile, KeyError):
+        for target in created:
+            target.unlink(missing_ok=True)
+        raise
+    return len(created), skipped
