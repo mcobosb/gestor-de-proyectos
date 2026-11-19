@@ -77,6 +77,7 @@ class ReportSettings:
     municipality_codes: list[str] = field(default_factory=list)
     cpv_codes: list[str] = field(default_factory=list)
     show_author: bool = True
+    text_styles: dict[str, dict[str, str | float | bool]] = field(default_factory=dict)
 
     @property
     def document_author(self) -> str:
@@ -125,6 +126,10 @@ class ReportSettings:
                 else:
                     resolve_cpv_codes(value)
                 values[key] = list(value)
+            elif key == "text_styles":
+                from document_styles import validate_styles
+
+                values[key] = validate_styles(value)
             elif key == "show_author":
                 if not isinstance(value, bool):
                     raise ValueError("Mostrar la autoría en los documentos debe ser verdadero o falso.")
@@ -616,6 +621,7 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
     settings = app.report_settings
     title = app._project_title()
     layout = ReportLayout(
+        text_styles=settings.text_styles,
         template_path=settings.template_path, expediente=settings.expediente, template_title=title,
     )
     story, page_header = build_pdf_report(app, report, layout)
@@ -713,6 +719,7 @@ def write_certification_pdf(
     )
     heading = f"{report_heading} · Certificación {certification_number} · {month_label}"
     layout = ReportLayout(
+        text_styles=settings.text_styles,
         certification=True,
         template_path=settings.template_path,
         expediente=settings.expediente,

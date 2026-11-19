@@ -306,7 +306,13 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
     for level in sorted({block[0] for block in blocks if isinstance(block, tuple) and block[0] < 0}):
         add_odt_list_style(document, f"RcdBullet{-level}", "ReportBody", -level - 1)
     headings = [block for block in blocks if isinstance(block, tuple) and block[0] > 0]
-    document.paragraph(TITLE, "RcdHeading1")
+    from copy import deepcopy
+
+    title_style = deepcopy(next(style for style in document.automatic_styles
+                               if style.get(_tag("style:name")) == "RcdHeading1"))
+    title_style.set(_tag("style:name"), "RcdDocumentTitle")
+    document.automatic_styles.append(title_style)
+    document.paragraph(TITLE, "RcdDocumentTitle")
     document.table_of_contents(headings, max_level=2, name="RcdContents")
     heading_index = 0
     main_seen = False
@@ -340,12 +346,13 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
     """Calcula el índice real y conserva las tablas paginadas del presupuesto original."""
     from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
     from reportlab.lib.styles import ParagraphStyle
-    from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer
+    from reportlab.platypus import PageBreak, SimpleDocTemplate, Spacer
     from reportlab.platypus.doctemplate import LayoutError
     from reportlab.platypus.tableofcontents import TableOfContents
     from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
 
     layout = ReportLayout(
+        text_styles=settings.text_styles,
         template_path=settings.template_path, expediente=settings.expediente,
         template_title=title, repeat_titles=False, footer_title="Estudio de gestión de RCDs",
     )
@@ -367,7 +374,9 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
         ParagraphStyle(f"RcdContents{level}", parent=body, leftIndent=12*level, alignment=TA_LEFT)
         for level in range(2)
     ]
-    story = [Paragraph(TITLE, headings[1]), Paragraph("ÍNDICE", headings[2]), contents, PageBreak()]
+    contents.levelStyles = layout.index_styles(contents.levelStyles)
+    story = [layout.text(TITLE, headings[1], role="title"), layout.text("ÍNDICE", headings[2], role="index"),
+             contents, PageBreak()]
     heading_index = 0
     main_seen = False
     for block in blocks:
@@ -383,16 +392,16 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
         if level > 0:
             if level == 1 and main_seen:
                 story.append(PageBreak())
-            paragraph = Paragraph(escape(text), headings[level])
+            paragraph = layout.text(text, headings[level])
             paragraph._rcd_heading = (level-1, text, f"RcdHeading{heading_index}")
             heading_index += 1
             main_seen = main_seen or level == 1
             story.append(paragraph)
         elif level < 0:
             marker, label = split_list_item(text)
-            story.append(Paragraph(escape(label), bullets[level], bulletText=marker))
+            story.append(layout.paragraph(escape(label), bullets[level], bulletText=marker))
         else:
-            story.append(Paragraph(escape(text).replace("\n", "<br/>"), body))
+            story.append(layout.text(text, body))
     story.extend(layout.signature_block(settings))
 
     class RcdDocument(SimpleDocTemplate):
@@ -405,7 +414,7 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
                 level, text, bookmark = entry
                 self.canv.bookmarkPage(bookmark)
                 if level < 2:
-                    self.notify("TOCEntry", (level, text, self.page, bookmark))
+                    self.notify("TOCEntry", (level, layout.index_entry(escape(text)), self.page, bookmark))
 
     def header(canvas, document):
         """Conserva la cabecera institucional y la numeración continua del estudio."""

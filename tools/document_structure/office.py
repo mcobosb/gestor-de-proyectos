@@ -6,12 +6,13 @@ from xml.etree import ElementTree as ET
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
 from odt_reports import _tag
+from document_styles import style_odt_paragraphs, style_role
 
 MASTER_NAME = "Documento maestro.odm"
 _MASTER_MIME = "application/vnd.oasis.opendocument.text-master"
 
 
-def _styles(xml: bytes, project: str, section: str) -> bytes:
+def _styles(xml: bytes, project: str, section: str, text_styles) -> bytes:
     """Añade cabecera y pie con un campo de página, no un número literal."""
     root = ET.fromstring(xml)
     automatic = root.find(_tag("office:automatic-styles"))
@@ -38,6 +39,9 @@ def _styles(xml: bytes, project: str, section: str) -> bytes:
     ET.SubElement(paragraph, _tag("text:page-number"), {
         _tag("text:select-page"): "current",
     }).text = "1"
+    if text_styles:
+        for role, part in (("header", header), ("footer", footer)):
+            style_odt_paragraphs(part, automatic, text_styles, _tag, lambda element, role=role: role)
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
@@ -61,13 +65,24 @@ def _master_content(xml: bytes, links: list[Path], folder: Path) -> bytes:
         linked_body = linked_root.find(f"{_tag('office:body')}/{_tag('office:text')}")
         if linked_body is None:
             raise ValueError(f"El documento vinculado no contiene texto ODF: {path.name}")
+        source_styles = linked_root.find(_tag("office:automatic-styles"))
+        if source_styles is not None:
+            typography = [style for style in source_styles
+                          if style.get(_tag("style:name"), "").startswith("ProjectTypography_")]
+            if typography:
+                cached = root.find(_tag("office:automatic-styles"))
+                if cached is None:
+                    cached = ET.Element(_tag("office:automatic-styles"))
+                    root.insert(list(root).index(root.find(_tag("office:body"))), cached)
+                known = {style.get(_tag("style:name")) for style in cached}
+                cached.extend(style for style in typography if style.get(_tag("style:name")) not in known)
         section.extend(linked_body)
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
 def write_office_document(
     source: Path, output: BinaryIO, project: str, section: str, *,
-    links: list[Path] | None = None, link_folder: Path = Path(),
+    links: list[Path] | None = None, link_folder: Path = Path(), text_styles=None,
 ) -> None:
     """Copia el paquete y actualiza las partes ODF que dependen del proyecto."""
     with ZipFile(source) as original, ZipFile(output, "w", ZIP_DEFLATED) as result:
@@ -78,9 +93,12 @@ def write_office_document(
                 continue
             data = original.read(name)
             if name == "styles.xml":
-                data = _styles(data, project, section)
-            elif name == "content.xml" and links is not None:
-                data = _master_content(data, links, link_folder)
+                data = _styles(data, project, section, text_styles)
+            elif name == "content.xml":
+                if links is not None:
+                    data = _master_content(data, links, link_folder)
+                if text_styles:
+                    data = _style_content(data, text_styles)
             elif name == "META-INF/manifest.xml" and links is not None:
                 manifest = ET.fromstring(data)
                 for entry in manifest:
@@ -88,3 +106,26 @@ def write_office_document(
                         entry.set(_tag("manifest:media-type"), _MASTER_MIME)
                 data = ET.tostring(manifest, encoding="utf-8", xml_declaration=True)
             result.writestr(name, data)
+
+
+def _style_content(data: bytes, text_styles) -> bytes:
+    """Aplica título, niveles y cuerpo a los textos editables de las plantillas."""
+    root = ET.fromstring(data)
+    automatic = root.find(_tag("office:automatic-styles"))
+    if automatic is None:
+        automatic = ET.Element(_tag("office:automatic-styles"))
+        root.insert(list(root).index(root.find(_tag("office:body"))), automatic)
+
+    def role(element):
+        """Respeta el nivel de esquema y el título explícito de cada plantilla."""
+        name = element.get(_tag("text:style-name"), "")
+        if name.startswith("ProjectTypography_"):
+            return ""
+        if element.tag == _tag("text:h"):
+            level = min(6, max(1, int(element.get(_tag("text:outline-level"), "1"))))
+            return style_role(name, odt=True) or f"heading{level}"
+        return "body"
+
+    # El maestro usa el mismo nombre determinista que los estilos automáticos de sus hijos.
+    style_odt_paragraphs(root.find(_tag("office:body")), automatic, text_styles, _tag, role)
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True)

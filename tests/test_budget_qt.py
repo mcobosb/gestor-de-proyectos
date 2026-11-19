@@ -203,7 +203,10 @@ class BudgetQtWindowTests(unittest.TestCase):
             folder = Path(directory)
             source = folder / "presupuesto.bc3"
             shutil.copyfile(ROOT / "tests" / "test.bc3", source)
-            with patch("budget_qt_window.user_data_directory", return_value=folder):
+            with (
+                patch("budget_qt_window.user_data_directory", return_value=folder),
+                patch("budget_qt_window.apply_theme"),
+            ):
                 window = BudgetMainWindow()
                 with patch.object(
                     BudgetMainWindow,
@@ -219,12 +222,20 @@ class BudgetQtWindowTests(unittest.TestCase):
                     window.budget_tree.topLevelItemCount(),
                     len(window.chapter_order),
                 )
+                styles = {"body": {"size": 11, "font": "Arial"}}
+                data = window.report_settings.to_dict()
+                data.update(project_title="Presupuesto", text_styles=styles)
+                self.assertTrue(window._save_report_settings(data))
+                self.assertEqual(window._read_report_settings().text_styles, {})
+                window.is_dirty = False
                 window.close()
 
                 reopened = BudgetMainWindow()
+                self.assertEqual(reopened.report_settings.text_styles, {})
                 self.assertTrue(
                     reopened._load_collaborative_project(project_path)
                 )
+                self.assertEqual(reopened.report_settings.text_styles, styles)
                 self.assertEqual(len(reopened.budget_items), expected_items)
                 self.assertIsInstance(reopened.budget_dataset, Bc3Dataset)
                 self.assertEqual(reopened.budget_items[0].__class__.__module__, "budget_core")
@@ -273,7 +284,7 @@ class BudgetQtWindowTests(unittest.TestCase):
                 [dialog.tabs.tabText(index) for index in range(dialog.tabs.count())],
                 [
                     "Informes", "Idioma", "Apariencia", "Colaboración",
-                    "Emplazamiento", "CPV",
+                    "Emplazamiento", "CPV", "Estilos de documentos",
                 ],
             )
             self.assertEqual(dialog.location_selector.query.currentIndex(), -1)
@@ -294,7 +305,11 @@ class BudgetQtWindowTests(unittest.TestCase):
             dialog.show_author.setChecked(False)
             dialog.report_fields["indirect_costs"].setText("7.5")
             dialog.output_format.setCurrentText("ODT")
+            font, size = dialog.style_controls["heading1"]
+            font.setCurrentText("Arial")
+            size.setValue(18)
             values = dialog.values()
+            self.assertEqual(values["text_styles"], {"heading1": {"font": "Arial", "size": 18}})
             self.assertEqual(values["project_title"], "Proyecto configurado")
             self.assertEqual(values["author"], "Autora Alfa\nAutor Beta")
             saved = ReportSettings.from_dict(values)

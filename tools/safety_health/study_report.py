@@ -1203,7 +1203,7 @@ def _pdf_blue_table(block: _Block, layout: ReportLayout):
         [layout.text(value, header) for value in block.headers],
         *[
             [
-                Paragraph(
+                layout.paragraph(
                     f'<a name="{_reference_target(value)}"/>{escape(value)}', text,
                 ) if block.headers == _CATALOGUE_HEADERS and column == 1 else (
                     cell_text(
@@ -1397,7 +1397,7 @@ def _write_pdf(app, target, content: _StudyContent) -> None:
     """Maqueta el estudio con indice enlazado y paginas reales, como el PPTP."""
     from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
     from reportlab.lib.styles import ParagraphStyle
-    from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate
+    from reportlab.platypus import PageBreak, SimpleDocTemplate
     from reportlab.platypus.doctemplate import LayoutError
     from reportlab.platypus.tableofcontents import TableOfContents
 
@@ -1408,11 +1408,12 @@ def _write_pdf(app, target, content: _StudyContent) -> None:
     class StudyLayout(ReportLayout):
         """Incorpora enlaces preventivos tambien en las tablas del maquetador comun."""
 
-        def text(self, value, style=None):
+        def text(self, value, style=None, *, role=""):
             """Crea parrafos seguros con referencias navegables al catalogo."""
-            return Paragraph(_pdf_reference_markup(str(value), targets), style or self.normal)
+            return self.paragraph(_pdf_reference_markup(str(value), targets), style, role=role)
 
     layout = StudyLayout(
+        text_styles=settings.text_styles,
         template_path=settings.template_path,
         expediente=settings.expediente,
         template_title=content.project_title,
@@ -1476,8 +1477,8 @@ def _write_pdf(app, target, content: _StudyContent) -> None:
             story.append(layout.text(document_title, layout.title_style))
         toc = StudyContents()
         toc.document_index = document_index
-        toc.levelStyles = toc_styles
-        story.extend((layout.text("ÍNDICE", layout.title_style), toc, PageBreak()))
+        toc.levelStyles = layout.index_styles(toc_styles)
+        story.extend((layout.text("ÍNDICE", layout.title_style, role="index"), toc, PageBreak()))
         for block, label in _tables_with_labels(blocks):
             if block.kind == "heading":
                 paragraph = layout.text(block.text, heading_styles[block.level])
@@ -1490,7 +1491,7 @@ def _write_pdf(app, target, content: _StudyContent) -> None:
                 story.append(layout.text(block.text, body))
             elif block.kind == "list_item":
                 marker, value = block.text.split(maxsplit=1)
-                story.append(Paragraph(
+                story.append(layout.paragraph(
                     _pdf_reference_markup(value, targets), list_styles[block.level],
                     bulletText=marker,
                 ))
@@ -1518,7 +1519,7 @@ def _write_pdf(app, target, content: _StudyContent) -> None:
                 self.canv.bookmarkPage(key)
                 if level < DEFAULT_TOC_DEPTH:
                     self.notify(
-                        f"ESSContents{document_index}", (level, escape(text), self.page, key),
+                        f"ESSContents{document_index}", (level, layout.index_entry(escape(text)), self.page, key),
                     )
 
     document = StudyDocTemplate(

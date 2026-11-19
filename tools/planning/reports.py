@@ -355,6 +355,7 @@ def write_planning_report(
     from report_layout import LEFT_MARGIN, RIGHT_MARGIN
 
     layout = ReportLayout(
+        text_styles=settings.text_styles,
         template_path=settings.template_path,
         expediente=settings.expediente, repeat_titles=False,
         footer_title="Planificación", landscape=True,

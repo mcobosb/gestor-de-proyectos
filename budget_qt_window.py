@@ -2660,8 +2660,10 @@ class BudgetMainWindow(QMainWindow):
             settings = ReportSettings.from_dict({
                 key: value for key, value in data.items() if key != "project_title"
             })
+            defaults = settings.to_dict()
+            defaults.pop("text_styles")
             self.report_settings_path.write_text(
-                json.dumps(settings.to_dict(), ensure_ascii=False, indent=2),
+                json.dumps(defaults, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
         except (OSError, TypeError, ValueError) as exc:
@@ -2669,7 +2671,7 @@ class BudgetMainWindow(QMainWindow):
                 self, "No se pudo guardar la configuración", str(exc)
             )
             return False
-        self.default_report_settings = settings
+        self.default_report_settings = ReportSettings.from_dict(defaults)
         self.report_settings = ReportSettings.from_dict(settings.to_dict())
         self.project_title = title.strip()
         for item in self.budget_items:
@@ -2680,7 +2682,7 @@ class BudgetMainWindow(QMainWindow):
             self.budget_items[selected] if selected is not None else None
         )
         self._mark_dirty()
-        if self.project_path is not None and not self._write_project_file(self.project_path):
+        if self.project_path is not None and not self.save_project():
             return False
         self._set_status("Configuración de informes guardada.")
         return True

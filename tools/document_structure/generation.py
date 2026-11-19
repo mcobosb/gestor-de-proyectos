@@ -33,7 +33,7 @@ def generated_at(project: Path) -> str | None:
     return data["fecha"]
 
 
-def generate(project: Path, destination: Path, selected: list[Path], title: str) -> tuple[int, int]:
+def generate(project: Path, destination: Path, selected: list[Path], title: str, *, text_styles=None) -> tuple[int, int]:
     """Impide que dos ventanas o colaboradores generen la estructura a la vez."""
     receipt = receipt_path(project)
     lock = QLockFile(str(receipt.with_suffix(".lock")))
@@ -46,7 +46,7 @@ def generate(project: Path, destination: Path, selected: list[Path], title: str)
 
         def prepare(source: Path, output: BinaryIO, section: str) -> None:
             """Personaliza cada copia sin modificar la plantilla de origen."""
-            write_office_document(source, output, title, section)
+            write_office_document(source, output, title, section, text_styles=text_styles)
 
         def record(copied: list[Path]) -> None:
             """Escribe el maestro y registra la generación solo si ambos se guardan."""
@@ -55,7 +55,7 @@ def generate(project: Path, destination: Path, selected: list[Path], title: str)
                 try:
                     write_office_document(
                         TEMPLATES / copied[0], output, title, "Estructura documental",
-                        links=copied, link_folder=destination,
+                        links=copied, link_folder=destination, text_styles=text_styles,
                     )
                 except (OSError, ValueError, ParseError, BadZipFile, KeyError):
                     output.close()

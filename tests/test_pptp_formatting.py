@@ -14,6 +14,42 @@ from tools.pptp.document import text_blocks, write_document
 
 
 class PptpFormattingTests(unittest.TestCase):
+    def test_project_typography_is_rendered_in_pdf_and_editable_odt(self):
+        """La misma personalización llega a la fuente visible y al estilo de Writer."""
+        overrides = {"heading1": {"font": "Courier New", "size": 19, "bold": False,
+                                  "italic": True, "underline": True}}
+        settings = ReportSettings.from_dict({"text_styles": overrides})
+        with tempfile.TemporaryDirectory() as directory:
+            for extension in ("pdf", "odt"):
+                settings.output_format = extension
+                target = Path(directory) / f"estilos.{extension}"
+                write_document("# Epígrafe singular\n\nTexto normal.", target,
+                               {"titulo_proyecto": "Proyecto"}, settings)
+                if extension == "pdf":
+                    seen = []
+
+                    def collect(text, _cm, _tm, font, size):
+                        """Registra el tamaño y la fuente de la línea efectivamente impresa."""
+                        if "EPÍGRAFE SINGULAR" in text:
+                            seen.append((font.get("/BaseFont"), size))
+
+                    page = PdfReader(target).pages[-1]
+                    page.extract_text(visitor_text=collect)
+                    self.assertIn(("/Courier-Oblique", 19), seen)
+                    self.assertIn(b"S", [operator for _, operator in page.get_contents().operations])
+                else:
+                    with ZipFile(target) as archive:
+                        root = ET.fromstring(archive.read("styles.xml"))
+                    style = next(style for style in root.iter(_tag("style:style"))
+                                 if style.get(_tag("style:name")) == "PPTPHeading1")
+                    text = style.find(_tag("style:text-properties"))
+                    for property_name, value in (
+                        ("fo:font-family", "Courier New"), ("fo:font-size", "19pt"),
+                        ("fo:font-weight", "normal"), ("fo:font-style", "italic"),
+                        ("style:text-underline-style", "solid"),
+                    ):
+                        self.assertEqual(text.get(_tag(property_name)), value)
+
     def test_generic_template_gets_distinct_heading_levels_and_readable_spacing(self):
         """Una plantilla sin títulos por nivel no aplana la jerarquía del documento."""
         with tempfile.TemporaryDirectory() as directory:

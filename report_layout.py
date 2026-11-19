@@ -17,6 +17,7 @@ from xml.etree import ElementTree
 from zipfile import BadZipFile, ZipFile
 
 from app_paths import application_directory
+from document_styles import StyleTable, pdf_typography, style_role
 from tools._shared.document_layout import table_labels
 
 DEFAULT_TEMPLATE_PATH = application_directory(__file__) / "plantillas" / "plantilla.odt"
@@ -263,6 +264,7 @@ def _read_report_template_header(template_path: str = ""):
             renamed_styles = {name: f"Template{name}" for name in style_names}
 
             def remap_style_references(element):
+                """Renombra las definiciones importadas y sus referencias internas."""
                 for key, value in list(element.attrib.items()):
                     local_name = key.rsplit("}", 1)[-1]
                     if key == style_name and value in renamed_styles:
@@ -671,7 +673,7 @@ class ReportLayout:
     def __init__(
         self, *, certification: bool = False, template_path: str = "",
         repeat_titles: bool = True, footer_title: str = "", expediente: str = "",
-        template_title: str = "", landscape: bool = False,
+        template_title: str = "", landscape: bool = False, text_styles: StyleTable | None = None,
     ):
         """Carga el logo y configura fuentes, sangrías y estilos del modelo elegido."""
         from reportlab.lib.enums import TA_CENTER, TA_RIGHT
@@ -725,6 +727,7 @@ class ReportLayout:
             "report-project", parent=self.bold, fontSize=8, leading=9,
         )
         self.certification = certification
+        self.text_styles = text_styles or {}
         self.repeat_titles = repeat_titles
         self.footer_title = footer_title
         self.data_table_number = 0
@@ -754,11 +757,27 @@ class ReportLayout:
         self.template_borders = _read_report_template_borders(template_path)
         self.logo = ImageReader(BytesIO(image_data))
 
-    def text(self, value, style=None):
-        """Escapa texto para un párrafo PDF y conserva sus saltos de línea."""
+    def paragraph(self, markup, style=None, *, role="", bulletText=None, paragraph_class=None):
+        """Crea un párrafo con la tipografía del proyecto y conserva su marcado."""
         from reportlab.platypus import Paragraph
 
-        return Paragraph(escape(str(value)).replace("\n", "<br/>"), style or self.normal)
+        style = style or self.normal
+        style, underline = pdf_typography(style, self.text_styles, role or style_role(style.name))
+        return (paragraph_class or Paragraph)(
+            f"<u>{markup}</u>" if underline else markup, style, bulletText=bulletText,
+        )
+
+    def index_styles(self, styles):
+        """Personaliza los estilos que el índice usa al generar sus propias filas."""
+        return [pdf_typography(style, self.text_styles, "index")[0] for style in styles]
+
+    def index_entry(self, markup: str) -> str:
+        """Subraya el texto del índice sin alterar el destino de su enlace."""
+        return f"<u>{markup}</u>" if self.text_styles.get("index", {}).get("underline") else markup
+
+    def text(self, value, style=None, *, role=""):
+        """Escapa texto para un párrafo PDF y conserva sus saltos de línea."""
+        return self.paragraph(escape(str(value)).replace("\n", "<br/>"), style, role=role)
 
     def signature_block(self, settings, *, with_contractor: bool = False):
         """Compone el bloque de firma común sin separarlo al paginar."""
@@ -836,8 +855,8 @@ class ReportLayout:
                         template_table, section, table_index, row_index, column_index,
                     ),
                 )
-                value = self._footer_value(cell["text"])
-                data_row.append(self.text(value, cell_style) if value else "")
+                value = self._footer_value(cell["text"]) if section == "footer" else self._template_value(cell["text"])
+                data_row.append(self.text(value, cell_style, role=section) if value else "")
                 style_row.append(cell)
             data.append(data_row)
             cell_styles.append(style_row)
@@ -918,7 +937,7 @@ class ReportLayout:
             origins[index] = (x, y, width, height)
         return origins
 
-    def leader(self, value, style=None):
+    def leader(self, value, style=None, *, role=""):
         """Crea un párrafo con puntos guía hasta el final de su columna."""
         from reportlab.platypus import Paragraph
 
@@ -937,7 +956,7 @@ class ReportLayout:
                         self.canv.line(start, self.style.fontSize * 0.2, self.width, self.style.fontSize * 0.2)
                         self.canv.restoreState()
 
-        return LeaderParagraph(escape(str(value)), style or self.normal)
+        return self.paragraph(escape(str(value)), style, role=role, paragraph_class=LeaderParagraph)
 
     def table(
         self, headers, rows, ratios, *, bold_rows=(), background=None, rule=False,
@@ -963,7 +982,7 @@ class ReportLayout:
                 ParagraphStyle(f"BlueTableHeader{index}", parent=style, textColor=colors.white)
                 for index, style in enumerate(header_styles)
             )
-        data = [[self.text(h, header_styles[i in numeric])
+        data = [[self.text(h, header_styles[i in numeric], role="table_header")
                  for i, h in enumerate(headers)]] if headers else []
         bold_rows = set(bold_rows)
         for row_index, row in enumerate(rows):
@@ -980,7 +999,8 @@ class ReportLayout:
                     self.bold if strong else self.normal
                 )
                 render = self.leader if column in leaders and str(value) else self.text
-                cells.append(render(fmt_number(float(value)) if isinstance(value, Decimal) else value, style))
+                cells.append(render(fmt_number(float(value)) if isinstance(value, Decimal) else value,
+                                    style, role="emphasis" if strong else "table"))
             data.append(cells)
         block = Table(
             data, colWidths=[self.content_width * r / sum(ratios) for r in ratios],
@@ -1057,7 +1077,7 @@ class ReportLayout:
             text_width = max(1, self.template_frame_x - 8) if self.template_frame_x else (
                 self.content_width - self.logo_width - 8
             )
-            _, text_height = self.text(self._template_value(self.template_header_text), self.normal).wrap(
+            _, text_height = self.text(self._template_value(self.template_header_text), self.normal, role="header").wrap(
                 text_width, 1000,
             )
         graphic_height = max(
@@ -1073,7 +1093,7 @@ class ReportLayout:
 
     def bottom_margin(self) -> float:
         """Reserva el pie dentro del margen exterior de 2,5 cm y separa el cuerpo."""
-        _, height = self.text(self._footer_value(self.template_footer), self.normal).wrap(
+        _, height = self.text(self._footer_value(self.template_footer), self.normal, role="footer").wrap(
             self.content_width - 20, 1000,
         )
         table_height = max((
@@ -1096,7 +1116,7 @@ class ReportLayout:
             text_width = max(1, self.template_frame_x - 8) if self.template_frame_x else (
                 self.content_width - self.logo_width - 8
             )
-            template_text = self.text(self._template_value(self.template_header_text), self.normal)
+            template_text = self.text(self._template_value(self.template_header_text), self.normal, role="header")
             _, text_height = template_text.wrap(text_width, 1000)
             template_text.drawOn(canvas, LEFT_MARGIN, top - PAGE_MARGIN - text_height)
         for graphic in self.template_graphics:
@@ -1182,8 +1202,16 @@ class ReportLayout:
                 preserveAspectRatio=False, mask="auto",
             )
         if not self.footer_title:
-            canvas.setFont(self.regular_font, 6)
-            canvas.drawRightString(self.page_width - RIGHT_MARGIN, PAGE_MARGIN + 1, str(document.page))
+            number_style, underline = pdf_typography(footer_style, self.text_styles, "footer")
+            page_number = str(document.page)
+            right = self.page_width - RIGHT_MARGIN
+            baseline = PAGE_MARGIN + 1
+            canvas.setFont(number_style.fontName, number_style.fontSize)
+            canvas.drawRightString(right, baseline, page_number)
+            if underline:
+                width = canvas.stringWidth(page_number, number_style.fontName, number_style.fontSize)
+                canvas.setLineWidth(number_style.fontSize / 20)
+                canvas.line(right - width, baseline - 1, right, baseline - 1)
         self.footer_page = None
         for section, borders in self.template_borders.items():
             for edge, border in borders.items():

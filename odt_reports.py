@@ -7,6 +7,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 from zipfile import ZIP_STORED, ZIP_DEFLATED, ZipFile
 from tools._shared.document_layout import table_labels
+from document_styles import style_odt_paragraphs, style_odt_tree
 
 from budget_reports import (
     CERTIFICATION_REPORT_NAMES, DEVIATION_REPORT_NAME, REPORT_NAMES, ReportSettings,
@@ -394,6 +395,8 @@ class _OdtReport:
     def write(self, target: Path) -> None:
         """Empaqueta el documento, los estilos, metadatos y recursos en un ODT."""
         styles = self._styles_xml()
+        if self.layout:
+            style_odt_tree(self.content_root, self.layout.text_styles, _tag)
         content = ET.tostring(self.content_root, encoding="utf-8", xml_declaration=True)
         metadata = self._metadata_xml()
         manifest = self._manifest_xml()
@@ -550,6 +553,8 @@ class _OdtReport:
         })
         for page_name, page_title in self.page_titles.items():
             self._master_page(master_styles, automatic, page_name, page_title)
+        if self.layout:
+            style_odt_tree(root, self.layout.text_styles, _tag)
         return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
     def _pdf_styles(self, styles) -> None:
@@ -622,7 +627,7 @@ class _OdtReport:
 
     def _master_page(self, master_styles, styles, name: str, title: str) -> None:
         """Repite logo, título, proyecto y pie numerado con la geometría del PDF."""
-        from report_layout import replace_template_fields, uppercase_footer
+        from report_layout import replace_footer_fields, replace_template_fields, uppercase_footer
 
         master_page = ET.SubElement(master_styles, _tag("style:master-page"), {
             _tag("style:name"): name,
@@ -673,8 +678,6 @@ class _OdtReport:
             template_fields = self.layout.template_fields if self.layout is not None else {}
             footer = replace_template_fields(self.template_footer, template_fields)
             if self.layout is not None and self.layout.footer_title:
-                from report_layout import replace_footer_fields
-
                 footer = replace_footer_fields(footer, self.layout.footer_title)
             uppercase_footer(footer)
             master_page.append(footer)
@@ -688,6 +691,17 @@ class _OdtReport:
             ET.SubElement(paragraph, _tag("text:page-number"), {
                 _tag("text:select-page"): "current",
             }).text = "1"
+        if self.layout:
+            for role in ("header", "footer"):
+                section = master_page.find(_tag(f"style:{role}"))
+                if section is not None:
+                    style_odt_paragraphs(
+                        section, styles, self.layout.text_styles, _tag,
+                        lambda element, role=role: role if (
+                            role == "footer" or element.get(_tag("text:style-name"), "")
+                            not in {"ReportTitle", "ProjectTitle"}
+                        ) else "",
+                    )
 
     def _header_table(self, header, styles) -> None:
         """Alinea las cabeceras repetidas con las columnas del cuerpo del informe."""
@@ -787,6 +801,7 @@ def _new_report(
         template_footer=template["footer"],
         template_resources=template["resources"],
         layout=ReportLayout(
+            text_styles=settings.text_styles,
             certification=certification, template_path=settings.template_path,
             repeat_titles=repeat_titles, footer_title=footer_title,
             expediente=settings.expediente,

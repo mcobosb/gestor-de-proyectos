@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -32,6 +34,7 @@ from localization import LANGUAGES
 from municipalities import load_municipalities, municipality_search_key
 from budget_reports import ReportSettings
 from budget_qt_theme import THEMES
+from document_styles import FLAGS, FONTS, ROLES
 
 
 @dataclass(frozen=True)
@@ -215,6 +218,7 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(self._collaboration_tab(), "Colaboración")
         self.tabs.addTab(self._location_tab(), "Emplazamiento")
         self.tabs.addTab(self._cpv_tab(), "CPV")
+        self.tabs.addTab(self._text_styles_tab(), "Estilos de documentos")
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save
             | QDialogButtonBox.StandardButton.Cancel
@@ -460,6 +464,93 @@ class SettingsDialog(QDialog):
         if self.save_language(code):
             self.language = code
 
+    def _text_styles_tab(self) -> QWidget:
+        """Edita por separado la fuente, el tamaño y el énfasis de cada estilo."""
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        help_text = QLabel("Estándar conserva el formato original de cada documento. "
+                           "Los cambios se guardan en este proyecto.")
+        help_text.setWordWrap(True)
+        layout.addWidget(help_text)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        grid = QWidget()
+        form = QFormLayout(grid)
+        scroll.setWidget(grid)
+        layout.addWidget(scroll, 1)
+        self.style_controls = {}
+        self.style_flags = {}
+
+        def toggle(button, role: str, flag: str, default: bool) -> None:
+            """Cicla entre heredar, activar y desactivar un atributo."""
+            current = self.style_flags[role, flag]
+            self.style_flags[role, flag] = not default if current is None else default if current != default else None
+            refresh_flag(button, role, flag, default)
+
+        def refresh_flag(button, role: str, flag: str, default: bool) -> None:
+            """Distingue visualmente un valor estándar de uno explícito."""
+            state = self.style_flags[role, flag]
+            button.setChecked(default if state is None else state)
+            button.setText(button.property("styleLetter") + ("·" if state is None else ""))
+            button.setToolTip(button.accessibleName() + ": " + (
+                "Estándar" if state is None else "Activado" if state else "Desactivado"
+            ))
+
+        for role, (label, standard_size, standard_bold) in ROLES.items():
+            saved = self.settings.text_styles.get(role, {})
+            row = QHBoxLayout()
+            font = QComboBox()
+            font.setAccessibleName(f"{label}: fuente")
+            font.addItems(("Estándar", *FONTS))
+            font.setCurrentText(str(saved.get("font", "Estándar")))
+            row.addWidget(font, 1)
+            size = QDoubleSpinBox()
+            size.setAccessibleName(f"{label}: tamaño")
+            size.setDecimals(1)
+            size.setSingleStep(0.5)
+            size.setRange(5.9, 36)
+            size.setSpecialValueText("Estándar")
+            size.setSuffix(" pt")
+            size.setToolTip(f"Tamaño estándar orientativo: {standard_size} pt")
+            size.setValue(float(saved.get("size", size.minimum())))
+            row.addWidget(size)
+            self.style_controls[role] = font, size
+            for flag, letter, name in zip(FLAGS, "NCS", ("Negrita", "Cursiva", "Subrayado"), strict=True):
+                button = QToolButton()
+                button.setAccessibleName(f"{label}: {name}")
+                button.setProperty("styleLetter", letter)
+                button.setCheckable(True)
+                visual = button.font()
+                visual.setBold(flag == "bold")
+                visual.setItalic(flag == "italic")
+                visual.setUnderline(flag == "underline")
+                button.setFont(visual)
+                self.style_flags[role, flag] = saved.get(flag)
+                default = flag == "bold" and standard_bold
+                refresh_flag(button, role, flag, default)
+                button.clicked.connect(
+                    lambda checked=False, b=button, r=role, f=flag, d=default: toggle(b, r, f, d)
+                )
+                row.addWidget(button)
+            form.addRow(label, row)
+        return page
+
+    def _style_values(self) -> dict:
+        """Recoge únicamente los atributos personalizados en la pestaña."""
+        styles = {}
+        for role, (font, size) in self.style_controls.items():
+            result = {}
+            if font.currentIndex():
+                result["font"] = font.currentText()
+            size.interpretText()
+            if size.value() != size.minimum():
+                result["size"] = size.value()
+            result.update({flag: value for flag in FLAGS
+                           if (value := self.style_flags[role, flag]) is not None})
+            if result:
+                styles[role] = result
+        return styles
+
     def _accept_reports(self) -> None:
         """Valida selecciones pendientes y acepta la configuración."""
         for tab_index, selector in (
@@ -486,5 +577,6 @@ class SettingsDialog(QDialog):
             "template_path": self.template_path.text(),
             "municipality_codes": self.location_selector.codes,
             "cpv_codes": self.cpv_selector.codes,
+            "text_styles": self._style_values(),
         })
         return data

@@ -177,12 +177,12 @@ def pdf_index(rows: list[SheetIndexRow], layout: ReportLayout, body: ParagraphSt
         "PPTPIndexHeader", parent=normal, fontName=layout.bold_font, textColor=colors.white,
     )
     bullet = pdf_list_style("PPTPIndexBullet", normal)
-    data = [[Paragraph(escape(value), header) for value in HEADERS]]
+    data = [[layout.text(value, header) for value in HEADERS]]
     for chapter, sheets in chapter_groups(rows).items():
         data.append([
-            Paragraph(escape(chapter), normal),
+            layout.text(chapter, normal),
             [
-                Paragraph(
+                layout.paragraph(
                     f'<a href="#{row.bookmark}">{escape(row.sheet)}</a>', bullet, bulletText="•",
                 )
                 for row in sheets

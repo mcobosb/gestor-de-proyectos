@@ -390,7 +390,16 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
     })
     headings = [(level, text) for level, text in blocks if level > 0 and isinstance(text, str)]
     headings.extend((1, title) for title, _ in LISTINGS)
-    document.paragraph(TITLE.upper(), style="PricesHeading1")
+    title_style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+        _tag("style:name"): "PricesDocumentTitle", _tag("style:family"): "paragraph",
+        _tag("style:parent-style-name"): "PricesHeading1",
+    })
+    heading_style = next(style for style in document.automatic_styles
+                         if style.get(_tag("style:name")) == "PricesHeading1")
+    from copy import deepcopy
+
+    title_style.extend(deepcopy(list(heading_style)))
+    document.paragraph(TITLE.upper(), style="PricesDocumentTitle")
     document.table_of_contents(headings, max_level=3, name="PricesContents")
     bookmark = 0
     for level, text in blocks:
@@ -424,7 +433,7 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
     from reportlab.lib.enums import TA_JUSTIFY
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle
-    from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table
+    from reportlab.platypus import PageBreak, SimpleDocTemplate, Spacer, Table
     from reportlab.platypus.doctemplate import LayoutError
     from reportlab.platypus.tableofcontents import TableOfContents
     from budget_reports import build_pdf_report
@@ -432,6 +441,7 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
 
     settings = app.report_settings
     layout = ReportLayout(
+        text_styles=settings.text_styles,
         template_path=settings.template_path, expediente=settings.expediente,
         template_title=TITLE, footer_title=TITLE.upper(), repeat_titles=False,
     )
@@ -466,20 +476,21 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
             fontSize=10, textColor=colors.black, spaceBefore=4,
         ) for level in range(3)
     ]
+    toc.levelStyles = layout.index_styles(toc.levelStyles)
     story = [
-        Paragraph(escape(TITLE.upper()), heading_styles[1]), Spacer(1, 12),
-        Paragraph("ÍNDICE", heading_styles[2]), toc, PageBreak(),
+        layout.text(TITLE.upper(), heading_styles[1], role="title"), Spacer(1, 12),
+        layout.text("ÍNDICE", heading_styles[2], role="index"), toc, PageBreak(),
     ]
     heading_index = 0
     reports = dict(LISTINGS)
     for level, text in blocks + [(1, title) for title, _ in LISTINGS]:
         if isinstance(text, NarrativeTable):
             layout.table_caption(story, text.title, body=body, caption=caption_style)
-            cells = [[Paragraph(label, header_style) for label in ("Concepto", "Detalle")]]
+            cells = [[layout.text(label, header_style) for label in ("Concepto", "Detalle")]]
             cells.extend([
                 [
-                    Paragraph(_pdf_inline(line[2:]), cell_bullet_style, bulletText="•")
-                    if line.startswith(("• ", "- ")) else Paragraph(_pdf_inline(line), cell_style)
+                    layout.paragraph(_pdf_inline(line[2:]), cell_bullet_style, bulletText="•")
+                    if line.startswith(("• ", "- ")) else layout.paragraph(_pdf_inline(line), cell_style)
                     for line in value.splitlines()
                 ]
                 for value in row
@@ -491,7 +502,7 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
         elif level > 0:
             if text in reports:
                 story.append(PageBreak())
-            paragraph = Paragraph(escape(text), heading_styles[level])
+            paragraph = layout.text(text, heading_styles[level])
             paragraph._prices_heading = (level - 1, text, f"PricesHeading{heading_index}")
             heading_index += 1
             story.append(paragraph)
@@ -503,9 +514,9 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
             story.append(PdfFormula(text))
         elif level < 0:
             marker, label = split_list_item(text)
-            story.append(Paragraph(_pdf_inline(label), list_styles[level], bulletText=marker))
+            story.append(layout.paragraph(_pdf_inline(label), list_styles[level], bulletText=marker))
         else:
-            story.append(Paragraph(_pdf_inline(text), body))
+            story.append(layout.paragraph(_pdf_inline(text), body))
     story.extend(layout.signature_block(settings))
 
     class PricesDocument(SimpleDocTemplate):
@@ -517,7 +528,7 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
             if entry is not None:
                 level, text, bookmark = entry
                 self.canv.bookmarkPage(bookmark)
-                self.notify("TOCEntry", (level, text, self.page, bookmark))
+                self.notify("TOCEntry", (level, layout.index_entry(escape(text)), self.page, bookmark))
 
     def page_header(canvas, document):
         """Dibuja la plantilla común sin cabeceras presupuestarias en la parte narrativa."""

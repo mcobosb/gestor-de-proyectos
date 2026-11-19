@@ -893,6 +893,7 @@ def write_document(
         from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
 
         layout = ReportLayout(
+            text_styles=settings.text_styles,
             template_path=settings.template_path, repeat_titles=False, footer_title=title,
             expediente=settings.expediente, template_title=project,
         )
@@ -907,6 +908,7 @@ def write_document(
                 alignment=TA_LEFT,
             ) for level in range(toc_depth)
         ]
+        toc.levelStyles = layout.index_styles(toc.levelStyles)
         bullet_styles = {
             depth: pdf_list_style(f"PPTPBullet{depth}", body, depth)
             for depth in bullet_depths
@@ -922,7 +924,7 @@ def write_document(
                 if bold else escape(value)
                 for value, bold in bold_runs(text)
             )
-            return Paragraph(markup, style, bulletText=marker)
+            return layout.paragraph(markup, style, bulletText=marker)
 
         tabular_rows = []
 
@@ -1018,7 +1020,7 @@ def write_document(
                     level, text, key = heading
                     self.canv.bookmarkPage(key)
                     if level < toc_depth:
-                        self.notify("TOCEntry", (level, escape(text), self.page, key))
+                        self.notify("TOCEntry", (level, layout.index_entry(escape(text)), self.page, key))
 
         story.extend(layout.signature_block(settings))
         document = PptpDocTemplate(

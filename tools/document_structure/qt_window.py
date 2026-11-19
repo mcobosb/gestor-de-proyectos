@@ -155,7 +155,10 @@ class DocumentStructureWindow(QDialog):
         if not folder:
             return
         try:
-            copied, skipped = generate(project, Path(folder), selected, self.app._project_title())
+            copied, skipped = generate(
+                project, Path(folder), selected, self.app._project_title(),
+                text_styles=self.app.report_settings.text_styles,
+            )
         except (OSError, ValueError) as exc:
             QMessageBox.critical(self, TOOL_LABEL, f"No se completó la copia de las plantillas:\n{exc}")
             return

@@ -22,6 +22,14 @@ En las siguientes ocasiones basta con ejecutar el último comando. Mantén junto
 los módulos principales y las carpetas `iconos` y `tools`.
 La aplicación utiliza PySide6. En **Archivo → Configuración → Apariencia** puedes elegir el tema **Sistema**, **Claro** u **Oscuro**. Los tres usan acentos suaves: azul para el presupuesto y los botones principales, verde azulado para la base de referencia y la presencia de colaboradores, y ciruela para la pestaña activa.
 
+En **Archivo → Configuración → Estilos de documentos** puedes definir la
+tipografía del proyecto: títulos, texto normal, listas, índice, tablas, cabecera,
+pie y firma. Elige la fuente y el tamaño y usa **N**, **C** y **S** para
+negrita, cursiva y subrayado. El punto junto a una letra indica que se conserva
+el valor estándar. **Estándar** mantiene el formato que ya usaba cada documento.
+Los cambios se aplican al volver a generar los documentos; no modifican archivos
+que ya se hayan exportado.
+
 Al arrancar, el programa examina `tools` junto a la aplicación y añade al menú
 **Herramientas** los módulos disponibles. En el instalador de Windows, la
 **Instalación personalizada** permite marcar cada módulo por separado. También
