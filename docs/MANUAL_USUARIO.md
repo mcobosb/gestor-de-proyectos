@@ -267,20 +267,21 @@ de presupuesto.
 
 ## 6. Guardar
 
-Usa el botón **Guardar** o **Ctrl+S** para actualizar el archivo actual.
-**Archivo → Guardar como (JSON)…** abre siempre el selector para elegir carpeta
-y nombre, aunque el proyecto ya tenga una ruta. Tras guardar correctamente,
+Usa el botón **Guardar** o **Ctrl+S** para actualizar la carpeta colaborativa.
+**Archivo → Guardar como proyecto colaborativo…** abre siempre el selector para
+elegir carpeta, aunque el proyecto ya tenga una ruta. Tras guardar correctamente,
 esa será la ubicación utilizada por **Guardar** y **Ctrl+S**. Cancelar el selector
 no cambia el proyecto ni su ruta.
-El JSON conserva partidas, mediciones,
-precios editados, planificación, certificaciones y configuración de informes.
+La carpeta conserva por separado partidas, capítulos, planificación,
+certificaciones y configuración de informes. Los JSON históricos siguen
+abriéndose con **Importar proyecto JSON…**.
 
 El **BC3 es el presupuesto de origen**: se lee, pero no se reescribe al guardar.
-El **JSON es el proyecto de trabajo**: para continuar con los cambios otro día,
-abre ese JSON, no vuelvas a importar el BC3. Guardar no exporta un BC3 actualizado.
+La **carpeta colaborativa es el proyecto de trabajo**: para continuar otro día,
+ábrela desde **Abrir proyecto colaborativo…**. Guardar no exporta un BC3 actualizado.
 
 No hay autoguardado general. La barra muestra **Cambios sin guardar** o
-**Sin cambios pendientes**. Al importar un BC3 se crea un JSON inicial;
+**Sin cambios pendientes**. Al importar un BC3 se crea una carpeta inicial;
 algunas herramientas y la configuración también guardan al pulsar sus botones de
 guardado. El resto de las ediciones queda en memoria hasta guardar el proyecto.
 

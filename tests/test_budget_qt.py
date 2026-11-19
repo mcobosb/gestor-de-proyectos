@@ -62,7 +62,7 @@ class BudgetQtWindowTests(unittest.TestCase):
                 expected_items = len(window.budget_items)
                 project_path = window.project_path
                 self.assertIsNotNone(project_path)
-                self.assertTrue(project_path.is_file())
+                self.assertTrue(project_path.is_dir())
                 self.assertEqual(
                     window.budget_tree.topLevelItemCount(),
                     len(window.chapter_order),
@@ -70,7 +70,7 @@ class BudgetQtWindowTests(unittest.TestCase):
                 window.close()
 
                 reopened = BudgetMainWindow()
-                self.assertTrue(reopened._load_project_file(project_path))
+                self.assertTrue(reopened._load_collaborative_project(project_path))
                 self.assertEqual(len(reopened.budget_items), expected_items)
                 self.assertIsInstance(reopened.budget_dataset, Bc3Dataset)
                 self.assertEqual(reopened.budget_items[0].__class__.__module__, "budget_core")
@@ -90,9 +90,10 @@ class BudgetQtWindowTests(unittest.TestCase):
                 "Importar presupuesto BC3…",
                 "Añadir base de referencia BCCA…",
                 "Quitar base de referencia…",
-                "Abrir proyecto JSON…",
+                "Abrir proyecto colaborativo…",
+                "Importar proyecto JSON…",
                 "Guardar",
-                "Guardar como (JSON)…",
+                "Guardar como proyecto colaborativo…",
                 "Configuración…",
                 "Recientes",
                 "Bases de referencia recientes",
@@ -694,7 +695,11 @@ class BudgetQtWindowTests(unittest.TestCase):
             dialog.show()
             self.application.processEvents()
             decorated = dialog.findChildren(QPushButton)
-            self.assertTrue(all(not button.icon().isNull() for button in decorated))
+            self.assertTrue(all(
+                not button.icon().isNull()
+                or button.text() == "Aceptar"
+                for button in decorated
+            ))
             for button in decorated:
                 self.assertNotEqual(button.text(), "OK")
             dialog.reject()

@@ -574,14 +574,15 @@ La imagen también se incluye en la versión instalada.
 3. Selecciona una partida y pulsa una celda de **Mediciones** para editarla.
 4. Completa **Archivo → Configuración** con la autoría y porcentajes.
 5. Completa **Herramientas → RCDs** y guarda para incorporar la gestión de residuos al presupuesto.
-6. Guarda el proyecto en JSON y genera los documentos desde **Informes**.
+6. Guarda el proyecto colaborativo por carpetas y genera los documentos desde **Informes**.
 7. Continúa con **Herramientas → Planificación**, **Certificaciones** y **Facturación** para el seguimiento.
 
-**Guardar** (Ctrl+S) conserva los cambios en el proyecto **JSON**, no en el BC3
-original. No hay autoguardado general; el indicador muestra los cambios pendientes.
+**Guardar** (Ctrl+S) actualiza la carpeta colaborativa, no el BC3 original. Cada
+partida se guarda por UUID en un archivo independiente y no hay autoguardado
+general; el indicador muestra los cambios pendientes.
 No se crean copias de seguridad automáticas al abrir o importar archivos.
-**Archivo → Guardar como (JSON)…** permite elegir siempre otra carpeta y nombre;
-después, **Guardar** y **Ctrl+S** utilizan la nueva ubicación.
+**Archivo → Guardar como proyecto colaborativo…** permite elegir una carpeta;
+después, **Guardar** y **Ctrl+S** actualizan esa misma ubicación.
 **Deshacer** (Ctrl+Z) revierte hasta las últimas 50 acciones de la sesión.
 
 Consulta el [manual de usuario](docs/MANUAL_USUARIO.md) para el procedimiento completo.
@@ -642,6 +643,29 @@ El formato se elige en **Archivo → Configuración…** y, de inicio, es PDF.
 Tkinter ya no es necesario.
 
 ## Organización
+
+## Proyectos colaborativos divididos
+
+Los proyectos nuevos y **Guardar como proyecto colaborativo…** crean una carpeta:
+
+```text
+Proyecto/
+  proyecto.json
+  capitulos/cap_<uuid>.json
+  partidas/part_<uuid>.json
+  planificacion/tareas_gantt.json
+  herramientas/*.json
+```
+
+Cada partida tiene un UUID estable. Al editarla se adquiere un `part_<uuid>.lock`
+con usuario, equipo, token y caducidad; el lock se renueva mientras siga abierta
+la edición y se libera al cerrar. Los guardados usan temporales únicos, `fsync`
+y sustitución atómica. Si otro colaborador cambió la misma entidad, el guardado
+se detiene en vez de sobrescribirla. Los totales y el Gantt se calculan siempre
+en memoria.
+
+Los JSON monolíticos anteriores siguen pudiendo abrirse. Usa **Guardar como
+proyecto colaborativo…** para migrarlos sin perder compatibilidad histórica.
 
 | Archivo o carpeta | Función |
 |---|---|

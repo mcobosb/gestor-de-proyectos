@@ -115,7 +115,10 @@ _TEXT = {
     "Quitar base de referencia…": ("Remove reference database…", "Retirer la base de référence…"),
     "Abrir proyecto (JSON)…": ("Open project (JSON)…", "Ouvrir un projet (JSON)…"),
     "Guardar proyecto (JSON)…": ("Save project (JSON)…", "Enregistrer le projet (JSON)…"),
-    "Guardar como (JSON)…": ("Save as (JSON)…", "Enregistrer sous (JSON)…"),
+    "Guardar como proyecto colaborativo…": (
+        "Save as collaborative project…",
+        "Enregistrer comme projet collaboratif…",
+    ),
     "Configuración…": ("Settings…", "Paramètres…"),
     "Costes Indirectos (%)": ("Indirect costs (%)", "Coûts indirects (%)"),
     "Precio directo": ("Direct price", "Prix direct"),

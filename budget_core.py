@@ -6,6 +6,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from math import isfinite
 from pathlib import Path
 import re
+from uuid import uuid4
 
 CURRENCY_SYMBOLS = {
     "EUR": "€", "USD": "$", "GBP": "£", "CHF": "CHF",
@@ -248,6 +249,7 @@ class ProjectItem:
     direct_unit_price: float | None = None
     indirect_costs: float = 0.0
     round_import_total: bool = False
+    storage_id: str = field(default_factory=lambda: uuid4().hex)
 
     def set_indirect_costs(self, percentage: float, direct_price: float | None = None) -> None:
         """Aplica el recargo sin perder el precio directo ni acumular porcentajes."""

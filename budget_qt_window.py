@@ -11,8 +11,9 @@ import sys
 import tempfile
 import unicodedata
 import webbrowser
+from uuid import uuid4
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
@@ -32,6 +33,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSplitter,
     QStatusBar,
+    QStyle,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -82,6 +84,13 @@ from odt_reports import write_report_odt
 from ods_export import write_ods
 from tool_loader import discover_tools
 from reference_search import load_reference_entries
+from collaborative_storage import (
+    CollaborativeProjectStore,
+    CollaborativeWatchService,
+    ProjectLockManager,
+    StorageConflictError,
+    project_directory,
+)
 
 
 ROW_KIND = Qt.ItemDataRole.UserRole
@@ -109,6 +118,7 @@ class BudgetMainWindow(QMainWindow):
         self.reference_filter_buttons: dict[str, QPushButton] = {}
         self.chapter_order: list[str] = []
         self.chapter_titles: dict[str, str] = {}
+        self.chapter_ids: dict[str, str] = {}
         self.planning_state: dict = {}
         self.invoicing_state: dict = {}
         self.rcd_state: dict = {}
@@ -118,6 +128,13 @@ class BudgetMainWindow(QMainWindow):
         self._project_windows: list[QDialog] = []
         self.project_title: str | None = None
         self.project_path: Path | None = None
+        self.project_store: CollaborativeProjectStore | None = None
+        self.project_watcher: CollaborativeWatchService | None = None
+        self.lock_manager = ProjectLockManager()
+        self._active_item_locks = {}
+        self._lock_timer = QTimer(self)
+        self._lock_timer.setInterval(120_000)
+        self._lock_timer.timeout.connect(self._renew_item_locks)
         self.source_budget_path: Path | None = None
         self.is_dirty = False
         self._undo_history: list[dict] = []
@@ -187,9 +204,20 @@ class BudgetMainWindow(QMainWindow):
             self._action("Quitar base de referencia…", self.remove_reference_bases)
         )
         file_menu.addSeparator()
-        file_menu.addAction(self._action("Abrir proyecto JSON…", self.open_project, "Ctrl+O"))
+        file_menu.addAction(
+            self._action(
+                "Abrir proyecto colaborativo…",
+                self.open_collaborative_project,
+                "Ctrl+O",
+            )
+        )
+        file_menu.addAction(
+            self._action("Importar proyecto JSON…", self.open_project)
+        )
         file_menu.addAction(self._action("Guardar", self.save_project, "Ctrl+S"))
-        file_menu.addAction(self._action("Guardar como (JSON)…", self.save_project_as))
+        file_menu.addAction(
+            self._action("Guardar como proyecto colaborativo…", self.save_project_as)
+        )
         file_menu.addSeparator()
         file_menu.addAction(self._action("Configuración…", self.open_report_settings))
 
@@ -414,6 +442,7 @@ class BudgetMainWindow(QMainWindow):
         ):
             event.ignore()
             return
+        self._stop_collaboration()
         event.accept()
 
     def _set_status(self, text: str) -> None:
@@ -467,6 +496,7 @@ class BudgetMainWindow(QMainWindow):
             "items": self.budget_items,
             "order": self.chapter_order,
             "titles": self.chapter_titles,
+            "chapter_ids": self.chapter_ids,
             "planning": self.planning_state,
             "invoicing": self.invoicing_state,
             "rcds": self.rcd_state,
@@ -512,6 +542,7 @@ class BudgetMainWindow(QMainWindow):
         self.budget_items = state["items"]
         self.chapter_order = state["order"]
         self.chapter_titles = state["titles"]
+        self.chapter_ids = state.get("chapter_ids", {})
         self.planning_state = state["planning"]
         self.invoicing_state = state["invoicing"]
         self.rcd_state = state["rcds"]
@@ -544,8 +575,10 @@ class BudgetMainWindow(QMainWindow):
         self.budget_items = []
         self.chapter_order = []
         self.chapter_titles = {}
+        self.chapter_ids = {}
         self.project_title = title.strip() or "Nuevo proyecto"
         self.project_path = None
+        self._stop_collaboration()
         self.source_budget_path = None
         self.planning_state = self.invoicing_state = self.rcd_state = {}
         self.safety_health_state = self.pptp_state = self.price_justification_state = {}
@@ -567,9 +600,13 @@ class BudgetMainWindow(QMainWindow):
         """Carga un BC3 o reabre el JSON asociado si ya existe."""
         try:
             dataset = Bc3Dataset(path)
-            project_path = path.with_suffix(".json")
-            if project_path.is_file():
-                if self._load_project_file(project_path, dataset, path):
+            legacy_path = path.with_suffix(".json")
+            collaborative_path = path.with_suffix("")
+            if project_directory(collaborative_path):
+                if self._load_collaborative_project(collaborative_path):
+                    return
+            elif legacy_path.is_file():
+                if self._load_project_file(legacy_path, dataset, path):
                     return
             if not self._dismiss_project_windows():
                 return
@@ -577,20 +614,21 @@ class BudgetMainWindow(QMainWindow):
             self.source_budget_path = path
             self.budget_items = dataset.to_project_items()
             self.chapter_order = list(dict.fromkeys(item.chapter for item in self.budget_items))
+            self.chapter_ids = {}
             self.chapter_titles = {
                 code: concept.summary
                 for code, concept in dataset.concepts.items()
                 if is_chapter_code(code) and not code.endswith("##")
             }
             self.project_title = path.stem
-            self.project_path = project_path
+            self.project_path = collaborative_path
             self.report_settings = ReportSettings.from_dict(self.default_report_settings.to_dict())
             for item in self.budget_items:
                 item.set_indirect_costs(self.report_settings.indirect_costs)
             self.refresh_budget_tree()
             self._show_item_details(None)
             self._reset_history(saved=False)
-            if not self._write_project_file(project_path):
+            if not self._write_collaborative_project(collaborative_path):
                 return
             self._set_status(f"Presupuesto cargado: {path.name}")
         except (OSError, UnicodeError, ValueError, TypeError) as exc:
@@ -975,6 +1013,7 @@ class BudgetMainWindow(QMainWindow):
             )
         else:
             self.summary_label.setText(f"Total presupuesto: {self._format_currency(total)}")
+        self._refresh_item_lock_icons()
         self._update_actions()
 
     def _refresh_budget_resources(self, term: str) -> None:
@@ -1185,7 +1224,13 @@ class BudgetMainWindow(QMainWindow):
             QMessageBox.information(self, "Sin selección", "Selecciona una partida.")
             return
         item = self.budget_items[self.selected_budget_index]
+        if not self._acquire_item_lock(item):
+            return
         editor = ItemEditor(self, item, tuple(self.chapter_order))
+        editor.finished.connect(
+            lambda _result, storage_id=item.storage_id:
+                self._release_item_lock(storage_id)
+        )
         if editor.exec() != QDialog.DialogCode.Accepted:
             return
         values = editor.values()
@@ -1277,6 +1322,7 @@ class BudgetMainWindow(QMainWindow):
             return
         source = self.budget_items[self.selected_budget_index]
         duplicate = deepcopy(source)
+        duplicate.storage_id = uuid4().hex
         existing = {item.code for item in self.budget_items}
         duplicate.code = f"{source.code}{DUPLICATE_ITEM_MARKER}"
         while duplicate.code in existing:
@@ -1398,12 +1444,23 @@ class BudgetMainWindow(QMainWindow):
         self._mark_dirty()
 
     def open_project(self) -> None:
-        """Selecciona y abre un proyecto JSON."""
+        """Selecciona y abre un proyecto JSON histórico para migrarlo."""
         path, _ = QFileDialog.getOpenFileName(
-            self, "Abrir proyecto guardado", "", "Proyecto JSON (*.json)"
+            self,
+            "Importar proyecto JSON histórico",
+            "",
+            "Proyecto JSON (*.json)",
         )
         if path and self._confirm_project_change():
             self._load_project_file(Path(path))
+
+    def open_collaborative_project(self) -> None:
+        """Selecciona una carpeta colaborativa y carga su manifiesto."""
+        path = QFileDialog.getExistingDirectory(
+            self, "Abrir proyecto colaborativo", ""
+        )
+        if path and self._confirm_project_change():
+            self._load_collaborative_project(Path(path))
 
     def _load_project_file(
         self,
@@ -1445,6 +1502,9 @@ class BudgetMainWindow(QMainWindow):
         self.chapter_titles = document.chapter_titles
         self.report_settings = document.settings
         self.project_path = project_path
+        self.project_store = None
+        self._stop_collaboration()
+        self.chapter_ids = document.chapter_ids or {}
         self.source_budget_path = document.source_budget_path
         self.project_title = document.title
         self.planning_state = document.planning
@@ -1468,23 +1528,76 @@ class BudgetMainWindow(QMainWindow):
         self._set_status(f"Proyecto abierto: {project_path.name}")
         return True
 
+    def _load_collaborative_project(self, path: Path) -> bool:
+        """Abre una carpeta dividida e inicia vigilancia de cambios externos."""
+        root = project_directory(path)
+        if root is None:
+            QMessageBox.critical(
+                self, "Proyecto colaborativo", "La carpeta no contiene un manifiesto válido."
+            )
+            return False
+        store = CollaborativeProjectStore(root, self.default_report_settings)
+        try:
+            document = store.load()
+        except (OSError, ValueError) as exc:
+            QMessageBox.critical(
+                self, "No se pudo abrir el proyecto", str(exc)
+            )
+            return False
+        self._stop_collaboration()
+        self.project_store = store
+        self.project_path = root
+        self.budget_dataset = document.budget_dataset
+        self.budget_items = document.items
+        self.chapter_order = document.chapter_order
+        self.chapter_titles = document.chapter_titles
+        self.chapter_ids = document.chapter_ids or {}
+        self.report_settings = document.settings
+        self.source_budget_path = document.source_budget_path
+        self.project_title = document.title
+        self.planning_state = document.planning
+        self.invoicing_state = document.invoicing
+        self.rcd_state = document.rcds
+        self.safety_health_state = document.safety_health
+        self.pptp_state = document.pptp
+        self.price_justification_state = document.price_justification
+        self.selected_budget_index = None
+        self.selected_chapter = None
+        self.refresh_budget_tree()
+        self._show_item_details(None)
+        self._reset_history()
+        self._remember_recent_project(root)
+        self._start_collaboration()
+        self._set_status(f"Proyecto colaborativo abierto: {root}")
+        return True
+
     def save_project(self) -> bool:
         """Guarda en la ruta actual o solicita una nueva."""
         if self.project_path is None:
             return self.save_project_as()
+        if self.project_store is not None or project_directory(self.project_path):
+            return self._write_collaborative_project(
+                self.project_store.root if self.project_store else self.project_path
+            )
         return self._write_project_file(self.project_path)
 
     def save_project_as(self) -> bool:
-        """Solicita una ruta para guardar el proyecto."""
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Guardar proyecto", self._project_title(), "Proyecto JSON (*.json)"
+        """Selecciona una carpeta para crear el formato colaborativo."""
+        path = QFileDialog.getExistingDirectory(
+            self, "Selecciona una carpeta para el proyecto colaborativo", ""
         )
         if not path:
             return False
         target = Path(path)
-        if target.suffix.lower() != ".json":
-            target = target.with_suffix(".json")
-        return self._write_project_file(target)
+        if target.exists() and any(target.iterdir()) and project_directory(target) is None:
+            answer = QMessageBox.question(
+                self,
+                "Carpeta no vacía",
+                "La carpeta contiene archivos. ¿Crear dentro la estructura del proyecto?",
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return False
+        return self._write_collaborative_project(target)
 
     def _open_tool(self, name: str) -> None:
         """Ejecuta la versión Qt de una herramienta descubierta."""
@@ -1597,6 +1710,175 @@ class BudgetMainWindow(QMainWindow):
         self._set_status(f"Proyecto guardado: {path}")
         return True
 
+    def _write_collaborative_project(self, root: Path) -> bool:
+        """Guarda el proyecto dividido y activa sincronización incremental."""
+        if not self._collect_tool_states():
+            return False
+        root = root.resolve()
+        store = self.project_store
+        try:
+            if store is None or store.root != root:
+                store = CollaborativeProjectStore(
+                    root, self.default_report_settings
+                )
+            if (root / "proyecto.json").is_file():
+                if project_directory(root) is None:
+                    raise ValueError(
+                        "La carpeta contiene un proyecto.json no compatible."
+                    )
+                if not store.baseline:
+                    store.load()
+            store.save(self)
+        except StorageConflictError as exc:
+            answer = QMessageBox.question(
+                self,
+                "Cambios externos detectados",
+                f"{exc}\n\n¿Recargar el proyecto y descartar tu copia no guardada "
+                "para resolverlos?",
+            )
+            if answer == QMessageBox.StandardButton.Yes:
+                self._load_collaborative_project(root)
+            return False
+        except (OSError, TypeError, ValueError) as exc:
+            QMessageBox.critical(
+                self, "No se pudo guardar el proyecto", str(exc)
+            )
+            return False
+        self._stop_collaboration()
+        self.project_store = store
+        self.project_path = root
+        self._saved_state = deepcopy(self._history_state)
+        self.is_dirty = False
+        self._update_actions()
+        self._remember_recent_project(root)
+        self._start_collaboration()
+        self._set_status(f"Proyecto colaborativo guardado: {root}")
+        return True
+
+    def _start_collaboration(self) -> None:
+        """Inicia vigilancia y renovación de locks para la carpeta activa."""
+        if self.project_store is None:
+            return
+        self.project_watcher = CollaborativeWatchService(self.project_store)
+        self.project_watcher.setParent(self)
+        self.project_watcher.files_changed.connect(self._external_files_changed)
+        self.project_watcher.start()
+        self._lock_timer.start()
+
+    def _stop_collaboration(self) -> None:
+        """Detiene vigilancia y libera bloqueos propios."""
+        if self.project_watcher is not None:
+            self.project_watcher.stop()
+            self.project_watcher = None
+        self._lock_timer.stop()
+        for handle in self._active_item_locks.values():
+            self.lock_manager.release(handle)
+        self._active_item_locks.clear()
+
+    def _renew_item_locks(self) -> None:
+        """Renueva los locks activos y avisa si otro usuario tomó uno."""
+        lost = []
+        for storage_id, handle in list(self._active_item_locks.items()):
+            renewed, message = self.lock_manager.renew(handle)
+            if not renewed:
+                lost.append(storage_id)
+                QMessageBox.warning(
+                    self, "Bloqueo perdido", f"{message}\nGuarda con precaución."
+                )
+        for storage_id in lost:
+            self._active_item_locks.pop(storage_id, None)
+
+    def _acquire_item_lock(self, item: ProjectItem):
+        """Adquiere el lock de una partida del proyecto colaborativo."""
+        if self.project_store is None:
+            return True
+        handle, message = self.lock_manager.acquire(
+            self.project_store.item_path(item.storage_id)
+        )
+        if handle is None:
+            QMessageBox.warning(
+                self, "Partida en edición", message
+            )
+            return False
+        self._active_item_locks[item.storage_id] = handle
+        return True
+
+    def _release_item_lock(self, storage_id: str) -> None:
+        """Libera el lock de una partida tras cerrar su editor."""
+        handle = self._active_item_locks.pop(storage_id, None)
+        if handle is not None:
+            self.lock_manager.release(handle)
+
+    def _external_files_changed(self, paths: list[Path]) -> None:
+        """Recarga partidas remotas sin tocar archivos bloqueados localmente."""
+        if self.project_store is None:
+            return
+        item_updates = []
+        structural = False
+        locks_changed = False
+        for path in paths:
+            if path.suffix == ".lock":
+                locks_changed = True
+                continue
+            if path.parent.name == "partidas" and path.suffix == ".json":
+                storage_id = path.stem.removeprefix("part_")
+                if storage_id in self._active_item_locks:
+                    continue
+                try:
+                    item_updates.append(self.project_store.load_item(storage_id))
+                except (OSError, ValueError):
+                    structural = True
+            elif path.suffix != ".lock":
+                structural = True
+        if item_updates:
+            by_id = {item.storage_id: index for index, item in enumerate(self.budget_items)}
+            for item in item_updates:
+                index = by_id.get(item.storage_id)
+                if index is not None:
+                    self.budget_items[index] = item
+            self.refresh_budget_tree()
+            if not self.is_dirty:
+                self._reset_history(saved=True)
+            self._set_status("Partidas actualizadas por otro colaborador.")
+        if structural:
+            self._set_status(
+                "El proyecto compartido cambió. Guarda o recarga para resolver la actualización."
+            )
+        if locks_changed:
+            self._refresh_item_lock_icons()
+
+    def _refresh_item_lock_icons(self) -> None:
+        """Muestra qué partidas están siendo editadas por otra persona."""
+        if self.project_store is None:
+            return
+        lock_icon = QIcon.fromTheme(
+            "system-lock-screen",
+            self.style().standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton),
+        )
+        empty_icon = QIcon()
+        locks: dict[str, str] = {}
+        folder = self.project_store.root / "partidas"
+        if folder.is_dir():
+            for path in folder.glob("part_*.lock"):
+                storage_id = path.stem.removeprefix("part_")
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                    locks[storage_id] = (
+                        f"En edición por {data.get('user', 'otro usuario')}"
+                        f" · {data.get('host', '')}"
+                    )
+                except (OSError, UnicodeError, json.JSONDecodeError):
+                    locks[storage_id] = "Bloqueo no válido; se renovará al editar"
+        iterator = QTreeWidgetItemIterator(self.budget_tree)
+        while iterator.value():
+            row = iterator.value()
+            if row.data(0, ROW_KIND) == "item":
+                item_index = int(row.data(0, ROW_DATA))
+                storage_id = self.budget_items[item_index].storage_id
+                row.setIcon(0, lock_icon if storage_id in locks else empty_icon)
+                row.setToolTip(0, locks.get(storage_id, ""))
+            iterator += 1
+
     def _confirm_project_change(self) -> bool:
         """Ofrece guardar antes de sustituir o cerrar el proyecto actual."""
         if not self.is_dirty:
@@ -1631,7 +1913,7 @@ class BudgetMainWindow(QMainWindow):
             menu.addAction("(No hay proyectos recientes)").setEnabled(False)
             return
         for path in self.recent_projects:
-            if path.is_file():
+            if path.is_file() or project_directory(path):
                 action = menu.addAction(str(path))
                 action.triggered.connect(
                     lambda checked=False, selected=path: self._open_recent_project(selected)
@@ -1654,7 +1936,10 @@ class BudgetMainWindow(QMainWindow):
     def _open_recent_project(self, path: Path) -> None:
         """Abre un proyecto reciente tras proteger cambios pendientes."""
         if self._confirm_project_change():
-            self._load_project_file(path)
+            if project_directory(path):
+                self._load_collaborative_project(path)
+            else:
+                self._load_project_file(path)
 
     def _read_recent_paths(self, path: Path, maximum: int) -> list[Path]:
         """Lee rutas absolutas válidas y limita el historial."""

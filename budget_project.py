@@ -5,8 +5,10 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 from typing import Any
+from uuid import uuid4
 
 from budget_core import (
     Bc3Dataset,
@@ -37,6 +39,7 @@ class ProjectDocument:
     pptp: dict
     price_justification: dict
     missing_source: Path | None = None
+    chapter_ids: dict[str, str] | None = None
 
 
 def item_from_data(data: dict) -> ProjectItem:
@@ -55,7 +58,11 @@ def item_from_data(data: dict) -> ProjectItem:
         )
         for line in data.get("measurement_lines", [])
     ]
+    storage_id = str(data.get("storage_id") or data.get("id") or uuid4().hex)
+    if not re.fullmatch(r"[0-9a-f]{32}", storage_id):
+        raise ValueError("El UUID de la partida no es válido.")
     return ProjectItem(
+        storage_id=storage_id,
         code=str(data["code"]),
         chapter=str(data["chapter"]),
         unit=str(data.get("unit", "")),
@@ -135,6 +142,7 @@ def build_project_payload(state: Any) -> dict:
         "chapters": {
             "order": state.chapter_order,
             "titles": state.chapter_titles,
+            "ids": getattr(state, "chapter_ids", {}),
         },
         "planning": state.planning_state,
         "invoicing": state.invoicing_state,
@@ -150,6 +158,7 @@ def build_project_payload(state: Any) -> dict:
 def _item_payload(item: ProjectItem) -> dict:
     """Convierte una partida en su representación persistente."""
     return {
+        "storage_id": item.storage_id,
         "code": item.code,
         "chapter": item.chapter,
         "unit": item.unit,
@@ -206,6 +215,24 @@ def read_project(
     """Valida un proyecto JSON y carga su BC3 de origen cuando está disponible."""
     raw = json.loads(project_path.read_text(encoding="utf-8"))
     payload = {"items": raw} if isinstance(raw, list) else raw
+    return decode_project_payload(
+        payload,
+        project_path,
+        default_settings,
+        budget_dataset=budget_dataset,
+        source_budget_path=source_budget_path,
+    )
+
+
+def decode_project_payload(
+    payload: object,
+    project_path: Path,
+    default_settings: ReportSettings,
+    *,
+    budget_dataset: Bc3Dataset | None = None,
+    source_budget_path: Path | None = None,
+) -> ProjectDocument:
+    """Valida un payload ya ensamblado desde archivos divididos o JSON legado."""
     if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
         raise ValueError("El archivo no contiene una lista de partidas válida.")
     settings = ReportSettings.from_dict(
@@ -239,6 +266,9 @@ def read_project(
         items.append(item_from_data(entry))
     for item in items:
         item.set_indirect_costs(settings.indirect_costs)
+    storage_ids = [item.storage_id for item in items]
+    if len(storage_ids) != len(set(storage_ids)):
+        raise ValueError("Hay partidas con UUID repetidos en el proyecto.")
     chapters = payload.get("chapters", {})
     order = chapters.get("order", []) if isinstance(chapters, dict) else []
     chapter_order = [str(code) for code in order]
@@ -256,6 +286,7 @@ def read_project(
             if is_chapter_code(code) and not code.endswith("##"):
                 chapter_titles.setdefault(code, concept.summary)
     title = payload.get("title")
+    chapter_ids = chapters.get("ids", {}) if isinstance(chapters, dict) else {}
     return ProjectDocument(
         items=items,
         chapter_order=chapter_order,
@@ -271,18 +302,36 @@ def read_project(
         pptp=dict(payload.get("pptp", {})),
         price_justification=dict(payload.get("price_justification", {})),
         missing_source=missing_source,
+        chapter_ids=(
+            {str(code): str(value) for code, value in chapter_ids.items()}
+            if isinstance(chapter_ids, dict)
+            else {}
+        ),
     )
 
 
 def write_project(path: Path, payload: dict) -> None:
     """Escribe un proyecto JSON mediante sustitución atómica."""
+    atomic_json_write(path, payload)
+
+
+def atomic_json_write(path: Path, payload: object) -> None:
+    """Escribe JSON con un temporal único y reemplazo atómico en el mismo volumen."""
+    path.parent.mkdir(parents=True, exist_ok=True)
     temporary: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=path.parent, suffix=".tmp", delete=False
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
         ) as output:
             temporary = Path(output.name)
-            output.write(json.dumps(payload, ensure_ascii=False, indent=2))
+            json.dump(payload, output, ensure_ascii=False, indent=2)
+            output.flush()
+            os.fsync(output.fileno())
         os.replace(temporary, path)
         temporary = None
     finally:

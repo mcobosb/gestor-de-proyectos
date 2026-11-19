@@ -18,7 +18,7 @@ _ICON_RULES = {
     "guardar": ("document-save", QStyle.StandardPixmap.SP_DialogSaveButton),
     "abrir": ("document-open", QStyle.StandardPixmap.SP_DialogOpenButton),
     "nuevo": ("document-new", QStyle.StandardPixmap.SP_FileIcon),
-    "añadir": ("list-add", QStyle.StandardPixmap.SP_FileDialogNewFolder),
+    "anadir": ("list-add", QStyle.StandardPixmap.SP_FileDialogNewFolder),
     "editar": ("edit", QStyle.StandardPixmap.SP_FileDialogDetailedView),
     "duplicar": ("edit-copy", QStyle.StandardPixmap.SP_FileDialogListView),
     "subir": ("go-up", QStyle.StandardPixmap.SP_ArrowUp),
