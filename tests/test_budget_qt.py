@@ -1290,6 +1290,31 @@ class BudgetQtWindowTests(unittest.TestCase):
             window.close()
             self.application.processEvents()
 
+    def test_budget_tool_buttons_do_not_use_the_save_icon(self) -> None:
+        """Distingue la incorporación y la aplicación de K del guardado en cada idioma."""
+        from budget_qt_theme import decorate_widget, icon_for_text
+        from localization import translate
+
+        labels = (
+            "Guardar RCDs en el proyecto", "Aceptar y crear capítulo",
+            "Incorporar mediciones al presupuesto", "Aplicar K al presupuesto",
+        )
+        save = icon_for_text(self.application, "Guardar anejo…").pixmap(24, 24).toImage()
+        self.assertFalse(save.isNull())
+        for language in ("es", "en", "fr"):
+            dialog = QDialog()
+            buttons = []
+            for label in labels:
+                button = QPushButton(translate(label, language), dialog)
+                button.setProperty("sourceButtonText", label)
+                buttons.append(button)
+            decorate_widget(dialog)
+            for label, button in zip(labels, buttons, strict=True):
+                with self.subTest(language=language, label=label):
+                    image = button.icon().pixmap(24, 24).toImage()
+                    self.assertFalse(image.isNull())
+                    self.assertNotEqual(image, save)
+
     def test_modern_theme_applies_icons_to_actions_buttons_and_dialogs(self) -> None:
         """El tema moderno echa raíces globales en botones y acciones."""
         with tempfile.TemporaryDirectory() as directory, patch(

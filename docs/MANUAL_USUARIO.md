@@ -655,6 +655,9 @@ proyecto para persistirlas.
 
 ### Incorporar la gestión de residuos al presupuesto
 
+El icono **+** indica que una herramienta incorpora datos al presupuesto
+(RCDs, Seguridad y Salud o mediciones BIM), no que guarda un archivo.
+
 Al pulsar el **disquete** o **Ctrl+S dentro de RCDs**, se crea un capítulo nuevo
 **Gestión de residuos** en el presupuesto y se guarda junto al proyecto:
 

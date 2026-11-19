@@ -15,7 +15,14 @@ THEMES = {
     "dark": "Oscuro",
 }
 
+_BUDGET_INSERT_LABELS = {
+    "guardar rcds en el proyecto",
+    "aceptar y crear capitulo",
+    "incorporar mediciones al presupuesto",
+}
+
 _ICON_RULES = {
+    "aplicar k al presupuesto": ("dialog-ok-apply", QStyle.StandardPixmap.SP_DialogApplyButton),
     "guardar": ("document-save", QStyle.StandardPixmap.SP_DialogSaveButton),
     "abrir": ("document-open", QStyle.StandardPixmap.SP_DialogOpenButton),
     "nuevo": ("document-new", QStyle.StandardPixmap.SP_FileIcon),
@@ -64,6 +71,8 @@ def _key(value: str) -> str:
 def icon_for_text(app: QApplication, text: str):
     """Obtiene un icono estándar según la intención principal del texto."""
     normalized = _key(text)
+    if normalized in _BUDGET_INSERT_LABELS:
+        return budget_insert_icon(app)
     if "deshacer" in normalized:
         return QIcon.fromTheme(
             "edit-undo",
@@ -81,6 +90,20 @@ def icon_for_text(app: QApplication, text: str):
                 app.style().standardIcon(fallback),
             )
     return QIcon()
+
+
+def budget_insert_icon(app: QApplication) -> QIcon:
+    """Dibuja un signo más para incorporar datos sin sugerir un guardado."""
+    pixmap = QPixmap(32, 32)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    with QPainter(pixmap) as painter:
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(app.palette().color(QPalette.ColorRole.ButtonText), 3)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.drawLine(QLineF(7, 16, 25, 16))
+        painter.drawLine(QLineF(16, 7, 16, 25))
+    return QIcon(pixmap)
 
 
 def search_icon(widget: QWidget) -> QIcon:
