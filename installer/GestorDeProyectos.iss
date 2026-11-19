@@ -1,5 +1,5 @@
 ﻿#define AppName "Gestor de Proyectos"
-#define AppVersion "1.7.0"
+#define AppVersion "2.0.0"
 #define AppPublisher "Manuel Cobos Budia"
 #define AppExecutable "GestorDeProyectos.exe"
 
@@ -57,6 +57,7 @@ Type: files; Name: "{app}\tools\invoicing\__init__*.pyd"; Components: not invoic
 Source: "{#AppDist}\*"; DestDir: "{app}"; Excludes: "\tools\*"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: core
 Source: "{#AppDist}\tools\*"; DestDir: "{app}\tools"; Flags: ignoreversion; Components: core
 Source: "{#AppDist}\tools\_shared\*"; DestDir: "{app}\tools\_shared"; Flags: ignoreversion recursesubdirs; Components: core
+Source: "{#AppDist}\tools\bim\*"; DestDir: "{app}\tools\bim"; Flags: ignoreversion recursesubdirs; Components: core
 ; Consultas utiliza estos CSV aun cuando no estén instalados PPTP o Seguridad y Salud.
 Source: "{#AppDist}\tools\pptp\docs\unes.csv"; DestDir: "{app}\tools\pptp\docs"; Flags: ignoreversion; Components: core
 Source: "{#AppDist}\tools\safety_health\datos\ntps.csv"; DestDir: "{app}\tools\safety_health\datos"; Flags: ignoreversion; Components: core

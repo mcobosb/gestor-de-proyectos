@@ -1,6 +1,6 @@
 # Manual de usuario
 
-## Gestor de Proyectos (v1.7.0)
+## Gestor de Proyectos (v2.0.0)
 
 Herramienta para preparar presupuestos, mediciones, planificación de obra y
 certificaciones. Los ejemplos de rutas de este manual son ficticios.

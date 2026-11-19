@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.0.0 — 2026-11-19
+
+- **Atomización del proyecto.** El nuevo formato de carpeta guarda capítulos y
+  partidas por separado, con identificadores estables y escrituras atómicas.
+  Los proyectos JSON anteriores se pueden abrir y migrar al formato dividido.
+- **Trabajo colaborativo.** Una carpeta compartida permite ver quién está activo
+  y editar con bloqueos por sección. Los cambios en campos distintos se fusionan
+  y los conflictos en un mismo campo se notifican antes de sobrescribir datos.
+  La carpeta se puede proteger con contraseña.
+- **Visor BIM.** El Motor BIM abre archivos IFC en segundo plano y muestra el
+  modelo en 3D con árbol espacial, propiedades, selección, aislamiento, modo
+  fantasma y planos de corte. Las equivalencias IFC 4.3 → BCCA se revisan antes
+  de incorporarlas al presupuesto como mediciones vinculadas a su `GlobalId`.
+
 ## 1.7.0 — 2026-11-17
 
 ### Añadido

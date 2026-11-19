@@ -4,11 +4,16 @@ Aplicación de escritorio para Windows que reúne el presupuesto, la documentaci
 
 [Descargas](https://github.com/mcobosb/gestor-de-proyectos/releases) · [Manual de usuario](docs/MANUAL_USUARIO.md) · [Guía detallada](docs/GUIA_DETALLADA.md) · [Historial de cambios](CHANGELOG.md)
 
-## Funciones principales
+## Release v2.0.0
+
+- **Atomización del proyecto:** los capítulos y las partidas se guardan en archivos independientes. Los proyectos anteriores siguen siendo compatibles y se pueden migrar al nuevo formato.
+- **Trabajo colaborativo:** comparte una carpeta de proyecto, consulta quién está activo y edita con bloqueos por sección, detección de conflictos y cifrado opcional.
+- **Visor BIM:** abre modelos IFC en 3D con árbol, propiedades, selección, aislamiento y cortes. Revisa las equivalencias IFC 4.3 → BCCA y añade mediciones al presupuesto con trazabilidad por `GlobalId`.
+
+## Otras funciones principales
 
 - **Presupuestos BC3 (FIEBDC-3):** importa presupuestos y edita capítulos, partidas, mediciones, descomposiciones y precios.
 - **Bases de precios:** carga BCCA u otras bases BC3, busca por código o descripción y copia partidas al presupuesto. Las bases se descargan por separado.
-- **Motor BIM:** abre modelos IFC en un visor 3D con árbol, propiedades, selección, aislamiento y cortes. Revisa las equivalencias IFC 4.3 → BCCA y añade los elementos al presupuesto como líneas de medición vinculadas a su `GlobalId`.
 - **Justificación de precios:** prepara un anejo con la composición de precios y los costes indirectos.
 - **Planificación:** organiza tareas y plazos, genera el diagrama de Gantt y expórtalo a PDF u ODT.
 - **Certificaciones:** registra previsiones y certificaciones mensuales y compara la ejecución con el presupuesto.
@@ -19,7 +24,6 @@ Aplicación de escritorio para Windows que reúne el presupuesto, la documentaci
 - **Consultas NTP, UNE y LER:** busca referencias y códigos desde catálogos independientes del presupuesto.
 - **Informes y exportación:** genera documentos en PDF u ODT editable, con cabeceras y firmas configurables, y exporta datos a ODS o CSV.
 - **Configuración de obra:** registra el emplazamiento, los municipios, los códigos CPV de construcción y los datos del proyecto.
-- **Colaboración:** trabaja sobre una carpeta de proyecto compartida, con bloqueos de edición, detección de conflictos y cifrado opcional con contraseña.
 
 ## Primeros pasos
 

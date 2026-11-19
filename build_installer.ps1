@@ -149,8 +149,8 @@ foreach ($tool in Get-ChildItem $toolsSource -Filter "*.py" -Recurse -File) {
     --windows-icon-from-ico=iconos\logo.ico `
     --company-name="Manuel Cobos Budia" `
     --product-name="Gestor de Proyectos" `
-    --file-version=1.7.0 `
-    --product-version=1.7.0 `
+    --file-version=2.0.0 `
+    --product-version=2.0.0 `
     --file-description="Gestión de presupuestos, planificación y certificaciones" `
     --output-dir=$nuitkaOutput `
     --output-filename=GestorDeProyectos.exe `
@@ -238,4 +238,4 @@ if ($LASTEXITCODE -ne 0) {
     throw "La creación del instalador con Inno Setup ha fallado."
 }
 
-Write-Host "Instalador creado en dist\GestorDeProyectos-Setup-1.7.0.exe"
+Write-Host "Instalador creado en dist\GestorDeProyectos-Setup-2.0.0.exe"

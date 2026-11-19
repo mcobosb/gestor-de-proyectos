@@ -5,8 +5,8 @@ from datetime import date
 
 
 APPLICATION_NAME = "Gestor de Proyectos"
-APPLICATION_VERSION = "1.7.0"
-APPLICATION_RELEASE_DATE = date(2026, 11, 17)
+APPLICATION_VERSION = "2.0.0"
+APPLICATION_RELEASE_DATE = date(2026, 11, 19)
 REPOSITORY_URL = "https://github.com/mcobosb/gestor-de-proyectos"
 BUY_ME_A_COFFEE_URL = "https://buymeacoffee.com/mcobosb"
 REFERENCE_PRICE_DATABASES = (

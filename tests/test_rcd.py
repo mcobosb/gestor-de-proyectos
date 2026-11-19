@@ -202,10 +202,9 @@ class RcdCalculationTests(unittest.TestCase):
     def test_catalogue_and_version_are_packaged_without_private_workbook(self):
         self.assertEqual(len(WASTES), 57)
         self.assertEqual(len({entry[0] for entry in WASTES}), 57)
-        self.assertEqual(APPLICATION_VERSION, "1.7.0")
-        self.assertIn('--file-version=1.7.0', (ROOT / "build_installer.ps1").read_text(encoding="utf-8"))
-        self.assertIn('--product-version=1.7.0', (ROOT / "build_installer.ps1").read_text(encoding="utf-8"))
-        self.assertIn('#define AppVersion "1.7.0"',
+        self.assertIn(f'--file-version={APPLICATION_VERSION} `', (ROOT / "build_installer.ps1").read_text(encoding="utf-8"))
+        self.assertIn(f'--product-version={APPLICATION_VERSION} `', (ROOT / "build_installer.ps1").read_text(encoding="utf-8"))
+        self.assertIn(f'#define AppVersion "{APPLICATION_VERSION}"',
                       (ROOT / "installer" / "GestorDeProyectos.iss").read_text(encoding="utf-8"))
 
     def test_demolition_measured_volumes_replace_model_and_follow_waste_marks(self):

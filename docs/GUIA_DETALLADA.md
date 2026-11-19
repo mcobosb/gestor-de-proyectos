@@ -4,6 +4,18 @@ Aplicación de escritorio para Windows que permite trabajar con presupuestos
 FIEBDC-3 (BC3), editar mediciones y descomposiciones, planificar obras y gestionar
 certificaciones mensuales.
 
+## Versión 2.0.0 — 19/11/2026
+
+- **Atomización del proyecto:** capítulos y partidas se guardan en archivos
+  independientes. Los proyectos anteriores se pueden abrir y migrar.
+- **Trabajo colaborativo:** [proyectos en carpeta compartida](#proyectos-colaborativos-divididos)
+  con presencia de usuarios, bloqueos de edición, detección de conflictos y
+  cifrado opcional.
+- **Visor BIM:** [Motor BIM](#motor-bim) para explorar el IFC en 3D y revisar
+  las equivalencias IFC 4.3 → BCCA antes de incorporar mediciones.
+
+Consulta el [historial de cambios](../CHANGELOG.md#200--2026-11-19).
+
 ## Versión 1.7.0 — 17/11/2026
 
 ### Novedades de esta versión
@@ -539,7 +551,7 @@ Esperamos que os sea muy útil. ¡Esto es solo el comienzo!
 ## Instalación y arranque
 
 En Windows se puede crear e instalar una versión compilada con Nuitka. Una vez
-generado, el instalador `GestorDeProyectos-Setup-1.7.0.exe` no requiere Python.
+generado, el instalador `GestorDeProyectos-Setup-2.0.0.exe` no requiere Python.
 Incluye los componentes necesarios, pero no los archivos fuente `.py`. La
 compilación Nuitka dificulta recuperar el código, aunque no puede impedir
 completamente la ingeniería inversa.
@@ -966,7 +978,7 @@ Después, desde PowerShell en la carpeta del proyecto:
 .\build_installer.ps1
 ```
 
-El instalador generado aparece en `dist\GestorDeProyectos-Setup-1.7.0.exe`.
+El instalador generado aparece en `dist\GestorDeProyectos-Setup-2.0.0.exe`.
 Permite instalar todos los módulos, solo el programa base o una selección
 personalizada. Los catálogos de **Consultas** están disponibles en las tres
 modalidades. En la selección se advierte que las correspondencias automáticas de
