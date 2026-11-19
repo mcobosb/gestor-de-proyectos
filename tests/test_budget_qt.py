@@ -12,10 +12,12 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import (
-    QApplication, QDialogButtonBox, QLabel, QMessageBox, QPushButton, QSplitter,
+    QApplication, QDialogButtonBox, QLabel, QMainWindow, QMessageBox, QPushButton, QSplashScreen,
+    QSplitter,
 )
 from PySide6.QtCore import QCoreApplication, QEvent, Qt
 
+import qt_app
 from budget_core import Bc3Dataset, Concept
 from budget_core import ProjectItem
 from budget_qt_settings import SettingsDialog
@@ -51,6 +53,58 @@ class BudgetQtWindowTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         """Crea una única aplicación Qt para las ventanas de prueba."""
         cls.application = QApplication.instance() or QApplication([])
+
+    def test_startup_image_has_transparent_corners(self) -> None:
+        """Las esquinas son transparentes aunque Windows no redondee la ventana."""
+        splash = qt_app.show_startup_splash(self.application)
+        self.assertIsNotNone(splash)
+        self.addCleanup(splash.close)
+        image = splash.pixmap().toImage()
+        right, bottom = image.width() - 1, image.height() - 1
+        for x, y in ((0, 0), (right, 0), (0, bottom), (right, bottom)):
+            self.assertEqual(image.pixelColor(x, y).alpha(), 0)
+        self.assertEqual(image.pixelColor(right // 2, bottom // 2).alpha(), 255)
+        self.assertTrue(splash.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground))
+
+    def test_startup_has_no_overlap_between_splash_and_main_window(self) -> None:
+        """Maximiza la ventana solo después de retirar la imagen de arranque."""
+        splash = QSplashScreen()
+        window = QMainWindow()
+        self.addCleanup(window.close)
+        self.addCleanup(splash.close)
+        splash.show()
+
+        with (
+            patch("qt_app.show_startup_splash", return_value=splash),
+            patch("qt_app.BudgetMainWindow", return_value=window),
+            patch("qt_app.QTimer.singleShot") as schedule,
+            patch.object(self.application, "exec", return_value=0),
+            patch.object(window, "showMaximized", wraps=window.showMaximized) as maximize,
+        ):
+            qt_app.main()
+            maximize.assert_not_called()
+            self.assertTrue(splash.isVisible())
+            callback = schedule.call_args.args[-1]
+
+            def maximize_without_splash() -> None:
+                """Comprueba la visibilidad en el momento exacto del relevo."""
+                self.assertFalse(splash.isVisible())
+
+            maximize.side_effect = maximize_without_splash
+            callback()
+            maximize.assert_called_once()
+
+    def test_startup_without_splash_maximizes_immediately(self) -> None:
+        """La aplicación sigue arrancando si no puede cargar la imagen."""
+        with (
+            patch("qt_app.show_startup_splash", return_value=None),
+            patch("qt_app.BudgetMainWindow") as window_class,
+            patch("qt_app.QTimer.singleShot") as schedule,
+            patch.object(self.application, "exec", return_value=0),
+        ):
+            qt_app.main()
+            window_class.return_value.showMaximized.assert_called_once()
+            schedule.assert_not_called()
 
     def test_long_panel_titles_elide_without_limiting_splitter(self) -> None:
         """Los nombres largos se recortan y no ensanchan ninguno de los paneles."""

@@ -563,8 +563,9 @@ En modo desarrollo, la carpeta debe permitir escritura porque las preferencias
 se guardan junto al código. La versión instalada guarda preferencias e historial
 en `%APPDATA%\Gestor de Proyectos`. No es necesario activar el entorno virtual.
 
-Al iniciar se muestra la imagen `iconos/Arranque.jpg`, centrada y sin marco,
-durante dos segundos. Después se cierra y se abre la ventana principal.
+Al iniciar se muestra la imagen `iconos/Arranque.jpg`, centrada, sin marco y con esquinas redondeadas,
+durante unos dos segundos mientras se prepara la ventana principal. La imagen
+se retira antes de mostrar la ventana principal maximizada.
 La imagen también se incluye en la versión instalada.
 
 ## Uso rápido

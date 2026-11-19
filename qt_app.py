@@ -4,8 +4,8 @@ from __future__ import annotations
 import os
 import sys
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QIcon, QPixmap
+from PySide6.QtCore import QElapsedTimer, QRectF, Qt, QTimer
+from PySide6.QtGui import QBrush, QFont, QIcon, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import QApplication, QSplashScreen
 
 from app_paths import application_directory
@@ -19,7 +19,18 @@ def show_startup_splash(app: QApplication) -> QSplashScreen | None:
     pixmap = QPixmap(str(image_path))
     if pixmap.isNull():
         return None
-    splash = QSplashScreen(pixmap.scaled(612, 245, Qt.AspectRatioMode.KeepAspectRatio))
+    pixmap = pixmap.scaled(
+        612, 245, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+    )
+    rounded = QPixmap(pixmap.size())
+    rounded.fill(Qt.GlobalColor.transparent)
+    outline = QPainterPath()
+    outline.addRoundedRect(QRectF(rounded.rect()), 12, 12)
+    with QPainter(rounded) as painter:
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.fillPath(outline, QBrush(pixmap))
+    splash = QSplashScreen(rounded, Qt.WindowType.FramelessWindowHint)
+    splash.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     splash.show()
     app.processEvents()
     return splash
@@ -36,11 +47,18 @@ def main() -> int:
     )
     font = QFont("Segoe UI", 10)
     app.setFont(font)
+    elapsed = QElapsedTimer()
     splash = show_startup_splash(app)
+    elapsed.start()
     window = BudgetMainWindow()
-    if splash is not None:
-        QTimer.singleShot(1800, splash.close)
-    window.showMaximized()
-    if splash is not None:
-        splash.raise_()
+    if splash is None:
+        window.showMaximized()
+    else:
+        def show_main_window() -> None:
+            """Retira la imagen antes de mostrar la ventana maximizada."""
+            splash.hide()
+            window.showMaximized()
+            splash.close()
+
+        QTimer.singleShot(max(0, 1800 - elapsed.elapsed()), window, show_main_window)
     return app.exec()
