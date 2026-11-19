@@ -46,7 +46,8 @@ El idioma se puede cambiar desde **Archivo → Configuración… → Idioma**.
 Están disponibles español, inglés y francés. La preferencia se guarda en el
 archivo global `preferencias.json`. Los botones de la aplicación y de los
 diálogos se actualizan sin reiniciar. El selector de archivos usa el diálogo
-de Qt para que sus botones respeten este idioma, aunque Windows use otro.
+de Qt para que sus botones y el aviso al reemplazar un archivo existente
+respeten este idioma, aunque Windows use otro.
 
 ## 2. Crear o abrir un proyecto
 

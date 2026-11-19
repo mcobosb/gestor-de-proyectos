@@ -395,6 +395,54 @@ class BudgetQtWindowTests(unittest.TestCase):
             window.close()
             self.application.processEvents()
 
+    def test_file_picker_localizes_overwrite_confirmation(self) -> None:
+        """Muestra el nombre y la confirmación de reemplazo en el idioma activo."""
+        previous_language = get_language()
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                target = Path(directory) / "informe.odt"
+                target.write_bytes(b"original")
+                for language, expected in (
+                    ("es", "informe.odt ya existe.\n¿Quieres reemplazarlo?"),
+                    ("en", "informe.odt already exists.\nDo you want to replace it?"),
+                    ("fr", "informe.odt existe déjà.\nVoulez-vous le remplacer ?"),
+                ):
+                    with self.subTest(language=language):
+                        set_language(language)
+                        apply_button_language(self.application)
+                        picker = QFileDialog(None, "Guardar", directory)
+                        picker.setOption(QFileDialog.Option.DontUseNativeDialog)
+                        picker.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
+                        picker.show()
+                        self.application.processEvents()
+                        name_edit = picker.findChild(QLineEdit, "fileNameEdit")
+                        self.assertIsNotNone(name_edit)
+                        name_edit.setText(target.name)
+                        messages: list[str] = []
+
+                        def decline_replacement() -> None:
+                            """Recoge el aviso real y rechaza el reemplazo."""
+                            notice = self.application.activeModalWidget()
+                            if isinstance(notice, QMessageBox):
+                                messages.append(notice.text())
+                                notice.done(QMessageBox.StandardButton.No.value)
+
+                        timer = QTimer(picker)
+                        timer.setSingleShot(True)
+                        timer.timeout.connect(decline_replacement)
+                        timer.start(50)
+                        try:
+                            picker.accept()
+                            self.assertEqual(messages, [expected])
+                            self.assertTrue(picker.isVisible())
+                        finally:
+                            timer.stop()
+                            picker.close()
+                self.assertEqual(target.read_bytes(), b"original")
+        finally:
+            set_language(previous_language)
+            apply_button_language(self.application)
+
     def test_price_justification_save_button_fits_and_opens_file_picker(self) -> None:
         """Abre un proyecto reciente y permite guardar el anejo desde una ventana estrecha."""
         with (

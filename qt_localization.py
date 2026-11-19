@@ -1,4 +1,4 @@
-"""Traducción de botones y acciones de barra en la interfaz Qt."""
+"""Traducción de botones, acciones de barra y avisos en la interfaz Qt."""
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QObject, Qt, QTranslator
@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QApplication, QAbstractButton, QToolBar, QToolButt
 from localization import get_language, translate
 
 
-_QT_BUTTONS = {
+_QT_TEXT = {
     "OK": ("Aceptar", "OK", "OK"),
     "Cancel": ("Cancelar", "Cancel", "Annuler"),
     "Save": ("Guardar", "Save", "Enregistrer"),
@@ -40,6 +40,11 @@ _QT_BUTTONS = {
     "Forward": ("Adelante", "Forward", "Suivant"),
     "Print": ("Imprimir", "Print", "Imprimer"),
     "Page Setup": ("Configurar página", "Page Setup", "Mise en page"),
+    "%1 already exists.\nDo you want to replace it?": (
+        "%1 ya existe.\n¿Quieres reemplazarlo?",
+        "%1 already exists.\nDo you want to replace it?",
+        "%1 existe déjà.\nVoulez-vous le remplacer ?",
+    ),
 }
 
 
@@ -53,12 +58,12 @@ class _QtButtonTranslator(QTranslator):
     def translate(
         self, context: str, sourceText: str, disambiguation: str | None = None, n: int = -1,
     ) -> str | None:
-        """Traduce los botones que Qt crea internamente."""
+        """Traduce los textos que Qt crea internamente."""
         if context in {
             "QPlatformTheme", "QFileDialog", "QPrintDialog", "QPrintPreviewDialog",
             "QInputDialog", "QMessageBox",
-        } and sourceText in _QT_BUTTONS:
-            return _QT_BUTTONS[sourceText][{"es": 0, "en": 1, "fr": 2}[get_language()]]
+        } and sourceText in _QT_TEXT:
+            return _QT_TEXT[sourceText][{"es": 0, "en": 1, "fr": 2}[get_language()]]
         return None
 
 
