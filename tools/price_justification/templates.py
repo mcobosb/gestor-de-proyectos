@@ -110,6 +110,9 @@ def template_variables(app, state: dict) -> dict[str, str]:
         "work_conditions", "annual_hours",
     ):
         values[key] = values.get(key) or "[PENDIENTE DE DEFINIR Y VERIFICAR]"
+    for key in ("salary_revision", "wage_reference", "contribution_bases",
+                "contributions", "pension_contribution"):
+        values[key] = re.sub(r"^2026\s+[—–-]\s+", "", values[key])
     for key, field in (
         ("convenio_texto", "agreement"), ("revision_texto", "salary_revision"),
         ("salario_texto", "wage_reference"), ("bases_tabla", "contribution_bases"),
@@ -170,7 +173,8 @@ def document_blocks(source: str, values: dict[str, str]) -> list[tuple[int, str 
                 marker = re.fullmatch(r"\{\{(\w+)\}\}", text)
                 if marker and marker[1] in _TABLES:
                     title, fields = _TABLES[marker[1]]
-                    rows = tuple((label, values[key]) for label, key in fields if values[key].strip())
+                    rows = tuple((label, _table_value(key, values[key]))
+                                 for label, key in fields if values[key].strip())
                     if rows:
                         blocks.append((0, NarrativeTable(title, rows)))
                     continue
@@ -178,6 +182,21 @@ def document_blocks(source: str, values: dict[str, str]) -> list[tuple[int, str 
                 if text.strip():
                     blocks.append((level, text))
     return blocks
+
+
+def _table_value(key: str, value: str) -> str:
+    """Desglosa las referencias corridas manteniendo intactos los textos ya estructurados."""
+    if "\n" in value:
+        return value
+    if key == "bases_tabla" and value.lower().startswith("base máxima:"):
+        parts = re.split(r";\s+|(?<=\.)\s+(?=Mínimas mensuales:|Obra,)", value)
+    elif key == "tipos_tabla" and "empresa/trabajador — " in value:
+        introduction, _, rates = value.partition("empresa/trabajador — ")
+        parts = re.split(r";\s+|(?<=\.)\s+(?=Totales:)", rates)
+        return introduction + "empresa/trabajador:\n" + "\n".join(f"• {part}" for part in parts)
+    else:
+        return value
+    return "\n".join(f"• {part}" for part in parts)
 
 
 def formula_runs(source: str) -> list[tuple[str, str]]:

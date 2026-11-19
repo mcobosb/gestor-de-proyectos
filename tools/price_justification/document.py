@@ -12,6 +12,7 @@ from .templates import (
 )
 from .formula import PdfFormula, odt_formula
 from collaborative_storage import shared_library_path
+from tools._shared.document_layout import add_odt_blue_table_cells, pdf_blue_table_style
 
 
 TITLE = "Justificación de precios"
@@ -267,6 +268,67 @@ def write_document(app, target: Path, data: dict) -> None:
             temporary.unlink()
 
 
+def _add_odt_table_styles(document) -> None:
+    """Registra los estilos del texto y las viñetas editables de las tablas."""
+    from odt_reports import _tag
+
+    add_odt_blue_table_cells(document, "Prices")
+    for name, bold in (("PricesTableText", False), ("PricesTableHeader", True)):
+        style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+            _tag("style:name"): name, _tag("style:family"): "paragraph",
+            _tag("style:parent-style-name"): "ReportBody",
+        })
+        ET.SubElement(style, _tag("style:paragraph-properties"), {
+            _tag("fo:text-align"): "start", _tag("fo:margin"): "0pt",
+            _tag("fo:text-indent"): "0pt", _tag("fo:line-height"): "115%",
+        })
+        ET.SubElement(style, _tag("style:text-properties"), {
+            _tag("fo:font-weight"): "bold" if bold else "normal",
+            _tag("fo:color"): "#FFFFFF" if bold else "#000000",
+            _tag("fo:font-size"): "9.5pt",
+        })
+    style = ET.SubElement(document.automatic_styles, _tag("text:list-style"), {
+        _tag("style:name"): "PricesTableBullets",
+    })
+    level = ET.SubElement(style, _tag("text:list-level-style-bullet"), {
+        _tag("text:level"): "1", _tag("text:bullet-char"): "•",
+    })
+    ET.SubElement(level, _tag("style:list-level-properties"), {
+        _tag("text:space-before"): "8pt", _tag("text:min-label-width"): "12pt",
+    })
+
+
+def _write_odt_table(document, table: NarrativeTable) -> None:
+    """Aplica el estilo común y conserva enlaces y listas nativas en las celdas."""
+    from odt_reports import _tag
+
+    document.table(["Concepto", "Detalle"], table.rows, ratios=(0.3, 0.7),
+                   body_text_style="PricesTableText")
+    element = document.body[-1]
+    for cell in element.find(_tag("table:table-header-rows")).iter(_tag("table:table-cell")):
+        cell.set(_tag("table:style-name"), "PricesHeaderCell")
+        cell[0].set(_tag("text:style-name"), "PricesTableHeader")
+    for index, row in enumerate(element.findall(_tag("table:table-row"))):
+        for cell, value in zip(row, table.rows[index], strict=True):
+            cell.set(_tag("table:style-name"), "PricesBlueCell" if index % 2 == 0 else "PricesWhiteCell")
+            cell.remove(cell[0])
+            bullets = None
+            for line in value.splitlines():
+                if line.startswith(("• ", "- ")):
+                    if bullets is None:
+                        bullets = ET.SubElement(cell, _tag("text:list"), {
+                            _tag("text:style-name"): "PricesTableBullets",
+                        })
+                    parent = ET.SubElement(bullets, _tag("text:list-item"))
+                    line = line[2:]
+                else:
+                    bullets = None
+                    parent = cell
+                _odt_inline(ET.SubElement(parent, _tag("text:p"), {
+                    _tag("text:style-name"): "PricesTableText",
+                }), line)
+
+
 def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]) -> None:
     """Conserva texto, índice y listados como elementos nativos editables de ODF."""
     from odt_reports import _new_report, _tag, append_report_odt
@@ -275,6 +337,7 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
         TITLE.upper(), app._project_title(), app.report_settings,
         footer_title=TITLE.upper(), template_title=TITLE, repeat_titles=False,
     )
+    _add_odt_table_styles(document)
     for level in range(1, 7):
         name = f"PricesHeading{level}"
         style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
@@ -345,8 +408,7 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
             reference = f"Tabla {table_index}"
             document.paragraph(f"Véase la {reference.lower()}: {text.title.lower()}.")
             document.paragraph(f"{reference}. {text.title}", "PricesCaption")
-            document.table(["Concepto", "Detalle"], text.rows, ratios=(1, 2.8),
-                           cell_style="NarrativeCell", write_cell=_odt_inline)
+            _write_odt_table(document, text)
         elif level > 0:
             document.heading(text, level, style=f"PricesHeading{level}", bookmark=f"PPTPHeading{bookmark}")
             bookmark += 1
@@ -374,7 +436,7 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
     from reportlab.lib.enums import TA_JUSTIFY
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle
-    from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer
+    from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table
     from reportlab.platypus.doctemplate import LayoutError
     from reportlab.platypus.tableofcontents import TableOfContents
     from budget_reports import build_pdf_report
@@ -392,6 +454,13 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
     caption_style = ParagraphStyle(
         "PricesCaption", parent=body, fontName="Helvetica-Bold",
         spaceBefore=6, spaceAfter=4, keepWithNext=True,
+    )
+    cell_style = ParagraphStyle("PricesTableText", parent=layout.normal, fontSize=9.5, leading=12)
+    header_style = ParagraphStyle(
+        "PricesTableHeader", parent=cell_style, fontName=layout.bold_font, textColor=colors.white,
+    )
+    cell_bullet_style = ParagraphStyle(
+        "PricesTableBullet", parent=cell_style, leftIndent=20, bulletIndent=8,
     )
     list_styles = {
         level: ParagraphStyle(
@@ -425,14 +494,17 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]
             table_index += 1
             story.append(Paragraph(f"Véase la tabla {table_index}: {escape(text.title.lower())}.", body))
             story.append(Paragraph(f"Tabla {table_index}. {escape(text.title)}", caption_style))
-            cells = [[Paragraph(_pdf_inline(value), body) for value in row] for row in text.rows]
-            table = layout.table(["Concepto", "Detalle"], cells, [1, 2.8], background="#EDF3FB")
-            table.setStyle([
-                ("LEFTPADDING", (0, 0), (-1, -1), 5),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-                ("LINEBELOW", (0, 1), (-1, -1), 0.3, colors.HexColor("#CCD9EC")),
-            ])
+            cells = [[Paragraph(label, header_style) for label in ("Concepto", "Detalle")]]
+            cells.extend([
+                [
+                    Paragraph(_pdf_inline(line[2:]), cell_bullet_style, bulletText="•")
+                    if line.startswith(("• ", "- ")) else Paragraph(_pdf_inline(line), cell_style)
+                    for line in value.splitlines()
+                ]
+                for value in row
+            ] for row in text.rows)
+            table = Table(cells, colWidths=[layout.content_width * ratio for ratio in (0.3, 0.7)],
+                          repeatRows=1, splitInRow=1, hAlign="LEFT", style=pdf_blue_table_style())
             table.spaceAfter = 9
             story.append(table)
         elif level > 0:

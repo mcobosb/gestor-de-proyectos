@@ -8,6 +8,45 @@ import unicodedata
 DEFAULT_TOC_DEPTH = 2
 TABLE_HEADER_BACKGROUND = "#4472C4"
 TABLE_ALTERNATE_BACKGROUND = "#D9E5F5"
+TABLE_BORDER_COLOR = "#B7C9E2"
+
+
+def pdf_blue_table_style() -> list[tuple]:
+    """Devuelve el estilo común de las tablas descriptivas de obra."""
+    from reportlab.lib import colors
+
+    return [
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(TABLE_HEADER_BACKGROUND)),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [
+            colors.HexColor(TABLE_ALTERNATE_BACKGROUND), colors.white,
+        ]),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor(TABLE_BORDER_COLOR)),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]
+
+
+def add_odt_blue_table_cells(document, prefix: str) -> None:
+    """Registra los mismos colores, bordes y márgenes de celda para Writer."""
+    from xml.etree import ElementTree as ET
+    from odt_reports import _tag
+
+    for suffix, color in (
+        ("HeaderCell", TABLE_HEADER_BACKGROUND),
+        ("BlueCell", TABLE_ALTERNATE_BACKGROUND),
+        ("WhiteCell", "#FFFFFF"),
+    ):
+        style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+            _tag("style:name"): prefix + suffix, _tag("style:family"): "table-cell",
+        })
+        ET.SubElement(style, _tag("style:table-cell-properties"), {
+            _tag("fo:background-color"): color,
+            _tag("fo:padding"): "4pt", _tag("fo:border"): f"0.5pt solid {TABLE_BORDER_COLOR}",
+            _tag("style:vertical-align"): "top",
+        })
 
 
 def project_document_variables(title: str, settings) -> dict[str, str]:

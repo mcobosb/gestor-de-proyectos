@@ -99,6 +99,8 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
   PDF u ODT elegidos en la configuración de informes. El ODT contiene texto
   y tablas editables, no capturas. Las tablas de proyecto y referencias laborales
   se numeran al exportar; los datos de proyecto que falten no se imprimen.
+  Comparten el formato de tablas de Seguridad y Salud, con cabecera azul
+  y filas alternas. Las bases y los tipos de cotización se desglosan en viñetas.
   Las referencias normativas enlazan con su publicación oficial. Las fórmulas
   tienen subíndices y fracciones apiladas; se editan en los bloques `$$` de la
   biblioteca, con `\frac{numerador}{denominador}` para las fracciones.

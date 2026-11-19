@@ -28,7 +28,7 @@ from municipalities import resolve_municipalities
 from report_layout import LEFT_MARGIN, PAGE_MARGIN, RIGHT_MARGIN, ReportLayout, report_project_label
 from tools._library_history import read_revisions
 from tools._shared.document_layout import (
-    DEFAULT_TOC_DEPTH, TABLE_ALTERNATE_BACKGROUND, TABLE_HEADER_BACKGROUND,
+    DEFAULT_TOC_DEPTH, TABLE_HEADER_BACKGROUND, add_odt_blue_table_cells, pdf_blue_table_style,
     number_headings, template_paragraph_styles,
 )
 from tools.safety_health import (
@@ -1197,16 +1197,7 @@ def _pdf_blue_table(block: _Block, layout: ReportLayout):
     return SummaryTable(
         rows, colWidths=[layout.content_width * ratio for ratio in ratios],
         repeatRows=1, splitInRow=1, hAlign="LEFT", style=[
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(TABLE_HEADER_BACKGROUND)),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [
-                colors.HexColor(TABLE_ALTERNATE_BACKGROUND), colors.white,
-            ]),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#B7C9E2")),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-            ("TOPPADDING", (0, 0), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            *pdf_blue_table_style(),
             *[
                 command for index in block.section_rows for command in (
                     ("SPAN", (0, index + 1), (-1, index + 1)),
@@ -1239,19 +1230,7 @@ def _add_odt_blue_table_styles(document) -> None:
             _tag("fo:color"): "#FFFFFF" if bold else "#000000",
             _tag("fo:font-size"): "9.5pt",
         })
-    for name, color in (
-        ("ESSSummaryHeaderCell", TABLE_HEADER_BACKGROUND),
-        ("ESSSummaryBlueCell", TABLE_ALTERNATE_BACKGROUND),
-        ("ESSSummaryWhiteCell", "#FFFFFF"),
-    ):
-        style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
-            _tag("style:name"): name, _tag("style:family"): "table-cell",
-        })
-        ET.SubElement(style, _tag("style:table-cell-properties"), {
-            _tag("fo:background-color"): color,
-            _tag("fo:padding"): "4pt", _tag("fo:border"): "0.5pt solid #B7C9E2",
-            _tag("style:vertical-align"): "top",
-        })
+    add_odt_blue_table_cells(document, "ESSSummary")
     style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
         _tag("style:name"): "ESSCellList", _tag("style:family"): "paragraph",
         _tag("style:parent-style-name"): "ESSSummaryText",

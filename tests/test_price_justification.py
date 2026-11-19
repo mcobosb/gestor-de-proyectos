@@ -305,6 +305,8 @@ class PriceDocumentTests(unittest.TestCase):
                     reader = PdfReader(target)
                     text = "\n".join(page.extract_text() for page in reader.pages)
                     self.assertGreater(len(reader.pages), 4)
+                    for item in ("base máxima:", "grupo 2,", "contingencias comunes", "Totales:"):
+                        self.assertEqual(len(re.findall(r"[•\x7f]\s*" + re.escape(item), text)), 2)
                     self.assertNotIn("Placeholder for table of contents", text)
                     self.assertIn("JUSTIFICACIÓN DE PRECIOS — 2", " ".join(text.split()))
                     links = {
@@ -337,6 +339,12 @@ class PriceDocumentTests(unittest.TestCase):
                         }
                         self.assertIsNotNone(content.find(".//text:table-of-content", ns))
                         self.assertTrue(content.findall(".//table:table-header-rows", ns))
+                        self.assertEqual(len(content.findall(
+                            ".//table:table-cell[@table:style-name='PricesHeaderCell']", ns,
+                        )), 8)
+                        lists = content.findall(".//text:list[@text:style-name='PricesTableBullets']", ns)
+                        self.assertEqual(sorted(len(items) for items in lists), [6, 6, 7, 7])
+                        self.assertEqual(" ".join(text.split()).count("47,48 €/día"), 2)
                         self.assertTrue(content.findall(".//math:mfrac/math:mrow/math:mfrac", ns))
                         self.assertTrue(content.findall(".//math:msub", ns))
                         self.assertTrue(content.findall(".//math:msup", ns))
@@ -356,6 +364,8 @@ class PriceDocumentTests(unittest.TestCase):
                 self.assertNotIn("Registro de cambios", " ".join(text.split()))
                 self.assertNotIn("Biblioteca distribuida con el programa", " ".join(text.split()))
                 self.assertNotIn("[PENDIENTE", text)
+                self.assertNotIn("2026—", condensed)
+                self.assertIn("01/01/2026", text)
                 for number in range(1, 5):
                     self.assertIn(f"Tabla{number}.", condensed)
                     self.assertIn(f"Véaselatabla{number}:", condensed)
