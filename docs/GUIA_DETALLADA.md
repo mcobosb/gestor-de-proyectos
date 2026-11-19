@@ -79,11 +79,10 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
 
 ### Justificación de precios
 
-- **Herramientas → Justificación de precios** es la primera opción del menú.
-  La pestaña **Documentos base** muestra el texto del anejo por apartados,
-  con las fórmulas de composición, costes indirectos, mano de obra y maquinaria.
-- **Editar biblioteca de documentos…** abre el mismo editor de Markdown y
-  biblioteca ZIP del PPTP, con historial de revisiones. Los ocho documentos de
+- En **Herramientas → Justificación de precios**, el botón
+  **Editar biblioteca de documentos…** abre el mismo editor de Markdown que
+  el PPTP. Selecciona un documento a la izquierda y guarda cada revisión con
+  su autor y fecha antes de exportar. Los ocho documentos de
   `tools/price_justification/BIBLIOTECA.zip` son la fuente del texto generado;
   las modificaciones guardadas se utilizan en las próximas exportaciones.
 - Proyecto, entidad, autoría, expediente, emplazamiento, provincias, comunidades

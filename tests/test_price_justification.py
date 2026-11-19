@@ -214,6 +214,61 @@ class PriceDocumentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Faltan documentos"):
             load_documents(broken)
 
+    def test_bundled_documents_accept_revisions_in_the_shared_editor(self):
+        """Comprueba el guardado real de los ocho documentos y su efecto en el anejo."""
+        from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton, QWidget
+        from tools._library_editor import read_markdown
+        from tools._library_history import read_revisions
+        from tools.pptp.qt_window import LibraryEditorQt
+        from tools.price_justification.qt_window import PriceJustificationWindowQt
+
+        class ProjectWidget(QWidget, ReportProject):
+            """Combina los datos del proyecto de prueba con un padre Qt."""
+
+        application = QApplication.instance() or QApplication([])
+        project = ProjectWidget()
+        vars(project).update(vars(self.app))
+        project.price_justification_state = {}
+        library = self.folder / "library.zip"
+        shutil.copyfile(LIBRARY_PATH, library)
+        with (
+            patch("tools.price_justification.qt_window.LIBRARY_PATH", library),
+            patch("tools.price_justification.document.LIBRARY_PATH", library),
+            patch.object(QMessageBox, "critical") as error,
+            patch.object(QMessageBox, "information"),
+        ):
+            window = PriceJustificationWindowQt(project)
+            self.addCleanup(project.deleteLater)
+            button = next(b for b in window.findChildren(QPushButton) if b.text().startswith("Editar biblioteca"))
+            button.click()
+            editor = window.library_editor
+            self.assertIsInstance(editor, LibraryEditorQt)
+            assert editor is not None
+            self.assertEqual(editor.members.count(), 8)
+            editor.author.setText("Autor de prueba")
+            for index in range(editor.members.count()):
+                editor.members.setCurrentRow(index)
+                name = editor.members.currentItem().text()
+                with self.subTest(document=name):
+                    editor.editor.appendPlainText("Texto revisado para el anejo.")
+                    if index == 0:
+                        window.export()
+                        self.assertIn("Guarda o descarta", error.call_args.args[2])
+                        error.reset_mock()
+                    self.assertTrue(editor.save(), error.call_args)
+                    revisions, _ = read_revisions(read_markdown(library, name))
+                    self.assertEqual(revisions[0].author, "Autor de prueba")
+            error.assert_not_called()
+            editor.close()
+            project.report_settings.output_format = "odt"
+            target = self.folder / "anejo.odt"
+            write_document(project, target, {})
+            with ZipFile(target) as exported:
+                content = exported.read("content.xml")
+                self.assertEqual(content.count(b"Texto revisado para el anejo."), 8)
+                self.assertNotIn(b"Autor de prueba", content)
+        application.processEvents()
+
     def test_single_pdf_and_odt_include_editable_listings_and_one_signature(self):
         """Genera ambos formatos reales, con las cinco secciones y sin alterar el presupuesto."""
         from pypdf import PdfReader
