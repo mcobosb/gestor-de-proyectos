@@ -1195,6 +1195,58 @@ class BudgetQtWindowTests(unittest.TestCase):
             window.close()
             self.application.processEvents()
 
+    def test_reference_details_follow_the_selected_concept_and_clear_with_the_tree(self) -> None:
+        """Muestra el concepto de la base seleccionada sin conservar detalles obsoletos."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            self.addCleanup(QCoreApplication.sendPostedEvents, None, QEvent.Type.DeferredDelete)
+            self.addCleanup(window.deleteLater)
+            self.addCleanup(window.close)
+            first_path = Path(directory) / "Base A.bc3"
+            second_path = Path(directory) / "Base B.bc3"
+            first_path.touch()
+            second_path.touch()
+            first, second = Bc3Dataset(first_path), Bc3Dataset(second_path)
+            first.root_codes = second.root_codes = ["P01"]
+            first.concepts["P01"] = Concept("P01", summary="Resumen de la primera base")
+            second.concepts["P01"] = Concept(
+                "P01", "m²", "Pavimento", 35, text="Descripción técnica con acentos.",
+                children=[("MO", 1.25)],
+            )
+            second.concepts["MO"] = Concept("MO", "h", "Oficial de albañilería", 20, "1")
+            window.reference_bases = [first, second]
+            window.refresh_reference_tree()
+            tree = window.reference_tree
+            details = window.reference_details
+            first_group, second_group = tree.topLevelItem(0), tree.topLevelItem(1)
+
+            self.assertTrue(details.isReadOnly())
+            tree.setCurrentItem(first_group.child(0))
+            self.assertIn("Resumen de la primera base", details.toPlainText())
+
+            tree.setCurrentItem(second_group.child(0))
+            self.assertEqual(window.selected_reference, (1, "P01"))
+            for text in (
+                "Base: Base B", "Código: P01", "Unidad: m²", "Precio: " + window._format_currency(35),
+                "Rendimiento: 1,2500 h", "Descripción técnica con acentos.", "Descomposición:",
+                "MO: Oficial de albañilería | 1,2500 h × " + window._format_currency(20),
+            ):
+                self.assertIn(text, details.toPlainText())
+
+            tree.clearSelection()
+            self.assertIsNone(window.selected_reference)
+            self.assertEqual(details.toPlainText(), "")
+            tree.setCurrentItem(second_group.child(0))
+            tree.setCurrentItem(second_group)
+            self.assertIsNone(window.selected_reference)
+            self.assertEqual(details.toPlainText(), "")
+            tree.setCurrentItem(second_group.child(0))
+            window.reference_search.setText("sin coincidencias")
+            self.assertIsNone(window.selected_reference)
+            self.assertEqual(details.toPlainText(), "")
+
     def test_budget_and_reference_resource_filters_are_visible_and_exclusive(self) -> None:
         """Los botones de naturaleza filtran usos reales en ambos paneles."""
         with tempfile.TemporaryDirectory() as directory, patch(

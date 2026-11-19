@@ -109,6 +109,8 @@ existente no cambia sus textos.
 2. Localiza una partida en la referencia y añádela al presupuesto con la flecha
    hacia la izquierda o arrastrándola al proyecto. Si seleccionas un capítulo,
    la flecha o el arrastre incorporan el capítulo con todas sus partidas.
+   Al seleccionar una fila, el cuadro situado debajo de la base muestra su
+   descripción, precio, rendimiento y, si la tiene, su descomposición.
 3. Usa **+** para elegir entre añadir un capítulo o una partida manual. La
    partida se añade al capítulo seleccionado; si no hay selección, se utiliza
    el último capítulo. Usa **×** para eliminar la selección.

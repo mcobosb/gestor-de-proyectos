@@ -536,13 +536,19 @@ class BudgetMainWindow(QMainWindow):
         self.reference_tree.setHeaderLabels(("Código / texto", "Ud", "Rendimiento", "Precio", "Base"))
         self.reference_tree.setAlternatingRowColors(True)
         self.reference_tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.reference_tree.itemSelectionChanged.connect(self.on_reference_selection)
         self.reference_tree.itemDoubleClicked.connect(self.add_selected_reference)
         header = self.reference_tree.header()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         for column in range(1, 5):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
-        layout.addWidget(self.reference_tree)
+        layout.addWidget(self.reference_tree, 3)
+        self.reference_details = QPlainTextEdit()
+        self.reference_details.setAccessibleName("Detalles de la referencia")
+        self.reference_details.setPlaceholderText("Selecciona una fila para ver sus detalles.")
+        self.reference_details.setReadOnly(True)
+        self.reference_details.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
+        layout.addWidget(self.reference_details, 1)
+        self.reference_tree.itemSelectionChanged.connect(self.on_reference_selection)
         return panel
 
     def _action(self, text: str, slot, shortcut: str = "") -> QAction:
@@ -975,10 +981,39 @@ class BudgetMainWindow(QMainWindow):
         return item
 
     def on_reference_selection(self) -> None:
-        """Memoriza la base y el código seleccionados."""
-        item = self.reference_tree.currentItem()
-        data = item.data(0, ROW_DATA) if item else None
-        self.selected_reference = tuple(data) if data else None
+        """Sincroniza la referencia seleccionada con el cuadro de detalles."""
+        items = self.reference_tree.selectedItems()
+        data = items[0].data(0, ROW_DATA) if items else None
+        self.selected_reference = None
+        if not data:
+            self.reference_details.clear()
+            return
+        base_index, code = data
+        base = self.reference_bases[base_index]
+        concept = base.concepts.get(code)
+        if concept is None:
+            self.reference_details.clear()
+            return
+        self.selected_reference = (base_index, code)
+        lines = [
+            f"Base: {base.path.stem}",
+            f"Código: {concept.code}",
+            f"Unidad: {concept.unit or '-'}",
+            f"Precio: {self._format_currency(concept.price)}",
+            f"Rendimiento: {fmt_number(base.calculate_rendimiento(code), 4)} h",
+            "",
+            concept.text or concept.summary or "Sin texto descriptivo.",
+        ]
+        if concept.children:
+            lines.extend(("", "Descomposición:"))
+            for child_code, quantity in concept.children:
+                child = base.concepts.get(child_code, Concept(child_code))
+                amount = f"{fmt_number(quantity, 4)} {child.unit}".rstrip()
+                lines.append(
+                    f"  {child_code}: {child.summary or child_code} | "
+                    f"{amount} × {self._format_currency(child.price)}"
+                )
+        self.reference_details.setPlainText("\n".join(lines))
 
     def add_selected_reference(self, _item=None, _column=None) -> None:
         """Añade al presupuesto la partida o capítulo de referencia seleccionado."""
