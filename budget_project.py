@@ -55,6 +55,7 @@ def item_from_data(data: dict) -> ProjectItem:
             width=line.get("width"),
             height=line.get("height"),
             k=float(line.get("k", 1.0)),
+            ifc_global_id=str(line.get("ifc_global_id") or ""),
         )
         for line in data.get("measurement_lines", [])
     ]
@@ -198,6 +199,7 @@ def _item_payload(item: ProjectItem) -> dict:
                 "width": line.width,
                 "height": line.height,
                 "k": line.k,
+                **({"ifc_global_id": line.ifc_global_id} if line.ifc_global_id else {}),
             }
             for line in item.measurement_lines
         ],

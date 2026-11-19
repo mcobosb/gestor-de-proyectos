@@ -13,8 +13,8 @@ from PySide6.QtWidgets import (
 
 from .engine import BimModel, SpatialNode
 from .scene import Element, Scene
+from .translation_panel import TranslationPanel
 from .viewport import Viewport
-
 
 _KEY = Qt.ItemDataRole.UserRole
 
@@ -63,7 +63,10 @@ class BimViewer(QMainWindow):
 
     closed = Signal()
 
-    def __init__(self, model: BimModel, scene: Scene, parent: QMainWindow) -> None:
+    def __init__(
+        self, model: BimModel, scene: Scene, parent: QMainWindow, *,
+        project_session: int = 0,
+    ) -> None:
         """Monta las tres vistas y conecta el estado común."""
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
@@ -84,7 +87,25 @@ class BimViewer(QMainWindow):
         self.inspector = QTreeWidget()
         self.inspector.setHeaderLabels(("Propiedad", "Valor"))
         self.inspector.setColumnWidth(0, 145)
-        for widget in (self.tree, self.viewport, self.inspector):
+        self.translation: TranslationPanel | None = None
+        from budget_qt_window import BudgetMainWindow
+
+        if isinstance(parent, BudgetMainWindow):
+            self.translation = TranslationPanel(parent, model, self._elements, project_session)
+            self.translation.add_requested.connect(self._add_translation_selection)
+            self.translation.selected.connect(self.state.select)
+            left = QSplitter(Qt.Orientation.Vertical)
+            left.addWidget(self.tree)
+            left.addWidget(self.translation.selection_panel)
+            left.setSizes((480, 260))
+            right = QSplitter(Qt.Orientation.Vertical)
+            right.addWidget(self.translation)
+            right.addWidget(self.inspector)
+            right.setSizes((500, 240))
+            panes = (left, self.viewport, right)
+        else:
+            panes = (self.tree, self.viewport, self.inspector)
+        for widget in panes:
             splitter.addWidget(widget)
         splitter.setStretchFactor(1, 1)
         splitter.setSizes((290, 760, 330))
@@ -103,6 +124,26 @@ class BimViewer(QMainWindow):
             "Clic: seleccionar · Arrastre izquierdo: orbitar · Botón central: desplazar · Rueda: zoom"
             if scene.mesh_keys else "El IFC no contiene mallas trianguladas."
         )
+
+    @Slot()
+    def _add_translation_selection(self) -> None:
+        """Pone en revisión las unidades físicas de la pieza o rama enfocada."""
+        item = self.tree.currentItem()
+        if self.translation is None or item is None:
+            self.statusBar().showMessage("Selecciona una pieza o rama para medir.", 4000)
+            return
+        keys = []
+        for row in self._walk(item):
+            key = row.data(0, _KEY)
+            if key and not key.startswith("#"):
+                entity = self.model.source.by_id(self._elements[key].entity_id)
+                if entity.is_a("IfcElement") and not entity.is_a("IfcFeatureElement"):
+                    keys.append(key)
+        if not keys:
+            self.statusBar().showMessage("La selección no contiene elementos de obra.", 4000)
+            return
+        self.translation.add_elements(keys)
+        self.translation.highlight(self.state.selected)
 
     def show(self) -> None:
         """Inicializa el contexto de render una vez visible la ventana Qt."""
@@ -239,6 +280,8 @@ class BimViewer(QMainWindow):
                 if item is not None:
                     self.tree.scrollToItem(item)
         self._inspect(key)
+        if self.translation is not None:
+            self.translation.highlight(key)
         self._update_viewport()
 
     def _inspect(self, key: str) -> None:

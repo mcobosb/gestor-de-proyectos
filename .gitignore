@@ -27,6 +27,7 @@ Desktop.ini
 *.BC3
 !tests/test.bc3
 *.json
+!tools/bim/bcca_2023_v02.json
 
 # Plantillas originales y documentos e informes de trabajo.
 plantillas/*

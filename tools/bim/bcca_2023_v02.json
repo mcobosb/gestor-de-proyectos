@@ -1,0 +1,44 @@
+[
+  {
+    "ifc_class": "IfcKerb",
+    "contains": ["granito", "achaflanado", "17x28"],
+    "base": "BCCA2023_V02",
+    "code": "15PBB00001",
+    "unit": "m"
+  },
+  {
+    "ifc_class": "IfcKerb",
+    "contains": ["prefabricado", "hm-40", "achaflanado", "17x28"],
+    "base": "BCCA2023_V02",
+    "code": "15PBB00002",
+    "unit": "m"
+  },
+  {
+    "ifc_class": "IfcColumn",
+    "contains": ["ha-25/p/20/xc2"],
+    "base": "BCCA2023_V02",
+    "code": "05HHP00003",
+    "unit": "m3"
+  },
+  {
+    "ifc_class": "IfcPipeSegment",
+    "contains": ["ppr 90 mm"],
+    "base": "BCCA2023_V02",
+    "code": "08CAV00095",
+    "unit": "m"
+  },
+  {
+    "ifc_class": "IfcPipeSegment",
+    "contains": ["ppr 75 mm"],
+    "base": "BCCA2023_V02",
+    "code": "08CAV00096",
+    "unit": "m"
+  },
+  {
+    "ifc_class": "IfcPipeSegment",
+    "contains": ["ppr 63 mm"],
+    "base": "BCCA2023_V02",
+    "code": "08CAV00097",
+    "unit": "m"
+  }
+]

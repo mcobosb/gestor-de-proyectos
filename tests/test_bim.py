@@ -16,14 +16,28 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QEventLoop, Qt, QTimer, Signal
 from PySide6.QtWidgets import QApplication, QMainWindow, QToolButton, QWidget
 
+from budget_core import Bc3Dataset, Concept
+from budget_project import _item_payload, item_from_data
 from tool_loader import discover_tools
+from tools.bim import translation
 from tools.bim.engine import IfcReadError, load_ifc
+from tools.bim.measurements import incorporate
 from tools.bim.qt import BimController
 from tools.bim.scene import prepare_scene
 from tools.bim.viewer import BimViewer
 
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def _bcca_fixture(directory: str) -> Bc3Dataset:
+    """Construye una base pequeña para probar sin distribuir el catálogo completo."""
+    path = Path(directory) / "BCCA2023_V02.bc3"
+    path.touch()
+    base = Bc3Dataset(path)
+    for code, diameter in (("08CAV00095", 90), ("08CAV00096", 75)):
+        base.concepts[code] = Concept(code, unit="m", summary=f"Tubería de PPR {diameter} mm")
+    return base
 
 
 def _write_ifc(path: Path, schema: str = "IFC4", repeats: int = 0) -> int:
@@ -118,6 +132,121 @@ class _HeadlessViewport(QWidget):
 
 class BimTests(unittest.TestCase):
     """Comprueba datos IFC reales y la entrega del resultado a Qt."""
+
+    def test_bim_has_its_own_menu_between_collaboration_and_information(self) -> None:
+        """Motor BIM sale de Herramientas, sin perder el acceso al selector IFC."""
+        from budget_qt_window import BudgetMainWindow
+
+        application = QApplication.instance() or QApplication([])
+        with (
+            TemporaryDirectory() as directory,
+            patch("budget_qt_window.user_data_directory", return_value=Path(directory)),
+            patch("budget_qt_window.apply_theme"),
+            patch("tools.bim.qt.QFileDialog.getOpenFileName", return_value=("", "")) as selector,
+        ):
+            window = BudgetMainWindow()
+            try:
+                actions = {action.text(): action for action in window.menuBar().actions()}
+                labels = list(actions)
+                index = labels.index("Colaboración")
+                self.assertEqual(labels[index:index + 3], ["Colaboración", "Motor BIM", "Información"])
+                tool_labels = [action.text() for action in actions["Herramientas"].menu().actions()]
+                self.assertNotIn("Motor BIM", tool_labels)
+                bim_menu = actions["Motor BIM"].menu()
+                open_ifc = next(action for action in bim_menu.actions()
+                                if action.text() == "Abrir archivo IFC…")
+                open_ifc.trigger()
+                selector.assert_called_once()
+            finally:
+                window.close()
+                application.processEvents()
+
+    def test_bcca_rules_match_specific_ifc_types_and_measure_in_catalogue_units(self) -> None:
+        """Comprueba códigos reales, precedencia, conversión y rechazo de ambigüedades."""
+        rules = translation.read_rules(ROOT / "tools" / "bim" / "bcca_2023_v02.json")
+        catalogue_path = ROOT / "tests" / "BCCA2023_V02.bc3"
+        if catalogue_path.is_file():
+            catalogue_base = Bc3Dataset(catalogue_path)
+            for rule in rules:
+                self.assertEqual(translation.unit_key(catalogue_base.concepts[rule.code].unit), rule.unit)
+        with TemporaryDirectory() as directory:
+            base = _bcca_fixture(directory)
+        catalogue = translation.Catalogue((base,), rules)
+        model = ifcopenshell.file(schema="IFC4X3_ADD2")
+        pipe = model.create_entity("IfcPipeSegment", Name="PPR 90 mm")
+        generic = model.create_entity("IfcPipeSegment", Name="Tubería")
+        unit = model.create_entity("IfcSIUnit", UnitType="LENGTHUNIT", Name="METRE", Prefix="CENTI")
+        length = model.create_entity("IfcQuantityLength", Name="Length", Unit=unit, LengthValue=240.)
+        qto = model.create_entity("IfcElementQuantity", Name="Qto_PipeSegmentBaseQuantities",
+                                  Quantities=[length])
+        model.create_entity("IfcRelDefinesByProperties", RelatedObjects=[pipe],
+                            RelatingPropertyDefinition=qto)
+        result = catalogue.propose(model, pipe)
+        self.assertIsNotNone(result.entry)
+        self.assertEqual(result.entry.code, "08CAV00095")
+        self.assertEqual(result.quantity, 2.4)
+        self.assertIn("Tabla IFC 4.3", result.reason)
+        self.assertIsNone(catalogue.propose(model, generic).entry)
+        pipe.Tag = "08CAV00096"
+        self.assertEqual(catalogue.propose(model, pipe).entry.code, "08CAV00096")
+        other = model.create_entity("IfcQuantityLength", Name="GrossLength", Unit=unit, LengthValue=270.)
+        qto.Quantities = [length, other]
+        self.assertIsNone(catalogue.propose(model, pipe).quantity)
+
+    def test_bim_measurement_is_persisted_and_cannot_be_imported_twice(self) -> None:
+        """Incorpora en la ventana real y verifica la persistencia del GlobalId."""
+        from budget_qt_window import BudgetMainWindow
+        from tools.bim.scene import Element
+
+        application = QApplication.instance() or QApplication([])
+        with (
+            TemporaryDirectory() as directory,
+            patch("budget_qt_window.apply_theme"),
+        ):
+            base = _bcca_fixture(directory)
+            entry = translation.Catalogue((base,)).codes["08cav00095"][0]
+            rows = [(Element(1, ifcopenshell.guid.new(), "IfcPipeSegment", "Tubería PPR"),
+                     translation.Proposal(entry, quantity, "Revisado")) for quantity in (2.4, 1.6)]
+            keys = {element.key for element, _ in rows}
+            with patch("budget_qt_window.user_data_directory", return_value=Path(directory)):
+                window = BudgetMainWindow()
+            window.reference_bases = [base]
+            added, errors = incorporate(window, rows)
+            self.assertEqual(added, keys)
+            self.assertFalse(errors)
+            self.assertTrue(window.is_dirty)
+            item, = window.budget_items
+            restored = item_from_data(_item_payload(item))
+            self.assertEqual(restored.measurement, 4.)
+            self.assertEqual({line.ifc_global_id for line in restored.measurement_lines}, keys)
+            window.budget_items[:] = [restored]
+            added, errors = incorporate(window, rows)
+            self.assertFalse(added)
+            self.assertEqual(set(errors.values()), {"Ya incorporado"})
+            self.assertEqual(len(restored.measurement_lines), 2)
+
+            path = Path(directory) / "visor.ifc"
+            wall_id = _write_ifc(path, "IFC4X3_ADD2")
+            model = load_ifc(path)
+            model.source.by_id(wall_id).Tag = entry.code
+            scene = prepare_scene(model)
+            with patch("tools.bim.viewer.Viewport", _HeadlessViewport):
+                viewer = BimViewer(model, scene, window, project_session=window.project_session)
+                self.assertIsNotNone(viewer.translation)
+                viewer.state.select(scene.elements[wall_id].key)
+                viewer._add_translation_selection()
+                application.processEvents()
+                panel = viewer.translation
+                self.assertEqual(panel.selection.topLevelItemCount(), 1)
+                row = panel.results.topLevelItem(0)
+                self.assertEqual(row.text(1), entry.code)
+                self.assertIn("sin cantidad IFC compatible", row.text(3))
+                self.assertIn("1 sin resolver", panel.summary.text())
+                viewer.close()
+                application.processEvents()
+            window.is_dirty = False
+            window.close()
+            application.processEvents()
 
     def test_reads_spatial_structure_properties_and_triangle(self) -> None:
         """Recupera el elemento en su planta con propiedades y geometría válidas."""

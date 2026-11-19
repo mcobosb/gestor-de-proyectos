@@ -83,6 +83,7 @@ class BimController(QObject):
         if not filename:
             return
         self._loading = True
+        self._project_session = getattr(self._window, "project_session", 0)
         path = Path(filename)
         self._window.statusBar().showMessage(f"Motor BIM: procesando {path.name}…")
         worker = _LoadIfc(path)
@@ -96,7 +97,7 @@ class BimController(QObject):
         self._loading = False
         try:
             from .viewer import BimViewer
-            viewer = BimViewer(model, scene, self._window)
+            viewer = BimViewer(model, scene, self._window, project_session=self._project_session)
         except (ImportError, OSError, RuntimeError) as exc:
             self._failed(f"No se pudo abrir el visor BIM:\n{exc}")
             return

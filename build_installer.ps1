@@ -172,6 +172,8 @@ foreach ($tool in Get-ChildItem $toolsSource -Filter "*.py" -Recurse -File) {
     --include-module=ifcopenshell.geom.main `
     --include-module=ifcopenshell.util.shape `
     --include-module=ifcopenshell.util.element `
+    --include-module=ifcopenshell.util.classification `
+    --include-module=ifcopenshell.util.unit `
     --include-package-data=ifcopenshell `
     --include-module=vtkmodules.qt.QVTKRenderWindowInteractor `
     --include-module=vtkmodules.util.numpy_support `

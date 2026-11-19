@@ -593,7 +593,8 @@ Consulta el [manual de usuario](docs/MANUAL_USUARIO.md) para el procedimiento co
 
 ### Motor BIM
 
-En la barra principal, elige **Motor BIM → Abrir archivo IFC…**. IfcOpenShell
+En el menú principal, entre **Colaboración** e **Información**, elige
+**Motor BIM → Abrir archivo IFC…**. IfcOpenShell
 lee y triangula el IFC en segundo plano. Al terminar se abre una ventana
 independiente con el visor VTK, el árbol espacial y el inspector de propiedades.
 
@@ -608,6 +609,26 @@ independiente con el visor VTK, el árbol espacial y el inspector de propiedades
 
 El visor agrupa geometría y reutiliza mallas repetidas mediante instancias de GPU.
 El modelo y los cambios de visualización no se guardan con el presupuesto.
+
+**Mediciones IFC → BCCA.** Carga una base de referencia BC3 en el presupuesto,
+selecciona una pieza o rama en el visor y pulsa **Añadir selección o rama** en
+el panel inferior izquierdo. A la derecha, el visor busca primero un código
+BCCA explícito, después aplica la tabla IFC 4.3 y, si no hay regla, sugiere una
+partida por descripción. Los casos
+sin equivalencia o sin cantidad compatible quedan visibles y se pueden resolver
+indicando una partida o cantidad manualmente.
+
+**Ver tabla IFC 4.3 → BCCA** muestra las equivalencias iniciales, verificadas
+contra BCCA 2023 V02. No hay un código universal por clase IFC: cada fila exige
+características adicionales o un tipo con nombre exacto. Puedes elegir una
+partida y usar **Guardar regla para este tipo IFC…** para reutilizar la
+equivalencia en otros modelos. Las reglas personales se guardan en
+`bim_equivalencias.json`, junto a las preferencias del programa.
+
+**Incorporar mediciones al presupuesto** añade una línea por `GlobalId` a la
+partida BCCA correspondiente, creándola si aún no existe. Usa **Guardar** en el
+presupuesto para conservar las líneas y sus vínculos; las propuestas no
+incorporadas son de revisión temporal. No se modifican el IFC ni el BC3 base.
 
 ## Bases de precios de referencia
 

@@ -162,6 +162,7 @@ class BudgetMainWindow(QMainWindow):
         self.pptp_state: dict = {}
         self.price_justification_state: dict = {}
         self._project_windows: list[QDialog] = []
+        self.project_session = 0
         self.project_title: str | None = None
         self.project_path: Path | None = None
         self.project_store: CollaborativeProjectStore | None = None
@@ -307,6 +308,8 @@ class BudgetMainWindow(QMainWindow):
             self.tools_by_name.values(),
             key=lambda entry: (entry.order, entry.label.casefold()),
         ):
+            if tool.name == "bim":
+                continue
             action = tools_menu.addAction(tool.label)
             action.triggered.connect(
                 lambda checked=False, name=tool.name: self._open_tool(name)
@@ -332,6 +335,11 @@ class BudgetMainWindow(QMainWindow):
         collaboration_menu.addAction(
             "Estado de colaboración…", self.show_collaboration_status
         )
+
+        bim = self.tools_by_name.get("bim")
+        if bim is not None:
+            bim_menu = menu.addMenu(bim.label)
+            bim_menu.addAction("Abrir archivo IFC…", lambda: self._open_tool("bim"))
 
         info_menu = menu.addMenu("Información")
         info_menu.addAction(APPLICATION_NAME).setEnabled(False)
@@ -1514,6 +1522,7 @@ class BudgetMainWindow(QMainWindow):
         if row is None:
             item.measurement_lines.append(result)
         else:
+            result.ifc_global_id = item.measurement_lines[row].ifc_global_id
             item.measurement_lines[row] = result
         item.recalculate_measurement()
         self.refresh_budget_tree()
@@ -1660,6 +1669,7 @@ class BudgetMainWindow(QMainWindow):
                 self, "No se pudo abrir el proyecto", str(exc)
             )
             return False
+        self.project_session += 1
         self._stop_collaboration()
         self.project_store = store
         self.project_path = root
@@ -1803,6 +1813,7 @@ class BudgetMainWindow(QMainWindow):
             if window.isVisible():
                 return False
         self._project_windows.clear()
+        self.project_session += 1
         return True
 
     def _project_payload(self) -> dict:

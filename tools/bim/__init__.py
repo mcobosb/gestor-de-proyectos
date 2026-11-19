@@ -18,7 +18,7 @@ def _controller(app: QMainWindow) -> BimController:
 
 
 def open_tool_qt(app: QMainWindow) -> None:
-    """Abre el selector IFC desde el menú Herramientas."""
+    """Abre el selector IFC desde el menú Motor BIM."""
     _controller(app).choose_file()
 
 

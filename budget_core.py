@@ -118,6 +118,7 @@ class MeasurementLine:
     height: float | None = None
     ltype: str = ""
     k: float = 1.0
+    ifc_global_id: str = ""
 
     @property
     def partial(self) -> float:
