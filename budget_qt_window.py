@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -80,7 +81,7 @@ from budget_project import (
 )
 from budget_reports import REPORT_NAMES, ReportSettings, write_pdf
 from budget_qt_settings import SettingsDialog
-from budget_qt_theme import THEMES, apply_theme
+from budget_qt_theme import THEMES, apply_theme, search_icon
 from localization import LANGUAGES, set_language
 from odt_reports import write_report_odt
 from ods_export import write_ods
@@ -314,10 +315,15 @@ class BudgetMainWindow(QMainWindow):
             action.triggered.connect(
                 lambda checked=False, name=tool.name: self._open_tool(name)
             )
-        references_menu = menu.addMenu("Consultas")
-        references_menu.addAction("NTP", lambda: self.open_reference_search("NTP"))
-        references_menu.addAction("UNE", lambda: self.open_reference_search("UNE"))
-        references_menu.addAction("LER", lambda: self.open_reference_search("LER"))
+        self._references_menu = QMenu("Consultas", menu)
+        menu.addMenu(self._references_menu)
+        icon = search_icon(self._references_menu)
+        for kind in ("NTP", "UNE", "LER"):
+            action = self._references_menu.addAction(
+                icon, kind, lambda checked=False, selected=kind: self.open_reference_search(selected)
+            )
+            action.setProperty("searchIcon", True)
+            action.setIconVisibleInMenu(True)
 
         collaboration_menu = menu.addMenu("Colaboración")
         collaboration_menu.addAction(

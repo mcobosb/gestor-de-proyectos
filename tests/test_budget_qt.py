@@ -740,6 +740,28 @@ class BudgetQtWindowTests(unittest.TestCase):
             window.close()
             self.application.processEvents()
 
+    def test_query_menu_entries_have_visible_search_icons_and_open_their_catalogues(self) -> None:
+        """Las lupas de Consultas no cambian cuál de los tres buscadores se abre."""
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("budget_qt_window.user_data_directory", return_value=Path(directory)),
+        ):
+            window = BudgetMainWindow()
+            try:
+                menu = next(action.menu() for action in window.menuBar().actions()
+                            if action.text() == "Consultas")
+                entries = menu.actions()
+                self.assertEqual([entry.text() for entry in entries], ["NTP", "UNE", "LER"])
+                with patch.object(window, "open_reference_search") as open_catalogue:
+                    for entry in entries:
+                        self.assertTrue(entry.isIconVisibleInMenu())
+                        self.assertFalse(entry.icon().isNull())
+                        entry.trigger()
+                        open_catalogue.assert_called_with(entry.text())
+            finally:
+                window.close()
+                self.application.processEvents()
+
     def test_reference_search_qt_filters_and_exposes_only_visible_entry(self) -> None:
         """Consulta NTP/UNE sin conservar ventanas o datos heredados Tk."""
         with tempfile.TemporaryDirectory() as directory, patch(

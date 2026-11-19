@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import unicodedata
 
-from PySide6.QtCore import QEvent, QObject, QTimer, Qt
-from PySide6.QtGui import QColor, QIcon, QPalette
+from PySide6.QtCore import QEvent, QLineF, QObject, QRectF, QTimer, Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPalette, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QPushButton, QStyle, QWidget
 
 
@@ -82,8 +82,22 @@ def icon_for_text(app: QApplication, text: str):
     return QIcon()
 
 
+def search_icon(widget: QWidget) -> QIcon:
+    """Dibuja una lupa con el color de texto del menú."""
+    pixmap = QPixmap(32, 32)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    with QPainter(pixmap) as painter:
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(widget.palette().color(QPalette.ColorRole.WindowText), 3)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.drawEllipse(QRectF(5, 5, 15, 15))
+        painter.drawLine(QLineF(18, 18, 27, 27))
+    return QIcon(pixmap)
+
+
 def decorate_widget(widget: QWidget) -> None:
-    """Asigna iconos a botones y barras operativas, pero conserva menús de texto."""
+    """Asigna iconos a botones y barras operativas y respeta excepciones de menú."""
     app = QApplication.instance()
     if app is None:
         return
@@ -112,7 +126,7 @@ def decorate_widget(widget: QWidget) -> None:
             menu = top_action.menu()
             if menu is not None:
                 for action in menu.actions():
-                    action.setIcon(QIcon())
+                    action.setIcon(search_icon(menu) if action.property("searchIcon") else QIcon())
                     submenu = action.menu()
                     if submenu is not None:
                         for child in submenu.actions():

@@ -348,8 +348,8 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
 
 ### Consulta de NTP y UNE
 
-- **Consultas**, entre **Herramientas** e **Información**, abre buscadores
-  independientes de NTP y UNE, incluso sin presupuesto abierto.
+- **Consultas** abre buscadores independientes de NTP, UNE y LER, identificados
+  con una lupa, incluso sin presupuesto abierto.
 - El listado se filtra al escribir por código o palabras del título, sin distinguir
   tildes ni mayúsculas. También busca año/fecha, estado y comité cuando constan.
 - La selección muestra el título completo y sus datos. Doble clic, Intro o
