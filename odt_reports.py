@@ -229,7 +229,7 @@ class _OdtReport:
         self, headers, rows, *, bold_rows=(), bold_text_style: str = "TableTotal",
         body_text_style: str = "TableText",
         ratios=(), right_columns=(), chapter: bool = False, keep_next: bool = False,
-        highlighted_rows=(),
+        highlighted_rows=(), cell_style="", write_cell=None,
     ) -> None:
         """Añade una tabla ODF con estilos semánticos para cabecera, texto y énfasis."""
         column_count = max(
@@ -294,8 +294,8 @@ class _OdtReport:
             for index, value in enumerate((*values, *("" for _ in range(column_count - len(values))))):
                 cell = ET.SubElement(row, _tag("table:table-cell"), {
                     _tag("table:style-name"): (
-                        "ChapterCell" if chapter or highlighted else
-                        "HeaderCell" if header else "TotalCell" if bold else "BodyCell"
+                        cell_style or ("ChapterCell" if chapter or highlighted else
+                        "HeaderCell" if header else "TotalCell" if bold else "BodyCell")
                     ),
                     _tag("office:value-type"): "string",
                 })
@@ -316,6 +316,9 @@ class _OdtReport:
                 paragraph = ET.SubElement(cell, _tag("text:p"), {
                     _tag("text:style-name"): text_style,
                 })
+                if write_cell is not None:
+                    write_cell(paragraph, "" if value is None else str(value))
+                    continue
                 lines = ("" if value is None else str(value)).split("\n")
                 paragraph.text = lines[0]
                 for line in lines[1:]:
@@ -431,6 +434,8 @@ class _OdtReport:
             for style in self.template_header["automatic_styles"]:
                 automatic.append(deepcopy(style))
         for name, background in (("HeaderCell", "#FFFFFF"), ("BodyCell", "#FFFFFF"),
+                                 ("AuxiliaryBandCell", "#8EAADB"), ("AuxiliaryTotalCell", "#D9E5F5"),
+                                 ("NarrativeCell", "#EDF3FB"),
                                  ("TotalCell", "#FFFFFF"), ("ChapterCell", (
                                      "#00EEEE" if self.layout and self.layout.certification
                                      else "#C7D0DF"
@@ -801,6 +806,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
             [], [["", label, fmt_number(float(value))]],
             ratios=[0.36 if major else 0.48, 0.48 if major else 0.36, 0.16],
             bold_rows=(0,) if major else (), right_columns=(2,),
+            cell_style="AuxiliaryTotalCell" if embedded and report == "Precios Auxiliares" else "",
         )
 
     if report == "Presupuesto resumen":
@@ -887,6 +893,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                     [], [[concept.code, concept.unit, concept.summary]],
                     ratios=[50, 15, CONTENT_WIDTH - 65], bold_rows=(0,),
                     bold_text_style="AuxiliaryTitle", keep_next=True,
+                    cell_style="AuxiliaryBandCell" if embedded else "",
                 )
                 if concept.text:
                     document.paragraph(concept.text, style="ItemDescription")
@@ -905,12 +912,16 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                 )
                 if difference:
                     total("Diferencia respecto a los componentes", difference)
-                document.paragraph(
+                words = (
                     "Asciende el precio unitario del concepto auxiliar a " + amount_in_words(
                         price, settings.currency, settings.custom_currency
-                    ),
-                    style="AmountInWords",
+                    )
                 )
+                if embedded:
+                    document.table([], [[words]], body_text_style="AmountInWords",
+                                   cell_style="AuxiliaryTotalCell")
+                else:
+                    document.paragraph(words, style="AmountInWords")
                 document.space(4 * 72 / 25.4)
     else:
         for section in ((1, 2) if report == "Cuadro de precios 1 y 2 por capitulos" else (0,)):

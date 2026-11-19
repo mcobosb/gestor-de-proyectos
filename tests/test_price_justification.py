@@ -11,9 +11,13 @@ from unittest.mock import patch
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
-from bc3_gui import Bc3Dataset, BudgetApp, Concept, ProjectItem
+import bc3_gui
+from bc3_gui import Bc3Dataset, Concept, ProjectItem
+from budget_project import (
+    budget_concept_type, chapter_title_for, component_dataset_for, project_title_for, report_components,
+)
 from budget_reports import ReportSettings, _collect_report_resources
-from tools.price_justification import before_project_save, open_tool
+from tools import price_justification
 from tools.price_justification.document import (
     ANNUAL_HOURS_REFERENCES, CALENDAR_REFERENCES, CONSTRUCTION_AGREEMENT_REFERENCES,
     CONTRIBUTION_BASE_REFERENCES, CONTRIBUTION_DETAIL_REFERENCES,
@@ -22,9 +26,32 @@ from tools.price_justification.document import (
     restore_state, validate_state, write_document,
 )
 from tools.price_justification.templates import (
-    DOCUMENTS, FORMULA_LEVEL, LIBRARY_PATH, document_blocks, formula_runs,
+    DOCUMENTS, FORMULA_LEVEL, LIBRARY_PATH, NarrativeTable, document_blocks,
     general_variables, load_documents,
 )
+
+BudgetApp = getattr(bc3_gui, "BudgetApp", None)
+before_project_save = getattr(price_justification, "before_project_save", None)
+open_tool = getattr(price_justification, "open_tool", None)
+
+
+class ReportProject:
+    """Usa los mismos métodos de consulta del proyecto que la ventana Qt."""
+
+    _project_title = project_title_for
+    _chapter_title = chapter_title_for
+    _component_dataset = component_dataset_for
+    _budget_concept_type = budget_concept_type
+    _report_components = report_components
+
+
+def narrative_text(app, state):
+    """Reúne los textos de los párrafos y todas las celdas del anejo."""
+    return "\n".join(
+        "\n".join((value.title, *(part for row in value.rows for part in row)))
+        if isinstance(value, NarrativeTable) else value
+        for _, value in narrative(app, state)
+    )
 
 
 class PriceDocumentTests(unittest.TestCase):
@@ -32,7 +59,7 @@ class PriceDocumentTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.folder = Path(self.temporary.name)
-        self.app = BudgetApp.__new__(BudgetApp)
+        self.app = ReportProject()
         dataset = Bc3Dataset.__new__(Bc3Dataset)
         dataset.concepts = {
             "MO1": Concept("MO1", "h", "Operario singular", 17.25, "1"),
@@ -83,12 +110,12 @@ class PriceDocumentTests(unittest.TestCase):
             "annual_hours": "1736,5", "reference_date": "2026-11-17",
             "territory": "Ámbito de prueba", "contract_type": "private",
         })
-        private = "\n".join(text for _, text in narrative(self.app, state))
+        private = narrative_text(self.app, state)
         self.assertNotIn("Ley 9/2017", private)
         self.assertIn("contratación privada", private)
         self.assertIn("1736,5 horas", private)
         self.assertIn("20.298,22 €/año", private)
-        public = "\n".join(text for _, text in narrative(self.app, {}))
+        public = narrative_text(self.app, {})
         self.assertIn("Ley 9/2017", public)
         self.assertIn("6,00 %", public)
         self.assertNotIn("2008", public)
@@ -99,12 +126,12 @@ class PriceDocumentTests(unittest.TestCase):
         self.assertEqual(len(load_documents(LIBRARY_PATH)), 8)
         blocks = narrative(self.app, {})
         formulas = [text for level, text in blocks if level == FORMULA_LEVEL]
-        self.assertIn("P_n = (1 + K / 100) C_n", formulas)
-        self.assertIn("C = [A + B + (k / 100) A] / H_a", formulas)
-        self.assertIn("T = H_ut / H_ua", formulas)
-        self.assertIn("C_d = (i_m + S) / E + (A_d H_ua) / (E H_ut)", formulas)
-        self.assertIn("C_hm = [100 + (M + C)] / H_ut + (i_m + S) / H_ua", formulas)
-        text = "\n".join(text for _, text in blocks)
+        self.assertIn(r"P_n = (1 + \frac{K}{100}) C_n", formulas)
+        self.assertIn(r"C = \frac{A + B + (\frac{k}{100}) A}{H_a}", formulas)
+        self.assertIn(r"T = \frac{H_ut}{H_ua}", formulas)
+        self.assertIn(r"C_hm = \frac{100 + (M + C)}{H_ut} + \frac{i_m + S}{H_ua}", formulas)
+        self.assertTrue(all("/" not in formula for formula in formulas))
+        text = narrative_text(self.app, {})
         self.assertIn("Reposición del capital.", text)
         self.assertIn("Reparaciones generales y conservación ordinaria.", text)
         self.assertIn("Consumos secundarios:", text)
@@ -118,14 +145,14 @@ class PriceDocumentTests(unittest.TestCase):
         settings.organization = "Entidad configurada"
         settings.expediente = "EXP-PRUEBA"
         state = {"territory": "Territorio obsoleto", "titulo_proyecto": "Título obsoleto"}
-        first = "\n".join(text for _, text in narrative(self.app, state))
+        first = narrative_text(self.app, state)
         for value in ("Lucena", "Córdoba", "Andalucía", "Madrid", "Entidad configurada", "EXP-PRUEBA"):
             self.assertIn(value, first)
         self.assertNotIn("obsoleto", first)
         settings.municipality_codes = ["280796"]
         settings.organization = "Entidad actualizada"
         settings.indirect_costs = 8.25
-        second = "\n".join(text for _, text in narrative(self.app, state))
+        second = narrative_text(self.app, state)
         self.assertIn("Entidad actualizada", second)
         self.assertIn("8,25 %", second)
         self.assertNotIn("Córdoba", second)
@@ -134,6 +161,18 @@ class PriceDocumentTests(unittest.TestCase):
         self.assertEqual(general_variables(self.app)["emplazamiento"], "Localidad configurada")
         self.assertEqual(general_variables(self.app)["provincias"], "")
         self.assertNotIn("territory", restore_state(state))
+
+    def test_project_table_omits_missing_fields_and_uses_live_configuration(self):
+        """No imprime expediente ni fecha ficticios y refleja los cambios del proyecto."""
+        tables = [block for _, block in narrative(self.app, {}) if isinstance(block, NarrativeTable)]
+        self.assertEqual(len(tables), 4)
+        self.assertEqual(tables[0].rows, (("Proyecto", "Proyecto singular"),))
+        self.app.report_settings.expediente = "EXP-42"
+        project = next(block for _, block in narrative(
+            self.app, {"reference_date": "2026-11-19"},
+        ) if isinstance(block, NarrativeTable))
+        self.assertEqual(dict(project.rows)["Expediente"], "EXP-42")
+        self.assertEqual(dict(project.rows)["Fecha de referencia de los precios"], "2026-11-19")
 
     def test_boe_references_are_exported_without_replacing_custom_values(self):
         """Las referencias del BOE se incorporan al anejo y admiten datos locales editables."""
@@ -148,7 +187,7 @@ class PriceDocumentTests(unittest.TestCase):
             "calendar": "Calendario municipal editable",
             "work_conditions": "Condiciones laborales editables",
         }
-        text = "\n".join(value for _, value in narrative(self.app, custom))
+        text = narrative_text(self.app, custom)
         for value in custom.values():
             self.assertIn(value, text)
         self.assertIn("Aportación empresarial al plan de pensiones", text)
@@ -163,7 +202,7 @@ class PriceDocumentTests(unittest.TestCase):
         source = read_markdown(library, member)
         write_markdown(library, member, source + "\n\nTexto técnico revisado.\n", _signature(library))
         with patch("tools.price_justification.document.LIBRARY_PATH", library):
-            text = "\n".join(text for _, text in narrative(self.app, {}))
+            text = narrative_text(self.app, {})
         self.assertIn("Texto técnico revisado.", text)
         with self.assertRaisesRegex(ValueError, "sin cerrar"):
             document_blocks("$$\nK = 1", {})
@@ -178,8 +217,26 @@ class PriceDocumentTests(unittest.TestCase):
     def test_single_pdf_and_odt_include_editable_listings_and_one_signature(self):
         """Genera ambos formatos reales, con las cinco secciones y sin alterar el presupuesto."""
         from pypdf import PdfReader
+        from odt_reports import _tag
+        from report_layout import DEFAULT_TEMPLATE_PATH
         from test_budget_reports import ReportLayoutTests
 
+        template = self.folder / "pie.odt"
+        with ZipFile(DEFAULT_TEMPLATE_PATH) as source, ZipFile(template, "w") as archive:
+            for entry in source.infolist():
+                data = source.read(entry)
+                if entry.filename == "styles.xml":
+                    root = ET.fromstring(data)
+                    footer = next(root.iter(_tag("style:footer")))
+                    for child in list(footer):
+                        footer.remove(child)
+                    paragraph = ET.SubElement(footer, _tag("text:p"), {
+                        _tag("text:style-name"): "Standard",
+                    })
+                    paragraph.text = "{{capitulo}} — {{no_pagina}}"
+                    data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+                archive.writestr(entry, data)
+        self.app.report_settings.template_path = str(template)
         original = deepcopy(self.app.budget_items)
         for output_format in ("pdf", "odt"):
             with self.subTest(output_format=output_format):
@@ -194,6 +251,12 @@ class PriceDocumentTests(unittest.TestCase):
                     text = "\n".join(page.extract_text() for page in reader.pages)
                     self.assertGreater(len(reader.pages), 4)
                     self.assertNotIn("Placeholder for table of contents", text)
+                    self.assertIn("JUSTIFICACIÓN DE PRECIOS — 2", " ".join(text.split()))
+                    links = {
+                        ref.get_object().get("/A", {}).get("/URI")
+                        for page in reader.pages for ref in page.get("/Annots", ())
+                    }
+                    self.assertIn("https://www.boe.es/buscar/act.php?id=BOE-A-2001-19995#a130", links)
                     pages = [re.sub(r"\s+", "", page.extract_text()) for page in reader.pages]
                     for title, _ in LISTINGS:
                         title = re.sub(r"\s+", "", title)
@@ -209,36 +272,38 @@ class PriceDocumentTests(unittest.TestCase):
                     with ZipFile(target) as archive:
                         self.assertIsNone(archive.testzip())
                         content = ET.fromstring(archive.read("content.xml"))
+                        styles = ET.fromstring(archive.read("styles.xml"))
                         text = " ".join(content.itertext())
                         ns = {
                             "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
                             "table": "urn:oasis:names:tc:opendocument:xmlns:table:1.0",
+                            "math": "http://www.w3.org/1998/Math/MathML",
+                            "xlink": "http://www.w3.org/1999/xlink",
                         }
                         self.assertIsNotNone(content.find(".//text:table-of-content", ns))
                         self.assertTrue(content.findall(".//table:table-header-rows", ns))
-                        formulas = [
-                            "".join(paragraph.itertext())
-                            for paragraph in content.findall(".//text:p", ns)
-                            if paragraph.get(f"{{{ns['text']}}}style-name") == "PricesFormula"
-                        ]
-                        expected = [
-                            "".join(value for value, _ in formula_runs(text))
-                            for level, text in narrative(self.app, {
-                                "reference_date": "2026-11-17", "materials_notes": "Transporte singular documentado.",
-                            })
-                            if level == FORMULA_LEVEL
-                        ]
-                        self.assertEqual(formulas, expected)
-                        self.assertTrue(content.findall(
-                            ".//text:span[@text:style-name='PricesSubscript']", ns,
-                        ))
-                        self.assertTrue(content.findall(
-                            ".//text:span[@text:style-name='PricesSuperscript']", ns,
-                        ))
+                        self.assertTrue(content.findall(".//math:mfrac/math:mrow/math:mfrac", ns))
+                        self.assertTrue(content.findall(".//math:msub", ns))
+                        self.assertTrue(content.findall(".//math:msup", ns))
+                        self.assertTrue(content.findall(".//text:p[@text:style-name='PricesList1']/text:tab", ns))
+                        self.assertTrue(content.findall(".//table:table-cell[@table:style-name='AuxiliaryBandCell']", ns))
+                        self.assertTrue(content.findall(".//table:table-cell[@table:style-name='AuxiliaryTotalCellLast']", ns))
+                        self.assertTrue(content.findall(".//text:p[@text:style-name='Signature']", ns))
+                        footer = next(styles.iter(_tag("style:footer")))
+                        self.assertIn("JUSTIFICACIÓN DE PRECIOS", "".join(footer.itertext()))
+                        self.assertIsNotNone(footer.find(".//text:page-number", ns))
+                        self.assertIn(
+                            "https://www.boe.es/buscar/act.php?id=BOE-A-2001-19995#a130",
+                            {anchor.get(f"{{{ns['xlink']}}}href") for anchor in content.findall(".//text:a", ns)},
+                        )
                         ReportLayoutTests.assert_odt_styles(self, archive)
                 condensed = re.sub(r"\s+", "", text)
                 self.assertNotIn("Registro de cambios", " ".join(text.split()))
                 self.assertNotIn("Biblioteca distribuida con el programa", " ".join(text.split()))
+                self.assertNotIn("[PENDIENTE", text)
+                for number in range(1, 5):
+                    self.assertIn(f"Tabla{number}.", condensed)
+                    self.assertIn(f"Véaselatabla{number}:", condensed)
                 for title, _ in LISTINGS:
                     self.assertIn(re.sub(r"\s+", "", title), condensed)
                 for value in (
@@ -261,6 +326,7 @@ class PriceDocumentTests(unittest.TestCase):
         self.assertEqual(list(self.folder.iterdir()), [target])
 
 
+@unittest.skipIf(BudgetApp is None, "El equivalente vigente se comprueba en test_budget_qt.")
 class PriceWindowTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()

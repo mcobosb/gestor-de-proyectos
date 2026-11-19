@@ -97,8 +97,11 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
 - **Guardar anejo…** genera un único documento con índice, texto y listados
   de precios elementales, auxiliares y descompuestos, en la plantilla y formato
   PDF u ODT elegidos en la configuración de informes. El ODT contiene texto
-  y tablas editables, no capturas. Las fórmulas son texto nativo centrado,
-  con subíndices y exponentes, y se editan en los bloques `$$` de la biblioteca.
+  y tablas editables, no capturas. Las tablas de proyecto y referencias laborales
+  se numeran al exportar; los datos de proyecto que falten no se imprimen.
+  Las referencias normativas enlazan con su publicación oficial. Las fórmulas
+  tienen subíndices y fracciones apiladas; se editan en los bloques `$$` de la
+  biblioteca, con `\frac{numerador}{denominador}` para las fracciones.
 - Los elementales incluyen mano de obra, maquinaria y materiales identificados.
   Se reutilizan las cantidades, precios y redondeos del presupuesto actual,
   sin cambiar el informe «Materiales» existente ni aplicar otro recargo indirecto.

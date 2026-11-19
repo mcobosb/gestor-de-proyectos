@@ -33,13 +33,16 @@ def document_markdown(source: str) -> str:
     return result if result.strip() else ""
 
 
-def text_blocks(source: str, *, preserve_bold: bool = False) -> list[tuple[int, str]]:
+def text_blocks(
+    source: str, *, preserve_bold: bool = False, preserve_links: bool = False,
+) -> list[tuple[int, str]]:
     """Transforma Markdown y conserva niveles de lista junto a titulos y avisos."""
     source = document_markdown(source)
     source = re.sub(r"<!--.*?-->", "", source, flags=re.DOTALL)
-    source = re.sub(r"\[([^]]+)\]\(([^)]+)\)",
-                    lambda match: (f"{match[1]} ({match[2]})" if match[2].startswith(("http:", "https:"))
-                                   else match[1]), source)
+    if not preserve_links:
+        source = re.sub(r"\[([^]]+)\]\(([^)]+)\)",
+                        lambda match: (f"{match[1]} ({match[2]})" if match[2].startswith(("http:", "https:"))
+                                       else match[1]), source)
     source = source.replace("`", "")
     blocks, paragraph = [], []
     for line in [*source.splitlines(), ""]:

@@ -356,7 +356,13 @@ def build_pdf_report(
                 block.setStyle([("LINEABOVE", (2, 0), (2, 0), 0.5, colors.black)])
             story.append(block)
         else:
-            story.append(layout.total(label, money(value), major=major))
+            block = layout.total(label, money(value), major=major)
+            if embedded and report == "Precios Auxiliares":
+                from reportlab.lib import colors
+
+                block.setStyle([("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#D9E5F5"))])
+                block.keepWithNext = True
+            story.append(block)
 
     def chapter(code):
         """Inserta la banda de capítulo con su código normalizado y su título."""
@@ -448,7 +454,8 @@ def build_pdf_report(
     elif report == "Precios Auxiliares":
         for concept, price, children in auxiliaries.values():
             p = table([], [[concept.code, concept.unit, text(concept.summary, layout.item_summary)]],
-                      [50, 15, CONTENT_WIDTH - 65], bold_rows=(0,))
+                      [50, 15, CONTENT_WIDTH - 65], bold_rows=(0,),
+                      background="#8EAADB" if embedded else None)
             p.keepWithNext = True
             story.append(p)
             if concept.text:
@@ -460,10 +467,10 @@ def build_pdf_report(
             difference = money(price) - sum((money(q * p) for _, q, p in children), Decimal(0))
             if difference:
                 total("Diferencia respecto a los componentes", difference)
-            story.append(text("Asciende el precio unitario del concepto auxiliar a " +
-                              amount_in_words(
-                                  price, settings.currency, settings.custom_currency
-                              ), layout.words_style))
+            words = text("Asciende el precio unitario del concepto auxiliar a " + amount_in_words(
+                price, settings.currency, settings.custom_currency
+            ), layout.words_style)
+            story.append(table([], [[words]], [1], background="#D9E5F5") if embedded else words)
             story.append(Spacer(1, 4 * mm))
         if not auxiliaries:
             story.append(text("No hay precios auxiliares en las descomposiciones del proyecto."))

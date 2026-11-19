@@ -1,6 +1,6 @@
 """Documentos base editables y variables enlazadas a la configuración del proyecto."""
 
-from datetime import date
+from dataclasses import dataclass
 from pathlib import Path
 import re
 
@@ -23,6 +23,38 @@ DOCUMENTS = (
 FORMULA_LEVEL = -100
 
 
+@dataclass(frozen=True)
+class NarrativeTable:
+    """Tabla de dos columnas con rótulos y datos que se leen en cada exportación."""
+
+    title: str
+    rows: tuple[tuple[str, str], ...]
+
+
+_PROJECT_ROWS = (
+    ("Proyecto", "titulo_proyecto"), ("Entidad", "entidad"), ("Expediente", "expediente"),
+    ("Emplazamiento", "emplazamiento"), ("Provincia o provincias", "provincias"),
+    ("Comunidad o comunidades autónomas", "comunidades_autonomas"),
+    ("Fecha de referencia de los precios", "fecha_referencia"),
+)
+_CONTRIBUTION_ROWS = (
+    ("Bases de cotización", "bases_tabla"), ("Tipos de cotización", "tipos_tabla"),
+)
+_AGREEMENT_ROWS = (("Convenio", "convenio_texto"), ("Revisión salarial", "revision_texto"))
+_TABLES = {
+    "tabla_proyecto": ("Datos del proyecto", _PROJECT_ROWS),
+    "tabla_convenio": ("Convenio y revisión salarial", _AGREEMENT_ROWS),
+    "tabla_cotizaciones": ("Bases y tipos de cotización", _CONTRIBUTION_ROWS),
+    "tabla_mano_obra": ("Referencias adoptadas para la mano de obra", (
+        *_AGREEMENT_ROWS,
+        ("Referencia salarial o SMI", "salario_texto"), *_CONTRIBUTION_ROWS,
+        ("Conceptos cotizables y exentos", "contribution_details"),
+        ("Aportación empresarial al plan de pensiones", "pension_texto"),
+        ("Calendario laboral", "calendario_texto"), ("Condiciones de trabajo", "condiciones_texto"),
+    )),
+}
+
+
 def load_documents(archive_path: Path) -> list[tuple[str, str]]:
     """Lee los documentos obligatorios sin extraer ni mantener copias paralelas."""
     members = set(library_members(archive_path))
@@ -43,22 +75,24 @@ def template_variables(app, state: dict) -> dict[str, str]:
 
     values = {key: value for key, value in state.items() if isinstance(value, str)}
     for key, value in general_variables(app).items():
-        values[key] = value or f"[PENDIENTE EN CONFIGURACIÓN GENERAL: {key}]"
+        values[key] = value or ""
     values.update({
-        "fecha_referencia": state.get("reference_date") or date.today().isoformat(),
+        "fecha_referencia": state.get("reference_date", ""),
         "porcentaje_indirectos": fmt_number(app.report_settings.indirect_costs),
         "moneda": currency_label(app.report_settings.currency, app.report_settings.custom_currency),
         "normativa_contratacion": (
-            "Ley 9/2017, de 8 de noviembre, de Contratos del Sector Público, y Reglamento general "
-            "de la Ley de Contratos de las Administraciones Públicas, aprobado por Real Decreto "
-            "1098/2001, de 12 de octubre, en lo vigente y aplicable."
+            "[Ley 9/2017, de 8 de noviembre, de Contratos del Sector Público]"
+            "(https://www.boe.es/buscar/act.php?id=BOE-A-2017-12902), y Reglamento general "
+            "de la Ley de Contratos de las Administraciones Públicas, aprobado por "
+            "[Real Decreto 1098/2001, de 12 de octubre]"
+            "(https://www.boe.es/buscar/act.php?id=BOE-A-2001-19995), en lo vigente y aplicable."
             if state.get("contract_type", "public") == "public" else
             "En contratación privada se atenderá al contrato y a la normativa aplicable; "
             "los criterios siguientes se utilizan como referencia técnica de composición de costes."
         ),
         "referencia_composicion": (
-            "De acuerdo con el artículo 130 del Reglamento general de la Ley de Contratos "
-            "de las Administraciones Públicas"
+            "De acuerdo con el [artículo 130 del Reglamento general de la Ley de Contratos "
+            "de las Administraciones Públicas](https://www.boe.es/buscar/act.php?id=BOE-A-2001-19995#a130)"
             if state.get("contract_type", "public") == "public" else
             "Como criterio técnico de composición de costes"
         ),
@@ -76,6 +110,19 @@ def template_variables(app, state: dict) -> dict[str, str]:
         "work_conditions", "annual_hours",
     ):
         values[key] = values.get(key) or "[PENDIENTE DE DEFINIR Y VERIFICAR]"
+    for key, field in (
+        ("convenio_texto", "agreement"), ("revision_texto", "salary_revision"),
+        ("salario_texto", "wage_reference"), ("bases_tabla", "contribution_bases"),
+        ("tipos_tabla", "contributions"), ("pension_texto", "pension_contribution"),
+        ("calendario_texto", "calendar"), ("condiciones_texto", "work_conditions"),
+    ):
+        values[key] = values[field].strip().rstrip(".")
+    values["condiciones_texto"] = re.sub(
+        r"\b(Vacaciones|Horas extraordinarias):\s*", lambda match: {
+            "Vacaciones": "Las vacaciones son de ",
+            "Horas extraordinarias": "Las horas extraordinarias tienen un límite de ",
+        }[match[1]], values["condiciones_texto"],
+    ).replace("un límite de máximo ", "un límite de ")
     salary_revision = values.get("salary_revision", "")
     if salary_revision:
         values["agreement"] = f"{values['agreement']}\nRevisión salarial: {salary_revision}"
@@ -105,7 +152,7 @@ def substitute(source: str, values: dict[str, str]) -> str:
     return re.sub(r"\{\{([^{}]+)\}\}", replacement, source)
 
 
-def document_blocks(source: str, values: dict[str, str]) -> list[tuple[int, str]]:
+def document_blocks(source: str, values: dict[str, str]) -> list[tuple[int, str | NarrativeTable]]:
     """Reutiliza el Markdown del PPTP y separa las fórmulas escritas entre líneas $$."""
     source = document_markdown(source)
     parts = re.split(r"^\s*\$\$[ \t]*\r?$", source, flags=re.MULTILINE)
@@ -119,7 +166,14 @@ def document_blocks(source: str, values: dict[str, str]) -> list[tuple[int, str]
                 raise ValueError("Cada bloque $$ debe contener una fórmula en una sola línea.")
             blocks.append((FORMULA_LEVEL, substitute(formula, values)))
         else:
-            for level, text in text_blocks(part):
+            for level, text in text_blocks(part, preserve_links=True):
+                marker = re.fullmatch(r"\{\{(\w+)\}\}", text)
+                if marker and marker[1] in _TABLES:
+                    title, fields = _TABLES[marker[1]]
+                    rows = tuple((label, values[key]) for label, key in fields if values[key].strip())
+                    if rows:
+                        blocks.append((0, NarrativeTable(title, rows)))
+                    continue
                 text = substitute(text, values)
                 if text.strip():
                     blocks.append((level, text))

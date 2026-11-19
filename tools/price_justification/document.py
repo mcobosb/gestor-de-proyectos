@@ -2,12 +2,15 @@
 
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from html import escape
 from pathlib import Path
+import re
 import tempfile
 from xml.etree import ElementTree as ET
 from .templates import (
-    FORMULA_LEVEL, LIBRARY_PATH, document_blocks, formula_runs, load_documents, template_variables,
+    FORMULA_LEVEL, LIBRARY_PATH, NarrativeTable, document_blocks, load_documents, template_variables,
 )
+from .formula import PdfFormula, odt_formula
 from collaborative_storage import shared_library_path
 
 
@@ -167,16 +170,78 @@ def validate_state(data) -> dict:
     return state
 
 
-def narrative(app, data: dict) -> list[tuple[int, str]]:
+def narrative(app, data: dict) -> list[tuple[int, str | NarrativeTable]]:
     """Compone los documentos base de la biblioteca con los datos actuales del proyecto."""
     state = FIELDS | validate_state(data)
     values = template_variables(app, state)
+    values["fuentes_cotizacion"] = (
+        "Los datos de 2026 se contrastan con la [Orden PJC/297/2026, de 30 de marzo]"
+        "(https://www.boe.es/buscar/act.php?id=BOE-A-2026-7296)."
+        if state["contribution_bases"] in CONTRIBUTION_BASE_REFERENCES
+        or state["contributions"] in CONTRIBUTION_RATE_REFERENCES else ""
+    )
+    values["fuentes_calendario"] = (
+        "Para 2026, consúltese la [relación oficial de fiestas laborales]"
+        "(https://www.boe.es/buscar/doc.php?id=BOE-A-2025-21667) y complétese con "
+        "las publicaciones provinciales y locales que correspondan."
+        if state["calendar"] in CALENDAR_REFERENCES else ""
+    )
     return [
         block for _, source in load_documents(
             shared_library_path(app, "price_justification", LIBRARY_PATH)
         )
         for block in document_blocks(source, values)
     ]
+
+
+_INLINE = re.compile(
+    r"\[([^]\n]+)\]\((https?://[^)\s]+)\)|\b(BOE-A-\d{4}-\d+)\b|"
+    r"\b([A-Za-z])_(intrinseco|utm|ut|ua|dm|hm|[nIaDtdhm12])\b|(\n)"
+)
+
+
+def _inline_runs(text: str):
+    """Separa enlaces, variables y saltos del texto, sin interpretar etiquetas HTML."""
+    cursor = 0
+    for match in _INLINE.finditer(text):
+        yield text[cursor:match.start()], "", ""
+        if match[1]:
+            yield match[1], "link", match[2]
+        elif match[3]:
+            yield match[3], "link", f"https://www.boe.es/buscar/doc.php?id={match[3]}"
+        elif match[4]:
+            yield match[4], "", ""
+            yield match[5], "sub", ""
+        else:
+            yield "", "break", ""
+        cursor = match.end()
+    yield text[cursor:], "", ""
+
+
+def _odt_inline(paragraph, text: str) -> None:
+    """Añade texto con enlaces activos y símbolos formateados en Writer."""
+    from odt_reports import _tag
+
+    for value, kind, url in _inline_runs(text):
+        if kind == "link":
+            ET.SubElement(paragraph, _tag("text:a"), {
+                _tag("xlink:href"): url, _tag("xlink:type"): "simple",
+            }).text = value
+        elif kind == "break":
+            ET.SubElement(paragraph, _tag("text:line-break"))
+        elif value:
+            attrs = {_tag("text:style-name"): "PricesSubscript"} if kind == "sub" else {}
+            ET.SubElement(paragraph, _tag("text:span"), attrs).text = value
+
+
+def _pdf_inline(text: str) -> str:
+    """Convierte únicamente las marcas admitidas en formato de párrafo PDF."""
+    return "".join(
+        f'<link href="{escape(url)}" color="#174B83"><u>{escape(value)}</u></link>' if kind == "link" else
+        f"<sub>{escape(value)}</sub>" if kind == "sub" else
+        "<br/>" if kind == "break" else escape(value)
+        for value, kind, url in _inline_runs(text)
+    )
 
 
 def write_document(app, target: Path, data: dict) -> None:
@@ -202,13 +267,13 @@ def write_document(app, target: Path, data: dict) -> None:
             temporary.unlink()
 
 
-def _write_odt(app, target: Path, blocks: list[tuple[int, str]]) -> None:
+def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]) -> None:
     """Conserva texto, índice y listados como elementos nativos editables de ODF."""
     from odt_reports import _new_report, _tag, append_report_odt
 
     document = _new_report(
         TITLE.upper(), app._project_title(), app.report_settings,
-        footer_title=TITLE, template_title=TITLE, repeat_titles=False,
+        footer_title=TITLE.upper(), template_title=TITLE, repeat_titles=False,
     )
     for level in range(1, 7):
         name = f"PricesHeading{level}"
@@ -223,23 +288,44 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str]]) -> None:
         ET.SubElement(style, _tag("style:text-properties"), {
             _tag("fo:font-weight"): "bold", _tag("fo:font-size"): f"{15 - level}pt",
         })
-    for name, position in (("PricesSubscript", "sub"), ("PricesSuperscript", "super")):
-        style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
-            _tag("style:name"): name, _tag("style:family"): "text",
-        })
-        ET.SubElement(style, _tag("style:text-properties"), {
-            _tag("style:text-position"): f"{position} 75%",
-        })
+    style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+        _tag("style:name"): "PricesSubscript", _tag("style:family"): "text",
+    })
+    ET.SubElement(style, _tag("style:text-properties"), {
+        _tag("style:text-position"): "sub 75%",
+    })
+
+    def paragraph(name):
+        """Crea un párrafo de la narrativa con el estilo indicado."""
+        return ET.SubElement(document.body, _tag("text:p"), {_tag("text:style-name"): name})
+
     for name, properties in (
         ("PricesFormula", {_tag("fo:text-align"): "center", _tag("fo:margin-top"): "6pt",
                            _tag("fo:margin-bottom"): "9pt"}),
-        ("PricesBullet", {_tag("fo:margin-left"): "12pt", _tag("fo:text-indent"): "-7pt"}),
+        ("PricesCaption", {_tag("fo:keep-with-next"): "always", _tag("fo:margin-top"): "6pt",
+                           _tag("fo:margin-bottom"): "4pt"}),
     ):
         style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
             _tag("style:name"): name, _tag("style:family"): "paragraph",
             _tag("style:parent-style-name"): "ReportBody",
         })
         ET.SubElement(style, _tag("style:paragraph-properties"), properties)
+        if name == "PricesCaption":
+            ET.SubElement(style, _tag("style:text-properties"), {_tag("fo:font-weight"): "bold"})
+    depths = {-level for level, text in blocks if FORMULA_LEVEL < level < 0}
+    for depth in sorted(depths):
+        indent = 18 * depth + 12
+        style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+            _tag("style:name"): f"PricesList{depth}", _tag("style:family"): "paragraph",
+            _tag("style:parent-style-name"): "ReportBody",
+        })
+        props = ET.SubElement(style, _tag("style:paragraph-properties"), {
+            _tag("fo:margin-left"): f"{indent}pt", _tag("fo:text-indent"): "-22pt",
+        })
+        tabs = ET.SubElement(props, _tag("style:tab-stops"))
+        ET.SubElement(tabs, _tag("style:tab-stop"), {
+            _tag("style:position"): f"{indent}pt", _tag("style:type"): "left",
+        })
     style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
         _tag("style:name"): "PricesListingHeading", _tag("style:family"): "paragraph",
         _tag("style:parent-style-name"): "PricesHeading1",
@@ -247,28 +333,33 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str]]) -> None:
     ET.SubElement(style, _tag("style:paragraph-properties"), {
         _tag("fo:break-before"): "page", _tag("fo:keep-with-next"): "always",
     })
-    headings = [(level, text) for level, text in blocks if level > 0]
+    headings = [(level, text) for level, text in blocks if level > 0 and isinstance(text, str)]
     headings.extend((1, title) for title, _ in LISTINGS)
     document.paragraph(TITLE.upper(), style="PricesHeading1")
     document.table_of_contents(headings, max_level=3, name="PricesContents")
     bookmark = 0
+    table_index = 0
     for level, text in blocks:
-        if level > 0:
+        if isinstance(text, NarrativeTable):
+            table_index += 1
+            reference = f"Tabla {table_index}"
+            document.paragraph(f"Véase la {reference.lower()}: {text.title.lower()}.")
+            document.paragraph(f"{reference}. {text.title}", "PricesCaption")
+            document.table(["Concepto", "Detalle"], text.rows, ratios=(1, 2.8),
+                           cell_style="NarrativeCell", write_cell=_odt_inline)
+        elif level > 0:
             document.heading(text, level, style=f"PricesHeading{level}", bookmark=f"PPTPHeading{bookmark}")
             bookmark += 1
         elif level == FORMULA_LEVEL:
-            paragraph = ET.SubElement(document.body, _tag("text:p"), {
-                _tag("text:style-name"): "PricesFormula",
-            })
-            for value, position in formula_runs(text):
-                attributes = {}
-                if position:
-                    attributes[_tag("text:style-name")] = (
-                        "PricesSubscript" if position == "sub" else "PricesSuperscript"
-                    )
-                ET.SubElement(paragraph, _tag("text:span"), attributes).text = value
+            odt_formula(paragraph("PricesFormula"), text)
+        elif level < 0:
+            item = paragraph(f"PricesList{-level}")
+            marker, _, label = text.partition(" ")
+            item.text = marker
+            ET.SubElement(item, _tag("text:tab"))
+            _odt_inline(item, label)
         else:
-            document.paragraph(text, "PricesBullet" if level < 0 else "ReportBody")
+            _odt_inline(paragraph("ReportBody"), text)
     for title, report in LISTINGS:
         document.heading(title, 1, style="PricesListingHeading", bookmark=f"PPTPHeading{bookmark}")
         bookmark += 1
@@ -278,20 +369,20 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str]]) -> None:
         settings.location, settings.role, settings.author, settings.organization, settings.signature,
     ) if value]
     if signature:
-        document.space(12)
+        document.space(8 * 72 / 25.4)
         for value in signature:
             document.paragraph(value, "SignatureNote" if value == settings.signature else "Signature")
     document.write(target)
 
 
-def _write_pdf(app, target: Path, blocks: list[tuple[int, str]]) -> None:
+def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable]]) -> None:
     """Pagina el anejo con índice real y tablas del generador presupuestario común."""
-    from html import escape
     from reportlab.lib import colors
-    from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+    from reportlab.lib.enums import TA_JUSTIFY
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle
-    from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer
+    from reportlab.lib.units import mm
+    from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer
     from reportlab.platypus.doctemplate import LayoutError
     from reportlab.platypus.tableofcontents import TableOfContents
     from budget_reports import build_pdf_report
@@ -300,17 +391,22 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str]]) -> None:
     settings = app.report_settings
     layout = ReportLayout(
         template_path=settings.template_path, expediente=settings.expediente,
-        template_title=TITLE, footer_title=TITLE, repeat_titles=False,
+        template_title=TITLE, footer_title=TITLE.upper(), repeat_titles=False,
     )
     body = ParagraphStyle(
         "PricesBody", fontName="Helvetica", fontSize=10, leading=14,
         spaceAfter=7, alignment=TA_JUSTIFY,
     )
-    formula_style = ParagraphStyle(
-        "PricesFormula", parent=body, fontName="Times-Roman", fontSize=10,
-        alignment=TA_CENTER, spaceBefore=6, spaceAfter=9,
+    caption_style = ParagraphStyle(
+        "PricesCaption", parent=body, fontName="Helvetica-Bold",
+        spaceBefore=6, spaceAfter=4, keepWithNext=True,
     )
-    bullet_style = ParagraphStyle("PricesBullet", parent=body, leftIndent=12, firstLineIndent=-7)
+    list_styles = {
+        level: ParagraphStyle(
+            f"PricesList{-level}", parent=body, leftIndent=-18 * level + 12,
+            bulletIndent=-18 * level - 10,
+        ) for level, _ in blocks if FORMULA_LEVEL < level < 0
+    }
     heading_styles = {
         level: ParagraphStyle(
             f"PricesHeading{level}", parent=body, fontName="Helvetica-Bold",
@@ -330,9 +426,24 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str]]) -> None:
         Paragraph("ÍNDICE", heading_styles[2]), toc, PageBreak(),
     ]
     heading_index = 0
+    table_index = 0
     reports = dict(LISTINGS)
     for level, text in blocks + [(1, title) for title, _ in LISTINGS]:
-        if level > 0:
+        if isinstance(text, NarrativeTable):
+            table_index += 1
+            story.append(Paragraph(f"Véase la tabla {table_index}: {escape(text.title.lower())}.", body))
+            story.append(Paragraph(f"Tabla {table_index}. {escape(text.title)}", caption_style))
+            cells = [[Paragraph(_pdf_inline(value), body) for value in row] for row in text.rows]
+            table = layout.table(["Concepto", "Detalle"], cells, [1, 2.8], background="#EDF3FB")
+            table.setStyle([
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("LINEBELOW", (0, 1), (-1, -1), 0.3, colors.HexColor("#CCD9EC")),
+            ])
+            table.spaceAfter = 9
+            story.append(table)
+        elif level > 0:
             if text in reports:
                 story.append(PageBreak())
             paragraph = Paragraph(escape(text), heading_styles[level])
@@ -344,21 +455,20 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str]]) -> None:
                 listing, _ = build_pdf_report(app, report, layout, embedded=True)
                 story.extend(listing)
         elif level == FORMULA_LEVEL:
-            formula = "".join(
-                f"<{position}>{escape(value)}</{position}>" if position else escape(value)
-                for value, position in formula_runs(text)
-            )
-            story.append(Paragraph(formula, formula_style))
+            story.append(PdfFormula(text))
+        elif level < 0:
+            marker, _, label = text.partition(" ")
+            story.append(Paragraph(_pdf_inline(label), list_styles[level], bulletText=marker))
         else:
-            story.append(Paragraph(
-                escape(text).replace("\n", "<br/>"), bullet_style if level < 0 else body,
-            ))
+            story.append(Paragraph(_pdf_inline(text), body))
     signature = [value for value in (
         settings.location, settings.role, settings.author, settings.organization, settings.signature,
     ) if value]
     if signature:
-        story.append(Spacer(1, 12))
-        story.extend(Paragraph(escape(value).replace("\n", "<br/>"), body) for value in signature)
+        story.append(KeepTogether([Spacer(1, 8 * mm), *[
+            layout.text(value, layout.signature_note if value == settings.signature else layout.center)
+            for value in signature
+        ]]))
 
     class PricesDocument(SimpleDocTemplate):
         """Resuelve los destinos del índice durante las pasadas de maquetación."""
