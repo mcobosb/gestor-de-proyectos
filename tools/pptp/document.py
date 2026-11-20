@@ -11,6 +11,7 @@ import re
 from typing import TYPE_CHECKING
 import unicodedata
 from urllib.parse import unquote
+from budget_reports import report_output_format
 from .library import ZipLibrary
 from .sheet_index import (
     INDEX_MARKER, INDEX_TOKEN, SheetIndexRow, extract_index, markdown_index, pdf_index,
@@ -726,7 +727,8 @@ def write_document(
     title = "PLIEGO DE PRESCRIPCIONES TÉCNICAS PARTICULARES"
     project = variables["titulo_proyecto"]
     bullet_depths = sorted({-level - 1 for level, _ in blocks if level < 0})
-    if settings.output_format == "odt":
+    output_format = report_output_format(target, settings.output_format)
+    if output_format == "odt":
         from xml.etree import ElementTree as ET
         from odt_reports import _new_report, _tag
 

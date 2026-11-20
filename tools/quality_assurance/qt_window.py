@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from collaborative_storage import shared_library_path
+from qt_localization import get_document_save_path
 from tools._library_editor_qt import LibraryEditorQt
 
 from . import TOOL_LABEL
@@ -254,18 +255,12 @@ class QualityWindow(QDialog):
         if self.editor is not None and self.editor.dirty:
             QMessageBox.warning(self, TOOL_LABEL, "Guarda o descarta la edición de la ficha antes de exportar.")
             return
-        kind = self.app.report_settings.output_format
-        name, _ = QFileDialog.getSaveFileName(self, "Generar anejo", f"Plan de control de calidad.{kind}",
-                                              f"{kind.upper()} (*.{kind})")
-        if not name:
+        selection = get_document_save_path(
+            self, "Generar anejo", "Plan de control de calidad.pdf",
+        )
+        if selection is None:
             return
-        target = Path(name)
-        if target.suffix.casefold() != f".{kind}":
-            target = target.with_suffix(f".{kind}")
-            if target.exists() and QMessageBox.question(
-                self, TOOL_LABEL, f"¿Quieres reemplazar «{target.name}»?",
-            ) != QMessageBox.StandardButton.Yes:
-                return
+        target, _output_format = selection
         try:
             with tempfile.TemporaryDirectory(dir=target.parent) as folder:
                 pending = Path(folder) / target.name

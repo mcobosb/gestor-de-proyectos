@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 from xml.etree import ElementTree
 
+from budget_reports import report_output_format
 from .._shared.scheduling import PlanActivity, PlanParams, activity_segments, merge_date_ranges
 
 if TYPE_CHECKING:
@@ -336,7 +337,8 @@ def write_planning_report(
     description = _describe_duration(dated)
     title = "PLAN DE TRABAJO"
 
-    if settings.output_format == "odt":
+    output_format = report_output_format(target, settings.output_format)
+    if output_format == "odt":
         from odt_reports import _new_report
 
         document = _new_report(

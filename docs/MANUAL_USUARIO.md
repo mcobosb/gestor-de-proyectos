@@ -428,7 +428,7 @@ los cambios. Para rehacer la inserción, retira primero las partidas generadas.
 
 **Editar fichas del anejo…** abre los siete apartados editables con historial.
 **Generar anejo…** exporta las fichas y la tabla revisada en PDF u ODT, según
-la configuración. El importe y el porcentaje sobre el PEM se calculan con las
+el formato elegido en el diálogo de guardado. El importe y el porcentaje sobre el PEM se calculan con las
 partidas incorporadas; el intervalo orientativo no se usa para fijar precios.
 
 ## 8. Estimar residuos de construcción y demolición (RCDs)
@@ -748,7 +748,8 @@ todavía debes guardar el proyecto para conservarlo en disco.
 ### Informe y cálculo revisado
 
 **Generar informe RCDs** utiliza **PDF u ODT** y la **plantilla de cabecera y pie**
-elegidos en **Archivo → Configuración**. Incluye la tabla económica de la hoja
+elegidos en el diálogo de guardado y en **Archivo → Configuración**, respectivamente.
+Incluye la tabla económica de la hoja
 Presupuesto (tipología, volumen, precio de gestión, importe y porcentaje del
 presupuesto), datos de cálculo y residuos seleccionados con su procedencia.
 
@@ -876,8 +877,8 @@ la revisión técnica de sus condiciones antes de incorporarlas al contrato.
 
 **Aceptar y generar** solicita el destino del documento y guarda primero
 la revisión en el JSON del proyecto (pide su ubicación si aún no existe).
-El formato PDF u ODT y la plantilla de cabecera y pie son los configurados
-para los informes. Se ensamblan todos los documentos Markdown numerados de la
+El formato PDF u ODT se elige en el diálogo de guardado; la plantilla de cabecera
+y pie procede de la configuración general. Se ensamblan todos los documentos Markdown numerados de la
 raíz del ZIP en orden de nombre, sustituyendo las variables. La biblioteca actual
 contiene las secciones `01` a `09`; las fichas elegidas se incorporan después del
 último documento general, bajo el apartado 9 de materiales, ejecución, medición
@@ -998,8 +999,8 @@ presupuesto como si se hubieran ejecutado ese mes. Muestra la cantidad derivada
 con seis decimales; el importe mensual guardado prevalece. Un precio unitario
 cero impide calcular esa cantidad.
 
-**Informe de desviaciones** permite guardar el informe en PDF u ODT, según
-**Archivo → Configuración…**, con la misma cabecera, pie y estilos del resto.
+**Informe de desviaciones** permite elegir PDF u ODT al guardar, con la misma
+cabecera, pie y estilos del resto.
 Incluye todas las partidas del mes seleccionado, también las pendientes de
 certificar: capítulo, código, resumen, previsión original, certificado,
 desviación (certificado menos previsión) y justificación, con sus totales.

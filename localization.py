@@ -27,6 +27,19 @@ _TEXT = {
     "Editar biblioteca de fichas…": ("Edit specification sheet library…", "Modifier la bibliothèque de fiches…"),
     "Editar documentación del estudio…": ("Edit study documentation…", "Modifier la documentation de l’étude…"),
     "Generar informe": ("Generate report", "Générer le rapport"),
+    "Generar": ("Generate", "Générer"),
+    "Generar anejo": ("Generate appendix", "Générer l’annexe"),
+    "Generar PPTP": ("Generate technical specifications", "Générer le cahier des prescriptions"),
+    "Generar Estudio de Seguridad y Salud": (
+        "Generate Health and Safety Study",
+        "Générer l’étude de sécurité et santé",
+    ),
+    "Guardar informe": ("Save report", "Enregistrer le rapport"),
+    "Guardar justificación de precios": (
+        "Save price justification",
+        "Enregistrer la justification des prix",
+    ),
+    "Guardar planificación": ("Save schedule", "Enregistrer le planning"),
     "Guardar RCDs en el proyecto": ("Save construction waste in the project", "Enregistrer les déchets de chantier dans le projet"),
     "Guardar anejo…": ("Save appendix…", "Enregistrer l’annexe…"),
     "Aplicar K al presupuesto": ("Apply K to budget", "Appliquer K au budget"),
@@ -872,7 +885,6 @@ _TEXT = {
         "Select the report template",
         "Sélectionner le modèle des rapports",
     ),
-    "Formato de informes": ("Report format", "Format des rapports"),
     "La plantilla aporta la cabecera y el pie de todos los informes de\n"
     "presupuesto y certificaciones. Déjala vacía para usar la incluida.\n"
     "GG y BI se aplican al PEM. En certificaciones, se deduce la baja\nantes del IVA. La baja no modifica el presupuesto de licitación.\n"

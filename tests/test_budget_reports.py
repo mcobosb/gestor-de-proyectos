@@ -9,7 +9,7 @@ from zipfile import ZIP_STORED, ZipFile
 from budget_reports import (
     CERTIFICATION_REPORT_NAMES, DEVIATION_REPORT_NAME, REPORT_NAMES, ReportSettings,
     amount_in_words, budget_totals, certification_deviation_rows,
-    certification_totals, write_certification_pdf, write_pdf,
+    certification_totals, report_output_format, write_certification_pdf, write_pdf,
 )
 from odt_reports import write_certification_odt, write_report_odt
 
@@ -111,6 +111,7 @@ class ReportCalculationsTests(unittest.TestCase):
         self.assertEqual(
             ReportSettings.from_dict({"output_format": "ODT"}).output_format, "odt"
         )
+        self.assertNotIn("output_format", ReportSettings(output_format="odt").to_dict())
         self.assertEqual(
             ReportSettings.from_dict({
                 "expediente": "EXP-2026-001",
@@ -119,6 +120,14 @@ class ReportCalculationsTests(unittest.TestCase):
         )
         self.assertEqual(ReportSettings.from_dict({}).indirect_costs, 0)
         self.assertEqual(ReportSettings.from_dict({"indirect_costs": "3,5"}).indirect_costs, 3.5)
+
+    def test_report_format_comes_from_destination_extension(self):
+        """The chosen extension overrides the legacy global format."""
+        self.assertEqual(report_output_format(Path("report.odt"), "pdf"), "odt")
+        self.assertEqual(report_output_format(Path("report.pdf"), "odt"), "pdf")
+        self.assertEqual(report_output_format(Path("report"), "odt"), "odt")
+        with self.assertRaises(ValueError):
+            report_output_format(Path("report.docx"))
 
 
 class ReportLayoutTests(unittest.TestCase):

@@ -49,6 +49,7 @@ from PySide6.QtWidgets import (
 
 
 from budget_qt_dialogs import ItemEditor, MeasurementEditor
+from qt_localization import get_document_save_path
 from PySide6.QtWidgets import QTreeWidgetItemIterator
 from app_paths import application_directory, user_data_directory
 from budget_config import (
@@ -2851,26 +2852,20 @@ class BudgetMainWindow(QMainWindow):
         self._set_status(f"{report} exportados a {path}")
 
     def generate_report(self, report: str) -> None:
-        """Genera uno de los informes PDF existentes."""
+        """Genera uno de los informes PDF u ODT disponibles."""
         if not self.budget_items:
             QMessageBox.information(self, "Presupuesto vacío", "No hay partidas para informar.")
             return
-        is_odt = self.report_settings.output_format == "odt"
-        extension = ".odt" if is_odt else ".pdf"
-        file_filter = "ODT (*.odt)" if is_odt else "PDF (*.pdf)"
-        path, _ = QFileDialog.getSaveFileName(
+        selection = get_document_save_path(
             self,
             f"Guardar informe: {report}",
-            f"{report}{extension}",
-            file_filter,
+            f"{report}.pdf",
         )
-        if not path:
+        if selection is None:
             return
-        target = Path(path)
-        if target.suffix.lower() != extension:
-            target = target.with_suffix(extension)
+        target, output_format = selection
         try:
-            if is_odt:
+            if output_format == "odt":
                 write_report_odt(self, report, target)
             else:
                 write_pdf(self, report, target)

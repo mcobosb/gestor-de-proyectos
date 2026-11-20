@@ -26,7 +26,9 @@ from budget_qt_window import BudgetMainWindow
 from budget_qt_theme import apply_theme
 from budget_reports import ReportSettings
 from localization import get_language, set_language
-from qt_localization import apply_button_language, localize_button
+from qt_localization import (
+    apply_button_language, get_document_save_path, localize_button,
+)
 from tools._shared.reference_pill import ReferencePill
 from tools.price_justification.qt_window import PriceJustificationWindowQt
 from tools.rcd import RCD_BUDGET_SOURCE
@@ -307,7 +309,6 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertTrue(dialog.show_author.isChecked())
             dialog.show_author.setChecked(False)
             dialog.report_fields["indirect_costs"].setText("7.5")
-            dialog.output_format.setCurrentText("ODT")
             report_template = str(Path.cwd() / "informes.odt")
             master_template = str(Path.cwd() / "maestro.odt")
             master_logo = str(Path.cwd() / "logo.jpg")
@@ -337,7 +338,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertEqual(reopened.master_logo_path.text(), master_logo)
             reopened.reject()
             self.assertEqual(values["indirect_costs"], "7.5")
-            self.assertEqual(values["output_format"], "odt")
+            self.assertNotIn("output_format", values)
             dialog.reject()
             window.close()
             self.application.processEvents()
@@ -355,7 +356,6 @@ class BudgetQtWindowTests(unittest.TestCase):
                 "author": "Autora",
                 "show_author": False,
                 "indirect_costs": "3.5",
-                "output_format": "odt",
                 "currency": "OTHER",
                 "custom_currency": "Ptas",
             })
@@ -364,8 +364,12 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertEqual(window.report_settings.author, "Autora")
             self.assertFalse(window._read_report_settings().show_author)
             self.assertEqual(window.report_settings.indirect_costs, 3.5)
-            self.assertEqual(window.report_settings.output_format, "odt")
+            self.assertEqual(window.report_settings.output_format, "pdf")
             self.assertTrue((folder / "configuracion_informes.json").is_file())
+            saved_settings = json.loads(
+                (folder / "configuracion_informes.json").read_text(encoding="utf-8")
+            )
+            self.assertNotIn("output_format", saved_settings)
             self.assertTrue(window._save_language_preference("fr"))
             self.assertTrue(window._save_theme_preference("dark"))
             self.assertTrue((folder / "preferencias.json").is_file())
@@ -420,6 +424,28 @@ class BudgetQtWindowTests(unittest.TestCase):
                 set_language(original_language)
                 apply_button_language(self.application)
                 self.application.processEvents()
+
+    def test_document_save_picker_uses_language_and_selected_format(self) -> None:
+        """Traduce el diálogo y aplica la extensión del filtro escogido."""
+        original_language = get_language()
+        try:
+            set_language("en")
+            with tempfile.TemporaryDirectory() as directory, patch(
+                "qt_localization.QFileDialog.getSaveFileName",
+                return_value=(str(Path(directory) / "report.pdf"), "ODT (*.odt)"),
+            ) as save_dialog:
+                selection = get_document_save_path(
+                    None, "Generar anejo", "report.pdf",
+                )
+                self.assertEqual(selection, (Path(directory) / "report.odt", "odt"))
+                self.assertEqual(save_dialog.call_args.args[1], "Generate appendix")
+                self.assertEqual(
+                    save_dialog.call_args.args[5],
+                    QFileDialog.Option.DontUseNativeDialog,
+                )
+        finally:
+            set_language(original_language)
+            apply_button_language(self.application)
 
     def test_price_justification_qt_roundtrips_state_and_reuses_window(self) -> None:
         """Migra el anejo a Qt sin cambiar el estado persistente compatible."""

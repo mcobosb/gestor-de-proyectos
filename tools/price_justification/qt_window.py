@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from budget_core import fmt_number
+from qt_localization import get_document_save_path
 from .document import (
     ANNUAL_HOURS_REFERENCES,
     CALENDAR_REFERENCES,
@@ -458,20 +459,17 @@ class PriceJustificationWindowQt(QDialog):
                     "Guarda o descarta los cambios de la biblioteca antes de generar el anejo."
                 )
             state = self.validated()
-            output_format = self.app.report_settings.output_format
-            if output_format not in {"pdf", "odt"}:
-                raise ValueError(f"Formato de informe no admitido: {output_format}")
-            target, _ = QFileDialog.getSaveFileName(
+            selection = get_document_save_path(
                 self,
                 "Guardar justificación de precios",
-                f"Justificación de precios.{output_format}",
-                f"{output_format.upper()} (*.{output_format})",
+                "Justificación de precios.pdf",
             )
-            if not target:
+            if selection is None:
                 return
+            target, _output_format = selection
             write_document(
                 self.app,
-                Path(target).with_suffix(f".{output_format}"),
+                target,
                 state,
             )
         except (ImportError, OSError, ValueError) as exc:

@@ -185,13 +185,23 @@ class ReportSettings:
         return cls(**values)
 
     def to_dict(self) -> dict:
-        """Devuelve la configuración como diccionario serializable en JSON."""
-        return asdict(self)
+        """Serializa las preferencias; el formato de salida se elige en cada exportación."""
+        values = asdict(self)
+        values.pop("output_format")
+        return values
 
 
 def money(value: Decimal | float) -> Decimal:
     """Redondea un importe a céntimos mediante redondeo comercial decimal."""
     return Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def report_output_format(target: str | Path, fallback: str = "pdf") -> str:
+    """Obtiene el formato PDF/ODT de la extensión elegida para el destino."""
+    output_format = Path(target).suffix.casefold().lstrip(".") or fallback.casefold()
+    if output_format not in {"pdf", "odt"}:
+        raise ValueError(f"Formato de informe no admitido: {output_format}")
+    return output_format
 
 
 def budget_totals(pem: float, settings: ReportSettings) -> dict[str, Decimal]:

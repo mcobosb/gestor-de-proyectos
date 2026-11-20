@@ -6,6 +6,7 @@ import re
 from xml.etree import ElementTree as ET
 
 from budget_core import currency_label, fmt_number
+from budget_reports import report_output_format
 from collaborative_storage import shared_library_path
 from document_styles import ROLES
 from tools._library_editor import read_markdown
@@ -75,12 +76,11 @@ def write_document(app, target: Path, rows: list[dict]) -> None:
             for row in rows
         ],
     }
-    if settings.output_format == "odt":
+    output_format = report_output_format(target, settings.output_format)
+    if output_format == "odt":
         _write_odt(target, app._project_title(), settings, blocks, data)
-    elif settings.output_format == "pdf":
-        _write_pdf(target, app._project_title(), settings, blocks, data)
     else:
-        raise ValueError("Formato de anejo no admitido.")
+        _write_pdf(target, app._project_title(), settings, blocks, data)
 
 
 def _write_odt(target, project, settings, blocks, data) -> None:

@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 
 from tools._library_editor_qt import LibraryEditorQt
 from tools._shared.reference_pill import add_reference_pill
+from qt_localization import get_document_save_path
 from collaborative_storage import shared_library_path
 from . import (
     GROUPS,
@@ -457,18 +458,15 @@ class RcdWindowQt(QDialog):
                 "Guarda o descarta los cambios de biblioteca antes de exportar.",
             )
             return
-        extension = (
-            ".odt" if self.app.report_settings.output_format == "odt" else ".pdf"
-        )
-        target, _ = QFileDialog.getSaveFileName(
+        selection = get_document_save_path(
             self,
             "Generar estudio RCDs",
-            f"Estudio de gestión de RCDs{extension}",
-            f"Estudio RCDs (*{extension})",
+            "Estudio de gestión de RCDs.pdf",
         )
-        if not target:
+        if selection is None:
             return
-        target = Path(target).with_suffix(extension)
+        target, _output_format = selection
+        extension = target.suffix
         temporary: Path | None = None
         try:
             self._refresh_surface()

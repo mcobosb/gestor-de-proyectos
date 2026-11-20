@@ -35,6 +35,7 @@ from tools._library_editor import library_members
 from tools._library_editor_qt import LibraryEditorQt
 from tools._shared.reference_pill import add_reference_pill
 from collaborative_storage import shared_library_path
+from qt_localization import get_document_save_path
 from . import (
     CARE_CENTERS_URL,
     SAFETY_BUDGET_SOURCE,
@@ -951,18 +952,14 @@ class SafetyProposalDialogQt(QDialog):
                 dialog = self.owner.open_technical_review()
                 if dialog is None or dialog.exec() != QDialog.DialogCode.Accepted:
                     return
-            extension = (
-                ".odt" if self.app.report_settings.output_format == "odt" else ".pdf"
-            )
-            target, _ = QFileDialog.getSaveFileName(
+            selection = get_document_save_path(
                 self,
                 "Generar Estudio de Seguridad y Salud",
-                f"Estudio de Seguridad y Salud{extension}",
-                f"Documento (*{extension})",
+                "Estudio de Seguridad y Salud.pdf",
             )
-            if not target:
+            if selection is None:
                 return
-            path = Path(target).with_suffix(extension)
+            path, _output_format = selection
             write_study_report(self.app, path)
         except (ImportError, OSError, ValueError) as exc:
             QMessageBox.critical(self, "No se pudo generar el informe", str(exc))

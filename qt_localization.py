@@ -3,7 +3,11 @@ from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QObject, Qt, QTranslator
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QApplication, QAbstractButton, QToolBar, QToolButton
+from pathlib import Path
+
+from PySide6.QtWidgets import (
+    QApplication, QAbstractButton, QFileDialog, QToolBar, QToolButton, QWidget,
+)
 
 from localization import get_language, translate
 
@@ -40,12 +44,57 @@ _QT_TEXT = {
     "Forward": ("Adelante", "Forward", "Suivant"),
     "Print": ("Imprimir", "Print", "Imprimer"),
     "Page Setup": ("Configurar página", "Page Setup", "Mise en page"),
+    "File name:": ("Nombre de archivo:", "File name:", "Nom du fichier :"),
+    "Files of type:": ("Tipo de archivo:", "Files of type:", "Type de fichiers :"),
+    "Look in:": ("Buscar en:", "Look in:", "Regarder dans :"),
     "%1 already exists.\nDo you want to replace it?": (
         "%1 ya existe.\n¿Quieres reemplazarlo?",
         "%1 already exists.\nDo you want to replace it?",
         "%1 existe déjà.\nVoulez-vous le remplacer ?",
     ),
 }
+
+
+def get_document_save_path(
+    parent: QWidget | None, caption: str, filename: str,
+) -> tuple[Path, str] | None:
+    """Permite elegir PDF u ODT en un diálogo Qt traducido al idioma activo."""
+    filters = {"pdf": "PDF (*.pdf)", "odt": "ODT (*.odt)"}
+    localized_caption = translate(caption, source_language="es")
+    if localized_caption == caption and caption.startswith("Generar "):
+        localized_caption = (
+            f"{translate('Generar', source_language='es')} "
+            f"{translate(caption[len('Generar '):], source_language='es')}"
+        )
+    elif localized_caption == caption and caption.startswith("Guardar informe: "):
+        localized_caption = (
+            f"{translate('Guardar informe', source_language='es')}: "
+            f"{translate(caption[len('Guardar informe: '):], source_language='es')}"
+        )
+    path, selected_filter = QFileDialog.getSaveFileName(
+        parent,
+        localized_caption,
+        filename,
+        ";;".join(filters.values()),
+        filters["pdf"],
+        QFileDialog.Option.DontUseNativeDialog,
+    )
+    if not path:
+        return None
+
+    selected_format = next(
+        (kind for kind, file_filter in filters.items() if file_filter == selected_filter),
+        None,
+    )
+    target = Path(path)
+    suffix = target.suffix.casefold().lstrip(".")
+    if selected_format is not None:
+        suffix = selected_format
+    elif suffix not in filters:
+        suffix = "pdf"
+    if target.suffix.casefold() != f".{suffix}":
+        target = target.with_suffix(f".{suffix}")
+    return target, suffix
 
 
 class _QtButtonTranslator(QTranslator):

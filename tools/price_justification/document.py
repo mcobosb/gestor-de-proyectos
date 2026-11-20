@@ -8,6 +8,8 @@ from pathlib import Path
 import re
 import tempfile
 from xml.etree import ElementTree as ET
+
+from budget_reports import report_output_format
 from .templates import (
     FORMULA_LEVEL, LIBRARY_PATH, Equation, NarrativeTable, calculated_tables, document_blocks,
     load_documents, template_variables,
@@ -298,9 +300,9 @@ def _pdf_inline(text: str) -> str:
 
 
 def write_document(app, target: Path, data: dict) -> None:
-    """Exporta un único anejo en la plantilla y formato seleccionados en el proyecto."""
+    """Exporta un único anejo en el formato indicado por la extensión del destino."""
     blocks = narrative(app, data)
-    output_format = app.report_settings.output_format
+    output_format = report_output_format(target, app.report_settings.output_format)
     if output_format == "odt":
         writer = _write_odt
     elif output_format == "pdf":

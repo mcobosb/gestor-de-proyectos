@@ -10,6 +10,7 @@ import re
 from typing import TYPE_CHECKING
 from xml.etree import ElementTree as ET
 
+from budget_reports import report_output_format
 from tools._library_editor import library_members, read_markdown
 from tools._library_markdown import document_markdown, text_blocks
 from tools.document_structure.catalog import RCD_NUMBER
@@ -356,17 +357,16 @@ def write_study(
     state: RcdState, title: str, settings: ReportSettings, target: Path, *,
     project_pem: float | None = None, app: BudgetApp | None = None,
 ) -> None:
-    """Emite el mismo estudio completo en el formato de la configuración general."""
+    """Emite el mismo estudio completo en el formato indicado por el destino."""
     from . import RcdState
 
     state = RcdState.from_dict(state.to_dict())
     blocks = study_blocks(state, title, settings, project_pem=project_pem, app=app)
-    if settings.output_format == "odt":
+    output_format = report_output_format(target, settings.output_format)
+    if output_format == "odt":
         _write_odt(blocks, title, settings, target)
-    elif settings.output_format == "pdf":
-        _write_pdf(blocks, title, settings, target)
     else:
-        raise ValueError(f"Formato de estudio RCDs no admitido: {settings.output_format}")
+        _write_pdf(blocks, title, settings, target)
 
 
 def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, target: Path) -> None:

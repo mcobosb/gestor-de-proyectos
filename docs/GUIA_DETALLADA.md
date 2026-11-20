@@ -96,7 +96,8 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
 - **Guardar anejo…** abre el selector de archivos para elegir nombre y destino.
   Genera un único documento con índice, texto y listados
   de precios elementales, auxiliares y descompuestos, en la plantilla y formato
-  PDF u ODT elegidos en la configuración de informes. El ODT contiene texto
+  PDF u ODT elegidos en el diálogo de guardado, usando la plantilla configurada.
+  El ODT contiene texto
   y tablas editables, no capturas. Las tablas de proyecto y referencias laborales
   se numeran al exportar; los datos de proyecto que falten no se imprimen.
   Comparten el formato de tablas de Seguridad y Salud, con cabecera azul
@@ -116,7 +117,7 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
 ### Planificación en plantilla
 
 - En **Herramientas → Planificación**, **Guardar planificación en plantilla**
-  utiliza el formato PDF u ODT y la plantilla elegidos en la configuración.
+  permite elegir PDF u ODT al guardar y utiliza la plantilla configurada.
 - Se exporta solo el cronograma central con sus datos y barras tabuladas, no
   una captura de imagen; el ODT permite editarlo. La página es horizontal para
   mejorar la lectura y después se describe la duración total calculada y la
@@ -458,8 +459,8 @@ expresamente en la herramienta.
   En el apartado 7, las referencias seleccionadas se presentan con subtítulos
   temáticos (contratación, accesibilidad, medio ambiente, estructuras, instalaciones,
   etc.), tanto en PDF como en ODT. Los grupos sin referencias incluidas se omiten.
-- Al generar se guarda la selección en el JSON del proyecto y se emite PDF u ODT
-  según la configuración, con su plantilla de cabecera y pie y las variables sustituidas.
+- Al generar se guarda la selección en el JSON del proyecto y se elige PDF u ODT
+  en el diálogo de guardado, con la plantilla de cabecera y pie configurada y las variables sustituidas.
   Las fichas compartidas por varias partidas solo se incorporan una vez.
 - La primera ventana permite marcar **Aplicar revisión de precios** e introducir
   la fórmula. Sin marcarla, exige una justificación de no aplicación. Se guarda

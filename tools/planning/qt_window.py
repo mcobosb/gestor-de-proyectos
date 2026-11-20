@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from budget_core import format_chapter_code, fmt_number
+from qt_localization import get_document_save_path
 from tools._shared.reference_pill import add_reference_pill
 from tools._shared.scheduling import (
     RELATIONS,
@@ -622,20 +623,15 @@ class PlanningWindowQt(QDialog):
 
     def save_plan_report(self) -> None:
         """Guarda la planificación en PDF u ODT."""
-        extension = (
-            ".odt"
-            if self.app.report_settings.output_format == "odt"
-            else ".pdf"
-        )
-        target, _ = QFileDialog.getSaveFileName(
+        selection = get_document_save_path(
             self,
             "Guardar planificación",
-            "Plan de trabajo" + extension,
-            f"Documento (*{extension})",
+            "Plan de trabajo.pdf",
         )
-        if not target:
+        if selection is None:
             return
-        target = Path(target).with_suffix(extension)
+        target, _output_format = selection
+        extension = target.suffix
         temporary: Path | None = None
         try:
             with tempfile.NamedTemporaryFile(

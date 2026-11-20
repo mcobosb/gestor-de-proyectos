@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 import unicodedata
 from zipfile import BadZipFile, ZipFile
 
-from budget_reports import budget_totals
+from budget_reports import budget_totals, report_output_format
 from cpv_catalog import resolve_cpv_codes
 from .care_centers import format_centers, restore_centers
 from .chapter_selection import study_chapters, study_items
@@ -1743,9 +1743,9 @@ def write_study_report(app, target) -> tuple[str, ...]:
     target = Path(target)
     content = _build_study_content(app)
     content.blocks = _numbered_blocks(content.blocks)
-    output_format = app.report_settings.output_format.lower()
-    if output_format not in {"pdf", "odt"}:
-        raise ValueError(f"Formato de informe no admitido: {output_format}.")
+    output_format = report_output_format(
+        target, app.report_settings.output_format,
+    )
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(

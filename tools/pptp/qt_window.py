@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 
 from tools._library_editor_qt import LibraryEditorQt
 from tools._shared.reference_pill import add_reference_pill
+from qt_localization import get_document_save_path
 from .library import ZipLibrary
 from .document import (
     DEFAULT_TOC_DEPTH,
@@ -620,13 +621,12 @@ class PptpWindowQt(QDialog):
             self.library, state, self.regulations,
             budget_chapter_titles=chapter_titles,
         )
-        extension = "." + self.app.report_settings.output_format
-        target, _ = QFileDialog.getSaveFileName(
-            self, "Generar PPTP", "PPTP" + extension,
-            f"Documento {extension[1:].upper()} (*{extension})",
+        selection = get_document_save_path(
+            self, "Generar PPTP", "PPTP.pdf",
         )
-        if not target:
+        if selection is None:
             return
+        target, _output_format = selection
         self.app.pptp_state = state
         self.app.project_title = state["variables"]["titulo_proyecto"]
         self.app.report_settings.organization = state["variables"]["entidad"]
@@ -634,7 +634,7 @@ class PptpWindowQt(QDialog):
         self.app._mark_dirty()
         if not self.app.save_project():
             return
-        path = Path(target).with_suffix(extension)
+        path = target
         temporary: Path | None = None
         try:
             with tempfile.NamedTemporaryFile(

@@ -274,10 +274,6 @@ class SettingsDialog(QDialog):
                 field = QLineEdit(str(values[key]))
                 self.report_fields[key] = field
                 form.addRow(label, field)
-        self.output_format = QComboBox()
-        self.output_format.addItems(("PDF", "ODT"))
-        self.output_format.setCurrentText(str(values["output_format"]).upper())
-        form.addRow("Formato de informes", self.output_format)
         currency_options = (
             ("EUR", "EUR (€)"),
             ("USD", "USD ($)"),
@@ -615,7 +611,6 @@ class SettingsDialog(QDialog):
         data.update({
             "project_title": self.project_title_field.text(),
             "show_author": self.show_author.isChecked(),
-            "output_format": self.output_format.currentText().lower(),
             "currency": self.currency.currentData(),
             "custom_currency": self.custom_currency.text(),
             "template_path": self.template_path.text(),

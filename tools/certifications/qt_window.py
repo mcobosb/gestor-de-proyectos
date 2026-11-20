@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QDialog,
-    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QInputDialog,
@@ -27,6 +26,7 @@ from PySide6.QtWidgets import (
 from budget_core import format_chapter_code, format_currency, parse_float
 from budget_reports import CERTIFICATION_REPORT_NAMES, DEVIATION_REPORT_NAME, write_certification_pdf
 from odt_reports import write_certification_odt
+from qt_localization import get_document_save_path
 from tools._shared.reference_pill import add_reference_pill
 from tools._shared.scheduling import PlanParams, apply_saved_plan_state, build_activities
 from . import economic_months, planned_monthly_amounts, reconcile_certification
@@ -358,16 +358,15 @@ class CertificationWindowQt(QDialog):
             )
             return
         settings = self.app.report_settings
-        extension = ".odt" if settings.output_format == "odt" else ".pdf"
-        target, _ = QFileDialog.getSaveFileName(
+        selection = get_document_save_path(
             self,
             f"Generar {report}",
-            f"{report} {index + 1} {month.key}{extension}",
-            f"Documento (*{extension})",
+            f"{report} {index + 1} {month.key}.pdf",
         )
-        if not target:
+        if selection is None:
             return
-        target_path = Path(target).with_suffix(extension)
+        target_path, output_format = selection
+        extension = f".{output_format}"
         temporary: Path | None = None
         try:
             with tempfile.NamedTemporaryFile(
