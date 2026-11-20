@@ -92,12 +92,18 @@ proyecto, presupuesto, plazo, fecha y logo incorporados. En **Configuración →
 Plantillas** puedes elegir otra plantilla ODT y un logo JPEG; si dejas las rutas
 vacías, se utilizan los recursos incluidos en el módulo. La plantilla alternativa
 debe conservar los marcadores y la estructura de portada, índice y trazabilidad.
-El índice y la tabla de trazabilidad reflejan los documentos incluidos. El maestro enlaza los ODT
-mediante rutas relativas y se guarda en la raíz de **Documentos tecnicos**;
-acepta la actualización de enlaces en LibreOffice al abrirlo y conserva la
-estructura de carpetas al mover la entrega. Se puede volver a generar; la
-aplicación avisa antes de reemplazar los archivos generados. Los archivos
-ajenos a la entrega no se sobrescriben.
+El índice y la tabla de trazabilidad reflejan los documentos incluidos. El maestro
+enlaza la memoria, los anejos, el pliego y el presupuesto como subdocumentos, y
+los archivos de planos desde el índice. Las rutas son relativas y se conserva la
+estructura de carpetas al mover la entrega. Al abrir el maestro en LibreOffice,
+acepta la actualización de enlaces o utiliza **Herramientas → Actualizar →
+Vínculos** para incorporar los cambios de los subdocumentos.
+
+Los maestros generados antes de esta corrección conservan sus vínculos anteriores.
+Puedes corregirlos en LibreOffice o volver a generar la entrega, teniendo en
+cuenta que la regeneración reemplaza los archivos generados, incluidos los
+editados. La aplicación avisa antes de reemplazarlos; los archivos ajenos a la
+entrega no se sobrescriben.
 
 La aplicación arranca siempre sin proyecto ni bases cargadas, aunque conserve
 archivos de ejemplo en su carpeta. El historial de recientes y la configuración

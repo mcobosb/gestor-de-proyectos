@@ -20,6 +20,11 @@ MASTER_TEMPLATE = Path(__file__).with_name("plantillas") / "maestro" / "plantill
 MASTER_LOGO = MASTER_TEMPLATE.with_name("logo.jpg")
 
 
+def _master_link(path: Path) -> str:
+    """Construye la URL relativa al interior del paquete ODM de LibreOffice."""
+    return "../" + quote(path.as_posix(), safe="/")
+
+
 def _styles(xml: bytes, project: str, section: str, text_styles) -> bytes:
     """Añade cabecera y pie con un campo de página, no un número literal."""
     root = ET.fromstring(xml)
@@ -66,7 +71,7 @@ def _master_content(xml: bytes, links: list[Path], folder: Path) -> bytes:
             _tag("text:name"): f"Documento {index}",
         })
         ET.SubElement(section, _tag("text:section-source"), {
-            _tag("xlink:href"): "../" + quote(path.as_posix()), _tag("text:filter-name"): "writer8",
+            _tag("xlink:href"): _master_link(path), _tag("text:filter-name"): "writer8",
         })
         with ZipFile(folder / path) as document:
             linked_root = ET.fromstring(document.read("content.xml"))
@@ -472,7 +477,7 @@ def _document_footer_titles(
         if entry.get("href") and entry.get("text", "").strip()
     }
     return [
-        titles.get(quote(path.as_posix(), safe="/"), path.stem).upper()
+        titles.get(_master_link(path), path.stem).upper()
         for path in links
     ]
 
@@ -612,7 +617,7 @@ def _append_index_and_sections(
             _tag("text:name"): f"Documento vinculado {index}",
         })
         ET.SubElement(section, _tag("text:section-source"), {
-            _tag("xlink:href"): quote(path.as_posix(), safe="/"),
+            _tag("xlink:href"): _master_link(path),
             _tag("text:filter-name"): "writer8",
         })
         with ZipFile(folder / path) as document:

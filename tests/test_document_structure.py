@@ -1,10 +1,12 @@
 """Pruebas de la entrega documental, la carátula ODT y el índice."""
+import json
 import os
 from pathlib import Path
+import shutil
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
-from urllib.parse import unquote
+from urllib.parse import unquote, urljoin
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
@@ -21,7 +23,7 @@ from tools.document_structure.catalog import (
 from tools.document_structure.generation import (
     DOCUMENT_FOLDERS, MEMORY_DOCUMENT_TITLE,
     TECHNICAL_DOCUMENTS_FOLDER, default_master_name,
-    generate_project_package, generated_at,
+    generate_project_package, generated_at, receipt_path,
 )
 from tools.document_structure.office import MASTER_LOGO, MASTER_TEMPLATE
 from tools.document_structure.qt_window import DocumentStructureWindow
@@ -37,6 +39,83 @@ class DocumentStructureTests(unittest.TestCase):
         self.assertTrue(MASTER_TEMPLATE.is_file())
         self.assertTrue(MASTER_LOGO.is_file())
         self.assertEqual(default_master_name("GEX2026/36718"), "GEX2026-36718-ProyectoConstructivo.odm")
+
+    def test_master_links_resolve_all_documents_after_relocation(self) -> None:
+        """Los subdocumentos y el índice apuntan a la entrega incluso al trasladarla."""
+        QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as directory:
+            root = Path(directory) / "Proyecto # % á"
+            root.mkdir()
+            with patch("budget_qt_window.user_data_directory", return_value=root):
+                window = BudgetMainWindow()
+                try:
+                    project = root / "proyecto.json"
+                    self.assertTrue(window._write_project_file(project))
+                    plan_pdf = root / "plano # %.pdf"
+                    plan_pdf.write_bytes(b"plano")
+                    plan_odt = root / "plano á.odt"
+                    plan_odt.write_bytes(MASTER_TEMPLATE.read_bytes())
+                    master, _ = generate_project_package(
+                        project, window, "Maestro.odm",
+                        [
+                            {"kind": "template", "number": "1", "title": "Cálculo # %", "outline": ["Datos"]},
+                            {"kind": "documentation", "number": "2", "title": "Trámites"},
+                        ],
+                        [
+                            {"title": "Plano PDF", "file": str(plan_pdf)},
+                            {"title": "Plano ODT", "file": str(plan_odt)},
+                            {"title": "Plano sin archivo", "file": ""},
+                        ],
+                        memory_documents=[{"title": "Memoria", "outline": ["Ámbito"]}],
+                        include_pptp=True, include_budget=True,
+                    )
+                    receipt = json.loads(receipt_path(project).read_text(encoding="utf-8"))
+                    document_paths = [Path(path).relative_to(TECHNICAL_DOCUMENTS_FOLDER)
+                                      for path in receipt["documentos"]]
+                    plan_paths = [Path(path).relative_to(TECHNICAL_DOCUMENTS_FOLDER)
+                                  for path in receipt["archivos_plano"]]
+                    self.assertCountEqual(
+                        document_paths,
+                        [path.relative_to(master.parent) for path in master.parent.rglob("*.odt")
+                         if path.relative_to(master.parent) not in plan_paths],
+                    )
+                    self.assertEqual(len(plan_paths), 2)
+                    relocated = Path(directory) / "Traslado # % á"
+                    shutil.copytree(master.parent, relocated)
+                    for folder in (master.parent, relocated):
+                        with self.subTest(folder=folder), ZipFile(folder / master.name) as archive:
+                            content = ET.fromstring(archive.read("content.xml"))
+                            section_hrefs = [
+                                node.attrib[_tag("xlink:href")]
+                                for node in content.iter(_tag("text:section-source"))
+                            ]
+                            index_hrefs = [
+                                node.attrib[_tag("xlink:href")]
+                                for node in content.iter(_tag("text:a"))
+                            ]
+                            base = (folder / master.name).as_uri() + "/"
+                            self.assertEqual(
+                                [urljoin(base, href) for href in section_hrefs],
+                                [(folder / path).as_uri() for path in document_paths],
+                            )
+                            self.assertCountEqual(
+                                [urljoin(base, href) for href in index_hrefs],
+                                [(folder / path).as_uri() for path in document_paths + plan_paths],
+                            )
+                            self.assertTrue(all((folder / path).is_file()
+                                                for path in document_paths + plan_paths))
+                            styles = ET.fromstring(archive.read("styles.xml"))
+                            annex_page = next(
+                                page for page in styles.iter(_tag("style:master-page"))
+                                if page.get(_tag("style:name")) == "ProjectDocumentPage2"
+                            )
+                            self.assertIn(
+                                "ANEJO Nº 1. CÁLCULO # %",
+                                "".join(annex_page.find(_tag("style:footer")).itertext()),
+                            )
+                finally:
+                    window.deleteLater()
+                    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
     def test_tool_annex_is_renumbered_and_linked_in_master(self) -> None:
         """Crea un anejo base vacío y lo enlaza al maestro con su número actualizado."""
@@ -184,7 +263,7 @@ class DocumentStructureTests(unittest.TestCase):
                         for node in content.iter(_tag("text:section-source"))
                     ]
                     self.assertEqual(references, [
-                        "DOC01 - MEMORIA Y ANEJOS/"
+                        "../DOC01 - MEMORIA Y ANEJOS/"
                         "ANEJO 01 - Gestión de residuos.odt",
                     ])
                     body = content.find(f"{_tag('office:body')}/{_tag('office:text')}")
@@ -220,7 +299,7 @@ class DocumentStructureTests(unittest.TestCase):
                     )
                     self.assertEqual(
                         unquote(index_link.get(_tag("xlink:href"), "")),
-                        "DOC01 - MEMORIA Y ANEJOS/"
+                        "../DOC01 - MEMORIA Y ANEJOS/"
                         "ANEJO 01 - Gestión de residuos.odt",
                     )
                     styles = ET.fromstring(document.read("styles.xml"))
@@ -646,7 +725,7 @@ class DocumentStructureTests(unittest.TestCase):
                     )
                     self.assertEqual(
                         unquote(memory_index_link.get(_tag("xlink:href"), "")),
-                        f"DOC01 - MEMORIA Y ANEJOS/{MEMORY_DOCUMENT_TITLE}.odt",
+                        f"../DOC01 - MEMORIA Y ANEJOS/{MEMORY_DOCUMENT_TITLE}.odt",
                     )
             finally:
                 window.deleteLater()

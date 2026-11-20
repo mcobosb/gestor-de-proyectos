@@ -8,7 +8,6 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import BinaryIO
-from urllib.parse import quote
 from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile
 
@@ -22,7 +21,7 @@ from .catalog import (
     CATALOG, DOCUMENTATION_PROCEDURE_FIELDS, TEMPLATES, copy_templates,
 )
 from .office import (
-    MASTER_LOGO, MASTER_NAME, MASTER_TEMPLATE, renumber_annex,
+    MASTER_LOGO, MASTER_NAME, MASTER_TEMPLATE, _master_link, renumber_annex,
     write_office_document, write_project_master,
 )
 
@@ -161,7 +160,7 @@ def _safe_component(value: str) -> str:
 def _master_href(path: Path) -> str:
     """Convierte una ruta del paquete en un enlace relativo desde el ODM."""
     relative = path.relative_to(Path(TECHNICAL_DOCUMENTS_FOLDER))
-    return quote(relative.as_posix(), safe="/")
+    return _master_link(relative)
 
 
 def _master_filename(value: str) -> str:
