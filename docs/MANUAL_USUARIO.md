@@ -244,7 +244,8 @@ Abre **Archivo → Configuración…** y completa:
   Esta opción cambia el símbolo o código mostrado, pero no convierte importes;
   comprueba que los precios de entrada y de las bases de referencia usan la
   misma divisa.
-- Formato de salida de los informes: PDF (predeterminado) u ODT editable.
+- Al guardar informes, el selector ofrece ODT editable por defecto y permite
+  elegir PDF. El diálogo utiliza el idioma seleccionado en las preferencias.
 - La ruta de una plantilla ODT que aporta la cabecera y el pie de todos los
   informes de presupuesto y certificaciones. Pulsa **Examinar…** para elegir
   el archivo. Si se deja vacía, se emplea la plantilla incluida con la
@@ -400,9 +401,9 @@ En el menú **Informes** de la ventana principal están:
 | Presupuesto mediciones | Partidas, líneas de medición e importes |
 | Presupuesto resumen | Capítulos, PEM, GG, BI, IVA y presupuesto de licitación |
 
-Selecciona el tipo y el destino del PDF. Al terminar, el programa intenta abrirlo
-con la aplicación asociada. Si no puede abrirlo, indica dónde ha quedado guardado.
-Puedes imprimirlo desde el visor PDF.
+Selecciona el tipo de informe, el formato ODT o PDF y su destino. Al terminar,
+el programa intenta abrirlo con la aplicación asociada. Si no puede abrirlo,
+indica dónde ha quedado guardado.
 
 Desde **Archivo → Exportar** puedes guardar el presupuesto, los recursos y los
 descompuestos en hojas ODS editables, y las mediciones en CSV.

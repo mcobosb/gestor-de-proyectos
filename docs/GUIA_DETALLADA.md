@@ -702,7 +702,8 @@ El archivo [requirements.txt](../requirements.txt) contiene las dependencias de 
 | pypdfium2 | Visor PDF integrado de facturas |
 
 Los informes también se generan como ODT editable con los módulos estándar de Python.
-El formato se elige en **Archivo → Configuración…** y, de inicio, es PDF.
+El formato se elige al guardar cada informe: ODT editable aparece seleccionado
+por defecto y también se puede elegir PDF. El diálogo utiliza el idioma global.
 Tkinter ya no es necesario.
 
 ## Organización

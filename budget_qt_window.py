@@ -84,7 +84,7 @@ from budget_reports import REPORT_NAMES, ReportSettings, write_pdf
 from budget_qt_settings import SettingsDialog
 from budget_qt_theme import THEMES, apply_theme, search_icon
 from tools._shared.reference_pill import add_reference_pill
-from localization import LANGUAGES, set_language
+from localization import LANGUAGES, set_language, translate
 from qt_localization import apply_button_language
 from odt_reports import write_report_odt
 from ods_export import write_ods
@@ -1779,7 +1779,9 @@ class BudgetMainWindow(QMainWindow):
     def save_project_as(self) -> bool:
         """Selecciona una carpeta para crear el formato colaborativo."""
         path = QFileDialog.getExistingDirectory(
-            self, "Selecciona una carpeta para el proyecto colaborativo", ""
+            self,
+            translate("Selecciona una carpeta para el proyecto colaborativo", source_language="es"),
+            "",
         )
         if not path:
             return False
@@ -2707,7 +2709,8 @@ class BudgetMainWindow(QMainWindow):
             QMessageBox.information(self, "Presupuesto vacío", "No hay partidas que exportar.")
             return
         path, _ = QFileDialog.getSaveFileName(
-            self, "Exportar presupuesto", "presupuesto.ods", "ODS (*.ods)"
+            self, translate("Exportar presupuesto", source_language="es"),
+            "presupuesto.ods", "ODS (*.ods)",
         )
         if not path:
             return
@@ -2757,7 +2760,8 @@ class BudgetMainWindow(QMainWindow):
             QMessageBox.information(self, "Presupuesto vacío", "No hay mediciones que exportar.")
             return
         path, _ = QFileDialog.getSaveFileName(
-            self, "Exportar mediciones", "mediciones.csv", "CSV (*.csv)"
+            self, translate("Exportar mediciones", source_language="es"),
+            "mediciones.csv", "CSV (*.csv)",
         )
         if not path:
             return
@@ -2787,9 +2791,9 @@ class BudgetMainWindow(QMainWindow):
             return
         path, _ = QFileDialog.getSaveFileName(
             self,
-            f"Exportar {report}",
+            translate(f"Exportar {report.lower()}", source_language="es"),
             f"{report}.ods",
-            "Hoja ODS (*.ods)",
+            f"{translate('Hoja ODS', source_language='es')} (*.ods)",
         )
         if not path:
             return

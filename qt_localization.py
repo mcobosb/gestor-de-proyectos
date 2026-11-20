@@ -1,12 +1,12 @@
 """Traducción de botones, acciones de barra y avisos en la interfaz Qt."""
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QObject, Qt, QTranslator
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt, QTranslator
 from PySide6.QtGui import QAction
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QApplication, QAbstractButton, QFileDialog, QToolBar, QToolButton, QWidget,
+    QApplication, QAbstractButton, QFileDialog, QMessageBox, QToolBar, QToolButton, QWidget,
 )
 
 from localization import get_language, translate
@@ -47,6 +47,13 @@ _QT_TEXT = {
     "File name:": ("Nombre de archivo:", "File name:", "Nom du fichier :"),
     "Files of type:": ("Tipo de archivo:", "Files of type:", "Type de fichiers :"),
     "Look in:": ("Buscar en:", "Look in:", "Regarder dans :"),
+    "File &name:": ("&Nombre de archivo:", "File &name:", "&Nom du fichier :"),
+    "Files of &type:": ("&Tipo de archivo:", "Files of &type:", "&Type de fichiers :"),
+    "&Look in:": ("&Buscar en:", "&Look in:", "&Regarder dans :"),
+    "Name": ("Nombre", "Name", "Nom"),
+    "Size": ("Tamaño", "Size", "Taille"),
+    "Type": ("Tipo", "Type", "Type"),
+    "Date Modified": ("Fecha de modificación", "Date Modified", "Date de modification"),
     "%1 already exists.\nDo you want to replace it?": (
         "%1 ya existe.\n¿Quieres reemplazarlo?",
         "%1 already exists.\nDo you want to replace it?",
@@ -59,7 +66,7 @@ def get_document_save_path(
     parent: QWidget | None, caption: str, filename: str,
 ) -> tuple[Path, str] | None:
     """Permite elegir PDF u ODT en un diálogo Qt traducido al idioma activo."""
-    filters = {"pdf": "PDF (*.pdf)", "odt": "ODT (*.odt)"}
+    filters = {"odt": "ODT (*.odt)", "pdf": "PDF (*.pdf)"}
     localized_caption = translate(caption, source_language="es")
     if localized_caption == caption and caption.startswith("Generar "):
         localized_caption = (
@@ -74,9 +81,9 @@ def get_document_save_path(
     path, selected_filter = QFileDialog.getSaveFileName(
         parent,
         localized_caption,
-        filename,
+        str(Path(filename).with_suffix(".odt")),
         ";;".join(filters.values()),
-        filters["pdf"],
+        filters["odt"],
         QFileDialog.Option.DontUseNativeDialog,
     )
     if not path:
@@ -91,9 +98,19 @@ def get_document_save_path(
     if selected_format is not None:
         suffix = selected_format
     elif suffix not in filters:
-        suffix = "pdf"
+        suffix = "odt"
     if target.suffix.casefold() != f".{suffix}":
         target = target.with_suffix(f".{suffix}")
+        if target.exists():
+            message = QCoreApplication.translate(
+                "QFileDialog", "%1 already exists.\nDo you want to replace it?"
+            ).replace("%1", target.name)
+            if QMessageBox.question(
+                parent, translate("Confirmar reemplazo", source_language="es"), message,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            ) != QMessageBox.StandardButton.Yes:
+                return None
     return target, suffix
 
 
@@ -109,7 +126,7 @@ class _QtButtonTranslator(QTranslator):
     ) -> str | None:
         """Traduce los textos que Qt crea internamente."""
         if context in {
-            "QPlatformTheme", "QFileDialog", "QPrintDialog", "QPrintPreviewDialog",
+            "QPlatformTheme", "QFileDialog", "QFileSystemModel", "QPrintDialog", "QPrintPreviewDialog",
             "QInputDialog", "QMessageBox",
         } and sourceText in _QT_TEXT:
             return _QT_TEXT[sourceText][{"es": 0, "en": 1, "fr": 2}[get_language()]]

@@ -13,7 +13,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import (
     QApplication, QDialog, QDialogButtonBox, QFileDialog, QLabel, QLineEdit, QMainWindow, QMessageBox,
-    QPushButton, QSplashScreen, QSplitter, QVBoxLayout,
+    QPushButton, QSplashScreen, QSplitter, QTreeView, QVBoxLayout,
 )
 from PySide6.QtCore import QCoreApplication, QEvent, Qt, QTimer, QUrl
 from PySide6.QtTest import QTest
@@ -41,7 +41,7 @@ from tools.safety_health.qt_window import (
 )
 from tools.pptp.qt_window import PptpWindowQt
 from tools.certifications.qt_window import CertificationWindowQt
-from tools.planning.qt_window import PlanningWindowQt
+from tools.planning.qt_window import GanttPreviewDialogQt, PlanningWindowQt
 from tools.invoicing import Invoice, InvoiceLine, InvoiceState
 from tools.invoicing.qt_window import InvoicingWindowQt
 from reference_search import ReferenceEntry, load_reference_entries
@@ -429,20 +429,125 @@ class BudgetQtWindowTests(unittest.TestCase):
         """Traduce el diálogo y aplica la extensión del filtro escogido."""
         original_language = get_language()
         try:
-            set_language("en")
+            for language, caption in (
+                ("es", "Generar anejo"),
+                ("en", "Generate appendix"),
+                ("fr", "Générer l’annexe"),
+            ):
+                set_language(language)
+                for chosen, expected in (("ODT (*.odt)", "odt"), ("PDF (*.pdf)", "pdf")):
+                    with self.subTest(language=language, chosen=chosen), tempfile.TemporaryDirectory() as directory, patch(
+                        "qt_localization.QFileDialog.getSaveFileName",
+                        return_value=(str(Path(directory) / "report.odt"), chosen),
+                    ) as save_dialog:
+                        selection = get_document_save_path(None, "Generar anejo", "report.pdf")
+                        self.assertEqual(selection, (Path(directory) / f"report.{expected}", expected))
+                        self.assertEqual(save_dialog.call_args.args[1:5], (
+                            caption, "report.odt", "ODT (*.odt);;PDF (*.pdf)", "ODT (*.odt)",
+                        ))
+                        self.assertEqual(save_dialog.call_args.args[5], QFileDialog.Option.DontUseNativeDialog)
+        finally:
+            set_language(original_language)
+            apply_button_language(self.application)
+
+    def test_other_save_dialogs_use_global_language(self) -> None:
+        """Traduce los títulos de exportación, proyecto y copia del diagrama."""
+        original_language = get_language()
+        try:
             with tempfile.TemporaryDirectory() as directory, patch(
-                "qt_localization.QFileDialog.getSaveFileName",
-                return_value=(str(Path(directory) / "report.pdf"), "ODT (*.odt)"),
-            ) as save_dialog:
-                selection = get_document_save_path(
-                    None, "Generar anejo", "report.pdf",
-                )
-                self.assertEqual(selection, (Path(directory) / "report.odt", "odt"))
-                self.assertEqual(save_dialog.call_args.args[1], "Generate appendix")
-                self.assertEqual(
-                    save_dialog.call_args.args[5],
-                    QFileDialog.Option.DontUseNativeDialog,
-                )
+                "budget_qt_window.user_data_directory", return_value=Path(directory),
+            ), patch("budget_qt_window.apply_theme"):
+                window = BudgetMainWindow()
+                window.budget_items = [ProjectItem("P1", "01#", "ud", "Partida", 1, 10)]
+                try:
+                    for language, expected in (
+                        ("en", ("Export budget", "Export measurements", "Export resources",
+                                "Export breakdowns", "Save work plan",
+                                "Select a folder for the collaborative project", "ODS spreadsheet (*.ods)")),
+                        ("fr", ("Exporter le budget", "Exporter les métrés", "Exporter les ressources",
+                                "Exporter les décompositions", "Enregistrer le planning des travaux",
+                                "Sélectionnez un dossier pour le projet collaboratif", "Feuille ODS (*.ods)")),
+                    ):
+                        with self.subTest(language=language):
+                            self.assertTrue(window._save_language_preference(language))
+                            with patch("PySide6.QtWidgets.QFileDialog.getSaveFileName", return_value=("", "")) as save:
+                                window.export_budget_ods()
+                                window.export_measurements_csv()
+                                window.export_resource_report("Recursos")
+                                window.export_resource_report("Descompuestos")
+                                GanttPreviewDialogQt.save_copy(window)
+                                self.assertEqual(tuple(call.args[1] for call in save.call_args_list), expected[:5])
+                                self.assertEqual(save.call_args_list[2].args[3], expected[6])
+                            with patch("PySide6.QtWidgets.QFileDialog.getExistingDirectory", return_value="") as folder:
+                                window.save_project_as()
+                                self.assertEqual(folder.call_args.args[1], expected[5])
+                finally:
+                    window.is_dirty = False
+                    window.close()
+        finally:
+            set_language(original_language)
+            apply_button_language(self.application)
+
+    def test_document_save_picker_confirms_overwrite_after_extension_change(self) -> None:
+        """Pide confirmación si la extensión elegida apunta a otro archivo existente."""
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "report.pdf"
+            target.write_bytes(b"existing")
+            with (
+                patch("qt_localization.QFileDialog.getSaveFileName",
+                      return_value=(str(target.with_suffix(".odt")), "PDF (*.pdf)")),
+                patch("qt_localization.QMessageBox.question", return_value=QMessageBox.StandardButton.No) as confirm,
+            ):
+                self.assertIsNone(get_document_save_path(None, "Generar anejo", "report.pdf"))
+                self.assertIn(target.name, confirm.call_args.args[2])
+                self.assertEqual(target.read_bytes(), b"existing")
+                confirm.return_value = QMessageBox.StandardButton.Yes
+                self.assertEqual(get_document_save_path(None, "Generar anejo", "report.pdf"), (target, "pdf"))
+
+    def test_document_save_picker_localizes_real_dialog_and_switches_format(self) -> None:
+        """Comprueba etiquetas, columnas y cambio de formato en el selector visible."""
+        original_language = get_language()
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                for language, labels, headers, chosen in (
+                    ("es", ("&Buscar en:", "&Nombre de archivo:", "&Tipo de archivo:"),
+                     ("Nombre", "Tamaño", "Tipo", "Fecha de modificación"), "ODT (*.odt)"),
+                    ("en", ("&Look in:", "File &name:", "Files of &type:"),
+                     ("Name", "Size", "Type", "Date Modified"), "PDF (*.pdf)"),
+                    ("fr", ("&Regarder dans :", "&Nom du fichier :", "&Type de fichiers :"),
+                     ("Nom", "Taille", "Type", "Date de modification"), "PDF (*.pdf)"),
+                ):
+                    with self.subTest(language=language):
+                        set_language(language)
+                        apply_button_language(self.application)
+                        observed = {}
+
+                        def choose() -> None:
+                            """Recoge los textos y confirma el formato seleccionado."""
+                            dialog = self.application.activeModalWidget()
+                            if not isinstance(dialog, QFileDialog):
+                                return
+                            observed["filter"] = dialog.selectedNameFilter()
+                            observed["labels"] = tuple(
+                                dialog.findChild(QLabel, name).text()
+                                for name in ("lookInLabel", "fileNameLabel", "fileTypeLabel")
+                            )
+                            model = dialog.findChild(QTreeView, "treeView").model()
+                            observed["headers"] = tuple(
+                                model.headerData(i, Qt.Orientation.Horizontal) for i in range(4)
+                            )
+                            dialog.selectNameFilter(chosen)
+                            dialog.accept()
+
+                        QTimer.singleShot(100, choose)
+                        selection = get_document_save_path(
+                            None, "Generar anejo", str(Path(directory) / "report.pdf"),
+                        )
+                        extension = "odt" if chosen.startswith("ODT") else "pdf"
+                        self.assertEqual(selection, (Path(directory) / f"report.{extension}", extension))
+                        self.assertEqual(observed, {
+                            "filter": "ODT (*.odt)", "labels": labels, "headers": headers,
+                        })
         finally:
             set_language(original_language)
             apply_button_language(self.application)

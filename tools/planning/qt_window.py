@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from budget_core import format_chapter_code, fmt_number
+from localization import translate
 from qt_localization import get_document_save_path
 from tools._shared.reference_pill import add_reference_pill
 from tools._shared.scheduling import (
@@ -714,7 +715,7 @@ class GanttPreviewDialogQt(QDialog):
         """Guarda una copia del Gantt en PDF o PNG."""
         target, _ = QFileDialog.getSaveFileName(
             self,
-            "Guardar plan de trabajo",
+            translate("Guardar plan de trabajo", source_language="es"),
             "plan_de_trabajo.pdf",
             "PDF (*.pdf);;PNG (*.png)",
         )
