@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import tempfile
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -55,13 +56,69 @@ def _read_receipt(project: Path) -> dict | None:
     return data
 
 
-def generated_at(project: Path) -> str | None:
-    """Devuelve la fecha de la última generación registrada."""
+def _project_root(project: Path) -> Path:
+    """Devuelve la carpeta del proyecto guardado."""
+    project = project.resolve(strict=True)
+    return project if project.is_dir() else project.parent
+
+
+def _delivery_root(project: Path, value: str) -> Path:
+    """Resuelve una ubicación registrada, conservando la portabilidad del proyecto."""
+    if value == ".":
+        return _project_root(project)
+    path = Path(value)
+    if not path.is_absolute():
+        raise ValueError("El registro de generación contiene una ubicación no válida.")
+    return path.resolve(strict=False)
+
+
+def _delivery_records(project: Path, data: dict | None) -> list[dict]:
+    """Recupera los registros por carpeta, incluyendo el formato anterior."""
+    if data is None:
+        return []
+    records = data.get("ubicaciones")
+    if records is None:
+        return [{**data, "raiz": "."}]
+    if not isinstance(records, list):
+        raise ValueError("El registro de generación contiene ubicaciones no válidas.")
+    roots: set[Path] = set()
+    for record in records:
+        if not isinstance(record, dict) or not isinstance(record.get("raiz"), str):
+            raise ValueError("El registro de generación contiene una ubicación no válida.")
+        if not isinstance(record.get("fecha"), str) or not record["fecha"]:
+            raise ValueError("El registro de generación contiene una fecha no válida.")
+        root = _delivery_root(project, record["raiz"])
+        if root in roots:
+            raise ValueError("El registro de generación contiene ubicaciones duplicadas.")
+        roots.add(root)
+    return records
+
+
+def suggested_destination(project: Path) -> Path:
+    """Sugiere la última carpeta elegida o la carpeta del proyecto."""
     data = _read_receipt(project)
-    return data["fecha"] if data else None
+    records = _delivery_records(project, data)
+    if records:
+        root = _delivery_root(project, records[-1]["raiz"])
+        if root.is_dir():
+            return root
+    return _project_root(project)
 
 
-def _previous_output_files(root: Path, receipt: Path, data: dict) -> set[Path]:
+def generated_at(project: Path, *, destination: Path | None = None) -> str | None:
+    """Devuelve la fecha de la última generación, opcionalmente de una carpeta."""
+    data = _read_receipt(project)
+    if destination is None:
+        return data["fecha"] if data else None
+    root = destination.resolve(strict=True)
+    return next(
+        (record["fecha"] for record in _delivery_records(project, data)
+         if _delivery_root(project, record["raiz"]) == root),
+        None,
+    )
+
+
+def _previous_output_files(root: Path, data: dict) -> set[Path]:
     """Valida las rutas propias del paquete antes de reemplazarlas."""
     result: set[Path] = set()
     master = data.get("maestro")
@@ -77,7 +134,7 @@ def _previous_output_files(root: Path, receipt: Path, data: dict) -> set[Path]:
         ):
             raise ValueError("El registro de generación contiene una ruta de maestro no válida.")
         if not (root / relative_master).resolve(strict=False).is_relative_to(root):
-            raise ValueError("El registro de generación contiene una ruta de maestro fuera del proyecto.")
+            raise ValueError("El registro de generación contiene una ruta de maestro fuera del destino.")
         result.add(relative_master)
 
     for key in ("documentos", "archivos_plano"):
@@ -94,9 +151,8 @@ def _previous_output_files(root: Path, receipt: Path, data: dict) -> set[Path]:
             ):
                 raise ValueError(f"El registro de generación contiene una ruta fuera del paquete: {value}.")
             if not (root / relative).resolve(strict=False).is_relative_to(root):
-                raise ValueError(f"El registro de generación contiene una ruta fuera del proyecto: {value}.")
+                raise ValueError(f"El registro de generación contiene una ruta fuera del destino: {value}.")
             result.add(relative)
-    result.add(receipt.relative_to(root))
     return result
 
 
@@ -291,11 +347,12 @@ def generate_project_package(
     app,
     master_name: str,
     annexes: list[dict[str, object]],
-    plans: list[dict[str, object]],
+    plans: Sequence[Mapping[str, object]],
     *,
     memory_documents: list[dict[str, object]] | None = None,
     include_pptp: bool = False,
     include_budget: bool = False,
+    destination: Path | None = None,
 ) -> tuple[Path, int]:
     """Genera la entrega técnica y reemplaza las salidas registradas."""
     receipt = receipt_path(project)
@@ -303,14 +360,27 @@ def generate_project_package(
     lock.setStaleLockTime(0)
     if not lock.tryLock(0):
         raise OSError("Otra sesión está generando la documentación o no se puede escribir junto al proyecto.")
+    destination_lock = None
     try:
-        root = project.resolve(strict=True)
-        root = root if root.is_dir() else root.parent
+        project_root = _project_root(project)
+        root = destination.resolve(strict=True) if destination is not None else project_root
+        if not root.is_dir():
+            raise ValueError(f"La ubicación seleccionada no es una carpeta: {root}")
+        destination_lock = QLockFile(str(root / ".estructura_documental.lock"))
+        destination_lock.setStaleLockTime(0)
+        if not destination_lock.tryLock(0):
+            raise OSError("Otra sesión está usando la carpeta de destino o no se puede escribir en ella.")
         previous_receipt = _read_receipt(project)
-        previous_outputs = (
-            _previous_output_files(root, receipt, previous_receipt)
-            if previous_receipt else set()
+        records = _delivery_records(project, previous_receipt)
+        previous_delivery = next(
+            (record for record in records if _delivery_root(project, record["raiz"]) == root),
+            None,
         )
+        previous_outputs = (
+            _previous_output_files(root, previous_delivery)
+            if previous_delivery else set()
+        )
+        receipt_existed = receipt.exists()
         master_name = _master_filename(master_name)
         master_relative = Path(TECHNICAL_DOCUMENTS_FOLDER) / master_name
         memory_documents = memory_documents or []
@@ -321,7 +391,7 @@ def generate_project_package(
 
         output_folder = root / TECHNICAL_DOCUMENTS_FOLDER
         if output_folder.exists() and not output_folder.resolve().is_relative_to(root):
-            raise ValueError("La carpeta de documentación queda fuera de la raíz del proyecto.")
+            raise ValueError("La carpeta de documentación queda fuera de la carpeta de destino.")
         document_paths = [
             Path(TECHNICAL_DOCUMENTS_FOLDER) / name for name in DOCUMENT_FOLDERS
         ]
@@ -493,7 +563,6 @@ def generate_project_package(
 
             files = [path for path in stage.rglob("*") if path.is_file()]
             staged_paths = {path.relative_to(stage) for path in files}
-            receipt_relative = receipt.relative_to(root)
             existing_outputs: set[Path] = set()
             for relative in previous_outputs:
                 existing = root / relative
@@ -502,11 +571,12 @@ def generate_project_package(
                 if existing.is_symlink() or not existing.is_file():
                     raise ValueError(f"No se puede reemplazar una salida que no sea un archivo: {relative}")
                 if not existing.resolve(strict=True).is_relative_to(root):
-                    raise ValueError(f"Una salida anterior queda fuera de la raíz del proyecto: {relative}")
+                    raise ValueError(f"Una salida anterior queda fuera de la carpeta de destino: {relative}")
                 existing_outputs.add(relative)
             conflicts = [
                 relative for relative in staged_paths
-                if (root / relative).exists() and relative not in existing_outputs
+                if ((root / relative).exists() or (root / relative).is_symlink())
+                and relative not in existing_outputs
             ]
             if conflicts:
                 raise FileExistsError(f"Ya existe un archivo ajeno a la entrega: {conflicts[0]}")
@@ -519,7 +589,7 @@ def generate_project_package(
                 ):
                     destination = root / relative
                     if destination.exists() and not destination.resolve().is_relative_to(root):
-                        raise ValueError("Una carpeta de destino queda fuera de la raíz del proyecto.")
+                        raise ValueError("Una carpeta de salida queda fuera de la carpeta de destino.")
                     if not destination.exists():
                         destination.mkdir()
                         created_directories.append(destination)
@@ -528,7 +598,7 @@ def generate_project_package(
                     destination = root / relative
                     os.replace(source, destination)
                     installed_paths.append(relative)
-                obsolete = existing_outputs - staged_paths - {receipt_relative}
+                obsolete = existing_outputs - staged_paths
                 for relative in obsolete:
                     (root / relative).unlink()
                 record = {
@@ -539,13 +609,17 @@ def generate_project_package(
                     "planos": [path.as_posix() for path in plan_directories],
                     "archivos_plano": [path.as_posix() for path in plan_files],
                 }
+                record["raiz"] = "." if root == project_root else str(root)
+                record["ubicaciones"] = [
+                    item for item in records if _delivery_root(project, item["raiz"]) != root
+                ] + [dict(record)]
                 atomic_json_write(receipt, record)
             except (OSError, ValueError) as error:
                 try:
                     for relative in installed_paths:
                         if relative not in existing_outputs:
                             (root / relative).unlink(missing_ok=True)
-                    if receipt_relative not in existing_outputs:
+                    if not receipt_existed:
                         receipt.unlink(missing_ok=True)
                 except OSError as rollback_error:
                     raise OSError(
@@ -559,4 +633,6 @@ def generate_project_package(
                 raise error
         return root / master_relative, 0
     finally:
+        if destination_lock is not None:
+            destination_lock.unlock()
         lock.unlock()

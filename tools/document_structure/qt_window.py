@@ -10,13 +10,14 @@ from PySide6.QtWidgets import (
     QMessageBox, QPushButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
 )
 
+from localization import translate
 from tools._shared.reference_pill import add_reference_pill
 from . import TOOL_LABEL
 from .catalog import (
     CATALOG, DOCUMENTATION_ANNEX_NUMBER, DOCUMENTATION_PROCEDURE_FIELDS, Entry,
 )
 from .generation import (
-    generate_project_package, generated_at, default_master_name,
+    generate_project_package, generated_at, default_master_name, suggested_destination,
 )
 
 ROLE = Qt.ItemDataRole.UserRole
@@ -352,13 +353,27 @@ class DocumentStructureWindow(QDialog):
         self._set_all(Qt.CheckState.Unchecked)
 
     def _copy_selected(self) -> None:
-        """Genera la entrega dentro de la carpeta técnica del proyecto."""
+        """Genera la entrega en la carpeta elegida por el usuario."""
         self.refresh_generation()
         project = self.app.project_path
         if project is None or not self._generation_available:
             return
         try:
-            has_previous_generation = generated_at(project) is not None
+            initial_folder = suggested_destination(project)
+        except (OSError, ValueError) as exc:
+            QMessageBox.critical(
+                self, TOOL_LABEL, f"No se puede comprobar la generación anterior:\n{exc}",
+            )
+            return
+        folder = QFileDialog.getExistingDirectory(
+            self, translate("Seleccionar carpeta para la estructura documental", source_language="es"),
+            str(initial_folder),
+        )
+        if not folder:
+            return
+        destination = Path(folder)
+        try:
+            has_previous_generation = generated_at(project, destination=destination) is not None
         except (OSError, ValueError) as exc:
             QMessageBox.critical(
                 self, TOOL_LABEL, f"No se puede comprobar la generación anterior:\n{exc}",
@@ -387,6 +402,7 @@ class DocumentStructureWindow(QDialog):
                 self._selected_annexes(), self._selected_plans(),
                 memory_documents=self._selected_memory_documents(),
                 include_pptp=pptp, include_budget=budget,
+                destination=destination,
             )
         except (ImportError, OSError, ParseError, BadZipFile, ValueError) as exc:
             QMessageBox.critical(self, TOOL_LABEL, f"No se generó la documentación:\n{exc}")

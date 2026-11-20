@@ -12,7 +12,7 @@ from zipfile import ZipFile
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QCoreApplication, QEvent, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, QLockFile, Qt
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from budget_qt_window import BudgetMainWindow
@@ -31,6 +31,213 @@ from tools.document_structure.qt_window import DocumentStructureWindow
 
 class DocumentStructureTests(unittest.TestCase):
     """Comprueba la generación de documentos técnicos y del maestro ODM."""
+
+    def test_external_destination_can_be_changed_and_regenerated(self) -> None:
+        """Cada carpeta conserva su propio historial y los enlaces del ODM funcionan."""
+        QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            root = Path(directory)
+            project_folder = root / "proyecto"
+            first = root / "primera entrega"
+            second = root / "segunda entrega"
+            for folder in (project_folder, first, second):
+                folder.mkdir()
+            window = BudgetMainWindow()
+            try:
+                project = project_folder / "proyecto.json"
+                self.assertTrue(window._write_project_file(project))
+                selection = [{"kind": "template", "number": "01", "title": "Base", "outline": ["Datos"]}]
+                plan = root / "plano.pdf"
+                plan.write_bytes(b"plano")
+                master, _ = generate_project_package(
+                    project, window, "Maestro.odm", selection,
+                    [{"title": "Plano", "file": str(plan)}], destination=first,
+                )
+                self.assertEqual(master.parent, first / TECHNICAL_DOCUMENTS_FOLDER)
+                self.assertIsNotNone(generated_at(project, destination=first))
+                self.assertIsNone(generated_at(project, destination=second))
+                receipt = json.loads(receipt_path(project).read_text(encoding="utf-8"))
+                with ZipFile(master) as archive:
+                    content = ET.fromstring(archive.read("content.xml"))
+                links = [node.get(_tag("xlink:href")) for node in content.iter(_tag("text:section-source"))]
+                self.assertEqual(
+                    [urljoin(master.as_uri() + "/", link) for link in links],
+                    [(first / Path(path)).as_uri() for path in receipt["documentos"]],
+                )
+                first_master = master.read_bytes()
+                generate_project_package(project, window, "Maestro.odm", selection, [], destination=second)
+                self.assertEqual(master.read_bytes(), first_master)
+                self.assertIsNotNone(generated_at(project, destination=first))
+                self.assertIsNotNone(generated_at(project, destination=second))
+                updated, _ = generate_project_package(
+                    project, window, "Maestro.odm", selection, [], destination=first,
+                )
+                self.assertEqual(updated, master)
+                self.assertTrue((second / TECHNICAL_DOCUMENTS_FOLDER / "Maestro.odm").is_file())
+                self.assertFalse((project_folder / TECHNICAL_DOCUMENTS_FOLDER).exists())
+                self.assertTrue(receipt["documentos"])
+            finally:
+                window.deleteLater()
+                QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+    def test_existing_untracked_file_in_external_destination_is_not_replaced(self) -> None:
+        """Un destino distinto no hereda la propiedad de archivos del proyecto."""
+        QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            root = Path(directory)
+            destination = root / "externo"
+            destination.mkdir()
+            window = BudgetMainWindow()
+            try:
+                project = root / "proyecto.json"
+                self.assertTrue(window._write_project_file(project))
+                selection = [{"kind": "template", "number": "01", "title": "Base", "outline": ["Datos"]}]
+                generate_project_package(project, window, "Maestro.odm", selection, [])
+                foreign = destination / TECHNICAL_DOCUMENTS_FOLDER / "Maestro.odm"
+                foreign.parent.mkdir()
+                foreign.write_bytes(b"documento ajeno")
+                with self.assertRaisesRegex(FileExistsError, "archivo ajeno"):
+                    generate_project_package(
+                        project, window, "Maestro.odm", selection, [], destination=destination,
+                    )
+                self.assertEqual(foreign.read_bytes(), b"documento ajeno")
+                self.assertIsNone(generated_at(project, destination=destination))
+                self.assertTrue((root / TECHNICAL_DOCUMENTS_FOLDER / "Maestro.odm").is_file())
+            finally:
+                window.deleteLater()
+                QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+    def test_external_destination_is_locked_across_projects(self) -> None:
+        """Dos proyectos no pueden generar simultáneamente en la misma carpeta."""
+        QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            root = Path(directory)
+            destination = root / "externo"
+            destination.mkdir()
+            window = BudgetMainWindow()
+            lock = QLockFile(str(destination / ".estructura_documental.lock"))
+            lock.setStaleLockTime(0)
+            try:
+                project = root / "proyecto.json"
+                self.assertTrue(window._write_project_file(project))
+                self.assertTrue(lock.tryLock(0))
+                with self.assertRaisesRegex(OSError, "carpeta de destino"):
+                    generate_project_package(
+                        project, window, "Maestro.odm", [], [{"title": "Plano"}],
+                        destination=destination,
+                    )
+                self.assertFalse((destination / TECHNICAL_DOCUMENTS_FOLDER).exists())
+                self.assertTrue(lock.isLocked())
+            finally:
+                lock.unlock()
+                window.deleteLater()
+                QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+    def test_folder_picker_cancel_and_external_generation(self) -> None:
+        """Cancelar no guarda ni genera; la siguiente entrega recuerda su carpeta."""
+        QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            root = Path(directory)
+            destination = root / "destino elegido"
+            destination.mkdir()
+            window = BudgetMainWindow()
+            try:
+                project = root / "proyecto.json"
+                self.assertTrue(window._write_project_file(project))
+                dialog = DocumentStructureWindow(window)
+                dialog._plans[0].setCheckState(0, Qt.CheckState.Checked)
+                for language, title in (
+                    ("en", "Select a folder for the document structure"),
+                    ("fr", "Sélectionner un dossier pour la structure documentaire"),
+                ):
+                    with (
+                        patch("localization._LANGUAGE", language),
+                        patch.object(QFileDialog, "getExistingDirectory", return_value="") as picker,
+                        patch.object(window, "save_project") as save,
+                    ):
+                        dialog._copy_button.click()
+                        self.assertEqual(picker.call_args.args[1], title)
+                        save.assert_not_called()
+                self.assertFalse(receipt_path(project).exists())
+                with (
+                    patch.object(QFileDialog, "getExistingDirectory", return_value=str(destination)) as picker,
+                    patch.object(QMessageBox, "exec", return_value=0),
+                    patch.object(QMessageBox, "critical") as failure,
+                ):
+                    dialog._copy_button.click()
+                    failure.assert_not_called()
+                    self.assertEqual(picker.call_args.args[2], str(root))
+                self.assertTrue((destination / TECHNICAL_DOCUMENTS_FOLDER / dialog.master_name.text()).is_file())
+                with (
+                    patch.object(QFileDialog, "getExistingDirectory", return_value=str(destination)) as picker,
+                    patch.object(QMessageBox, "warning", return_value=QMessageBox.StandardButton.No) as warning,
+                ):
+                    dialog._copy_button.click()
+                    self.assertEqual(picker.call_args.args[2], str(destination))
+                    warning.assert_called_once()
+            finally:
+                window.deleteLater()
+                QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+    def test_legacy_record_remains_usable_after_changing_destination(self) -> None:
+        """Conserva el historial previo cuando el registro aún no contiene ubicaciones."""
+        QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            root = Path(directory)
+            other = root / "externo"
+            other.mkdir()
+            window = BudgetMainWindow()
+            try:
+                project = root / "proyecto.json"
+                self.assertTrue(window._write_project_file(project))
+                selection = [{"kind": "template", "number": "01", "title": "Base", "outline": ["Datos"]}]
+                master, _ = generate_project_package(project, window, "Maestro.odm", selection, [])
+                record = json.loads(receipt_path(project).read_text(encoding="utf-8"))
+                record.pop("raiz")
+                record.pop("ubicaciones")
+                receipt_path(project).write_text(json.dumps(record), encoding="utf-8")
+                generate_project_package(project, window, "Maestro.odm", selection, [], destination=other)
+                self.assertIsNotNone(generated_at(project, destination=root))
+                regenerated, _ = generate_project_package(project, window, "Maestro.odm", selection, [])
+                self.assertEqual(regenerated, master)
+                self.assertTrue((other / TECHNICAL_DOCUMENTS_FOLDER / "Maestro.odm").is_file())
+            finally:
+                window.deleteLater()
+                QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+    def test_external_destination_with_folder_project(self) -> None:
+        """Mantiene el registro dentro de los proyectos colaborativos de carpeta."""
+        QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            root = Path(directory)
+            project = root / "proyecto"
+            destination = root / "externo"
+            project.mkdir()
+            destination.mkdir()
+            window = BudgetMainWindow()
+            try:
+                master, _ = generate_project_package(
+                    project, window, "Maestro.odm", [], [{"title": "Plano"}], destination=destination,
+                )
+                self.assertEqual(master, destination / TECHNICAL_DOCUMENTS_FOLDER / "Maestro.odm")
+                self.assertTrue(receipt_path(project).is_file())
+                self.assertIsNotNone(generated_at(project, destination=destination))
+                self.assertIsNone(generated_at(project, destination=project))
+            finally:
+                window.deleteLater()
+                QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
     def test_removed_catalog_templates_are_not_restored(self) -> None:
         """Mantiene las 29 eliminaciones y conserva los recursos de portada."""
@@ -567,6 +774,7 @@ class DocumentStructureTests(unittest.TestCase):
                 with (
                     patch.object(QMessageBox, "exec", new=capture_dialog),
                     patch.object(QMessageBox, "critical") as failure,
+                    patch.object(QFileDialog, "getExistingDirectory", return_value=directory),
                 ):
                     dialog._copy_button.click()
                     failure.assert_not_called()
@@ -605,6 +813,7 @@ class DocumentStructureTests(unittest.TestCase):
                         return_value=QMessageBox.StandardButton.No,
                     ) as replacement_warning,
                     patch.object(QMessageBox, "critical") as failure,
+                    patch.object(QFileDialog, "getExistingDirectory", return_value=directory),
                 ):
                     dialog._copy_button.click()
                     replacement_warning.assert_called_once()

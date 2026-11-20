@@ -837,6 +837,10 @@ _TEXT = {
         "Select a folder for the collaborative project",
         "Sélectionnez un dossier pour le projet collaboratif",
     ),
+    "Seleccionar carpeta para la estructura documental": (
+        "Select a folder for the document structure",
+        "Sélectionner un dossier pour la structure documentaire",
+    ),
     "Descripción": ("Description", "Description"),
     "Configuración": ("Settings", "Paramètres"),
     "Preferencias de idioma": ("Language preferences", "Préférences linguistiques"),

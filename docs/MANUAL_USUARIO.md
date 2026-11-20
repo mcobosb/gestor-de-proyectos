@@ -85,7 +85,9 @@ indicado en la trazabilidad. Las antiguas plantillas ODT no se restauran.
 
 El nombre inicial del maestro sigue el formato
 **GEX<número de expediente>-ProyectoConstructivo.odm** y puedes cambiarlo
-antes de generar. La aplicación crea junto al proyecto **Documentos tecnicos**
+antes de generar. Al pulsar **Generar documentación**, elige la carpeta de
+destino; se propone la última utilizada o, inicialmente, la carpeta del proyecto.
+Dentro de ella, la aplicación crea **Documentos tecnicos**
 con las carpetas **DOC01 - MEMORIA Y ANEJOS**, **DOC02 - PLANOS**,
 **DOC03 - PLIEGO DE PRESCRIPCIONES TÉCNICAS PARTICULARES** y
 **DOC04 - PRESUPUESTO**. Crea los archivos base seleccionados en ODT; también
@@ -108,8 +110,9 @@ Vínculos** para incorporar los cambios de los subdocumentos.
 Los maestros generados antes de esta corrección conservan sus vínculos anteriores.
 Puedes corregirlos en LibreOffice o volver a generar la entrega, teniendo en
 cuenta que la regeneración reemplaza los archivos generados, incluidos los
-editados. La aplicación avisa antes de reemplazarlos; los archivos ajenos a la
-entrega no se sobrescriben.
+editados. La aplicación avisa antes de reemplazarlos en la carpeta elegida; los
+archivos ajenos a la entrega no se sobrescriben. Cada destino conserva su propio
+historial de generación en el registro guardado junto al proyecto.
 
 La aplicación arranca siempre sin proyecto ni bases cargadas, aunque conserve
 archivos de ejemplo en su carpeta. El historial de recientes y la configuración
