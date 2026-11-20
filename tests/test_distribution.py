@@ -304,6 +304,8 @@ class DistributionTests(unittest.TestCase):
         for resource in (
             r"safety_health\datos\ntps.csv", r"pptp\docs\unes.csv",
             r"safety_health\datos\NTP_tematica_por_codigo_BCCA.csv",
+            r"document_structure\plantillas\maestro\plantilla.odt",
+            r"document_structure\plantillas\maestro\logo.jpg",
         ):
             self.assertTrue((ROOT / "tools" / resource).is_file())
             self.assertIn(f'"{resource.lower()}"', build_script)

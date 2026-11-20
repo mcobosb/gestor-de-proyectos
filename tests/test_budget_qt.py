@@ -284,7 +284,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertEqual(
                 [dialog.tabs.tabText(index) for index in range(dialog.tabs.count())],
                 [
-                    "Informes", "Idioma", "Apariencia", "Colaboración",
+                    "Informes", "Plantillas", "Idioma", "Apariencia", "Colaboración",
                     "Emplazamiento", "CPV", "Estilos de documentos",
                 ],
             )
@@ -302,10 +302,18 @@ class BudgetQtWindowTests(unittest.TestCase):
             )
             dialog.project_title_field.setText("Proyecto configurado")
             dialog.report_fields["author"].setPlainText("Autora Alfa\nAutor Beta")
+            dialog.report_fields["organization"].setText("Entidad configurada")
+            dialog.report_fields["service"].setText("Servicio configurado")
             self.assertTrue(dialog.show_author.isChecked())
             dialog.show_author.setChecked(False)
             dialog.report_fields["indirect_costs"].setText("7.5")
             dialog.output_format.setCurrentText("ODT")
+            report_template = str(Path.cwd() / "informes.odt")
+            master_template = str(Path.cwd() / "maestro.odt")
+            master_logo = str(Path.cwd() / "logo.jpg")
+            dialog.template_path.setText(report_template)
+            dialog.master_template_path.setText(master_template)
+            dialog.master_logo_path.setText(master_logo)
             font, size = dialog.style_controls["heading1"]
             font.setCurrentText("Arial")
             size.setValue(18)
@@ -313,11 +321,20 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertEqual(values["text_styles"], {"heading1": {"font": "Arial", "size": 18}})
             self.assertEqual(values["project_title"], "Proyecto configurado")
             self.assertEqual(values["author"], "Autora Alfa\nAutor Beta")
+            self.assertEqual(values["organization"], "Entidad configurada")
+            self.assertEqual(values["service"], "Servicio configurado")
+            self.assertEqual(values["template_path"], report_template)
+            self.assertEqual(values["master_template_path"], master_template)
+            self.assertEqual(values["master_logo_path"], master_logo)
             saved = ReportSettings.from_dict(values)
             reopened = SettingsDialog(window, ReportSettings.from_dict(saved.to_dict()),
                                       "Proyecto configurado", "es", lambda language: True)
             self.assertFalse(reopened.show_author.isChecked())
             self.assertEqual(reopened.report_fields["author"].toPlainText(), "Autora Alfa\nAutor Beta")
+            self.assertEqual(reopened.report_fields["organization"].text(), "Entidad configurada")
+            self.assertEqual(reopened.report_fields["service"].text(), "Servicio configurado")
+            self.assertEqual(reopened.master_template_path.text(), master_template)
+            self.assertEqual(reopened.master_logo_path.text(), master_logo)
             reopened.reject()
             self.assertEqual(values["indirect_costs"], "7.5")
             self.assertEqual(values["output_format"], "odt")

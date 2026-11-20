@@ -80,7 +80,9 @@ foreach ($requiredResource in @(
     "rcd\BIBLIOTECA.zip",
     "quality_assurance\BIBLIOTECA.zip",
     "rcd\Codigos_LER_BCCA2023.csv",
-    "BCCA2023_V02.bc3"
+    "BCCA2023_V02.bc3",
+    "document_structure\plantillas\maestro\plantilla.odt",
+    "document_structure\plantillas\maestro\logo.jpg"
 )) {
     $resourcePath = Join-Path $toolsSource $requiredResource
     if (-not (Test-Path -LiteralPath $resourcePath -PathType Leaf)) {

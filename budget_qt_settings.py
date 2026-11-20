@@ -186,7 +186,7 @@ class CatalogSelector(QWidget):
 
 
 class SettingsDialog(QDialog):
-    """Configuración de informes, idioma, emplazamiento y códigos CPV."""
+    """Configuración general, informes, plantillas e idioma del proyecto."""
 
     def __init__(
         self,
@@ -200,7 +200,7 @@ class SettingsDialog(QDialog):
     ) -> None:
         """Construye todas las pestañas y carga el estado vigente."""
         super().__init__(parent)
-        self.setWindowTitle("Configuración de informes")
+        self.setWindowTitle("Configuración general")
         self.resize(900, 760)
         self.settings = settings
         self.project_title = project_title
@@ -213,6 +213,7 @@ class SettingsDialog(QDialog):
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs)
         self.tabs.addTab(self._reports_tab(), "Informes")
+        self.tabs.addTab(self._templates_tab(), "Plantillas")
         self.tabs.addTab(self._language_tab(), "Idioma")
         self.tabs.addTab(self._appearance_tab(), "Apariencia")
         self.tabs.addTab(self._collaboration_tab(), "Colaboración")
@@ -241,7 +242,8 @@ class SettingsDialog(QDialog):
             ("Expediente", "expediente"),
             ("Autoría / nombre", "author"),
             ("Cargo / titulación", "role"),
-            ("Entidad / servicio", "organization"),
+            ("Entidad", "organization"),
+            ("Servicio", "service"),
             ("Localidad", "location"),
             ("Plazo de garantía (con unidad)", "guarantee_period"),
             ("Texto de firma / fecha", "signature"),
@@ -295,15 +297,7 @@ class SettingsDialog(QDialog):
         form.addRow("Símbolo o código personalizado", self.custom_currency)
         self.currency.currentIndexChanged.connect(self._currency_changed)
         self._currency_changed()
-        self.template_path = QLineEdit(str(values["template_path"]))
-        browse = QPushButton("Examinar…")
-        browse.clicked.connect(self._select_template)
-        template_layout = QHBoxLayout()
-        template_layout.addWidget(self.template_path)
-        template_layout.addWidget(browse)
-        form.addRow("Plantilla de cabecera y pie (ODT)", template_layout)
         explanation = QLabel(
-            "La plantilla aporta cabecera y pie. Déjala vacía para usar la incluida. "
             "GG y BI se aplican al PEM; en certificaciones la baja se deduce antes "
             "del IVA. La divisa modifica la presentación, no convierte importes."
         )
@@ -313,6 +307,38 @@ class SettingsDialog(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setWidget(content)
         return scroll
+
+    def _templates_tab(self) -> QWidget:
+        """Configura las plantillas y el logo usados por los documentos."""
+        page = QWidget()
+        form = QFormLayout(page)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        self.template_path = QLineEdit(self.settings.template_path)
+        self.template_path.setPlaceholderText("Usar la plantilla de cabecera y pie incluida")
+        self.master_template_path = QLineEdit(self.settings.master_template_path)
+        self.master_template_path.setPlaceholderText("Usar plantilla.odt incluida en el módulo")
+        self.master_logo_path = QLineEdit(self.settings.master_logo_path)
+        self.master_logo_path.setPlaceholderText("Usar logo.jpg incluido en el módulo")
+        fields = (
+            ("Plantilla de informes (cabecera y pie, ODT)", self.template_path, self._select_template),
+            ("Plantilla del documento maestro (ODT)", self.master_template_path, self._select_master_template),
+            ("Logo del documento maestro (JPEG)", self.master_logo_path, self._select_master_logo),
+        )
+        for label, field, callback in fields:
+            button = QPushButton("Examinar…")
+            button.clicked.connect(callback)
+            row = QHBoxLayout()
+            row.addWidget(field, 1)
+            row.addWidget(button)
+            form.addRow(label, row)
+        note = QLabel(
+            "Deja una ruta vacía para utilizar el recurso incluido en el módulo. "
+            "La plantilla del documento maestro debe conservar la estructura ODT "
+            "con marcadores de proyecto, índice, trazabilidad y logo."
+        )
+        note.setWordWrap(True)
+        form.addRow(note)
+        return page
 
     def _language_tab(self) -> QWidget:
         """Crea la preferencia global de idioma."""
@@ -452,11 +478,32 @@ class SettingsDialog(QDialog):
 
     def _select_template(self) -> None:
         """Selecciona una plantilla ODT absoluta."""
+        self._select_file(
+            self.template_path, "Selecciona la plantilla de informes",
+            "Plantilla ODT (*.odt)",
+        )
+
+    def _select_master_template(self) -> None:
+        """Selecciona una plantilla ODT para el documento maestro."""
+        self._select_file(
+            self.master_template_path, "Selecciona la plantilla del documento maestro",
+            "Plantilla ODT (*.odt)",
+        )
+
+    def _select_master_logo(self) -> None:
+        """Selecciona el logo JPEG para los documentos maestros."""
+        self._select_file(
+            self.master_logo_path, "Selecciona el logo del documento maestro",
+            "Imagen JPEG (*.jpg *.jpeg)",
+        )
+
+    def _select_file(self, field: QLineEdit, title: str, file_filter: str) -> None:
+        """Abre el selector de archivos y guarda la ruta seleccionada."""
         path, _ = QFileDialog.getOpenFileName(
-            self, "Selecciona la plantilla de informes", "", "Plantilla ODT (*.odt)"
+            self, title, field.text().strip(), file_filter,
         )
         if path:
-            self.template_path.setText(path)
+            field.setText(path)
 
     def _save_language(self) -> None:
         """Persiste la preferencia global de idioma sin cerrar el diálogo."""
@@ -553,12 +600,9 @@ class SettingsDialog(QDialog):
 
     def _accept_reports(self) -> None:
         """Valida selecciones pendientes y acepta la configuración."""
-        for tab_index, selector in (
-            (4, self.location_selector),
-            (5, self.cpv_selector),
-        ):
+        for selector in (self.location_selector, self.cpv_selector):
             if not selector.confirm_pending():
-                self.tabs.setCurrentIndex(tab_index)
+                self.tabs.setCurrentWidget(selector)
                 return
         self.accept()
 
@@ -575,6 +619,8 @@ class SettingsDialog(QDialog):
             "currency": self.currency.currentData(),
             "custom_currency": self.custom_currency.text(),
             "template_path": self.template_path.text(),
+            "master_template_path": self.master_template_path.text(),
+            "master_logo_path": self.master_logo_path.text(),
             "municipality_codes": self.location_selector.codes,
             "cpv_codes": self.cpv_selector.codes,
             "text_styles": self._style_values(),

@@ -58,12 +58,15 @@ class ReportSettings:
     author: str = ""
     role: str = ""
     organization: str = ""
+    service: str = ""
     location: str = ""
     signature: str = "(Fecha y firma electrónicas)"
     contractor: str = ""
     contractor_representative: str = ""
     expediente: str = ""
     template_path: str = ""
+    master_template_path: str = ""
+    master_logo_path: str = ""
     output_format: str = "pdf"
     currency: str = "EUR"
     custom_currency: str = ""
@@ -159,12 +162,19 @@ class ReportSettings:
                 if len(custom_currency) > 12 or any(ord(char) < 32 for char in custom_currency):
                     raise ValueError("La divisa personalizada debe tener como máximo 12 caracteres.")
                 values[key] = custom_currency
-            elif key == "template_path":
+            elif key in {
+                "template_path", "master_template_path", "master_logo_path",
+            }:
                 if not isinstance(value, str):
-                    raise ValueError("La ruta de la plantilla debe ser texto.")
+                    raise ValueError("Las rutas de plantillas y logos deben ser texto.")
                 raw_path = value.strip()
                 if raw_path and not Path(raw_path).expanduser().is_absolute():
-                    raise ValueError("La ruta de la plantilla debe ser absoluta.")
+                    raise ValueError("Las rutas de plantillas y logos deben ser absolutas.")
+                suffix = Path(raw_path).suffix.lower() if raw_path else ""
+                if key == "master_template_path" and suffix and suffix != ".odt":
+                    raise ValueError("La plantilla del documento maestro debe ser un archivo ODT.")
+                if key == "master_logo_path" and suffix and suffix not in {".jpg", ".jpeg"}:
+                    raise ValueError("El logo del documento maestro debe ser una imagen JPEG.")
                 values[key] = str(Path(raw_path).expanduser()) if raw_path else ""
             else:
                 if not isinstance(value, str):

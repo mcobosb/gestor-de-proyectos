@@ -63,26 +63,41 @@ Las páginas se abren en el navegador solo al pulsar un enlace.
 
 ## 2. Crear o abrir un proyecto
 
-En **Herramientas → Estructura documental** puedes preparar la documentación
-incluso sin un presupuesto abierto. Marca apartados individuales o grupos y
-pulsa **Copiar plantillas…** para elegir una carpeta. Se conservan las subcarpetas
-del índice y los archivos existentes no se sobrescriben. Los planos, los trámites
-externos y los documentos que se preparan en herramientas o informes específicos
-figuran en gris. El índice es orientativo y las plantillas ODT son esquemas
-editables, no documentos técnicos terminados.
+En **Herramientas → Estructura documental** puedes preparar la entrega del
+proyecto. Guarda el proyecto, selecciona los apartados de memoria, anejos y
+documentos que quieras incluir, y edita los nombres directamente en el árbol.
+En **DOCUMENTACIÓN COMPLEMENTARIA Y TRAMITACIÓN MUNICIPAL** puedes añadir un
+anejo con una tabla rellenable que enumera los ficheros, autorizaciones,
+tramitación ambiental, visado, replanteo y supervisión.
+Los ODT se crean como archivos base vacíos, con sus nombres, cabeceras, estructura
+y estilos configurados para el proyecto, pero sin importar datos de las
+herramientas. La memoria reúne sus secciones seleccionadas en un único documento;
+cada anejo se genera por separado. Después, completa los campos necesarios desde
+la herramienta correspondiente. Para cada plano se crea una carpeta, sin generar
+un ODT; puedes asociar un archivo gráfico existente y, si no lo haces, queda
+indicado en la trazabilidad. Las antiguas plantillas ODT no se restauran.
 
-Puedes consultar el índice sin proyecto, pero para copiar las plantillas debes
-guardar el proyecto primero. La primera copia que crea algún ODT se registra
-junto al proyecto y bloquea nuevas generaciones, incluso al volver a abrirlo.
-Cancelar o no crear ningún archivo no activa el bloqueo. Los informes y las
-demás herramientas siguen disponibles.
+El nombre inicial del maestro sigue el formato
+**GEX<número de expediente>-ProyectoConstructivo.odm** y puedes cambiarlo
+antes de generar. La aplicación crea junto al proyecto **Documentos tecnicos**
+con las carpetas **DOC01 - MEMORIA Y ANEJOS**, **DOC02 - PLANOS**,
+**DOC03 - PLIEGO DE PRESCRIPCIONES TÉCNICAS PARTICULARES** y
+**DOC04 - PRESUPUESTO**. Crea los archivos base seleccionados en ODT; también
+crea las subcarpetas de los planos seleccionados y copia en ellas los archivos
+asociados. Los anejos se renombran y renumeran según la selección. Los archivos
+ajenos a la entrega no se sobrescriben.
 
-Las copias ODT incorporan el título del proyecto en la cabecera y el apartado
-y el número de página en el pie. **Documento maestro.odm** reúne las copias
-creadas mediante enlaces relativos y numera las páginas de forma continua.
-Cada ODT abierto por separado empieza en la página 1. Para actualizar el
-maestro tras editar un ODT, acepta la actualización de enlaces en LibreOffice.
-Si mueves la entrega, conserva su estructura de carpetas.
+La carátula de **plantilla.odt** se conserva en el maestro, con los datos del
+proyecto, presupuesto, plazo, fecha y logo incorporados. En **Configuración →
+Plantillas** puedes elegir otra plantilla ODT y un logo JPEG; si dejas las rutas
+vacías, se utilizan los recursos incluidos en el módulo. La plantilla alternativa
+debe conservar los marcadores y la estructura de portada, índice y trazabilidad.
+El índice y la tabla de trazabilidad reflejan los documentos incluidos. El maestro enlaza los ODT
+mediante rutas relativas y se guarda en la raíz de **Documentos tecnicos**;
+acepta la actualización de enlaces en LibreOffice al abrirlo y conserva la
+estructura de carpetas al mover la entrega. Se puede volver a generar; la
+aplicación avisa antes de reemplazar los archivos generados. Los archivos
+ajenos a la entrega no se sobrescriben.
 
 La aplicación arranca siempre sin proyecto ni bases cargadas, aunque conserve
 archivos de ejemplo en su carpeta. El historial de recientes y la configuración
@@ -206,7 +221,8 @@ Abre **Archivo → Configuración…** y completa:
   **Informes**. Se aplica al pulsar **Guardar informes**, actualiza el encabezado
   y los informes y se conserva en el JSON del proyecto. No puede estar vacío y
   no se utiliza como título predeterminado para nuevos proyectos.
-- Autoría, cargo o titulación, entidad o servicio. Escribe un autor por línea
+- Autoría, cargo o titulación, entidad y servicio. Son campos independientes.
+  Escribe un autor por línea
   para incluir varios. Desmarca **Mostrar en los
   documentos** junto a la autoría para ocultar los nombres al generar informes.
   Los nombres se conservan en el proyecto; al volver a marcar la casilla,

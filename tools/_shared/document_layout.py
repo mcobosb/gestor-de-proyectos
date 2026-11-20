@@ -142,6 +142,7 @@ def project_document_variables(title: str, settings) -> dict[str, str]:
     return {
         "titulo_proyecto": title,
         "entidad": settings.organization,
+        "servicio": settings.service,
         "autor": settings.document_author,
         "cargo": settings.role,
         "expediente": settings.expediente,

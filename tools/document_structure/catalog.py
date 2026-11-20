@@ -38,10 +38,18 @@ def _external(title: str, reason: str) -> Entry:
 
 _PLANS = "Planos preparados externamente en CAD o GIS."
 _REPORTS = "Se prepara desde Informes o a partir de los datos del presupuesto."
-_PROCEDURES = "Documentación externa o dependiente de la tramitación."
 PRICE_JUSTIFICATION_NUMBER = "15"
 RCD_NUMBER = "18"
 QUALITY_ASSURANCE_NUMBER = "17"
+DOCUMENTATION_ANNEX_NUMBER = "21"
+DOCUMENTATION_PROCEDURE_FIELDS = (
+    "Ficheros editables e intercambio (BC3, DWG/DXF/SHP, IFC)",
+    "Autorizaciones Sectoriales Previas",
+    "Tramitación Ambiental (Documento Ambiental / Estudio de Impacto Ambiental / Calificación Ambiental)",
+    "Visado Colegial o Declaración Responsable de Habilitación Profesional",
+    "Acta de Replanteo Previo",
+    "Informe de Supervisión de Proyectos",
+)
 
 CATALOG = (
     Entry("DOCUMENTO N.º 1: MEMORIA Y ANEJOS", "01 Memoria y anejos", children=(
@@ -87,6 +95,11 @@ CATALOG = (
             Entry("Estudio de Gestión de Residuos de Construcción y Demolición (RCDs)", RCD_NUMBER, external="Herramientas → RCDs."),
             Entry("Estudio de Seguridad y Salud (ESS) o Estudio Básico (EBSS)", "19", external="Herramientas → Seguridad y Salud."),
             _template("20", "Manual de Uso, Conservación y Mantenimiento", "Inventario y condiciones de uso", "Operaciones, frecuencias y registros"),
+            Entry(
+                "Documentación Complementaria y Tramitación Municipal",
+                DOCUMENTATION_ANNEX_NUMBER,
+                children=tuple(Entry(title) for title in DOCUMENTATION_PROCEDURE_FIELDS),
+            ),
         )),
     )),
     Entry("DOCUMENTO N.º 2: PLANOS", external=_PLANS, children=tuple(
@@ -117,14 +130,6 @@ CATALOG = (
                 "Valor Estimado del Contrato (VEC) y Presupuesto para Conocimiento de la Administración",
             )
         )),
-    )),
-    Entry("DOCUMENTACIÓN COMPLEMENTARIA Y TRAMITACIÓN MUNICIPAL", external=_PROCEDURES, children=tuple(
-        Entry(title) for title in (
-            "Ficheros editables e intercambio (BC3, DWG/DXF/SHP, IFC)", "Autorizaciones Sectoriales Previas",
-            "Tramitación Ambiental (Documento Ambiental / Estudio de Impacto Ambiental / Calificación Ambiental)",
-            "Visado Colegial o Declaración Responsable de Habilitación Profesional",
-            "Acta de Replanteo Previo", "Informe de Supervisión de Proyectos",
-        )
     )),
 )
 

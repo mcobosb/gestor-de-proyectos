@@ -1,4 +1,4 @@
-"""Pruebas de la estructura documental y de sus plantillas ODT."""
+"""Pruebas de la entrega documental, la carátula ODT y el índice."""
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -14,111 +14,640 @@ from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from budget_qt_window import BudgetMainWindow
-from tools.document_structure.catalog import TEMPLATES, copy_templates, template_paths
-from tools.document_structure.generation import generate, generated_at
-from tools.document_structure.office import MASTER_NAME
 from odt_reports import _tag
+from tools.document_structure.catalog import (
+    DOCUMENTATION_PROCEDURE_FIELDS, TEMPLATES, template_paths,
+)
+from tools.document_structure.generation import (
+    DOCUMENT_FOLDERS, MEMORY_DOCUMENT_TITLE,
+    TECHNICAL_DOCUMENTS_FOLDER, default_master_name,
+    generate_project_package, generated_at,
+)
+from tools.document_structure.office import MASTER_LOGO, MASTER_TEMPLATE
 from tools.document_structure.qt_window import DocumentStructureWindow
 
 
 class DocumentStructureTests(unittest.TestCase):
-    """Comprueba el catálogo distribuido y el recorrido desde Herramientas."""
+    """Comprueba la generación de documentos técnicos y del maestro ODM."""
 
-    def test_templates_are_editable_and_existing_files_are_preserved(self) -> None:
-        """Copia los ODT originales y preserva los documentos ya editados."""
-        paths = template_paths()
-        self.assertEqual(len(paths), 29)
-        self.assertEqual(set(paths), {path.relative_to(TEMPLATES) for path in TEMPLATES.rglob("*.odt")})
-        with TemporaryDirectory() as directory:
-            destination = Path(directory)
-            self.assertEqual(copy_templates(destination, list(paths)), (29, 0))
-            for relative, entry in paths.items():
-                with ZipFile(destination / relative) as doc:
-                    self.assertEqual(doc.read("mimetype"), b"application/vnd.oasis.opendocument.text")
-                    text = list(ET.fromstring(doc.read("content.xml")).itertext())
-                    self.assertIn(entry.title, text)
-                    self.assertIn("Referencias y documentación de apoyo", text)
-                    for heading in entry.outline:
-                        self.assertIn(heading, text)
-            relative = next(iter(paths))
-            (destination / relative).write_bytes(b"edited")
-            self.assertEqual(copy_templates(destination, [relative]), (0, 1))
-            self.assertEqual((destination / relative).read_bytes(), b"edited")
+    def test_removed_catalog_templates_are_not_restored(self) -> None:
+        """Mantiene las 29 eliminaciones y conserva los recursos de portada."""
+        self.assertEqual(len(template_paths()), 29)
+        self.assertTrue(all(not (TEMPLATES / path).exists() for path in template_paths()))
+        self.assertTrue(MASTER_TEMPLATE.is_file())
+        self.assertTrue(MASTER_LOGO.is_file())
+        self.assertEqual(default_master_name("GEX2026/36718"), "GEX2026-36718-ProyectoConstructivo.odm")
 
-    def test_generation_receipt_and_office_documents(self) -> None:
-        """Personaliza los ODT, enlaza el maestro y no permite una segunda generación."""
-        with TemporaryDirectory() as directory:
-            project = Path(directory) / "proyecto.json"
-            project.write_text("{}", encoding="utf-8")
-            destination = Path(directory) / "entrega"
-            destination.mkdir()
-            paths = list(template_paths())[:3]
-            self.assertEqual(copy_templates(destination, paths[:1]), (1, 0))
-            self.assertEqual(generate(project, destination, paths[:1], "Proyecto de prueba"), (0, 1))
-            self.assertIsNone(generated_at(project))
-            self.assertEqual(generate(project, destination, paths, "Proyecto de prueba"), (2, 1))
-            self.assertIsNotNone(generated_at(project))
-            with ZipFile(destination / paths[1]) as doc:
-                styles = ET.fromstring(doc.read("styles.xml"))
-                self.assertIn("Proyecto de prueba", "".join(styles.find(f".//{_tag('style:header')}").itertext()))
-                footer = styles.find(f".//{_tag('style:footer')}")
-                self.assertIn(" · PÁGINA ", "".join(footer.itertext()))
-                self.assertIsNotNone(footer.find(f".//{_tag('text:page-number')}"))
-            with ZipFile(destination / MASTER_NAME) as master:
-                self.assertEqual(master.read("mimetype"), b"application/vnd.oasis.opendocument.text-master")
-                content = ET.fromstring(master.read("content.xml"))
-                refs = [unquote(node.attrib[_tag("xlink:href")])
-                        for node in content.iter(_tag("text:section-source"))]
-                self.assertEqual(refs, [f"../{path.as_posix()}" for path in paths[1:]])
-            with self.assertRaisesRegex(ValueError, "Ya se ha generado"):
-                generate(project, destination, paths, "Proyecto de prueba")
-
-    def test_menu_checklist_and_copy(self) -> None:
-        """Abre el índice sin proyecto y exige guardarlo antes de habilitar la copia."""
-        app = QApplication.instance() or QApplication([])
+    def test_tool_annex_is_renumbered_and_linked_in_master(self) -> None:
+        """Crea un anejo base vacío y lo enlaza al maestro con su número actualizado."""
+        QApplication.instance() or QApplication([])
         with TemporaryDirectory() as directory, patch(
             "budget_qt_window.user_data_directory", return_value=Path(directory),
         ):
             window = BudgetMainWindow()
             try:
-                tools = next(action.menu() for action in window.menuBar().actions()
-                             if action.text() == "Herramientas")
-                action = tools.actions()[0]
-                self.assertEqual(action.text(), "Estructura documental")
-                action.trigger()
-                dialog = window.findChild(DocumentStructureWindow)
-                self.assertIsNotNone(dialog)
-                self.assertTrue(dialog.isVisible())
-                tree = dialog.tree
-                self.assertEqual(tree.topLevelItemCount(), 5)
-                plans = tree.topLevelItem(1)
-                self.assertEqual(plans.childCount(), 17)
-                self.assertTrue(plans.child(0).isDisabled())
-                memory = tree.topLevelItem(0).child(0)
-                memory.setCheckState(0, Qt.CheckState.Checked)
-                self.assertEqual(memory.child(0).checkState(0), Qt.CheckState.Checked)
-                self.assertTrue(memory.child(8).isDisabled())
-                self.assertEqual(memory.child(8).checkState(0), Qt.CheckState.Unchecked)
-                self.assertEqual(tree.topLevelItem(0).checkState(0), Qt.CheckState.PartiallyChecked)
-                self.assertFalse(dialog._copy_button.isEnabled())
+                window.project_title = "Proyecto de prueba"
+                window.report_settings.expediente = "GEX42"
+                window.report_settings.organization = "Ayuntamiento de prueba"
+                window.report_settings.role = "Infraestructuras"
+                window.report_settings.service = "Servicio de Infraestructuras"
+                window.report_settings.author = "Ana"
+                custom_template = Path(directory) / "plantilla_personalizada.odt"
+                custom_template.write_bytes(MASTER_TEMPLATE.read_bytes())
+                custom_logo = Path(directory) / "logo_personalizado.jpg"
+                custom_logo.write_bytes(b"logo personalizado")
+                window.report_settings.master_template_path = str(custom_template)
+                window.report_settings.master_logo_path = str(custom_logo)
                 project = Path(directory) / "proyecto.json"
                 self.assertTrue(window._write_project_file(project))
-                dialog.refresh_generation()
+
+                master, skipped = generate_project_package(
+                    project, window, "Maestro de prueba.odm",
+                    [{
+                        "kind": "tool", "tool": "rcd", "number": "18",
+                        "title": "Gestión de residuos",
+                    }],
+                    [],
+                )
+
+                self.assertEqual(skipped, 0)
+                docs = Path(directory) / TECHNICAL_DOCUMENTS_FOLDER
+                self.assertEqual(master, docs / "Maestro de prueba.odm")
+                self.assertIsNotNone(generated_at(project))
+                self.assertEqual(
+                    {path.name for path in docs.iterdir()},
+                    {*DOCUMENT_FOLDERS, master.name},
+                )
+                annex = docs / DOCUMENT_FOLDERS[0] / "ANEJO 01 - Gestión de residuos.odt"
+                with ZipFile(annex) as document:
+                    content = ET.fromstring(document.read("content.xml"))
+                    self.assertIn("ANEJO Nº 1: GESTIÓN DE RESIDUOS", "".join(content.itertext()))
+                    self.assertFalse(any(content.iter(_tag("table:table"))))
+
+                with ZipFile(master) as document:
+                    self.assertEqual(
+                        document.read("mimetype"),
+                        b"application/vnd.oasis.opendocument.text-master",
+                    )
+                    content_xml = document.read("content.xml")
+                    content = ET.fromstring(content_xml)
+                    visible = "".join(content.itertext())
+                    self.assertIn("Proyecto de prueba", visible)
+                    self.assertIn("GEX42", visible)
+                    self.assertIn("Ayuntamiento de prueba", visible)
+                    self.assertIn("Servicio de Infraestructuras", visible)
+                    self.assertIn("Ana", visible)
+                    cover_cell = next(
+                        cell for cell in content.iter(_tag("table:table-cell"))
+                        if "".join(cell.itertext()).startswith("Ayuntamiento de prueba")
+                    )
+                    self.assertEqual(
+                        [
+                            "".join(paragraph.itertext())
+                            for paragraph in cover_cell.findall(_tag("text:p"))
+                        ][:2],
+                        ["Ayuntamiento de prueba", "Servicio de Infraestructuras"],
+                    )
+                    self.assertIn("ÍNDICE GENERAL DEL PROYECTO", visible)
+                    for heading in (
+                        "DOCUMENTO Nº 1. MEMORIA Y ANEJOS.",
+                        "MEMORIA DESCRIPTIVA.",
+                        "DOCUMENTO Nº 2. PLANOS.",
+                        "DOCUMENTO Nº 3. PLIEGO DE PRESCRIPCIONES TÉCNICAS PARTICULARES.",
+                        "DOCUMENTO Nº 4. PRESUPUESTO.",
+                    ):
+                        self.assertIn(heading, visible)
+                    self.assertIn("ANEJO Nº 1. Gestión de residuos", visible)
+                    self.assertIn("DOC01-A01", visible)
+                    self.assertNotIn("REPORTAJE FOTOGRÁFICO", visible)
+                    annex_index = next(
+                        paragraph for paragraph in content.iter(_tag("text:p"))
+                        if "ANEJO Nº 1. Gestión de residuos" in "".join(paragraph.itertext())
+                    )
+                    self.assertEqual(annex_index.get(_tag("text:style-name")), "P19")
+                    self.assertIsNotNone(annex_index.find(_tag("text:tab")))
+                    self.assertNotIn("{{", content_xml.decode("utf-8"))
+                    styles_xml = document.read("styles.xml")
+                    self.assertNotIn("{{", styles_xml.decode("utf-8"))
+                    self.assertNotIn("GEX2026/36718", styles_xml.decode("utf-8"))
+                    traceability = next(
+                        table for table in content.iter(_tag("table:table"))
+                        if (
+                            "CÓDIGO" in "".join(table.itertext())
+                            and "DOCUMENTO" in "".join(table.itertext())
+                        )
+                    )
+                    trace_rows = traceability.findall(_tag("table:table-row"))
+                    header = traceability.find(_tag("table:table-header-rows"))
+                    self.assertIsNotNone(header)
+                    header_cells = header.findall(f".//{_tag('table:table-cell')}")
+                    self.assertEqual(
+                        ["".join(cell.itertext()) for cell in header_cells],
+                        [
+                            "CÓDIGO", "DOCUMENTO", "FECHA EDICIÓN",
+                            "EDITADO", "FECHA COMPROBACIÓN", "VALIDADO",
+                        ],
+                    )
+                    columns = traceability.findall(_tag("table:table-column"))
+                    self.assertEqual(sum(
+                        int(column.get(_tag("table:number-columns-repeated"), "1"))
+                        for column in columns
+                    ), 6)
+                    self.assertTrue(all(
+                        cell.get(_tag("table:style-name")) == "TraceabilityHeaderCell"
+                        for cell in header_cells
+                    ))
+                    self.assertEqual(len(trace_rows), 2)
+                    first_row = trace_rows[0].findall(_tag("table:table-cell"))
+                    second_row = trace_rows[1].findall(_tag("table:table-cell"))
+                    self.assertEqual(len(first_row), 6)
+                    self.assertEqual(len(second_row), 6)
+                    self.assertEqual(
+                        ["".join(cell.itertext()) for cell in first_row],
+                        ["MAESTRO", "Maestro de prueba.odm", "", "Ana", "", ""],
+                    )
+                    self.assertEqual(
+                        ["".join(cell.itertext()) for cell in second_row],
+                        ["DOC01-A01", "Gestión de residuos", "", "Ana", "", ""],
+                    )
+                    for index, row in enumerate((first_row, second_row)):
+                        self.assertEqual("".join(row[2].itertext()), "")
+                        self.assertEqual("".join(row[3].itertext()), "Ana")
+                        self.assertEqual("".join(row[4].itertext()), "")
+                        self.assertEqual("".join(row[5].itertext()), "")
+                        self.assertEqual(
+                            row[0].get(_tag("table:style-name")),
+                            "TraceabilityBlueCell" if index == 0 else "TraceabilityWhiteCell",
+                        )
+                    references = [
+                        unquote(node.attrib[_tag("xlink:href")])
+                        for node in content.iter(_tag("text:section-source"))
+                    ]
+                    self.assertEqual(references, [
+                        "DOC01 - MEMORIA Y ANEJOS/"
+                        "ANEJO 01 - Gestión de residuos.odt",
+                    ])
+                    body = content.find(f"{_tag('office:body')}/{_tag('office:text')}")
+                    self.assertIsNotNone(body)
+                    linked_sections = [
+                        child for child in body
+                        if child.tag == _tag("text:section")
+                        and child.get(_tag("text:name"), "").startswith("Documento vinculado ")
+                    ]
+                    self.assertEqual(len(linked_sections), 1)
+                    previous = list(body)[list(body).index(linked_sections[0]) - 1]
+                    self.assertEqual(
+                        previous.get(_tag("text:style-name")),
+                        "ProjectDocumentPageBreak1",
+                    )
+                    page_break_style = next(
+                        style for style in content.iter(_tag("style:style"))
+                        if style.get(_tag("style:name")) == "ProjectDocumentPageBreak1"
+                    )
+                    self.assertEqual(
+                        page_break_style.find(_tag("style:paragraph-properties")).get(
+                            _tag("fo:break-before"),
+                        ),
+                        "page",
+                    )
+                    self.assertEqual(
+                        page_break_style.get(_tag("style:master-page-name")),
+                        "ProjectDocumentPage1",
+                    )
+                    index_link = next(
+                        node for node in content.iter(_tag("text:a"))
+                        if "ANEJO Nº 1. Gestión de residuos" in "".join(node.itertext())
+                    )
+                    self.assertEqual(
+                        unquote(index_link.get(_tag("xlink:href"), "")),
+                        "DOC01 - MEMORIA Y ANEJOS/"
+                        "ANEJO 01 - Gestión de residuos.odt",
+                    )
+                    styles = ET.fromstring(document.read("styles.xml"))
+                    self.assertIsNotNone(styles.find(f".//{_tag('text:page-number')}"))
+                    document_page = next(
+                        page for page in styles.iter(_tag("style:master-page"))
+                        if page.get(_tag("style:name")) == "ProjectDocumentPage1"
+                    )
+                    footer = document_page.find(_tag("style:footer"))
+                    self.assertIsNotNone(footer)
+                    self.assertIn(
+                        "ANEJO Nº 1. GESTIÓN DE RESIDUOS",
+                        "".join(footer.itertext()),
+                    )
+                    traceability_page = next(
+                        page for page in styles.iter(_tag("style:master-page"))
+                        if page.get(_tag("style:name")) == "Trazabilidad"
+                    )
+                    self.assertIn(
+                        "HOJA DE TRAZABILIDAD",
+                        "".join(traceability_page.find(_tag("style:footer")).itertext()),
+                    )
+                    header = traceability_page.find(_tag("style:header"))
+                    logo_image = header.find(".//" + _tag("draw:image"))
+                    self.assertIsNotNone(logo_image)
+                    logo_resource = logo_image.get(_tag("xlink:href"))
+                    self.assertEqual(
+                        document.read(logo_resource),
+                        custom_logo.read_bytes(),
+                    )
+                    index_page = next(
+                        page for page in styles.iter(_tag("style:master-page"))
+                        if page.get(_tag("style:name")) == "Converted2"
+                    )
+                    self.assertIn(
+                        "ÍNDICE GENERAL DEL PROYECTO",
+                        "".join(index_page.find(_tag("style:footer")).itertext()),
+                    )
+                    self.assertEqual(
+                        logo_resource,
+                        "Pictures/ProjectLogo_estructura_documental.jpg",
+                    )
+                window.project_title = "Proyecto revisado"
+                updated_master, _ = generate_project_package(
+                    project, window, "Maestro de prueba.odm",
+                    [{
+                        "kind": "tool", "tool": "rcd", "number": "18",
+                        "title": "Gestión de residuos revisada",
+                    }],
+                    [],
+                )
+                self.assertEqual(updated_master, master)
+                self.assertTrue(master.is_file())
+                self.assertFalse((
+                    docs / DOCUMENT_FOLDERS[0] / "ANEJO 01 - Gestión de residuos.odt"
+                ).exists())
+                self.assertFalse((
+                    Path(directory) / "Copias de seguridad estructura documental"
+                ).exists())
+                with ZipFile(updated_master) as new_master:
+                    new_visible = "".join(ET.fromstring(
+                        new_master.read("content.xml"),
+                    ).itertext())
+                    self.assertIn("Proyecto revisado", new_visible)
+                self.assertTrue(
+                    (docs / DOCUMENT_FOLDERS[0] / "ANEJO 01 - Gestión de residuos revisada.odt").is_file()
+                )
+            finally:
+                window.deleteLater()
+                QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+    def test_documentation_procedure_annex_contains_all_fields_in_a_blue_table(self) -> None:
+        """Genera un anejo con una fila rellenable por documento o trámite."""
+        QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            window = BudgetMainWindow()
+            checklist = None
+            try:
+                project = Path(directory) / "proyecto.json"
+                self.assertTrue(window._write_project_file(project))
+                checklist = DocumentStructureWindow(window)
+                items = checklist.tree.findItems(
+                    "Documentación Complementaria y Tramitación Municipal",
+                    Qt.MatchFlag.MatchExactly, 0,
+                )
+                self.assertEqual(len(items), 1)
+                self.assertTrue(items[0].isEnabled())
+                items[0].setCheckState(0, Qt.CheckState.Checked)
+                selected_annexes = checklist._selected_annexes()
+                self.assertEqual(selected_annexes[0]["kind"], "documentation")
+                generate_project_package(
+                    project, window, "Maestro.odm",
+                    selected_annexes,
+                    [],
+                )
+                annex = (
+                    Path(directory) / TECHNICAL_DOCUMENTS_FOLDER / DOCUMENT_FOLDERS[0]
+                    / "ANEJO 01 - Documentación Complementaria y Tramitación Municipal.odt"
+                )
+                with ZipFile(annex) as document:
+                    content = ET.fromstring(document.read("content.xml"))
+                table = next(
+                    table for table in content.iter(_tag("table:table"))
+                    if "DOCUMENTACIÓN / TRÁMITE" in "".join(table.itertext())
+                )
+                header = table.find(_tag("table:table-header-rows"))
+                self.assertEqual(
+                    [
+                        "".join(cell.itertext())
+                        for cell in header.findall(f".//{_tag('table:table-cell')}")
+                    ],
+                    ["DOCUMENTACIÓN / TRÁMITE", "ESTADO / REFERENCIA"],
+                )
+                rows = table.findall(_tag("table:table-row"))
+                self.assertEqual(len(rows), len(DOCUMENTATION_PROCEDURE_FIELDS))
+                for index, (row, field) in enumerate(
+                    zip(rows, DOCUMENTATION_PROCEDURE_FIELDS, strict=True),
+                ):
+                    cells = row.findall(_tag("table:table-cell"))
+                    self.assertEqual(
+                        ["".join(cell.itertext()) for cell in cells],
+                        [field, ""],
+                    )
+                    self.assertEqual(
+                        [cell.get(_tag("table:style-name")) for cell in cells],
+                        ["DocumentationAnnexBlueCell" if index % 2 == 0 else
+                         "DocumentationAnnexWhiteCell"] * 2,
+                    )
+                self.assertTrue(all(
+                    cell.get(_tag("table:style-name")) == "DocumentationAnnexHeaderCell"
+                    for cell in header.iter(_tag("table:table-cell"))
+                ))
+            finally:
+                if checklist is not None:
+                    checklist.deleteLater()
+                window.deleteLater()
+                QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+    def test_service_is_a_separate_persisted_report_setting(self) -> None:
+        """Conserva el servicio como ajuste distinto de la entidad y el cargo."""
+        from budget_reports import ReportSettings
+
+        settings = ReportSettings.from_dict({
+            "organization": "Entidad",
+            "service": "Servicio",
+            "role": "Cargo",
+        })
+
+        self.assertEqual(settings.organization, "Entidad")
+        self.assertEqual(settings.service, "Servicio")
+        self.assertEqual(settings.role, "Cargo")
+        self.assertEqual(settings.to_dict()["service"], "Servicio")
+
+    def test_regeneration_preserves_untracked_files(self) -> None:
+        """No reemplaza archivos existentes que el registro no atribuye a la entrega."""
+        QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            window = BudgetMainWindow()
+            try:
+                project = Path(directory) / "proyecto.json"
+                self.assertTrue(window._write_project_file(project))
+                generate_project_package(
+                    project, window, "Maestro.odm",
+                    [{
+                        "kind": "template", "number": "01", "title": "Base",
+                        "outline": ["Sección"],
+                    }],
+                    [],
+                )
+                docs = Path(directory) / TECHNICAL_DOCUMENTS_FOLDER
+                custom_file = docs / DOCUMENT_FOLDERS[0] / "ANEJO 01 - Manual.odt"
+                custom_file.write_bytes(b"contenido manual")
+
+                with self.assertRaisesRegex(FileExistsError, "archivo ajeno"):
+                    generate_project_package(
+                        project, window, "Maestro.odm",
+                        [{
+                            "kind": "template", "number": "02", "title": "Manual",
+                            "outline": ["Otra sección"],
+                        }],
+                        [],
+                    )
+
+                self.assertEqual(custom_file.read_bytes(), b"contenido manual")
+                self.assertTrue((docs / "Maestro.odm").is_file())
+                self.assertFalse((
+                    Path(directory) / "Copias de seguridad estructura documental"
+                ).exists())
+            finally:
+                window.deleteLater()
+                QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+    def test_plan_file_association_from_checklist(self) -> None:
+        """Permite asociar un plano y genera la entrega en la raíz del proyecto."""
+        QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            window = BudgetMainWindow()
+            try:
+                project = Path(directory) / "proyecto.json"
+                self.assertTrue(window._write_project_file(project))
+                tools = next(
+                    action.menu() for action in window.menuBar().actions()
+                    if action.text() == "Herramientas"
+                )
+                tools.actions()[0].trigger()
+                dialog = window.findChild(DocumentStructureWindow)
+                self.assertIsNotNone(dialog)
+                memory_item = dialog._memory_documents[0]
+                self.assertFalse(memory_item.isDisabled())
+                self.assertGreaterEqual(memory_item.sizeHint(0).height(), 52)
+                catalog_annex = next(
+                    item for item in dialog._annexes
+                    if item.text(0) == "Cartografía y Topografía"
+                )
+                self.assertFalse(catalog_annex.isDisabled())
+                catalog_annex.setCheckState(0, Qt.CheckState.Checked)
+                selected_catalog_annex = dialog._selected_annexes()[0]
+                self.assertEqual(selected_catalog_annex["kind"], "template")
+                self.assertEqual(
+                    selected_catalog_annex["outline"],
+                    ["Sistema de referencia y fuentes", "Levantamiento y validación"],
+                )
+                catalog_annex.setCheckState(0, Qt.CheckState.Unchecked)
+                annex = next(
+                    item for item in dialog._annexes
+                    if item.text(0) == "Justificación de precios"
+                )
+                self.assertTrue(annex.flags() & Qt.ItemFlag.ItemIsEditable)
+                annex.setText(0, "Justificación de precios ajustada")
+                annex.setCheckState(0, Qt.CheckState.Checked)
+                self.assertEqual(
+                    dialog._selected_annexes()[0]["title"],
+                    "Justificación de precios ajustada",
+                )
+                annex.setCheckState(0, Qt.CheckState.Unchecked)
+                plan = dialog.tree.topLevelItem(1).child(0)
+                plan.setCheckState(0, Qt.CheckState.Checked)
                 self.assertTrue(dialog._copy_button.isEnabled())
-                destination = Path(directory) / "entrega"
-                destination.mkdir()
+                source = Path(directory) / "plano.pdf"
+                source.write_bytes(b"plano de prueba")
+                dialog.tree.setCurrentItem(plan)
+                with patch.object(
+                    QFileDialog, "getOpenFileName", return_value=(str(source), "PDF"),
+                ):
+                    dialog._plan_file_button.click()
+                dialog.master_name.setText("Maestro con plano.odm")
+                displayed_dialogs = []
+
+                def capture_dialog(message_box):
+                    """Captura el aviso de generación sin mostrar una ventana modal."""
+                    displayed_dialogs.append(message_box)
+                    return 0
+
                 with (
-                    patch.object(QFileDialog, "getExistingDirectory", side_effect=["", str(destination)]),
-                    patch.object(QMessageBox, "information") as result,
+                    patch.object(QMessageBox, "exec", new=capture_dialog),
+                    patch.object(QMessageBox, "critical") as failure,
                 ):
                     dialog._copy_button.click()
-                    self.assertEqual(list(destination.iterdir()), [])
+                    failure.assert_not_called()
+                    self.assertEqual(len(displayed_dialogs), 1)
+                    message_box = displayed_dialogs[0]
+                    self.assertEqual(message_box.text(), str(
+                        Path(directory) / TECHNICAL_DOCUMENTS_FOLDER,
+                    ))
+                    self.assertEqual(message_box.informativeText(), "")
+                    self.assertEqual(
+                        [button.text() for button in message_box.buttons()],
+                        ["Aceptar"],
+                    )
+
+                root = Path(directory)
+                docs = root / TECHNICAL_DOCUMENTS_FOLDER
+                self.assertTrue((docs / "Maestro con plano.odm").is_file())
+                self.assertEqual(
+                    {path.name for path in docs.iterdir()},
+                    {*DOCUMENT_FOLDERS, "Maestro con plano.odm"},
+                )
+                plan_folder = next((docs / DOCUMENT_FOLDERS[1]).iterdir())
+                self.assertEqual((plan_folder / source.name).read_bytes(), source.read_bytes())
+                self.assertFalse(list(plan_folder.glob("*.odt")))
+                self.assertTrue(dialog._copy_button.isEnabled())
+                with ZipFile(docs / "Maestro con plano.odm") as master:
+                    content = ET.fromstring(master.read("content.xml"))
+                    links = [
+                        unquote(node.attrib[_tag("xlink:href")])
+                        for node in content.iter(_tag("text:a"))
+                    ]
+                    self.assertTrue(any(link.endswith("/plano.pdf") for link in links))
+                with (
+                    patch.object(
+                        QMessageBox, "warning",
+                        return_value=QMessageBox.StandardButton.No,
+                    ) as replacement_warning,
+                    patch.object(QMessageBox, "critical") as failure,
+                ):
                     dialog._copy_button.click()
-                    result.assert_called_once()
-                self.assertEqual(len(list(destination.rglob("*.odt"))), 8)
-                self.assertFalse(dialog._copy_button.isEnabled())
-                self.assertEqual([path.name for path in (destination / "01 Memoria y anejos").iterdir()],
-                                 ["01 Memoria"])
+                    replacement_warning.assert_called_once()
+                    self.assertIn(
+                        "se reemplazarán",
+                        replacement_warning.call_args.args[2],
+                    )
+                    failure.assert_not_called()
+                self.assertFalse((
+                    root / "Copias de seguridad estructura documental"
+                ).exists())
+            finally:
+                window.deleteLater()
+                QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+    def test_pptp_and_budget_are_created_as_empty_base_documents(self) -> None:
+        """Crea los ODT base sin requerir ni exportar datos de las herramientas."""
+        QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            window = BudgetMainWindow()
+            try:
+                project = Path(directory) / "proyecto.json"
+                self.assertTrue(window._write_project_file(project))
+                generate_project_package(
+                    project, window, "Maestro.odm", [], [],
+                    include_pptp=True, include_budget=True,
+                )
+
+                documents = Path(directory) / TECHNICAL_DOCUMENTS_FOLDER
+                base_files = [
+                    documents / DOCUMENT_FOLDERS[2] / "PPTP.odt",
+                    *((documents / DOCUMENT_FOLDERS[3]).glob("*.odt")),
+                ]
+                self.assertGreater(len(base_files), 1)
+                for base_file in base_files:
+                    self.assertTrue(base_file.is_file())
+                    with ZipFile(base_file) as archive:
+                        content = ET.fromstring(archive.read("content.xml"))
+                        self.assertFalse(any(content.iter(_tag("table:table"))))
+            finally:
+                window.deleteLater()
+                QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+    def test_catalog_documents_use_configured_styles_and_outline(self) -> None:
+        """Genera ODT editables desde esquemas y aplica la tipografía del proyecto."""
+        QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            window = BudgetMainWindow()
+            try:
+                window.project_title = "Proyecto estructurado"
+                window.report_settings.text_styles = {"heading1": {"size": 18}}
+                project = Path(directory) / "proyecto.json"
+                self.assertTrue(window._write_project_file(project))
+                master, _ = generate_project_package(
+                    project, window, "Maestro.odm",
+                    [{
+                        "kind": "template",
+                        "number": "02",
+                        "title": "Topografía revisada",
+                        "outline": ["Sistema de referencia", "Levantamiento"],
+                    }],
+                    [],
+                    memory_documents=[{
+                        "number": "01",
+                        "title": "Estado actual",
+                        "outline": ["Situación e inventario", "Deficiencias"],
+                    }, {
+                        "number": "02",
+                        "title": "Objeto del proyecto y antecedentes",
+                        "outline": ["Objeto y alcance", "Antecedentes"],
+                    }],
+                )
+
+                documents = Path(directory) / TECHNICAL_DOCUMENTS_FOLDER / DOCUMENT_FOLDERS[0]
+                memory = documents / f"{MEMORY_DOCUMENT_TITLE}.odt"
+                annex = documents / "ANEJO 01 - Topografía revisada.odt"
+                self.assertTrue(memory.is_file())
+                self.assertEqual(len(list(documents.glob("Memoria *.odt"))), 1)
+                self.assertTrue(annex.is_file())
+                with ZipFile(annex) as archive:
+                    content = ET.fromstring(archive.read("content.xml"))
+                    visible = "".join(content.itertext())
+                    self.assertIn("ANEJO Nº 1: TOPOGRAFÍA REVISADA", visible)
+                    self.assertIn("Sistema de referencia", visible)
+                    self.assertIn("Levantamiento", visible)
+                    self.assertFalse(any(content.iter(_tag("table:table"))))
+                    styles = ET.fromstring(archive.read("styles.xml"))
+                    heading = next(
+                        style for style in styles.iter(_tag("style:style"))
+                        if style.get(_tag("style:name")) == "Heading1"
+                    )
+                    text_properties = heading.find(_tag("style:text-properties"))
+                    self.assertIsNotNone(text_properties)
+                    self.assertEqual(text_properties.get(_tag("fo:font-size")), "18pt")
+                with ZipFile(memory) as archive:
+                    visible = "".join(ET.fromstring(
+                        archive.read("content.xml"),
+                    ).itertext())
+                    self.assertIn("Estado actual", visible)
+                    self.assertIn("Situación e inventario", visible)
+                    self.assertIn("Objeto del proyecto y antecedentes", visible)
+                    self.assertIn("Objeto y alcance", visible)
+                with ZipFile(master) as archive:
+                    content = ET.fromstring(archive.read("content.xml"))
+                    visible = "".join(content.itertext())
+                    self.assertIn("DOC01-M01", visible)
+                    self.assertIn("DOC01-A01", visible)
+                    self.assertIn("Estado actual", visible)
+                    self.assertIn("TOPOGRAFÍA REVISADA", visible)
+                    links = [
+                        unquote(node.attrib[_tag("xlink:href")])
+                        for node in content.iter(_tag("text:section-source"))
+                    ]
+                    self.assertTrue(any(f"{MEMORY_DOCUMENT_TITLE}.odt" in link for link in links))
+                    self.assertTrue(any("ANEJO 01 - Topografía revisada.odt" in link for link in links))
+                    memory_index_link = next(
+                        node for node in content.iter(_tag("text:a"))
+                        if MEMORY_DOCUMENT_TITLE.upper() in "".join(node.itertext())
+                    )
+                    self.assertEqual(
+                        unquote(memory_index_link.get(_tag("xlink:href"), "")),
+                        f"DOC01 - MEMORIA Y ANEJOS/{MEMORY_DOCUMENT_TITLE}.odt",
+                    )
             finally:
                 window.deleteLater()
                 QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
