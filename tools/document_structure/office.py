@@ -604,7 +604,7 @@ def _append_index_and_sections(
     for entry in entries:
         style = entry.get("style", "P19")
         paragraph = deepcopy(samples.get(style, samples.get("P19", ET.Element(_tag("text:p")))))
-        indent = any(paragraph.iter(_tag("text:tab")))
+        indent = next(paragraph.iter(_tag("text:tab")), None) is not None
         _set_paragraph_text(
             paragraph, entry["text"], entry.get("href", ""), indent=indent,
         )

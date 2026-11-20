@@ -199,6 +199,11 @@ class DocumentStructureTests(unittest.TestCase):
                     self.assertIn("ANEJO Nº 1. Gestión de residuos", visible)
                     self.assertIn("DOC01-A01", visible)
                     self.assertNotIn("REPORTAJE FOTOGRÁFICO", visible)
+                    memory_index = next(
+                        paragraph for paragraph in content.iter(_tag("text:p"))
+                        if "".join(paragraph.itertext()) == "MEMORIA DESCRIPTIVA."
+                    )
+                    self.assertIsNotNone(memory_index.find(_tag("text:tab")))
                     annex_index = next(
                         paragraph for paragraph in content.iter(_tag("text:p"))
                         if "ANEJO Nº 1. Gestión de residuos" in "".join(paragraph.itertext())
@@ -385,10 +390,10 @@ class DocumentStructureTests(unittest.TestCase):
                 checklist = DocumentStructureWindow(window)
                 items = checklist.tree.findItems(
                     "Documentación Complementaria y Tramitación Municipal",
-                    Qt.MatchFlag.MatchExactly, 0,
+                    Qt.MatchFlag.MatchExactly | Qt.MatchFlag.MatchRecursive, 0,
                 )
                 self.assertEqual(len(items), 1)
-                self.assertTrue(items[0].isEnabled())
+                self.assertFalse(items[0].isDisabled())
                 items[0].setCheckState(0, Qt.CheckState.Checked)
                 selected_annexes = checklist._selected_annexes()
                 self.assertEqual(selected_annexes[0]["kind"], "documentation")
@@ -721,12 +726,17 @@ class DocumentStructureTests(unittest.TestCase):
                     self.assertTrue(any("ANEJO 01 - Topografía revisada.odt" in link for link in links))
                     memory_index_link = next(
                         node for node in content.iter(_tag("text:a"))
-                        if MEMORY_DOCUMENT_TITLE.upper() in "".join(node.itertext())
+                        if MEMORY_DOCUMENT_TITLE in "".join(node.itertext())
                     )
                     self.assertEqual(
                         unquote(memory_index_link.get(_tag("xlink:href"), "")),
                         f"../DOC01 - MEMORIA Y ANEJOS/{MEMORY_DOCUMENT_TITLE}.odt",
                     )
+                    memory_index = next(
+                        paragraph for paragraph in content.iter(_tag("text:p"))
+                        if paragraph.find(_tag("text:a")) is memory_index_link
+                    )
+                    self.assertIsNotNone(memory_index.find(_tag("text:tab")))
             finally:
                 window.deleteLater()
                 QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
