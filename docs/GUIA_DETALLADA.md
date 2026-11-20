@@ -766,6 +766,9 @@ proyecto colaborativo…** para migrarlos sin perder compatibilidad histórica.
 | [tools/rcd/](../tools/rcd/) | Estimación, revisión y presupuesto de gestión de RCDs |
 | [tools/safety_health/](../tools/safety_health/) | Seguridad y Salud y su matriz CSV en `datos/` |
 | [tools/planning/](../tools/planning/) | Planificación, ventana, conversor XLSX y dibujo del Gantt |
+| [tools/rcd/document.py](../tools/rcd/document.py) | Generación de informes de gestión de RCDs |
+| [tools/safety_health/document.py](../tools/safety_health/document.py) | Generación del estudio de Seguridad y Salud |
+| [tools/planning/document.py](../tools/planning/document.py) | Generación del informe de planificación |
 | [tools/pptp/](../tools/pptp/) | Asistente PPTP, biblioteca `BIBLIOTECA.zip` y secciones generales en `docs/` |
 | [tools/certifications/](../tools/certifications/) | Previsiones y certificaciones mensuales |
 | [tools/invoicing/](../tools/invoicing/) | Facturas PDF y matriz editable de costes por recurso |

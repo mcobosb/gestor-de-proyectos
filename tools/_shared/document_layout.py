@@ -47,6 +47,58 @@ def add_odt_list_style(document, name: str, parent: str, depth: int = 0) -> None
     })
 
 
+def add_odt_narrative_styles(document, prefix: str, *, heading_levels: int = 6) -> None:
+    """Unifica cuerpo y títulos heredando la plantilla y la tipografía del proyecto."""
+    from xml.etree import ElementTree as ET
+    from odt_reports import _tag
+
+    document.preserve_template_styles = True
+    template = template_paragraph_styles(document.template_header)
+    body_name = f"{prefix}Body"
+    body = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+        _tag("style:name"): body_name, _tag("style:family"): "paragraph",
+        _tag("style:parent-style-name"): template.get("body", "ReportBody"),
+    })
+    ET.SubElement(body, _tag("style:paragraph-properties"), {
+        _tag("fo:text-align"): "justify",
+        _tag("fo:break-before"): "auto", _tag("fo:break-after"): "auto",
+        _tag("fo:keep-with-next"): "auto", _tag("fo:keep-together"): "auto",
+        _tag("fo:orphans"): "2", _tag("fo:widows"): "2",
+        _tag("fo:text-indent"): "0pt", _tag("fo:margin-top"): "0pt",
+        _tag("fo:margin-bottom"): "6pt", _tag("fo:line-height"): "115%",
+    })
+    for level in range(1, heading_levels + 1):
+        style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+            _tag("style:name"): f"{prefix}Heading{level}",
+            _tag("style:family"): "paragraph",
+            _tag("style:parent-style-name"): template.get(
+                f"heading{level}", template.get("heading", f"Heading{level}"),
+            ),
+            _tag("style:default-outline-level"): str(level),
+            _tag("style:next-style-name"): body_name,
+        })
+        if f"heading{level}" not in template:
+            size = (14, 12, 11, 10.5, 10, 10)[level - 1]
+            ET.SubElement(style, _tag("style:text-properties"), {
+                _tag("fo:font-size"): f"{size}pt",
+                _tag("style:font-size-asian"): f"{size}pt",
+                _tag("style:font-size-complex"): f"{size}pt",
+                _tag("fo:font-weight"): "bold",
+                _tag("style:font-weight-asian"): "bold",
+                _tag("style:font-weight-complex"): "bold",
+                _tag("fo:font-style"): "normal",
+            })
+        ET.SubElement(style, _tag("style:paragraph-properties"), {
+            _tag("fo:text-align"): "start",
+            _tag("fo:break-before"): "auto", _tag("fo:break-after"): "auto",
+            _tag("fo:keep-with-next"): "always", _tag("fo:keep-together"): "auto",
+            _tag("fo:orphans"): "2", _tag("fo:widows"): "2",
+            _tag("fo:text-indent"): "0pt",
+            _tag("fo:margin-top"): "14pt" if level == 1 else "10pt",
+            _tag("fo:margin-bottom"): "5pt", _tag("fo:line-height"): "115%",
+        })
+
+
 def split_list_item(text: str) -> tuple[str, str]:
     """Separa el marcador preservando el énfasis del texto de Markdown."""
     marker, _, body = text.partition(" ")

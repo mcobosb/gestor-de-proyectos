@@ -514,7 +514,7 @@ def _chapter_number(code: str) -> int | None:
 
 def write_study_report(app: BudgetApp, target: Path) -> tuple[str, ...]:
     """Genera el estudio en el formato configurado y devuelve sus avisos de revision."""
-    from .study_report import write_study_report as write
+    from .document import write_study_report as write
 
     return write(app, target)
 

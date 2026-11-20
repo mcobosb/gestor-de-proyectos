@@ -405,7 +405,7 @@ class RcdReportTests(unittest.TestCase):
 
     def test_edited_library_is_used_and_missing_tables_cannot_be_silently_removed(self):
         from tools._library_editor import _signature, read_markdown, write_markdown
-        from tools.rcd import study
+        from tools.rcd import document as study
 
         library = self.folder / "library.zip"
         shutil.copyfile(study.LIBRARY_PATH, library)
@@ -428,7 +428,7 @@ class RcdReportTests(unittest.TestCase):
                     self.assertFalse(target.exists())
 
     def test_territory_follows_configured_municipalities_not_location_text(self):
-        from tools.rcd.study import study_blocks
+        from tools.rcd.document import study_blocks
 
         settings = ReportSettings(location="Lucena", municipality_codes=["280796"], currency="USD")
         blocks = study_blocks(example_state(), "Proyecto", settings)
@@ -727,7 +727,7 @@ class RcdWindowTests(unittest.TestCase):
 
     def test_manual_documentation_is_on_first_screen_and_library_editor_guards(self):
         from tools._library_editor import _signature, read_markdown, write_markdown
-        from tools.rcd import study
+        from tools.rcd import document as study
 
         library = self.folder / "library.zip"
         shutil.copyfile(study.LIBRARY_PATH, library)

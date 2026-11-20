@@ -83,6 +83,105 @@ class PriceDocumentTests(unittest.TestCase):
             author="Autor único del anejo", indirect_costs=6,
         )
 
+    def test_odt_uses_project_typography_and_shared_list_layout(self):
+        """Respeta la configuración para texto, títulos, tablas y viñetas."""
+        from odt_reports import _tag
+        from tools._shared.document_layout import LIST_INDENT, template_paragraph_styles
+        from odt_reports import _new_report
+
+        styles = {
+            "title": {"font": "Courier New", "size": 20},
+            "heading1": {"font": "Arial", "size": 18},
+            "body": {"font": "Times New Roman", "size": 14},
+            "list": {"font": "Courier New", "size": 13},
+            "table": {"font": "Arial", "size": 11},
+            "table_header": {"font": "Arial", "size": 12},
+            "emphasis": {"font": "Arial", "size": 14},
+            "caption": {"font": "Times New Roman", "size": 9},
+            "index": {"font": "Arial", "size": 10},
+        }
+        self.app.report_settings.text_styles = styles
+        template = _new_report("PRUEBA", "Proyecto singular", self.app.report_settings)
+        template_styles = template_paragraph_styles(template.template_header)
+        table = NarrativeTable(
+            "Datos", (("Concepto", "• **Primera** [norma](https://example.org)\n- Segunda"),
+                      ("Total", "12,34")),
+            bands=(1,),
+        )
+        blocks = [
+            (1, "Título principal"), (0, "Texto normal."),
+            (-1, "• Viñeta exterior"), (-2, "- Viñeta anidada"), (0, table),
+        ]
+        target = self.folder / "estilos.odt"
+        with patch("tools.price_justification.document.narrative", return_value=blocks):
+            write_document(self.app, target, {})
+        with ZipFile(target) as archive:
+            content = ET.fromstring(archive.read("content.xml"))
+            style_root = ET.fromstring(archive.read("styles.xml"))
+        declared = {
+            style.get(_tag("style:name")): style
+            for root in (content, style_root) for style in root.iter(_tag("style:style"))
+        }
+        for name, role in (
+            ("PricesDocumentTitle", "title"), ("PricesHeading1", "heading1"),
+            ("PricesBody", "body"), ("PricesList1", "list"), ("PricesTableBulletText", "list"),
+            ("PricesTableText", "table"), ("PricesTableHeader", "table_header"),
+            ("PricesTableTotal", "emphasis"), ("PricesCaption", "caption"),
+            ("PPTPContents1", "index"),
+        ):
+            with self.subTest(style=name):
+                props = declared[name].find(_tag("style:text-properties"))
+                self.assertEqual(props.get(_tag("fo:font-family")), styles[role]["font"])
+                self.assertEqual(props.get(_tag("fo:font-size")), f'{styles[role]["size"]}pt')
+        self.assertEqual(
+            declared["PricesBody"].get(_tag("style:parent-style-name")), template_styles["body"],
+        )
+        self.assertEqual(
+            declared["PricesHeading1"].get(_tag("style:parent-style-name")),
+            template_styles["heading1"],
+        )
+        self.assertEqual(
+            declared["PricesBody"].find(_tag("style:paragraph-properties")).get(_tag("fo:text-align")),
+            "justify",
+        )
+        for name, indent in (
+            ("PricesList1", LIST_INDENT), ("PricesList2", LIST_INDENT + 12),
+        ):
+            props = declared[name].find(_tag("style:paragraph-properties"))
+            self.assertEqual(props.get(_tag("fo:margin-left")), f"{indent}pt")
+            self.assertEqual(props.get(_tag("fo:text-indent")), f"-{LIST_INDENT}pt")
+            self.assertEqual(
+                props.find(f"{_tag('style:tab-stops')}/{_tag('style:tab-stop')}").get(
+                    _tag("style:position")
+                ), f"{indent}pt",
+            )
+        list_style = next(
+            style for style in content.iter(_tag("text:list-style"))
+            if style.get(_tag("style:name")) == "PricesTableBullets"
+        )
+        self.assertEqual(
+            list_style.find(f".//{_tag('style:list-level-properties')}").get(
+                _tag("text:list-level-position-and-space-mode")
+            ), "label-alignment",
+        )
+        alignment = list_style.find(
+            f".//{_tag('style:list-level-properties')}/{_tag('style:list-level-label-alignment')}"
+        )
+        self.assertEqual(alignment.get(_tag("text:label-followed-by")), "listtab")
+        self.assertEqual(alignment.get(_tag("text:list-tab-stop-position")), f"{LIST_INDENT}pt")
+        self.assertEqual(alignment.get(_tag("fo:margin-left")), f"{LIST_INDENT}pt")
+        self.assertEqual(alignment.get(_tag("fo:text-indent")), f"-{LIST_INDENT}pt")
+        cell_items = [
+            p for p in content.iter(_tag("text:p"))
+            if p.get(_tag("text:style-name")) == "PricesTableBulletText"
+        ]
+        self.assertEqual(len(cell_items), 2)
+        self.assertIn("Primera norma", "".join(cell_items[0].itertext()))
+        self.assertEqual(
+            cell_items[0].find(f".//{_tag('text:a')}").get(_tag("xlink:href")),
+            "https://example.org",
+        )
+
     def test_elementals_include_all_three_kinds_without_changing_materials(self):
         """Las cantidades anidadas se conservan y Materiales continúa limitado al tipo 3."""
         _, materials = _collect_report_resources(self.app)
@@ -577,9 +676,9 @@ class PriceDocumentTests(unittest.TestCase):
         from budget_reports import CERTIFICATION_REPORT_NAMES, write_certification_pdf, write_pdf
         from odt_reports import _tag, write_certification_odt, write_report_odt
         from tools._shared.scheduling import PlanActivity, PlanParams
-        from tools.planning.reports import write_planning_report
+        from tools.planning.document import write_planning_report
         from tools.rcd import RcdState
-        from tools.rcd.study import write_study
+        from tools.rcd.document import write_study
         from tools.pptp.document import write_document as write_pptp
 
         authors = "Autora Alfa\nAutor Beta"

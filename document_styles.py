@@ -55,7 +55,7 @@ def validate_styles(value: object) -> StyleTable:
 def style_role(name: str, *, odt: bool = False) -> str:
     """Asocia los estilos existentes a la misma función en los dos formatos."""
     name = name.lower().replace("-", "")
-    heading = re.fullmatch(r"(?:(?:pptp|rcd|prices|ess)(?:document\d+)?)?heading([1-6])", name)
+    heading = re.fullmatch(r"(?:(?:pptp|rcd|prices|ess|quality)(?:document\d+)?)?heading([1-6])", name)
     if heading:
         return "heading" + heading[1]
     if name in {"chaptertitle", "pricesectiontitle", "reportchapter", "priceslistingheading"}:
@@ -84,7 +84,8 @@ def style_role(name: str, *, odt: bool = False) -> str:
         return "emphasis"
     if any(part in name for part in ("tabletext", "summarytext", "indextext", "reporttable", "planningaxis")):
         return "table"
-    if name in {"normal", "reportbody", "pptpbody", "pricesbody", "essbody", "rcdbody", "reportdescription",
+    if name in {"normal", "reportbody", "pptpbody", "pricesbody", "essbody", "rcdbody", "qualitybody",
+                 "planningbody", "reportdescription",
                 "reportwords", "itemdescription", "amountinwords", "reportnote", "justification",
                 "reportright", "pptpseparator"} or "tablereference" in name:
         return "body"

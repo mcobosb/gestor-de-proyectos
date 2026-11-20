@@ -23,7 +23,7 @@ from reference_search import load_reference_entries
 from tools.safety_health import (
     SafetyLine, SafetyProposalWindow, restore_project_state, synchronize_budget, write_study_report,
 )
-from tools.safety_health.study_report import (
+from tools.safety_health.document import (
     _Block, _StudyContent, _build_study_content, _markdown_blocks, _numbered_blocks,
     _pdf_blue_table, study_technical_review, study_work_units,
 )
@@ -376,7 +376,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
                     content.blocks = content.blocks[:memory_index]
                     target = Path(folder) / f"resumen.{output_format}"
                     with patch(
-                        "tools.safety_health.study_report._build_study_content",
+                        "tools.safety_health.document._build_study_content",
                         return_value=content,
                     ):
                         write_study_report(app, target)
@@ -563,7 +563,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
                     ])
                     target = Path(folder) / f"terceros.{output_format}"
                     with patch(
-                        "tools.safety_health.study_report._build_study_content",
+                        "tools.safety_health.document._build_study_content",
                         return_value=content,
                     ):
                         write_study_report(app, target)
@@ -1669,7 +1669,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder) / "catalogo.pdf"
             with patch(
-                "tools.safety_health.study_report._build_study_content", return_value=content,
+                "tools.safety_health.document._build_study_content", return_value=content,
             ):
                 write_study_report(self.make_app("pdf"), target)
             pages = [" ".join(page.extract_text().split()) for page in PdfReader(target).pages]
@@ -1689,7 +1689,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
                 self.assertEqual(" ".join(table_pages).count(code), 1, code)
             target = Path(folder) / "catalogo.odt"
             with patch(
-                "tools.safety_health.study_report._build_study_content", return_value=content,
+                "tools.safety_health.document._build_study_content", return_value=content,
             ):
                 write_study_report(self.make_app("odt"), target)
             with ZipFile(target) as archive:
@@ -1741,7 +1741,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
                 with self.subTest(format=output_format):
                     target = Path(folder) / f"listas.{output_format}"
                     with patch(
-                        "tools.safety_health.study_report._build_study_content", return_value=content,
+                        "tools.safety_health.document._build_study_content", return_value=content,
                     ):
                         write_study_report(self.make_app(output_format), target)
                     if output_format == "pdf":
@@ -1831,7 +1831,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
                 with self.subTest(format=output_format):
                     target = Path(folder) / f"enlaces.{output_format}"
                     with patch(
-                        "tools.safety_health.study_report._build_study_content",
+                        "tools.safety_health.document._build_study_content",
                         return_value=content,
                     ):
                         write_study_report(self.make_app(output_format), target)
@@ -1942,7 +1942,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
                         content.blocks = [caption, overview]
                     target = Path(folder) / f"riesgos.{output_format}"
                     with patch(
-                        "tools.safety_health.study_report._build_study_content",
+                        "tools.safety_health.document._build_study_content",
                         return_value=content,
                     ):
                         write_study_report(app, target)
@@ -2233,7 +2233,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder) / "resumen_largo.pdf"
             with patch(
-                "tools.safety_health.study_report._build_study_content", return_value=content,
+                "tools.safety_health.document._build_study_content", return_value=content,
             ):
                 write_study_report(app, target)
             reader = PdfReader(target)
@@ -2288,7 +2288,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder) / "indice.pdf"
             with patch(
-                "tools.safety_health.study_report._build_study_content", return_value=content,
+                "tools.safety_health.document._build_study_content", return_value=content,
             ):
                 write_study_report(self.make_app("pdf"), target)
             reader = PdfReader(target)
@@ -2420,7 +2420,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder) / "indice.odt"
             with patch(
-                "tools.safety_health.study_report._build_study_content", return_value=content,
+                "tools.safety_health.document._build_study_content", return_value=content,
             ):
                 write_study_report(self.make_app("odt"), target)
             with ZipFile(target) as archive:
@@ -2523,7 +2523,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
                         blocks,
                     )
                     with patch(
-                        "tools.safety_health.study_report._build_study_content", return_value=content,
+                        "tools.safety_health.document._build_study_content", return_value=content,
                     ):
                         write_study_report(self.make_app(output_format), target)
                     if output_format == "odt":
@@ -2657,7 +2657,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
             root = Path(folder)
             target = root / "indice.odt"
             with patch(
-                "tools.safety_health.study_report._build_study_content", return_value=content,
+                "tools.safety_health.document._build_study_content", return_value=content,
             ):
                 write_study_report(self.make_app("odt"), target)
             subprocess.run(

@@ -20,6 +20,7 @@ from collaborative_storage import shared_library_path
 from tools.document_structure.catalog import PRICE_JUSTIFICATION_NUMBER
 from tools._shared.document_layout import (
     LIST_INDENT, TABLE_HEADER_BACKGROUND, add_odt_blue_table_cells, add_odt_list_style,
+    add_odt_narrative_styles,
     pdf_blue_table_style, pdf_list_style,
     split_list_item,
 )
@@ -332,7 +333,7 @@ def _add_odt_table_styles(document) -> None:
                        ("PricesTableHeaderCentered", True), ("PricesTableTotal", True)):
         style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
             _tag("style:name"): name, _tag("style:family"): "paragraph",
-            _tag("style:parent-style-name"): "ReportBody",
+            _tag("style:parent-style-name"): "PricesBody",
         })
         ET.SubElement(style, _tag("style:paragraph-properties"), {
             _tag("fo:text-align"): (
@@ -352,9 +353,23 @@ def _add_odt_table_styles(document) -> None:
     level = ET.SubElement(style, _tag("text:list-level-style-bullet"), {
         _tag("text:level"): "1", _tag("text:bullet-char"): "•",
     })
-    ET.SubElement(level, _tag("style:list-level-properties"), {
-        _tag("text:space-before"): "0pt", _tag("text:min-label-width"): f"{LIST_INDENT}pt",
+    properties = ET.SubElement(level, _tag("style:list-level-properties"), {
+        _tag("text:list-level-position-and-space-mode"): "label-alignment",
     })
+    ET.SubElement(properties, _tag("style:list-level-label-alignment"), {
+        _tag("text:label-followed-by"): "listtab",
+        _tag("text:list-tab-stop-position"): f"{LIST_INDENT}pt",
+        _tag("fo:margin-left"): f"{LIST_INDENT}pt",
+        _tag("fo:text-indent"): f"-{LIST_INDENT}pt",
+    })
+    for name, parent in (
+        ("PricesTableBulletText", "PricesTableText"),
+        ("PricesTableBulletHeader", "PricesTableHeader"),
+    ):
+        ET.SubElement(document.automatic_styles, _tag("style:style"), {
+            _tag("style:name"): name, _tag("style:family"): "paragraph",
+            _tag("style:parent-style-name"): parent,
+        })
     style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
         _tag("style:name"): "PricesTableTextIndented", _tag("style:family"): "paragraph",
         _tag("style:parent-style-name"): "PricesTableText",
@@ -383,7 +398,8 @@ def _write_odt_table(document, table: NarrativeTable) -> None:
             cell.remove(cell[0])
             bullets = None
             for line in value.splitlines() or [""]:
-                if line.startswith(("• ", "- ")):
+                is_bullet = line.startswith(("• ", "- "))
+                if is_bullet:
                     if bullets is None:
                         bullets = ET.SubElement(cell, _tag("text:list"), {
                             _tag("text:style-name"): "PricesTableBullets",
@@ -395,6 +411,8 @@ def _write_odt_table(document, table: NarrativeTable) -> None:
                     parent = cell
                 _odt_inline(ET.SubElement(parent, _tag("text:p"), {
                     _tag("text:style-name"): (
+                        "PricesTableBulletHeader" if is_bullet and subheader else
+                        "PricesTableBulletText" if is_bullet else
                         "PricesTableHeader" if subheader else
                         "PricesTableTextCentered" if table.centered else
                         "PricesTableTextIndented" if line.startswith("\t") else
@@ -429,20 +447,8 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable |
                 missing = (["{{capitulo}}"] if not has_title else []) + (["{{no_pagina}}"] if not has_page else [])
                 ET.SubElement(footer, _tag("text:p"), {_tag("text:style-name"): "FooterText"}).text = " — ".join(missing)
                 document.template_footer = footer
+    add_odt_narrative_styles(document, "Prices")
     _add_odt_table_styles(document)
-    for level in range(1, 7):
-        name = f"PricesHeading{level}"
-        style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
-            _tag("style:name"): name, _tag("style:family"): "paragraph",
-            _tag("style:parent-style-name"): "ReportBody",
-        })
-        ET.SubElement(style, _tag("style:paragraph-properties"), {
-            _tag("fo:keep-with-next"): "always",
-            _tag("fo:margin-top"): "12pt", _tag("fo:margin-bottom"): "6pt",
-        })
-        ET.SubElement(style, _tag("style:text-properties"), {
-            _tag("fo:font-weight"): "bold", _tag("fo:font-size"): f"{15 - level}pt",
-        })
     style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
         _tag("style:name"): "PricesSubscript", _tag("style:family"): "text",
     })
@@ -467,7 +473,7 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable |
     ):
         style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
             _tag("style:name"): name, _tag("style:family"): "paragraph",
-            _tag("style:parent-style-name"): "ReportBody",
+            _tag("style:parent-style-name"): "PricesBody",
         })
         ET.SubElement(style, _tag("style:paragraph-properties"), properties)
         if name == "PricesCaption":
@@ -476,7 +482,7 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable |
             })
     depths = {-level for level, text in blocks if FORMULA_LEVEL < level < 0}
     for depth in sorted(depths):
-        add_odt_list_style(document, f"PricesList{depth}", "ReportBody", depth - 1)
+        add_odt_list_style(document, f"PricesList{depth}", "PricesBody", depth - 1)
     style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
         _tag("style:name"): "PricesListingHeading", _tag("style:family"): "paragraph",
         _tag("style:parent-style-name"): "PricesHeading1",
@@ -488,11 +494,11 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable |
     headings.extend((1, title) for title, _ in LISTINGS)
     title_style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
         _tag("style:name"): "PricesDocumentTitle", _tag("style:family"): "paragraph",
-        _tag("style:parent-style-name"): "PricesHeading1",
+        _tag("style:parent-style-name"): "ReportTitle",
     })
-    heading_style = next(style for style in document.automatic_styles
-                         if style.get(_tag("style:name")) == "PricesHeading1")
-    title_style.extend(deepcopy(list(heading_style)))
+    ET.SubElement(title_style, _tag("style:paragraph-properties"), {
+        _tag("fo:keep-with-next"): "always",
+    })
     document.paragraph(TITLE.upper(), style="PricesDocumentTitle")
     document.table_of_contents(headings, max_level=3, name="PricesContents")
     bookmark = 0
@@ -516,7 +522,7 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable |
             ET.SubElement(item, _tag("text:tab"))
             _odt_inline(item, label)
         else:
-            _odt_inline(paragraph("PricesTableReference" if _TABLE_CITATION.search(text) else "ReportBody"), text)
+            _odt_inline(paragraph("PricesTableReference" if _TABLE_CITATION.search(text) else "PricesBody"), text)
     document.table_caption_suffix = " (importe en €)"
     for title, report in LISTINGS:
         document.heading(title, 1, style="PricesListingHeading", bookmark=f"PPTPHeading{bookmark}")

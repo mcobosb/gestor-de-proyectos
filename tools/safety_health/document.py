@@ -29,7 +29,7 @@ from report_layout import LEFT_MARGIN, PAGE_MARGIN, RIGHT_MARGIN, ReportLayout, 
 from tools._library_history import read_revisions
 from tools._shared.document_layout import (
     DEFAULT_TOC_DEPTH, TABLE_HEADER_BACKGROUND, add_odt_blue_table_cells, add_odt_list_style,
-    number_headings, pdf_blue_table_style, pdf_list_style, template_paragraph_styles,
+    add_odt_narrative_styles, number_headings, pdf_blue_table_style, pdf_list_style,
 )
 from tools.safety_health import (
     LIBRARY_PATH, SAFETY_BUDGET_SOURCE, _study_criteria_values, evaluate_study_criteria,
@@ -1590,51 +1590,14 @@ def _write_odt(app, target, content: _StudyContent) -> None:
                 _tag("fo:text-align"): "end",
             })
         document.template_footer = footer
-    document.preserve_template_styles = True
-    template_styles = template_paragraph_styles(document.template_header)
-    for name, parent, level in [
-        ("ESSBody", template_styles.get("body", "ReportBody"), 0),
-        ("ESSCaption", template_styles.get("body", "ReportBody"), 0),
-        *[
-            (
-                f"ESSHeading{level}",
-                template_styles.get(
-                    f"heading{level}", template_styles.get("heading", f"Heading{level}"),
-                ),
-                level,
-            )
-            for level in range(1, 5)
-        ],
-    ]:
-        style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
-            _tag("style:name"): name, _tag("style:family"): "paragraph",
-            _tag("style:parent-style-name"): parent,
-        })
-        ET.SubElement(style, _tag("style:paragraph-properties"), {
-            _tag("fo:text-align"): "start" if level else "justify",
-            _tag("fo:break-before"): "auto", _tag("fo:break-after"): "auto",
-            _tag("fo:keep-with-next"): "always" if level or name == "ESSCaption" else "auto",
-            _tag("fo:keep-together"): "auto",
-            _tag("fo:orphans"): "2", _tag("fo:widows"): "2",
-            _tag("fo:text-indent"): "0pt",
-            _tag("fo:margin-top"): f"{14 if level == 1 else 10 if level else 0}pt",
-            _tag("fo:margin-bottom"): "5pt" if level else "6pt",
-            _tag("fo:line-height"): "115%",
-        })
-        if level:
-            style.set(_tag("style:default-outline-level"), str(level))
-            style.set(_tag("style:next-style-name"), "ESSBody")
-            if f"heading{level}" not in template_styles:
-                size = (14, 12, 11, 10.5)[level - 1]
-                ET.SubElement(style, _tag("style:text-properties"), {
-                    _tag("fo:font-size"): f"{size}pt",
-                    _tag("style:font-size-asian"): f"{size}pt",
-                    _tag("style:font-size-complex"): f"{size}pt",
-                    _tag("fo:font-weight"): "bold",
-                    _tag("style:font-weight-asian"): "bold",
-                    _tag("style:font-weight-complex"): "bold",
-                    _tag("fo:font-style"): "normal",
-                })
+    add_odt_narrative_styles(document, "ESS", heading_levels=4)
+    style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+        _tag("style:name"): "ESSCaption", _tag("style:family"): "paragraph",
+        _tag("style:parent-style-name"): "ESSBody",
+    })
+    ET.SubElement(style, _tag("style:paragraph-properties"), {
+        _tag("fo:keep-with-next"): "always",
+    })
     documents = _study_documents(content.blocks)
     scoped_contents = any(title for title, _blocks in documents)
     document_styles = {}

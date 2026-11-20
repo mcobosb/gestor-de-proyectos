@@ -48,7 +48,7 @@ from tools._shared.scheduling import (
     schedule,
     validate_phase_shares,
 )
-from .reports import write_planning_report
+from .document import write_planning_report
 
 
 class PlanningWindowQt(QDialog):

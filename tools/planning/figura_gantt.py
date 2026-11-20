@@ -38,7 +38,7 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch, Patch, Polygon, Rectangle
 from openpyxl import load_workbook
-from .reports import GANTT_PALETTE
+from .document import GANTT_PALETTE
 from .._shared.scheduling import merge_date_ranges
 
 BASE_DIR = Path(__file__).resolve().parents[2]

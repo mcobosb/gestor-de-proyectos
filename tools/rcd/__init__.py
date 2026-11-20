@@ -758,7 +758,7 @@ def write_report(
     app: BudgetApp | None = None,
 ) -> None:
     """Genera el estudio completo reutilizando exactamente el análisis y las tablas RCDs."""
-    from .study import write_study
+    from .document import write_study
 
     write_study(state, title, settings, target, project_pem=project_pem, app=app)
 

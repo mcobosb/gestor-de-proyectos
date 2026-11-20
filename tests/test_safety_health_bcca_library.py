@@ -6,7 +6,7 @@ import unittest
 from zipfile import ZipFile
 
 from tools.safety_health.bcca_resources import add_bcca_resources
-from tools.safety_health.study_report import (
+from tools.safety_health.document import (
     _load_selected_fiches, _markdown_blocks, _parse_catalogues, _parse_index,
 )
 

@@ -11,7 +11,7 @@ from budget_reports import ReportSettings
 from report_layout import DEFAULT_TEMPLATE_PATH
 from tools._shared.scheduling import PlanActivity, PlanParams
 from tools.planning.window import PlanningWindow
-from tools.planning.reports import write_planning_report
+from tools.planning.document import write_planning_report
 
 
 class PlanningReportTests(unittest.TestCase):

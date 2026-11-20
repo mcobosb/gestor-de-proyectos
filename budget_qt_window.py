@@ -2128,7 +2128,7 @@ class BudgetMainWindow(QMainWindow):
         from tools.price_justification.templates import (
             LIBRARY_PATH as PRICE_LIBRARY,
         )
-        from tools.rcd.study import LIBRARY_PATH as RCD_LIBRARY
+        from tools.rcd.document import LIBRARY_PATH as RCD_LIBRARY
         from tools.quality_assurance.document import LIBRARY_PATH as QUALITY_LIBRARY
         from tools.safety_health import LIBRARY_PATH as SAFETY_LIBRARY
         from tools.pptp import DOCS_ROOT, LIBRARY_PATH as PPTP_LIBRARY

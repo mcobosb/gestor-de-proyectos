@@ -17,6 +17,7 @@ from tools.document_structure.catalog import RCD_NUMBER
 from document_styles import ROLES
 from tools._shared.document_layout import (
     add_odt_blue_table_cells, add_odt_blue_table_headers, add_odt_list_style,
+    add_odt_narrative_styles,
     pdf_list_style, project_document_variables, split_list_item, style_odt_blue_table,
 )
 from . import ler_catalog
@@ -384,35 +385,23 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
         }).text = "{{capitulo}}"
     add_odt_blue_table_cells(document, "RcdTable")
     add_odt_blue_table_headers(document, "RcdTable", centered=True)
-    for level in range(1, 7):
-        _, size, bold = ROLES[f"heading{level}"]
-        style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
-            _tag("style:name"): f"RcdHeading{level}", _tag("style:family"): "paragraph",
-            _tag("style:parent-style-name"): "ReportBody",
-        })
-        ET.SubElement(style, _tag("style:paragraph-properties"), {
-            _tag("fo:keep-with-next"): "always", _tag("fo:margin-top"): "12pt",
-            _tag("fo:margin-bottom"): "6pt",
-        })
-        ET.SubElement(style, _tag("style:text-properties"), {
-            _tag("fo:font-weight"): "bold" if bold else "normal",
-            _tag("fo:font-size"): f"{size:g}pt",
-        })
+    add_odt_narrative_styles(document, "Rcd")
     style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
         _tag("style:name"): "RcdDocumentStart", _tag("style:family"): "paragraph",
         _tag("style:parent-style-name"): "RcdHeading1",
     })
     ET.SubElement(style, _tag("style:paragraph-properties"), {_tag("fo:break-before"): "page"})
     for level in sorted({block[0] for block in blocks if isinstance(block, tuple) and block[0] < 0}):
-        add_odt_list_style(document, f"RcdBullet{-level}", "ReportBody", -level - 1)
+        add_odt_list_style(document, f"RcdBullet{-level}", "RcdBody", -level - 1)
     headings = [block for block in blocks if isinstance(block, tuple) and block[0] > 0]
-    from copy import deepcopy
-
-    title_style = deepcopy(next(style for style in document.automatic_styles
-                               if style.get(_tag("style:name")) == "RcdHeading1"))
-    title_style.set(_tag("style:name"), "RcdDocumentTitle")
-    title_style.find(_tag("style:text-properties")).set(_tag("fo:font-size"), f"{ROLES['title'][1]:g}pt")
-    document.automatic_styles.append(title_style)
+    title_style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+        _tag("style:name"): "RcdDocumentTitle", _tag("style:family"): "paragraph",
+        _tag("style:parent-style-name"): "ReportTitle",
+    })
+    ET.SubElement(title_style, _tag("style:paragraph-properties"), {
+        _tag("fo:keep-with-next"): "always", _tag("fo:margin-top"): "14pt",
+        _tag("fo:margin-bottom"): "5pt",
+    })
     document.paragraph(TITLE, "RcdDocumentTitle")
     document.table_of_contents(headings, max_level=2, name="RcdContents")
     heading_index = 0
@@ -446,7 +435,7 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
             ET.SubElement(paragraph, _tag("text:tab"))
             _odt_law_links(paragraph, label)
         else:
-            document.paragraph(text)
+            document.paragraph(text, "RcdBody")
             _odt_link_paragraph_spans(document.body[-1])
     document.append_signature(settings)
     document.write(target)

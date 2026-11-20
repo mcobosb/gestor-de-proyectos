@@ -64,7 +64,7 @@ from .regulations import (
     restore_review,
     review_context,
 )
-from .study_report import study_technical_review, study_work_units
+from .document import study_technical_review, study_work_units
 from .technical_conditions import (
     TECHNICAL_BLOCKS,
     restore_technical_review,

@@ -55,7 +55,9 @@ class PptpNamedStylesTests(unittest.TestCase):
             self.assertFalse(any(style.get(_tag("style:name")) in public for style in automatic))
             for element in content.iter():
                 style_name = element.get(_tag("text:style-name"))
-                if style_name and style_name != "PPTPContentsBreak":
+                if style_name in {"Signature", "SignatureNote"}:
+                    self.assertIn(style_name, named)
+                elif style_name and style_name != "PPTPContentsBreak" and "".join(element.itertext()).strip():
                     self.assertIn(style_name, public)
             for name in ("PPTPSeparator", "PPTPBullet0", "PPTPIndexText", "PPTPContents1"):
                 self.assertEqual(named[name].get(_tag("style:parent-style-name")), "PPTPBody")

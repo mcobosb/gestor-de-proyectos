@@ -26,9 +26,15 @@ En **Archivo → Configuración → Estilos de documentos** puedes definir la
 tipografía del proyecto: títulos, texto normal, listas, índice, tablas, cabecera,
 pie y firma. Elige la fuente y el tamaño y usa **N**, **C** y **S** para
 negrita, cursiva y subrayado. El punto junto a una letra indica que se conserva
-el valor estándar. **Estándar** mantiene el formato que ya usaba cada documento.
+el valor estándar. **Estándar** mantiene la tipografía predeterminada de cada función.
 Los cambios se aplican al volver a generar los documentos; no modifican archivos
 que ya se hayan exportado.
+Los informes ODT de justificación de precios, PPTP, seguridad y salud, RCD y
+calidad comparten la presentación del cuerpo, los títulos y las listas: heredan
+los estilos de la plantilla cuando existen y aplican la tipografía configurada
+para cada función. Las tablas y otros elementos propios de cada informe
+conservan sus formatos específicos. El texto descriptivo de planificación usa
+el mismo estilo de cuerpo, sin alterar el diagrama de Gantt.
 
 Al arrancar, el programa examina `tools` junto a la aplicación y añade al menú
 **Herramientas** los módulos disponibles. En el instalador de Windows, la
@@ -588,8 +594,8 @@ iniciales mantienen la sangría y las filas separadas por tabuladores se alinean
 en columnas con ajuste de texto. Las líneas tabuladas no se unen en un párrafo.
 
 El ODT del PPTP hereda los estilos de cuerpo y títulos de la plantilla seleccionada
-(por ejemplo, **Cuerpo**, **Text body**, **Título 1** o **Heading 1**), conservando
-su tipografía, espaciado, alineación y posiciones de tabulación. Si falta un nivel,
+(por ejemplo, **Cuerpo**, **Text body**, **Título 1** o **Heading 1**) y aplica
+la presentación común del informe y la tipografía configurada. Si falta un nivel,
 se utiliza el estilo general de encabezado de la plantilla o el estilo del
 programa como respaldo. Los separadores y listas siguen siendo editables, sin
 alterar el archivo de plantilla original.

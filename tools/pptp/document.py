@@ -19,8 +19,8 @@ from .sheet_index import (
 )
 from tools._library_markdown import document_markdown, text_blocks
 from tools._shared.document_layout import (
-    DEFAULT_TOC_DEPTH, add_odt_list_style, number_headings, pdf_list_style, split_list_item,
-    template_paragraph_styles,
+    DEFAULT_TOC_DEPTH, add_odt_list_style, add_odt_narrative_styles,
+    number_headings, pdf_list_style, split_list_item,
 )
 
 if TYPE_CHECKING:
@@ -733,9 +733,7 @@ def write_document(
         from odt_reports import _new_report, _tag
 
         document = _new_report(title, project, settings, repeat_titles=False, footer_title=title)
-        document.preserve_template_styles = True
-        template_styles = template_paragraph_styles(document.template_header)
-        body_parent = template_styles.get("body", "ReportBody")
+        add_odt_narrative_styles(document, "PPTP")
         bold_style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
             _tag("style:name"): "PPTPBold", _tag("style:family"): "text",
         })
@@ -744,56 +742,18 @@ def write_document(
             _tag("style:font-weight-asian"): "bold",
             _tag("style:font-weight-complex"): "bold",
         })
-        for name, parent, heading in [
-            ("PPTPBody", body_parent, False),
-            ("PPTPSeparator", "PPTPBody", True),
-            *[(
-                f"PPTPHeading{level}",
-                template_styles.get(f"heading{level}", template_styles.get("heading", f"Heading{level}")),
-                True,
-            ) for level in range(1, 7)],
-        ]:
-            style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
-                _tag("style:name"): name, _tag("style:family"): "paragraph",
-                _tag("style:parent-style-name"): parent,
-            })
-            properties = {
-                _tag("fo:text-align"): "start" if heading else "justify",
-                _tag("fo:break-before"): "auto", _tag("fo:break-after"): "auto",
-                _tag("fo:keep-with-next"): "always" if heading else "auto",
-                _tag("fo:keep-together"): "auto",
-                _tag("fo:orphans"): "2", _tag("fo:widows"): "2",
-                _tag("fo:text-indent"): "0pt",
-            }
-            if name == "PPTPBody":
-                properties.update({
-                    _tag("fo:margin-top"): "0pt", _tag("fo:margin-bottom"): "6pt",
-                    _tag("fo:line-height"): "115%",
-                })
-            elif name == "PPTPSeparator":
-                properties.update({
-                    _tag("fo:margin-top"): "8pt", _tag("fo:margin-bottom"): "3pt",
-                })
-            else:
-                level = int(name.removeprefix("PPTPHeading"))
-                properties.update({
-                    _tag("fo:margin-top"): f"{14 if level == 1 else 10}pt",
-                    _tag("fo:margin-bottom"): "5pt",
-                    _tag("fo:line-height"): "115%",
-                })
-                style.set(_tag("style:next-style-name"), "PPTPBody")
-                if f"heading{level}" not in template_styles:
-                    size = (14, 12, 11, 10.5, 10, 10)[level - 1]
-                    ET.SubElement(style, _tag("style:text-properties"), {
-                        _tag("fo:font-size"): f"{size}pt",
-                        _tag("style:font-size-asian"): f"{size}pt",
-                        _tag("style:font-size-complex"): f"{size}pt",
-                        _tag("fo:font-weight"): "bold",
-                        _tag("style:font-weight-asian"): "bold",
-                        _tag("style:font-weight-complex"): "bold",
-                        _tag("fo:font-style"): "normal",
-                    })
-            ET.SubElement(style, _tag("style:paragraph-properties"), properties)
+        separator_style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+            _tag("style:name"): "PPTPSeparator", _tag("style:family"): "paragraph",
+            _tag("style:parent-style-name"): "PPTPBody",
+        })
+        ET.SubElement(separator_style, _tag("style:paragraph-properties"), {
+            _tag("fo:text-align"): "start",
+            _tag("fo:break-before"): "auto", _tag("fo:break-after"): "auto",
+            _tag("fo:keep-with-next"): "always", _tag("fo:keep-together"): "auto",
+            _tag("fo:orphans"): "2", _tag("fo:widows"): "2",
+            _tag("fo:text-indent"): "0pt", _tag("fo:margin-top"): "8pt",
+            _tag("fo:margin-bottom"): "3pt",
+        })
         for depth in bullet_depths:
             add_odt_list_style(document, f"PPTPBullet{depth}", "PPTPBody", depth)
         if sheet_rows:
@@ -872,6 +832,7 @@ def write_document(
             style.set(_tag("style:default-outline-level"), str(level))
         document.name_text_styles({
             "PPTPBody": "PPTP - Cuerpo",
+            "PPTPBodyTableReference": "PPTP - Referencia de tabla",
             "PPTPTitle": "PPTP - Título del índice",
             "PPTPSeparator": "PPTP - Apartado de ficha",
             "PPTPBold": "PPTP - Énfasis",

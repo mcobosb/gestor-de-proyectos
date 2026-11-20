@@ -59,7 +59,7 @@ from . import (
     write_report,
 )
 from .._shared.budget_sources import TRANSPORT_PREFIX
-from .study import DOCUMENTS, LIBRARY_PATH, load_documents
+from .document import DOCUMENTS, LIBRARY_PATH, load_documents
 
 
 class RcdWindowQt(QDialog):

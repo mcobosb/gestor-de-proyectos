@@ -829,10 +829,11 @@ class BudgetQtWindowTests(unittest.TestCase):
         from zipfile import ZipFile
 
         from pypdf import PdfReader
-        from odt_reports import _tag
+        from odt_reports import _new_report, _tag
+        from tools._shared.document_layout import template_paragraph_styles
         from tools._library_editor_qt import LibraryEditorQt
         from tools.rcd import write_report
-        from tools.rcd.study import LIBRARY_PATH
+        from tools.rcd.document import LIBRARY_PATH
 
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
@@ -841,7 +842,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             with (
                 patch("budget_qt_window.user_data_directory", return_value=folder),
                 patch("tools.rcd.qt_window.LIBRARY_PATH", library),
-                patch("tools.rcd.study.LIBRARY_PATH", library),
+                patch("tools.rcd.document.LIBRARY_PATH", library),
                 patch.object(QMessageBox, "critical") as error,
                 patch.object(QMessageBox, "information"),
             ):
@@ -976,15 +977,22 @@ class BudgetQtWindowTests(unittest.TestCase):
                             self.assertEqual("".join(rows["Metales"][2].itertext()), "Sí")
                             self.assertEqual([cell[0].get(_tag("text:style-name")) for cell in rows["Metales"]],
                                              ["TableTextRight", "TableTextCenter", "TableTextCenter"])
-                            heading_sizes = {
-                                style.get(_tag("style:name")):
-                                    float(style.find(_tag("style:text-properties"))
-                                          .get(_tag("fo:font-size")).removesuffix("pt"))
+                            headings = {
+                                style.get(_tag("style:name")): style
                                 for style in content.iter(_tag("style:style"))
                                 if style.get(_tag("style:name"), "").startswith("RcdHeading")
                             }
-                            self.assertGreater(heading_sizes["RcdHeading1"], heading_sizes["RcdHeading2"])
-                            self.assertGreater(heading_sizes["RcdHeading2"], heading_sizes["RcdHeading3"])
+                            template = _new_report("PRUEBA", "Proyecto RCD", window.report_settings)
+                            template_styles = template_paragraph_styles(template.template_header)
+                            for level in (1, 2):
+                                self.assertEqual(
+                                    headings[f"RcdHeading{level}"].get(_tag("style:parent-style-name")),
+                                    template_styles[f"heading{level}"],
+                                )
+                            self.assertEqual(
+                                headings["RcdHeading3"].find(_tag("style:text-properties"))
+                                .get(_tag("fo:font-size")), "11pt",
+                            )
                         else:
                             reader = PdfReader(target)
                             text = " ".join(page.extract_text() for page in reader.pages)
@@ -1281,7 +1289,7 @@ class BudgetQtWindowTests(unittest.TestCase):
 
         from pypdf import PdfReader
         from tools.certifications import economic_months, planned_monthly_amounts
-        from tools.planning.reports import write_planning_report
+        from tools.planning.document import write_planning_report
 
         with tempfile.TemporaryDirectory() as directory, patch(
             "budget_qt_window.user_data_directory", return_value=Path(directory)

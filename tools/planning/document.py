@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Callable
 from xml.etree import ElementTree
 
 from budget_reports import report_output_format
+from .._shared.document_layout import add_odt_narrative_styles
 from .._shared.scheduling import PlanActivity, PlanParams, activity_segments, merge_date_ranges
 
 if TYPE_CHECKING:
@@ -345,9 +346,10 @@ def write_planning_report(
             title, project_title, settings, repeat_titles=False,
             footer_title="Planificación", landscape=True, template_title="",
         )
+        add_odt_narrative_styles(document, "Planning", heading_levels=0)
         document.table_caption("Calendario de actividades (diagrama de Gantt)")
         _write_odt_chart(document, rows, periods)
-        document.paragraph(description)
+        document.paragraph(description, "PlanningBody")
         document.append_signature(settings)
         document.write(target)
         return

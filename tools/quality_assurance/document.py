@@ -13,6 +13,7 @@ from tools._library_editor import read_markdown
 from tools._library_markdown import document_markdown, text_blocks
 from tools._shared.document_layout import (
     add_odt_blue_table_cells, add_odt_blue_table_headers, add_odt_list_style,
+    add_odt_narrative_styles,
     pdf_list_style, split_list_item, style_odt_blue_table,
 )
 from tools.document_structure.catalog import QUALITY_ASSURANCE_NUMBER
@@ -95,22 +96,10 @@ def _write_odt(target, project, settings, blocks, data) -> None:
                       {_tag("text:style-name"): "FooterText"}).text = "{{capitulo}}"
     add_odt_blue_table_cells(doc, "QualityTable")
     add_odt_blue_table_headers(doc, "QualityTable")
-    for role in ("title", *(f"heading{level}" for level in range(1, 7))):
-        _, size, bold = ROLES[role]
-        style = ET.SubElement(doc.automatic_styles, _tag("style:style"), {
-            _tag("style:name"): role, _tag("style:family"): "paragraph",
-            _tag("style:parent-style-name"): "ReportBody",
-        })
-        ET.SubElement(style, _tag("style:paragraph-properties"), {
-            _tag("fo:keep-with-next"): "always", _tag("fo:margin-top"): "10pt",
-            _tag("fo:margin-bottom"): "5pt",
-        })
-        ET.SubElement(style, _tag("style:text-properties"), {
-            _tag("fo:font-size"): f"{size:g}pt", _tag("fo:font-weight"): "bold" if bold else "normal",
-        })
+    add_odt_narrative_styles(doc, "Quality")
     for level in {level for level, _ in blocks if level < 0}:
-        add_odt_list_style(doc, f"QualityBullet{-level}", "ReportBody", -level - 1)
-    doc.paragraph(TITLE, "title")
+        add_odt_list_style(doc, f"QualityBullet{-level}", "QualityBody", -level - 1)
+    doc.paragraph(TITLE, "ReportTitle")
     for level, text in blocks:
         if text in TABLES:
             caption, headers, ratios, numeric = TABLES[text]
@@ -118,7 +107,7 @@ def _write_odt(target, project, settings, blocks, data) -> None:
             doc.table(headers, data[text], ratios=ratios, right_columns=numeric)
             style_odt_blue_table(doc.body[-1], "QualityTable")
         elif level > 0:
-            doc.heading(text, level, style=f"heading{level}")
+            doc.heading(text, level, style=f"QualityHeading{level}")
         elif level < 0:
             marker, label = split_list_item(text)
             node = ET.SubElement(doc.body, _tag("text:p"),
@@ -126,7 +115,7 @@ def _write_odt(target, project, settings, blocks, data) -> None:
             node.text = marker
             ET.SubElement(node, _tag("text:tab")).tail = label
         else:
-            doc.paragraph(text)
+            doc.paragraph(text, "QualityBody")
     doc.append_signature(settings)
     doc.write(target)
 
