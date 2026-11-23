@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from xml.etree import ElementTree as ET
 
 from budget_reports import report_output_format
+from tools._shared.budget_sources import RCD_BUDGET_SOURCE
 from tools._library_editor import library_members, read_markdown
 from tools._library_markdown import document_markdown, text_blocks
 from tools.document_structure.catalog import RCD_NUMBER
@@ -112,7 +113,7 @@ def load_documents(archive_path: Path) -> list[tuple[str, str]]:
 def study_variables(state: RcdState, title: str, settings: ReportSettings) -> dict[str, str]:
     """Enlaza los datos generales actuales y las decisiones particulares sin inventar destinos."""
     from budget_core import fmt_number
-    from . import MEASURED_NOTE, NOTE, normalize
+    from . import MEASURED_NOTE, normalize
 
     values = {
         key: value if key == "autor" and not settings.show_author
@@ -124,11 +125,11 @@ def study_variables(state: RcdState, title: str, settings: ReportSettings) -> di
         or f"[PENDIENTE DE CONCRETAR: {label}]"
         for key, label in DOCUMENT_FIELDS.items()
     })
-    values["nota_modelo"] = NOTE
+    values["nota_modelo"] = ""
     values["metodo_estimacion"] = MEASURED_NOTE if state.demolition else (
         "Se aplica el modelo estimativo revisable de superficie afectada, coeficiente de "
         "generación en m³/m², densidad global y composición en peso por grupos. Los valores "
-        "utilizados figuran en la tabla de datos de cálculo; no se sustituyen por los del estudio tipo."
+        "utilizados figuran en la tabla de datos de cálculo."
     )
     values["coeficiente_generacion"] = (
         fmt_number(state.inputs["volume_factor"], 4)
@@ -167,6 +168,7 @@ def substitute(source: str, values: dict[str, str]) -> str:
 
 def study_tables(
     state: RcdState, title: str, settings: ReportSettings, project_pem: float | None,
+    *, excluded_codes: set[str] | None = None,
 ) -> dict[str, list[StudyTable]]:
     """Reutiliza las filas del cálculo existente sin distribuir artificialmente cantidades por LER."""
     from budget_core import currency_label, fmt_number
@@ -192,11 +194,18 @@ def study_tables(
         ["Expediente", values["expediente"]],
     ]
     waste_rows = []
-    for key, _, code, description, _ in WASTES:
+    for key, _, code, description, _ in sorted(WASTES, key=lambda waste: waste[2]):
         if not state.selected[key]:
             continue
+        original_evidence = state.evidence.get(key, [])
+        evidence_rows = [
+            evidence for evidence in original_evidence
+            if not excluded_codes or evidence.strip().partition(": ")[0] not in excluded_codes
+        ]
+        if original_evidence and not evidence_rows:
+            continue
         units: dict[str, str] = {}
-        for evidence in state.evidence.get(key, []):
+        for evidence in evidence_rows:
             unit = re.sub(r"\s*\[(?:texto, revisar|BCCA2023 → [^,\]]+, revisar)\]\s*$", "", evidence).strip()
             if unit:
                 units.setdefault(unit.removesuffix(" [LER]"), unit)
@@ -216,8 +225,8 @@ def study_tables(
         "tabla_proyecto": [StudyTable("Datos del proyecto", ["Dato", "Descripción"], project_rows, [1.4, 4],
                                       right_columns=(0,))],
         "tabla_residuos": [StudyTable(
-            "Residuos seleccionados (revisión manual)",
-            ["LER (modelo ODS)", "Residuo", "Procedencia"],
+            "Residuos seleccionados",
+            ["Código LER", "Residuo", "Procedencia"],
             waste_rows or [["—", "No se han seleccionado residuos; revisar el análisis.", "Pendiente"]],
             [1.2, 2.5, 4],
         )],
@@ -255,7 +264,10 @@ def study_blocks(
     app: BudgetApp | None = None,
 ) -> list[StudyBlock]:
     """Intercala memoria y pliego con las tablas del análisis en sus marcadores obligatorios."""
-    tables = study_tables(state, title, settings, project_pem)
+    excluded_codes = {
+        item.code for item in app.budget_items if item.source.startswith(RCD_BUDGET_SOURCE)
+    } if app is not None else set()
+    tables = study_tables(state, title, settings, project_pem, excluded_codes=excluded_codes)
     summary = work_summary(app) if app is not None else None
     links = ler_catalog.match_rows(app.budget_items) if app is not None else []
     values = study_variables(state, title, settings)
@@ -284,10 +296,9 @@ def study_blocks(
         if index % 2:
             blocks.extend(tables[part])
             if part == "tabla_residuos" and app is not None:
-                blocks.append((0, ler_catalog.MATCH_NOTE))
                 if links:
                     blocks.append(StudyTable(
-                        "Vínculos orientativos LER–UO (BCCA2023)", ler_catalog.MATCH_HEADERS,
+                        "Vínculos orientativos LER–UO", ler_catalog.MATCH_HEADERS,
                         links, [3, 0.9, 3.2, 1.7],
                     ))
                 else:
@@ -393,6 +404,9 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
     ET.SubElement(style, _tag("style:paragraph-properties"), {_tag("fo:break-before"): "page"})
     for level in sorted({block[0] for block in blocks if isinstance(block, tuple) and block[0] < 0}):
         add_odt_list_style(document, f"RcdBullet{-level}", "RcdBody", -level - 1)
+        add_odt_list_style(
+            document, f"RcdSummaryBullet{-level}", "RcdBody", -level - 1, justified=True,
+        )
     headings = [block for block in blocks if isinstance(block, tuple) and block[0] > 0]
     title_style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
         _tag("style:name"): "RcdDocumentTitle", _tag("style:family"): "paragraph",
@@ -406,6 +420,7 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
     document.table_of_contents(headings, max_level=2, name="RcdContents")
     heading_index = 0
     main_seen = False
+    in_description = False
     for block in blocks:
         if isinstance(block, StudyTable):
             document.table_caption(block.caption, include_reference=False)
@@ -422,6 +437,7 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
             continue
         level, text = block
         if level > 0:
+            in_description = text == DESCRIPTION_HEADING
             style = "RcdDocumentStart" if level == 1 and main_seen else f"RcdHeading{level}"
             document.heading(text, level, style=style, bookmark=f"PPTPHeading{heading_index}")
             heading_index += 1
@@ -429,7 +445,9 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
         elif level < 0:
             marker, label = split_list_item(text)
             paragraph = ET.SubElement(document.body, _tag("text:p"), {
-                _tag("text:style-name"): f"RcdBullet{-level}",
+                _tag("text:style-name"): (
+                    f"RcdSummaryBullet{-level}" if in_description else f"RcdBullet{-level}"
+                ),
             })
             paragraph.text = marker
             ET.SubElement(paragraph, _tag("text:tab"))
@@ -437,6 +455,7 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
         else:
             document.paragraph(text, "RcdBody")
             _odt_link_paragraph_spans(document.body[-1])
+    document.name_text_styles({"RcdHeading1": "RCD - Título 1", "RcdBody": "RCD - Cuerpo"})
     document.append_signature(settings)
     document.write(target)
 
@@ -447,7 +466,7 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.platypus import PageBreak, SimpleDocTemplate, Spacer
     from reportlab.platypus.doctemplate import LayoutError
-    from reportlab.platypus.tableofcontents import TableOfContents
+    from tools._shared.pdf_contents import contents_table, contents_title
     from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
 
     layout = ReportLayout(
@@ -469,6 +488,10 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
         level: pdf_list_style(f"RcdBullet{-level}", body, -level - 1)
         for level in sorted({block[0] for block in blocks if isinstance(block, tuple) and block[0] < 0})
     }
+    summary_bullets = {
+        level: pdf_list_style(f"RcdSummaryBullet{-level}", body, -level - 1, justified=True)
+        for level in bullets
+    }
     headings = {}
     for level in range(1, 7):
         _, size, bold = ROLES[f"heading{level}"]
@@ -479,16 +502,12 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
         )
     title_style = ParagraphStyle("RcdDocumentTitle", parent=headings[1],
                                  fontSize=ROLES["title"][1], leading=ROLES["title"][1] * 1.28)
-    contents = TableOfContents()
-    contents.levelStyles = [
-        ParagraphStyle(f"RcdContents{level}", parent=body, leftIndent=12*level, alignment=TA_LEFT)
-        for level in range(2)
-    ]
-    contents.levelStyles = layout.index_styles(contents.levelStyles)
-    story = [layout.text(TITLE, title_style, role="title"), layout.text("ÍNDICE", headings[2], role="index"),
+    contents = contents_table(layout, 2)
+    story = [layout.text(TITLE, title_style, role="title"), contents_title(layout),
              contents, PageBreak()]
     heading_index = 0
     main_seen = False
+    in_description = False
     for block in blocks:
         if isinstance(block, StudyTable):
             layout.table_caption(story, block.caption, body=body, include_reference=False)
@@ -508,6 +527,7 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
             continue
         level, text = block
         if level > 0:
+            in_description = text == DESCRIPTION_HEADING
             if level == 1 and main_seen:
                 story.append(PageBreak())
             paragraph = layout.text(text, headings[level])
@@ -517,7 +537,8 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
             story.append(paragraph)
         elif level < 0:
             marker, label = split_list_item(text)
-            story.append(layout.paragraph(_pdf_law_links(label), bullets[level], bulletText=marker))
+            style = summary_bullets[level] if in_description else bullets[level]
+            story.append(layout.paragraph(_pdf_law_links(label), style, bulletText=marker))
         else:
             story.append(layout.paragraph(_pdf_law_links(text), body))
     story.extend(layout.signature_block(settings))

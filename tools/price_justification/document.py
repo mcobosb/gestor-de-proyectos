@@ -483,14 +483,18 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable |
     depths = {-level for level, text in blocks if FORMULA_LEVEL < level < 0}
     for depth in sorted(depths):
         add_odt_list_style(document, f"PricesList{depth}", "PricesBody", depth - 1)
+    template_styles = template_paragraph_styles(document.template_header)
     style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
         _tag("style:name"): "PricesListingHeading", _tag("style:family"): "paragraph",
-        _tag("style:parent-style-name"): template_paragraph_styles(
-            document.template_header,
-        ).get("heading1", "Heading1"),
+        _tag("style:parent-style-name"): template_styles.get(
+            "heading", template_styles.get("heading1", "Heading1"),
+        ),
     })
     ET.SubElement(style, _tag("style:paragraph-properties"), {
         _tag("fo:break-before"): "page", _tag("fo:keep-with-next"): "always",
+    })
+    ET.SubElement(style, _tag("style:text-properties"), {
+        _tag("fo:font-weight"): "bold",
     })
     headings = [(level, text) for level, text in blocks if level > 0 and isinstance(text, str)]
     headings.extend((1, title) for title, _ in LISTINGS)
@@ -542,7 +546,7 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable |
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.platypus import PageBreak, SimpleDocTemplate, Spacer, Table
     from reportlab.platypus.doctemplate import LayoutError
-    from reportlab.platypus.tableofcontents import TableOfContents
+    from tools._shared.pdf_contents import contents_table, contents_title
     from budget_reports import build_pdf_report
     from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
 
@@ -592,17 +596,10 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable |
             spaceAfter=7, keepWithNext=True,
         ) for level in range(1, 7)
     }
-    toc = TableOfContents()
-    toc.levelStyles = [
-        ParagraphStyle(
-            f"PricesContents{level}", parent=body, leftIndent=12 * level,
-            fontSize=10, textColor=colors.black, spaceBefore=4,
-        ) for level in range(3)
-    ]
-    toc.levelStyles = layout.index_styles(toc.levelStyles)
+    toc = contents_table(layout, 3)
     story = [
         layout.text(TITLE.upper(), heading_styles[1], role="title"), Spacer(1, 12),
-        layout.text("ÍNDICE", heading_styles[2], role="index"), toc, PageBreak(),
+        contents_title(layout), toc, PageBreak(),
     ]
     heading_index = 0
     reports = dict(LISTINGS)

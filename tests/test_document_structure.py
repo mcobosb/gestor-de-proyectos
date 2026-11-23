@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 from tempfile import TemporaryDirectory
@@ -74,13 +75,16 @@ class DocumentStructureTests(unittest.TestCase):
             )
             project = root / "proyecto.json"
             project.touch()
+            plan = root / "Plano de situación.pdf"
+            plan.write_bytes(b"plano externo")
             master, _ = generate_project_package(
                 project, app, "Maestro.odm",
                 [
                     {"kind": "tool", "number": "15", "title": "Justificación de precios"},
-                    {"kind": "template", "number": "20", "title": "Conservación y mantenimiento"},
+                    {"kind": "template", "number": "20", "title": "Conservación y mantenimiento",
+                     "outline": ["Operaciones", "Periodicidad"]},
                 ],
-                [], include_pptp=True,
+                [{"title": "Situación", "file": str(plan)}], include_pptp=True,
                 memory_documents=[{"title": "Objeto", "outline": ["Alcance"]}],
             )
             with ZipFile(master) as archive:
@@ -95,6 +99,22 @@ class DocumentStructureTests(unittest.TestCase):
                 node for node in body
                 if node.get(_tag("text:style-name"), "").startswith("ProjectAnnexCoverNumber")
             ]
+            index_title = body.find(
+                f"{_tag('text:p')}[@{_tag('text:style-name')}='ReportContentsTitle']",
+            )
+            self.assertEqual(index_title.text, "ÍNDICE")
+            index_entries = [
+                node for node in body
+                if node.get(_tag("text:style-name"), "").startswith("PPTPContents")
+            ]
+            self.assertEqual(sum(
+                len(list(entry.iter(_tag("text:bookmark-ref")))) for entry in index_entries
+            ), 4)
+            plan_entry = next(
+                node for node in index_entries if "PLANO Nº 01" in "".join(node.itertext())
+            )
+            self.assertIsNotNone(plan_entry.find(_tag("text:a")))
+            self.assertIsNone(plan_entry.find(".//" + _tag("text:bookmark-ref")))
             self.assertEqual(["".join(node.itertext()) for node in covers], ["ANEJO Nº 1", "ANEJO Nº 2"])
             for index, cover in enumerate(covers, 1):
                 document_index = index + 1
@@ -105,6 +125,15 @@ class DocumentStructureTests(unittest.TestCase):
                     page_break.get(_tag("text:style-name")), f"ProjectDocumentPageBreak{document_index}",
                 )
                 self.assertIsNotNone(section.find(_tag("text:section-source")))
+                bookmark = cover.find(_tag("text:bookmark"))
+                self.assertEqual(
+                    bookmark.get(_tag("text:name")), f"ProjectDocumentStart{document_index}",
+                )
+                self.assertIsNone(page_break.find(_tag("text:bookmark")))
+                self.assertTrue(any(
+                    reference.get(_tag("text:ref-name")) == bookmark.get(_tag("text:name"))
+                    for entry in index_entries for reference in entry.iter(_tag("text:bookmark-ref"))
+                ))
                 self.assertFalse(any(
                     node.get(_tag("text:style-name"), "").startswith("ProjectAnnexCover")
                     for node in section.iter()
@@ -137,7 +166,11 @@ class DocumentStructureTests(unittest.TestCase):
                 self.assertIsNotNone(page.find(f".//{_tag('text:page-number')}"))
             for path in master.parent.rglob("*.odt"):
                 with ZipFile(path) as archive:
-                    self.assertNotIn(b"ProjectAnnexCover", archive.read("content.xml"))
+                    xml = archive.read("content.xml")
+                    self.assertNotIn(b"ProjectAnnexCover", xml)
+                    child = ET.fromstring(xml)
+                    if child.find(".//" + _tag("text:h")) is not None:
+                        self.assertIsNotNone(child.find(".//" + _tag("text:table-of-content")))
 
             soffice = shutil.which("soffice") or str(
                 Path(os.environ.get("PROGRAMFILES", r"C:\Program Files"))
@@ -152,6 +185,11 @@ class DocumentStructureTests(unittest.TestCase):
                     check=True, capture_output=True, timeout=90,
                 )
                 pages = PdfReader(root / "Maestro.pdf").pages
+                index_text = " ".join(
+                    page.extract_text() for page in pages
+                    if "DOCUMENTO Nº 1. MEMORIA Y ANEJOS." in page.extract_text()
+                )
+                index_text = " ".join(index_text.split())
                 for number, title in (
                     (1, "JUSTIFICACIÓN DE PRECIOS"), (2, "CONSERVACIÓN Y MANTENIMIENTO"),
                 ):
@@ -161,6 +199,10 @@ class DocumentStructureTests(unittest.TestCase):
                     ]
                     self.assertEqual(len(cover_pages), 1)
                     page_index = cover_pages[0]
+                    self.assertRegex(
+                        index_text,
+                        rf"(?i)ANEJO Nº {number}\. {re.escape(title)}[\s.]+{page_index + 1}\b",
+                    )
                     self.assertIn(title, pages[page_index].extract_text())
                     self.assertIn(f"ANEJO Nº {number}:", pages[page_index + 1].extract_text())
                     runs = []
@@ -477,6 +519,7 @@ class DocumentStructureTests(unittest.TestCase):
                             index_hrefs = [
                                 node.attrib[_tag("xlink:href")]
                                 for node in content.iter(_tag("text:a"))
+                                if not node.attrib[_tag("xlink:href")].startswith("#")
                             ]
                             base = (folder / master.name).as_uri() + "/"
                             self.assertEqual(
@@ -588,12 +631,12 @@ class DocumentStructureTests(unittest.TestCase):
                         paragraph for paragraph in content.iter(_tag("text:p"))
                         if "".join(paragraph.itertext()) == "MEMORIA DESCRIPTIVA."
                     )
-                    self.assertIsNotNone(memory_index.find(_tag("text:tab")))
+                    self.assertIsNone(memory_index.find(_tag("text:tab")))
                     annex_index = next(
                         paragraph for paragraph in content.iter(_tag("text:p"))
                         if "ANEJO Nº 1. Gestión de residuos" in "".join(paragraph.itertext())
                     )
-                    self.assertEqual(annex_index.get(_tag("text:style-name")), "P19")
+                    self.assertEqual(annex_index.get(_tag("text:style-name")), "PPTPContents2")
                     self.assertIsNotNone(annex_index.find(_tag("text:tab")))
                     self.assertNotIn("{{", content_xml.decode("utf-8"))
                     styles_xml = document.read("styles.xml")

@@ -14,19 +14,22 @@ def table_labels(number: int | str, title: str) -> tuple[str, str]:
     return f"Véase la Tabla {number}.", f"Tabla {number}. {title}"
 
 
-def pdf_list_style(name, parent, depth: int = 0):
+def pdf_list_style(name, parent, depth: int = 0, *, justified: bool = False):
     """Alinea el marcador y las líneas de continuación de una lista PDF."""
-    from reportlab.lib.enums import TA_LEFT
+    from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
     from reportlab.lib.styles import ParagraphStyle
 
     return ParagraphStyle(
-        name, parent=parent, alignment=TA_LEFT, leftIndent=LIST_INDENT + LIST_DEPTH_STEP * depth,
+        name, parent=parent, alignment=TA_JUSTIFY if justified else TA_LEFT,
+        leftIndent=LIST_INDENT + LIST_DEPTH_STEP * depth,
         firstLineIndent=0, bulletIndent=LIST_DEPTH_STEP * depth, bulletAnchor="start",
         bulletFontName=parent.fontName, bulletFontSize=parent.fontSize, spaceAfter=3,
     )
 
 
-def add_odt_list_style(document, name: str, parent: str, depth: int = 0) -> None:
+def add_odt_list_style(
+    document, name: str, parent: str, depth: int = 0, *, justified: bool = False,
+) -> None:
     """Define el tabulador y la sangría francesa de una lista ODT."""
     from xml.etree import ElementTree as ET
     from odt_reports import _tag
@@ -39,7 +42,7 @@ def add_odt_list_style(document, name: str, parent: str, depth: int = 0) -> None
     properties = ET.SubElement(style, _tag("style:paragraph-properties"), {
         _tag("fo:margin-left"): f"{indent}pt", _tag("fo:text-indent"): f"-{LIST_INDENT}pt",
         _tag("fo:margin-top"): "0pt", _tag("fo:margin-bottom"): "3pt",
-        _tag("fo:text-align"): "start",
+        _tag("fo:text-align"): "justify" if justified else "start",
     })
     tabs = ET.SubElement(properties, _tag("style:tab-stops"))
     ET.SubElement(tabs, _tag("style:tab-stop"), {
@@ -112,9 +115,51 @@ def split_list_item(text: str) -> tuple[str, str]:
 
 
 DEFAULT_TOC_DEPTH = 2
+CONTENTS_LEVEL_INDENT = 12
 TABLE_HEADER_BACKGROUND = "#4472C4"
 TABLE_ALTERNATE_BACKGROUND = "#D9E5F5"
 TABLE_BORDER_COLOR = "#B7C9E2"
+
+
+def add_odt_contents_styles(document, depth: int, *, width: float | None = None) -> None:
+    """Define el aspecto comun de titulos, niveles y puntos guia de los indices."""
+    from xml.etree import ElementTree as ET
+    from odt_reports import _tag
+    from report_layout import CONTENT_WIDTH
+
+    if width is None:
+        layout = getattr(document, "layout", None)
+        width = layout.content_width if layout is not None else CONTENT_WIDTH
+    known = {
+        style.get(_tag("style:name")) for style in document.automatic_styles
+    }
+    for level in range(depth + 1):
+        name = f"PPTPContents{level}" if level else "ReportContentsTitle"
+        if name in known:
+            continue
+        style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+            _tag("style:name"): name, _tag("style:family"): "paragraph",
+        })
+        indent = (level - 1) * CONTENTS_LEVEL_INDENT if level else 0
+        properties = ET.SubElement(style, _tag("style:paragraph-properties"), {
+            _tag("fo:margin-left"): f"{indent}pt", _tag("fo:margin-right"): "0pt",
+            _tag("fo:text-indent"): "0pt", _tag("fo:text-align"): "start",
+            _tag("fo:line-height"): "115%",
+            _tag("fo:margin-top"): "0pt" if level else "6pt",
+            _tag("fo:margin-bottom"): "4pt" if level else "8pt",
+            _tag("fo:keep-with-next"): "auto" if level else "always",
+        })
+        ET.SubElement(style, _tag("style:text-properties"), {
+            _tag("fo:font-family"): "Arial", _tag("fo:font-size"): "10pt" if level else "16pt",
+            _tag("fo:font-weight"): "bold" if level <= 1 else "normal",
+            _tag("fo:color"): "#000000",
+        })
+        if level:
+            tabs = ET.SubElement(properties, _tag("style:tab-stops"))
+            ET.SubElement(tabs, _tag("style:tab-stop"), {
+                _tag("style:position"): f"{width - indent:g}pt",
+                _tag("style:type"): "right", _tag("style:leader-char"): ".",
+            })
 
 
 def pdf_blue_table_style() -> list[tuple]:
@@ -164,8 +209,12 @@ def add_odt_blue_table_headers(document, prefix: str, *, centered: bool = False)
         style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
             _tag("style:name"): f"{prefix}Header{suffix}",
             _tag("style:family"): "paragraph",
-            _tag("style:parent-style-name"): f"TableHeader{suffix}",
+            _tag("style:parent-style-name"): "TableHeader" if suffix == "Center" else f"TableHeader{suffix}",
         })
+        if suffix == "Center":
+            ET.SubElement(style, _tag("style:paragraph-properties"), {
+                _tag("fo:text-align"): "center",
+            })
         ET.SubElement(style, _tag("style:text-properties"), {_tag("fo:color"): "#FFFFFF"})
 
 

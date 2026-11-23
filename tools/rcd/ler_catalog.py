@@ -8,6 +8,8 @@ from pathlib import Path
 import re
 from typing import TYPE_CHECKING
 
+from .._shared.budget_sources import RCD_BUDGET_SOURCE
+
 if TYPE_CHECKING:
     from bc3_gui import ProjectItem
 
@@ -68,6 +70,8 @@ def match_rows(items: list[ProjectItem]) -> list[list[str]]:
     index = by_work_unit(CATALOG_PATH)
     rows = []
     for item in items:
+        if item.source.startswith(RCD_BUDGET_SOURCE):
+            continue
         entries = index.get(item.code.strip().upper(), ())
         for entry in entries:
             review = "Vínculo múltiple" if len(entries) > 1 else "Vínculo único"

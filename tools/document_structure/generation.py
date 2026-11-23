@@ -315,9 +315,11 @@ def _write_catalog_document(
     ):
         raise ValueError(f"El documento «{title}» no tiene un esquema válido.")
     document = _new_catalog_document(app, title, settings, annex_number=annex_number)
-    for section in outline:
-        document.heading(section.strip(), level=1)
+    headings = [(1, section.strip()) for section in outline]
+    for index, (_, section) in enumerate(headings):
+        document.heading(section, level=1, bookmark=f"PPTPHeading{index}")
         document.paragraph("", "ReportBody")
+    document.insert_table_of_contents(headings, position=1)
     document.write(target)
 
 
@@ -345,6 +347,7 @@ def _write_memory_document(app, target: Path, sections: list[dict[str, object]],
     document = _new_catalog_document(app, MEMORY_DOCUMENT_TITLE, settings)
     if not sections:
         raise ValueError("Selecciona al menos una sección para generar la memoria.")
+    headings = []
     for section in sections:
         title = str(section.get("title", "")).strip()
         outline = section.get("outline", [])
@@ -353,10 +356,15 @@ def _write_memory_document(app, target: Path, sections: list[dict[str, object]],
             for subsection in outline
         ):
             raise ValueError("Una sección de la memoria no tiene un esquema válido.")
-        document.heading(title, level=1)
+        document.heading(title, level=1, bookmark=f"PPTPHeading{len(headings)}")
+        headings.append((1, title))
         for subsection in outline:
-            document.heading(subsection.strip(), level=2)
+            document.heading(
+                subsection.strip(), level=2, bookmark=f"PPTPHeading{len(headings)}",
+            )
+            headings.append((2, subsection.strip()))
             document.paragraph("", "ReportBody")
+    document.insert_table_of_contents(headings, position=1)
     document.write(target)
 
 

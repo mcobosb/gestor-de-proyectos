@@ -83,6 +83,45 @@ class PriceDocumentTests(unittest.TestCase):
             author="Autor único del anejo", indirect_costs=6,
         )
 
+    def test_caption_base_is_narrow_eight_and_bold_in_both_formats(self):
+        """Corrige el caption propio de nueve puntos sin alterar las tablas nativas."""
+        from pypdf import PdfReader
+        from report_layout import ReportLayout
+        from reportlab.pdfbase import pdfmetrics
+        from odt_reports import _tag
+
+        font = pdfmetrics.getFont(ReportLayout().bold_font).face.name
+        expected_font = font.decode() if isinstance(font, bytes) else font
+        table = NarrativeTable("CAPTION_MARCA", (("Campo", "Valor"),))
+        for extension in ("odt", "pdf"):
+            with self.subTest(format=extension):
+                target = self.folder / f"caption.{extension}"
+                with patch("tools.price_justification.document.narrative", return_value=[(0, table)]):
+                    write_document(self.app, target, {})
+                if extension == "odt":
+                    with ZipFile(target) as archive:
+                        content = ET.fromstring(archive.read("content.xml"))
+                    style = next(
+                        node for node in content.iter(_tag("style:style"))
+                        if node.get(_tag("style:name")) == "PricesCaption"
+                    )
+                    props = style.find(_tag("style:text-properties"))
+                    self.assertEqual(props.get(_tag("fo:font-family")), "Arial Narrow")
+                    self.assertEqual(props.get(_tag("fo:font-size")), "8pt")
+                    self.assertEqual(props.get(_tag("fo:font-weight")), "bold")
+                else:
+                    runs = []
+                    for page in PdfReader(target).pages:
+                        def collect(text, cm, tm, font, size):
+                            """Comprueba la fuente incrustada y su tamaño efectivo."""
+                            if "CAPTION_MARCA" in text:
+                                runs.append((font["/BaseFont"], size))
+                        page.extract_text(visitor_text=collect)
+                    self.assertTrue(runs)
+                    for name, size in runs:
+                        self.assertTrue(name.endswith(expected_font))
+                        self.assertAlmostEqual(size, 8, places=1)
+
     def test_listing_headings_and_blue_rows_preserve_template_and_table_layout(self):
         """Conserva títulos de plantilla y resalta solo las filas solicitadas."""
         from odt_reports import _tag
@@ -99,7 +138,10 @@ class PriceDocumentTests(unittest.TestCase):
             for root in (styles, content) for style in root.iter(_tag("style:style"))
         }
         parent = declared["PricesListingHeading"].get(_tag("style:parent-style-name"))
-        self.assertTrue(parent.startswith("TemplateHeading"), parent)
+        self.assertEqual(parent, "TemplateHeading")
+        heading_properties = declared["PricesListingHeading"].find(_tag("style:text-properties"))
+        self.assertIsNotNone(heading_properties)
+        self.assertEqual(heading_properties.get(_tag("fo:font-weight")), "bold")
         self.assertIsNotNone(styles.find(
             f".//{_tag('office:styles')}/{_tag('style:style')}[@{_tag('style:name')}='{parent}']",
         ))
@@ -128,6 +170,28 @@ class PriceDocumentTests(unittest.TestCase):
                 declared[name].find(_tag("style:text-properties")).get(_tag("fo:color")),
                 "#FFFFFF",
             )
+
+    def test_listing_heading_bold_respects_project_typography(self):
+        """Mantiene la negrita predeterminada sin anular la configuración del proyecto."""
+        from odt_reports import _tag
+
+        for bold in (True, False):
+            with self.subTest(bold=bold):
+                self.app.report_settings.text_styles = {"heading1": {"bold": bold}}
+                target = self.folder / "negrita.odt"
+                with patch("tools.price_justification.document.narrative", return_value=[]):
+                    write_document(self.app, target, {})
+                with ZipFile(target) as archive:
+                    content = ET.fromstring(archive.read("content.xml"))
+                style = next(
+                    node for node in content.iter(_tag("style:style"))
+                    if node.get(_tag("style:name")) == "PricesListingHeading"
+                )
+                self.assertEqual(style.get(_tag("style:parent-style-name")), "TemplateHeading")
+                self.assertEqual(
+                    style.find(_tag("style:text-properties")).get(_tag("fo:font-weight")),
+                    "bold" if bold else "normal",
+                )
 
     def test_embedded_pdf_listings_use_blue_headers_and_chapter_bands(self):
         """Aplica el mismo azul en PDF sin recolorear los informes independientes."""

@@ -415,10 +415,16 @@ def build_pdf_report(
     def chapter(code):
         """Inserta la banda de capítulo con su código normalizado y su título."""
         story.append(Spacer(1, 2 * mm))
-        story.append(layout.chapter(
+        block = layout.chapter(
             format_chapter_code(code), app._chapter_title(code),
             blue_header=embedded and report == "Descompuestos",
-        ))
+        )
+        if not embedded:
+            label = f"{format_chapter_code(code)} — {app._chapter_title(code)}"
+            if report == "Cuadro de precios 1 y 2 por capitulos":
+                label = f"CUADRO DE PRECIOS {section} · {label}"
+            block._contents_heading = (1, label)
+        story.append(block)
 
     def item_heading(item, value=None):
         """Añade la partida en negrita y su descripción sangrada, con importe opcional."""
@@ -639,6 +645,10 @@ def build_pdf_report(
 
     def page_header(canvas, document):
         """Dibuja el logo, título de sección, cabeceras tabuladas y pie de página."""
+        nonlocal current_heading
+        if document.page == 1:
+            current_heading = header_title
+            page_headings.clear()
         layout.header(canvas, document, page_headings.get(document.page, current_heading),
                       project_label,
                       footer=f"{date.today():%d/%m/%Y}",
@@ -650,7 +660,7 @@ def build_pdf_report(
 def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
     """Genera el informe independiente conservando sus cabeceras y firmas."""
     from reportlab.lib.pagesizes import A4
-    from reportlab.platypus import SimpleDocTemplate
+    from tools._shared.pdf_contents import ContentsDocTemplate, add_pdf_contents
     from reportlab.platypus.doctemplate import LayoutError
     from bc3_gui import currency_label
     from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout, budget_report_columns, report_project_label
@@ -664,13 +674,14 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
         template_path=settings.template_path, expediente=settings.expediente, template_title=title,
     )
     story, page_header = build_pdf_report(app, report, layout)
+    add_pdf_contents(story, layout)
     header_title = REPORT_TITLES[report]
     column_headers, column_ratios = budget_report_columns(report)
     project_label = report_project_label(
         title, "" if report == "Mediciones" else currency_label(settings.currency, settings.custom_currency),
     )
 
-    class ReportDocument(SimpleDocTemplate):
+    class ReportDocument(ContentsDocTemplate):
         def afterPage(self):
             """Dibuja la cabecera tras conocer la sección efectivamente impresa en la página."""
             page_header(self.canv, self)
@@ -682,7 +693,7 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
         author=settings.document_author,
     )
     try:
-        document.build(story)
+        document.multiBuild(story)
     except LayoutError as exc:
         raise ValueError(f"No se pudo paginar el informe: {exc}") from exc
 
@@ -720,8 +731,9 @@ def write_certification_pdf(
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.platypus import (
-        PageBreak, SimpleDocTemplate, Spacer,
+        PageBreak, Spacer,
     )
+    from tools._shared.pdf_contents import ContentsDocTemplate, add_pdf_contents
     from reportlab.platypus.doctemplate import LayoutError
     from bc3_gui import fmt_number, format_chapter_code
     from report_layout import (
@@ -805,7 +817,9 @@ def write_certification_pdf(
         for chapter_index, code in enumerate(codes):
             if chapter_index:
                 story.append(PageBreak())
-            story.append(layout.chapter(format_chapter_code(code), chapter_title(code)))
+            block = layout.chapter(format_chapter_code(code), chapter_title(code))
+            block._contents_heading = (1, f"{format_chapter_code(code)} — {chapter_title(code)}")
+            story.append(block)
             for item, amount in certified:
                 if item.chapter != code:
                     continue
@@ -858,6 +872,7 @@ def write_certification_pdf(
                           ), layout.words_style))
 
     story.extend(layout.signature_block(settings, with_contractor=True))
+    add_pdf_contents(story, layout)
 
     def page_header(canvas, document):
         """Dibuja la cabecera institucional y la identificación del mes certificado."""
@@ -873,13 +888,13 @@ def write_certification_pdf(
     column_headers = (["CÓDIGO", "RESUMEN", "UDS", "LONGITUD", "ANCHURA", "ALTURA",
                        "CANTIDAD", "PRECIO", "IMPORTE"] if detail else ())
     column_ratios = CERTIFICATION_COLUMN_RATIOS
-    document = SimpleDocTemplate(
+    document = ContentsDocTemplate(
         str(target), pagesize=A4, leftMargin=LEFT_MARGIN - 6, rightMargin=RIGHT_MARGIN - 6,
         topMargin=layout.top_margin(heading, project_label, column_headers, column_ratios),
         bottomMargin=layout.bottom_margin(),
         title=f"{report} - Certificación {certification_number} - {project_title}", author=settings.document_author,
     )
     try:
-        document.build(story, onFirstPage=page_header, onLaterPages=page_header)
+        document.multiBuild(story, onFirstPage=page_header, onLaterPages=page_header)
     except LayoutError as exc:
         raise ValueError(f"No se pudo paginar el informe: {exc}") from exc

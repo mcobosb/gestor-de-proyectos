@@ -10,6 +10,7 @@ FONTS = {
     "Times New Roman": ("Times-Roman", "Times-Bold", "Times-Italic", "Times-BoldItalic"),
     "Courier New": ("Courier", "Courier-Bold", "Courier-Oblique", "Courier-BoldOblique"),
 }
+CAPTION_SIZE = 8
 ROLES = {
     "title": ("Título del documento", 16, True),
     **{f"heading{n}": (f"Título {n}", size, True)
@@ -17,7 +18,7 @@ ROLES = {
     "body": ("Texto normal", 10, False),
     "list": ("Listas y viñetas", 10, False),
     "index": ("Índice", 10, False),
-    "caption": ("Títulos de tabla", 9, True),
+    "caption": ("Títulos de tabla", CAPTION_SIZE, True),
     "table_header": ("Cabeceras de tabla", 8, True),
     "table": ("Texto de tabla", 8, False),
     "emphasis": ("Totales y énfasis en tablas", 8, True),
@@ -69,7 +70,7 @@ def style_role(name: str, *, odt: bool = False) -> str:
     if name in {"reportheader", "reportproject", "projecttitle"}:
         return "header"
     if name in {"title", "reporttitle", "pptptitle", "essdocumenttitle", "essdocumentnexttitle",
-                "tituloplantilla", "pricesdocumenttitle", "rcddocumenttitle"}:
+                "tituloplantilla", "pricesdocumenttitle", "rcddocumenttitle", "reportcontentstitle"}:
         return "title"
     if "caption" in name:
         return "caption"
@@ -149,14 +150,18 @@ def odt_typography(style, fields: dict[str, str | float | bool], tag) -> None:
 
 def style_odt_tree(root, styles: StyleTable, tag) -> None:
     """Personaliza estilos de párrafo nombrados y automáticos ya existentes."""
-    if not styles:
-        return
     for style in root.iter(tag("style:style")):
         if style.get(tag("style:family")) != "paragraph":
             continue
         role = style_role(style.get(tag("style:name"), ""), odt=True)
         if role:
-            odt_typography(style, styles.get(role, {}), tag)
+            fields = styles.get(role, {})
+            if role == "caption":
+                fields = {
+                    "font": "Arial Narrow", "size": CAPTION_SIZE, "bold": True,
+                    "italic": False, **fields,
+                }
+            odt_typography(style, fields, tag)
 
 
 def style_odt_paragraphs(section, container, styles: StyleTable, tag, role_for) -> None:

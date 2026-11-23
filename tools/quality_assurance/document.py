@@ -12,7 +12,7 @@ from document_styles import ROLES
 from tools._library_editor import read_markdown
 from tools._library_markdown import document_markdown, text_blocks
 from tools._shared.document_layout import (
-    add_odt_blue_table_cells, add_odt_blue_table_headers, add_odt_list_style,
+    DEFAULT_TOC_DEPTH, add_odt_blue_table_cells, add_odt_blue_table_headers, add_odt_list_style,
     add_odt_narrative_styles,
     pdf_list_style, split_list_item, style_odt_blue_table,
 )
@@ -100,6 +100,10 @@ def _write_odt(target, project, settings, blocks, data) -> None:
     for level in {level for level, _ in blocks if level < 0}:
         add_odt_list_style(doc, f"QualityBullet{-level}", "QualityBody", -level - 1)
     doc.paragraph(TITLE, "ReportTitle")
+    headings = [(level, text) for level, text in blocks if level > 0]
+    if headings:
+        doc.table_of_contents(headings, max_level=DEFAULT_TOC_DEPTH, name="QualityContents")
+    bookmark = 0
     for level, text in blocks:
         if text in TABLES:
             caption, headers, ratios, numeric = TABLES[text]
@@ -107,7 +111,10 @@ def _write_odt(target, project, settings, blocks, data) -> None:
             doc.table(headers, data[text], ratios=ratios, right_columns=numeric)
             style_odt_blue_table(doc.body[-1], "QualityTable")
         elif level > 0:
-            doc.heading(text, level, style=f"QualityHeading{level}")
+            doc.heading(
+                text, level, style=f"QualityHeading{level}", bookmark=f"PPTPHeading{bookmark}",
+            )
+            bookmark += 1
         elif level < 0:
             marker, label = split_list_item(text)
             node = ET.SubElement(doc.body, _tag("text:p"),
@@ -125,8 +132,9 @@ def _write_pdf(target, project, settings, blocks, data) -> None:
     from html import escape
     from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
     from reportlab.lib.styles import ParagraphStyle
-    from reportlab.platypus import SimpleDocTemplate, Spacer
+    from reportlab.platypus import Spacer
     from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
+    from tools._shared.pdf_contents import ContentsDocTemplate, add_pdf_contents
 
     layout = ReportLayout(template_path=settings.template_path, template_title=project,
                           expediente=settings.expediente, repeat_titles=False,
@@ -157,19 +165,23 @@ def _write_pdf(target, project, settings, blocks, data) -> None:
             story.extend([layout.table(headers, data[text], ratios, blue_header=True,
                                        right_columns=numeric), Spacer(1, 10)])
         elif level > 0:
-            story.append(layout.text(text, headings[f"heading{level}"]))
+            heading = layout.text(text, headings[f"heading{level}"])
+            if level <= DEFAULT_TOC_DEPTH:
+                heading._contents_heading = (level, text)
+            story.append(heading)
         elif level < 0:
             marker, label = split_list_item(text)
             story.append(layout.paragraph(escape(label), bullets[level], bulletText=marker))
         else:
             story.append(layout.text(text, body, role="body"))
     story.extend(layout.signature_block(settings))
+    add_pdf_contents(story, layout, insertion=1)
 
     def page_header(canvas, document) -> None:
         """Pinta la cabecera y el pie de cada página."""
         layout.header(canvas, document, TITLE, project)
 
-    document = SimpleDocTemplate(str(target), pagesize=layout.page_size, leftMargin=LEFT_MARGIN-6,
+    document = ContentsDocTemplate(str(target), pagesize=layout.page_size, leftMargin=LEFT_MARGIN-6,
                                  rightMargin=RIGHT_MARGIN-6, title=TITLE, author=settings.document_author,
                                  topMargin=layout.top_margin(TITLE, project), bottomMargin=layout.bottom_margin())
-    document.build(story, onFirstPage=page_header, onLaterPages=page_header)
+    document.multiBuild(story, onFirstPage=page_header, onLaterPages=page_header)

@@ -11,7 +11,8 @@ from odt_reports import _tag
 from document_styles import style_odt_paragraphs, style_role
 from report_layout import replace_template_fields
 from tools._shared.document_layout import (
-    add_odt_blue_table_cells, add_odt_blue_table_headers, style_odt_blue_table,
+    add_odt_blue_table_cells, add_odt_blue_table_headers, add_odt_contents_styles,
+    style_odt_blue_table,
 )
 
 MASTER_NAME = "Documento maestro.odm"
@@ -134,6 +135,8 @@ def _style_content(data: bytes, text_styles) -> bytes:
         name = element.get(_tag("text:style-name"), "")
         if name.startswith("ProjectTypography_"):
             return ""
+        if "contents" in name.lower() or "caption" in name.lower():
+            return style_role(name, odt=True)
         if element.tag == _tag("text:h"):
             level = min(6, max(1, int(element.get(_tag("text:outline-level"), "1"))))
             return style_role(name, odt=True) or f"heading{level}"
@@ -573,7 +576,7 @@ def _style_document_page_breaks(root, master_page_names: list[str]) -> None:
 def _append_index_and_sections(
     root, entries: list[dict[str, str]], links: list[Path], folder: Path,
 ) -> None:
-    """Actualiza el índice estático y añade secciones enlazadas al contenido maestro."""
+    """Unifica el índice y vincula documentos con referencias de página del maestro."""
     body = root.find(f"{_tag('office:body')}/{_tag('office:text')}")
     if body is None:
         raise ValueError("La plantilla no contiene un cuerpo de texto ODF.")
@@ -586,28 +589,46 @@ def _append_index_and_sections(
     ), None)
     if heading_index is None:
         raise ValueError("La plantilla no contiene el índice general del proyecto.")
-    samples = {}
-    for child in children:
-        if child.tag != _tag("text:p"):
-            continue
-        style = child.get(_tag("text:style-name"), "")
-        current = samples.get(style)
-        if current is None or (
-            not "".join(current.itertext()).strip()
-            and "".join(child.itertext()).strip()
-        ):
-            samples[style] = child
+    automatic = root.find(_tag("office:automatic-styles"))
+    if automatic is None:
+        automatic = ET.Element(_tag("office:automatic-styles"))
+        root.insert(list(root).index(root.find(_tag("office:body"))), automatic)
+    add_odt_contents_styles(SimpleNamespace(automatic_styles=automatic), 2)
+    heading = children[heading_index]
+    original_style = heading.get(_tag("text:style-name"))
+    title_style = next(
+        style for style in automatic
+        if style.get(_tag("style:name")) == "ReportContentsTitle"
+    )
+    if original_style:
+        title_style.set(_tag("style:parent-style-name"), original_style)
+    _set_paragraph_text(heading, "ÍNDICE")
+    heading.set(_tag("text:style-name"), "ReportContentsTitle")
     for child in children[heading_index + 1:]:
         body.remove(child)
 
     insertion = heading_index + 1
+    targets = {
+        _master_link(path): f"ProjectDocumentStart{index}"
+        for index, path in enumerate(links, 1)
+    }
     for entry in entries:
-        style = entry.get("style", "P19")
-        paragraph = deepcopy(samples.get(style, samples.get("P19", ET.Element(_tag("text:p")))))
-        indent = next(paragraph.iter(_tag("text:tab")), None) is not None
+        level = 1 if entry.get("style") in {"P18", "P21"} else 2
+        paragraph = ET.Element(_tag("text:p"), {
+            _tag("text:style-name"): f"PPTPContents{level}",
+        })
         _set_paragraph_text(
-            paragraph, entry["text"], entry.get("href", ""), indent=indent,
+            paragraph, entry["text"], entry.get("href", ""),
         )
+        target = targets.get(entry.get("href"))
+        if target is not None:
+            ET.SubElement(paragraph, _tag("text:tab"))
+            link = ET.SubElement(paragraph, _tag("text:a"), {
+                _tag("xlink:href"): f"#{target}", _tag("xlink:type"): "simple",
+            })
+            ET.SubElement(link, _tag("text:bookmark-ref"), {
+                _tag("text:ref-name"): target, _tag("text:reference-format"): "page",
+            }).text = "1"
         body.insert(insertion, paragraph)
         insertion += 1
 
@@ -642,7 +663,10 @@ def _append_index_and_sections(
                     if style.get(_tag("style:name")) not in known
                 )
         section.extend(deepcopy(list(linked_body)))
-        body.append(ET.Element(_tag("text:p")))
+        page_break = ET.SubElement(body, _tag("text:p"))
+        ET.SubElement(page_break, _tag("text:bookmark"), {
+            _tag("text:name"): f"ProjectDocumentStart{index}",
+        })
         body.append(section)
 
 
@@ -701,6 +725,10 @@ def _add_annex_covers(root, entries: list[dict[str, str]], links: list[Path]) ->
             _tag("text:style-name"): f"ProjectAnnexCoverNumber{index}",
         })
         number_paragraph.text = f"ANEJO Nº {number}"
+        page_break = body[position]
+        for bookmark in list(page_break.findall(_tag("text:bookmark"))):
+            page_break.remove(bookmark)
+            number_paragraph.append(bookmark)
         title_paragraph = ET.Element(_tag("text:p"), {
             _tag("text:style-name"): "ProjectAnnexCoverTitle",
         })

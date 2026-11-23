@@ -36,6 +36,23 @@ para cada función. Las tablas y otros elementos propios de cada informe
 conservan sus formatos específicos. El texto descriptivo de planificación usa
 el mismo estilo de cuerpo, sin alterar el diagrama de Gantt.
 
+Los títulos de las tablas (captions) usan como base **Arial Narrow, 8 pt y
+negrita**, tanto en PDF como en ODT. Los ajustes explícitos de **Títulos de
+tabla** del proyecto tienen prioridad. En PDF se conserva la alternativa
+Helvetica si Arial Narrow no está instalada.
+El resumen de la actuación se justifica en el estudio RCD y en la tabla de
+datos del proyecto de Seguridad y Salud. Sus viñetas mantienen la sangría
+francesa y un solo tabulador tras el marcador, también al pegar texto con «•».
+
+Los índices de PDF, ODT y del maestro ODM comparten el título **ÍNDICE**,
+sangrías por nivel, primer nivel en negrita, puntos guía y números de página
+alineados a la derecha. Respetan la tipografía de **Índice** del proyecto.
+Calidad, los documentos base de memoria y anejos y los informes detallados de
+presupuesto y certificación también incluyen índice cuando tienen secciones
+o capítulos. No se añade a resúmenes ni a documentos que solo contienen tablas.
+PPTP conserva la profundidad elegida y Seguridad y Salud el índice de cada
+documento. En ODT los índices son editables y se pueden actualizar en Writer.
+
 Al arrancar, el programa examina `tools` junto a la aplicación y añade al menú
 **Herramientas** los módulos disponibles. En el instalador de Windows, la
 **Instalación personalizada** permite marcar cada módulo por separado. También
@@ -112,6 +129,10 @@ Antes de cada anejo, el maestro incluye una portada independiente con
 Conserva el encabezado y el pie de la plantilla, con el rótulo del anejo y la
 numeración de página. Estas portadas pertenecen al ODM, no al ODT enlazado:
 se mantienen al actualizar o sustituir los textos de los anejos.
+Después del texto de cada portada se inserta un salto de página y comienza
+el documento vinculado. El índice del maestro referencia la página de la
+portada; el texto del enlace sigue abriendo el ODT correspondiente.
+Los planos externos conservan su enlace, sin asignarles páginas del maestro.
 
 Los maestros generados antes de esta corrección conservan sus vínculos anteriores.
 Puedes corregirlos en LibreOffice o volver a generar la entrega, teniendo en
@@ -551,8 +572,10 @@ la numeración de página. Antes de cada tabla de datos se incluye una referenci
 en el texto («Véase la Tabla X.»), seguida del título «Tabla X. …». Los elementos
 de maquetación (por ejemplo, las columnas de firma) no se numeran.
 
-En **Justificación de precios**, los títulos de las secciones 3, 4 y 5 conservan
-el estilo de encabezado de la plantilla ODT. La cabecera del listado de precios
+En **Justificación de precios**, los títulos de las secciones 3, 4 y 5 heredan
+el estilo **TemplateHeading** de la plantilla ODT, no **Heading 1**, y mantienen
+la negrita salvo que se desactive en los estilos del proyecto.
+La cabecera del listado de precios
 elementales y las bandas de capítulo del listado de descompuestos usan fondo
 azul y texto blanco en ODT y PDF.
 
@@ -779,6 +802,12 @@ elegidos en el diálogo de guardado y en **Archivo → Configuración**, respect
 Incluye la tabla económica de la hoja
 Presupuesto (tipología, volumen, precio de gestión, importe y porcentaje del
 presupuesto), datos de cálculo y residuos seleccionados con su procedencia.
+La tabla **Residuos seleccionados** se ordena por **Código LER**, manteniendo
+juntas sus procedencias. Las partidas generadas por el propio estudio no se
+utilizan para detectar residuos ni como procedencias o vínculos LER, con
+independencia del número de capítulo que tengan asignado. Los textos
+explicativos de revisión del modelo se mantienen en la herramienta, pero no
+se incluyen en el informe.
 
 - **A1**: volumen de tierras seleccionado × precio de gestión Nivel I.
 - **A2**: costes de los grupos pétreo, no pétreo y peligrosos/otros.

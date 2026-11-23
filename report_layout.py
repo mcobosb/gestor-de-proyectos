@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 import re
-from copy import deepcopy
+from copy import copy, deepcopy
 from datetime import date
 from io import BytesIO
 from html import escape
@@ -17,7 +17,7 @@ from xml.etree import ElementTree
 from zipfile import BadZipFile, ZipFile
 
 from app_paths import application_directory
-from document_styles import StyleTable, pdf_typography, style_role
+from document_styles import CAPTION_SIZE, StyleTable, pdf_typography, style_role
 from tools._shared.document_layout import table_labels
 
 DEFAULT_TEMPLATE_PATH = application_directory(__file__) / "plantillas" / "plantilla.odt"
@@ -698,6 +698,10 @@ class ReportLayout:
         self.regular_font = font("ReportNarrow", "ARIALN.TTF", "Helvetica")
         self.bold_font = font("ReportNarrowBold", "ARIALNB.TTF", "Helvetica-Bold")
         self.italic_font = font("ReportNarrowItalic", "ARIALNI.TTF", "Helvetica-Oblique")
+        pdfmetrics.registerFontFamily(
+            "ReportNarrow", normal=self.regular_font, bold=self.bold_font, italic=self.italic_font,
+            boldItalic=font("ReportNarrowBoldItalic", "ARIALNBI.TTF", "Helvetica-BoldOblique"),
+        )
         body_font = font("ReportArial", "arial.ttf", "Helvetica") if certification else self.regular_font
         self.normal = ParagraphStyle("report-body", fontName=self.regular_font, fontSize=8, leading=9.5)
         self.bold = ParagraphStyle("report-bold", parent=self.normal, fontName=self.bold_font)
@@ -765,7 +769,13 @@ class ReportLayout:
         from reportlab.platypus import Paragraph
 
         style = style or self.normal
-        style, underline = pdf_typography(style, self.text_styles, role or style_role(style.name))
+        role = role or style_role(style.name)
+        if role == "caption":
+            style = copy(style)
+            style.fontName = self.bold_font
+            style.leading *= CAPTION_SIZE / style.fontSize
+            style.fontSize = CAPTION_SIZE
+        style, underline = pdf_typography(style, self.text_styles, role)
         return (paragraph_class or Paragraph)(
             f"<u>{markup}</u>" if underline else markup, style, bulletText=bulletText,
         )

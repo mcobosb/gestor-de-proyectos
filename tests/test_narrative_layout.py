@@ -1,6 +1,9 @@
 """Comprobaciones comunes de tipografía de los informes ODT."""
 from datetime import date
 from pathlib import Path
+import re
+import shutil
+import subprocess
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
@@ -16,13 +19,298 @@ from tools._shared.document_layout import LIST_INDENT, template_paragraph_styles
 from tools._shared.scheduling import PlanActivity, PlanParams
 from tools.planning.document import write_planning_report
 from tools.quality_assurance.document import _write_odt as write_quality_odt
-from tools.rcd.document import _write_odt as write_rcd_odt
+from tools.quality_assurance.document import _write_pdf as write_quality_pdf
+from tools.rcd.document import DESCRIPTION_HEADING, StudyTable, _write_odt as write_rcd_odt
+from tools.rcd.document import _write_pdf as write_rcd_pdf
 from tools.safety_health import write_study_report
-from tools.safety_health.document import _Block, _StudyContent, _write_odt as write_safety_odt
+from tools.safety_health.document import (
+    _Block, _StudyContent, _pdf_blue_table, _write_odt as write_safety_odt,
+)
 
 
 class NarrativeLayoutTests(unittest.TestCase):
     """Verifica configuración y plantilla en varios generadores."""
+
+    def test_work_summary_justifies_text_and_preserves_hanging_bullets(self):
+        """Conserva viñetas pegadas con tabulador sin duplicar la sangría del resumen."""
+        from report_layout import ReportLayout
+        from reportlab.lib.enums import TA_JUSTIFY
+        from tools._library_markdown import text_blocks
+
+        source = (
+            "RESUMEN_INICIO La actuación contempla la mejora integral de la vía.\n"
+            "•\tMEDIDA_UNO " + "TRAZADO_CONTINUO " * 18 + "\n"
+            "•\tMEDIDA_DOS Adaptación del drenaje y de los servicios urbanos."
+        )
+        table = _Block("table", headers=("Aspecto", "Descripción"),
+                       rows=(("Actuación", source),), project_summary=True)
+        layout = ReportLayout()
+        cell = _pdf_blue_table(table, layout)._cellvalues[1][1]
+        self.assertEqual(len(cell), 3)
+        self.assertTrue(all(paragraph.style.alignment == TA_JUSTIFY for paragraph in cell))
+        for paragraph in cell[1:]:
+            self.assertEqual(paragraph.bulletText, "•")
+            self.assertEqual(paragraph.style.leftIndent - paragraph.style.bulletIndent, LIST_INDENT)
+            self.assertNotIn("\t", paragraph.getPlainText())
+
+        blocks = [(2, DESCRIPTION_HEADING), *text_blocks(source)]
+        captured = []
+        render = ReportLayout.paragraph
+
+        def capture(layout, markup, style=None, **kwargs):
+            """Observa los párrafos reales del PDF RCD antes de la paginación."""
+            paragraph = render(layout, markup, style, **kwargs)
+            if paragraph.getPlainText().startswith(("RESUMEN_INICIO", "MEDIDA_")):
+                captured.append(paragraph)
+            return paragraph
+
+        with TemporaryDirectory() as folder:
+            target = Path(folder) / "summary.pdf"
+            with patch.object(ReportLayout, "paragraph", capture):
+                write_rcd_pdf(blocks, "Proyecto", ReportSettings(), target)
+            self.assertEqual(len(captured), 3)
+            self.assertTrue(all(paragraph.style.alignment == TA_JUSTIFY for paragraph in captured))
+            for kind in ("rcd", "safety"):
+                target = Path(folder) / f"{kind}.odt"
+                if kind == "rcd":
+                    write_rcd_odt(blocks, "Proyecto", ReportSettings(), target)
+                    list_style, text_style = "RcdSummaryBullet1", "RcdBody"
+                else:
+                    content = _StudyContent("Seguridad", "Proyecto", "", "EUR", [table])
+                    write_safety_odt(SimpleNamespace(report_settings=ReportSettings()), target, content)
+                    list_style, text_style = "ESSProjectSummaryList", "ESSProjectSummaryText"
+                with ZipFile(target) as archive:
+                    roots = [ET.fromstring(archive.read(name)) for name in ("content.xml", "styles.xml")]
+                declared = {
+                    style.get(_tag("style:name")): style
+                    for root in roots for style in root.iter(_tag("style:style"))
+                }
+                for name in (list_style, text_style):
+                    props = declared[name].find(_tag("style:paragraph-properties"))
+                    self.assertEqual(props.get(_tag("fo:text-align")), "justify")
+                props = declared[list_style].find(_tag("style:paragraph-properties"))
+                self.assertEqual(props.get(_tag("fo:margin-left")), f"{LIST_INDENT}pt")
+                self.assertEqual(props.get(_tag("fo:text-indent")), f"-{LIST_INDENT}pt")
+                paragraphs = roots[0].findall(
+                    f".//{_tag('text:p')}[@{_tag('text:style-name')}='{list_style}']",
+                )
+                self.assertEqual(len(paragraphs), 2)
+                for paragraph in paragraphs:
+                    self.assertEqual(paragraph.text, "•")
+                    self.assertEqual(len(paragraph.findall(_tag("text:tab"))), 1)
+                    self.assertTrue(paragraph.find(_tag("text:tab")).tail.startswith("MEDIDA_"))
+            soffice = shutil.which("soffice") or r"C:\Program Files\LibreOffice\program\soffice.com"
+            if Path(soffice).is_file():
+                root = Path(folder)
+                subprocess.run(
+                    [soffice, f"-env:UserInstallation={(root / 'profile').as_uri()}",
+                     "--headless", "--convert-to", "pdf", "--outdir", str(root), str(root / "rcd.odt")],
+                    check=True, capture_output=True, timeout=90,
+                )
+                positions = {}
+                continuations = []
+                for page in PdfReader(root / "rcd.pdf").pages:
+                    def collect(text, cm, tm, font, size):
+                        """Mide la sangría del marcador, la primera línea y las continuaciones."""
+                        if text.strip() == "•":
+                            positions["bullet"] = tm[4]
+                        if "MEDIDA_UNO" in text:
+                            positions["text"] = tm[4]
+                        if text.startswith("TRAZADO_CONTINUO"):
+                            continuations.append(tm[4])
+                    page.extract_text(visitor_text=collect)
+                self.assertAlmostEqual(positions["text"] - positions["bullet"], LIST_INDENT, delta=0.15)
+                self.assertTrue(continuations)
+                for position in continuations:
+                    self.assertAlmostEqual(position, positions["text"], delta=0.15)
+
+    def test_caption_base_is_independent_of_body_and_reference_visibility(self):
+        """Unifica captions propios y comunes sin anular los ajustes del proyecto."""
+        from report_layout import ReportLayout
+        from reportlab.lib.styles import ParagraphStyle
+
+        with TemporaryDirectory() as folder:
+            for overrides in ({}, {"bold": False}, {"font": "Times New Roman", "size": 11, "bold": False}):
+                settings = ReportSettings(text_styles={
+                    "body": {"font": "Courier New", "size": 14}, "caption": overrides,
+                })
+                layout = ReportLayout(text_styles=settings.text_styles)
+                layout.table_references = False
+                story = []
+                layout.table_caption(story, "Tabla de prueba")
+                custom = layout.text("Leyenda", ParagraphStyle(
+                    "ESSCaption", fontName="Helvetica", fontSize=9, leading=12,
+                ))
+                for paragraph in (story[-1], custom):
+                    self.assertEqual(paragraph.style.fontSize, overrides.get("size", 8))
+                    self.assertEqual(
+                        paragraph.style.fontName,
+                        "Times-Roman" if "font" in overrides else
+                        layout.bold_font if overrides.get("bold", True) else layout.regular_font,
+                    )
+                target = Path(folder) / "caption.odt"
+                content = _StudyContent("Seguridad", "Proyecto", "", "EUR", [
+                    _Block("caption", "Leyenda"),
+                ])
+                write_safety_odt(SimpleNamespace(report_settings=settings), target, content)
+                with ZipFile(target) as archive:
+                    roots = [ET.fromstring(archive.read(name)) for name in ("content.xml", "styles.xml")]
+                style = next(
+                    node for root in roots for node in root.iter(_tag("style:style"))
+                    if node.get(_tag("style:name")) == "ESSCaption"
+                )
+                properties = style.find(_tag("style:text-properties"))
+                self.assertIsNotNone(properties)
+                self.assertEqual(properties.get(_tag("fo:font-family")), overrides.get("font", "Arial Narrow"))
+                self.assertEqual(properties.get(_tag("fo:font-size")), f'{overrides.get("size", 8)}pt')
+                self.assertEqual(
+                    properties.get(_tag("fo:font-weight")), "bold" if overrides.get("bold", True) else "normal",
+                )
+
+    def test_rcd_header_and_section_inheritance_survives_writer(self):
+        """Conserva el mismo formato en cabeceras centradas y secciones posteriores."""
+        blocks = [
+            (1, "SECCION_PRIMERA"), (0, "Texto inicial."),
+            (1, "SECCION_SEGUNDA"),
+            StudyTable("Cabeceras", ["HEADER_PLAIN", "HEADER_RIGHT", "HEADER_CENTER"],
+                       [["A", "1", "B"]], [1, 1, 1], right_columns=(1,), center_columns=(2,)),
+        ]
+        with TemporaryDirectory() as folder:
+            root = Path(folder)
+            target = root / "rcd.odt"
+            write_rcd_odt(blocks, "Proyecto", ReportSettings(), target)
+            with ZipFile(target) as archive:
+                styles = ET.fromstring(archive.read("styles.xml"))
+                content = ET.fromstring(archive.read("content.xml"))
+            named = {
+                style.get(_tag("style:name"))
+                for style in styles.find(_tag("office:styles"))
+                if style.tag == _tag("style:style")
+            }
+            declared = {
+                style.get(_tag("style:name")): style
+                for document in (styles, content) for style in document.iter(_tag("style:style"))
+            }
+            for name in ("RcdDocumentStart", "RcdTableHeaderCenter"):
+                self.assertIn(declared[name].get(_tag("style:parent-style-name")), named)
+            soffice = shutil.which("soffice") or r"C:\Program Files\LibreOffice\program\soffice.com"
+            if not Path(soffice).is_file():
+                return
+            subprocess.run(
+                [soffice, f"-env:UserInstallation={(root / 'profile').as_uri()}",
+                 "--headless", "--convert-to", "pdf", "--outdir", str(root), str(target)],
+                check=True, capture_output=True, timeout=90,
+            )
+            runs = {}
+            for page in PdfReader(target.with_suffix(".pdf")).pages:
+                def collect(text, cm, tm, font, size):
+                    """Recoge el formato efectivo, después de las entradas del índice."""
+                    for marker in ("SECCION_PRIMERA", "SECCION_SEGUNDA",
+                                   "HEADER_PLAIN", "HEADER_RIGHT", "HEADER_CENTER"):
+                        if marker in text:
+                            runs[marker] = (font["/BaseFont"], size)
+                page.extract_text(visitor_text=collect)
+            self.assertEqual(runs["SECCION_PRIMERA"], runs["SECCION_SEGUNDA"])
+            self.assertEqual(runs["HEADER_PLAIN"], runs["HEADER_CENTER"])
+            self.assertEqual(runs["HEADER_PLAIN"], runs["HEADER_RIGHT"])
+            self.assertAlmostEqual(runs["HEADER_CENTER"][1], 8, places=1)
+
+    def test_safety_contents_remain_scoped_to_each_document(self):
+        """Mantiene separados los indices de memoria y pliego tras unificar su estilo."""
+        app = SimpleNamespace(report_settings=ReportSettings())
+        content = _StudyContent("Seguridad y salud", "Proyecto", "", "EUR", [
+            _Block("document", "Memoria"), _Block("heading", "MEMORIA_UNICA", 1),
+            _Block("paragraph", "CUERPOMEMORIA"),
+            _Block("document", "Pliego"), _Block("heading", "PLIEGO_UNICO", 1),
+            _Block("paragraph", "CUERPOPLIEGO"),
+        ])
+        with TemporaryDirectory() as folder:
+            for output in ("odt", "pdf"):
+                target = Path(folder) / f"safety.{output}"
+                with patch("tools.safety_health.document._build_study_content", return_value=content):
+                    write_study_report(app, target)
+                if output == "odt":
+                    with ZipFile(target) as archive:
+                        tree = ET.fromstring(archive.read("content.xml"))
+                    indices = list(tree.iter(_tag("text:table-of-content")))
+                    self.assertEqual(len(indices), 2)
+                    contents = [" ".join(index.itertext()) for index in indices]
+                    for index, toc in enumerate(indices):
+                        styles = list(toc.iter(_tag("text:index-source-style")))
+                        self.assertTrue(all(
+                            style.get(_tag("text:style-name")).startswith(f"ESSDocument{index}Heading")
+                            for style in styles
+                        ))
+                else:
+                    contents = [
+                        page.extract_text() for page in PdfReader(target).pages
+                        if "ÍNDICE" in page.extract_text()
+                    ]
+                    self.assertEqual(len(contents), 2)
+                for index, label in enumerate(("MEMORIA_UNICA", "PLIEGO_UNICO")):
+                    self.assertIn(label, contents[index])
+                    self.assertNotIn(label, contents[1 - index])
+
+    def test_quality_contents_are_navigable_and_use_real_pages(self):
+        """Añade un indice multipagina con destinos reales, no numeros provisionales."""
+        blocks = []
+        for index in range(60):
+            blocks.extend([
+                (1, f"APARTADO {index:03d} & <control>"),
+                (0, f"Contenido técnico {index:03d}. " + "Texto normal. " * 35),
+            ])
+        with TemporaryDirectory() as folder:
+            target = Path(folder) / "quality.pdf"
+            write_quality_pdf(target, "Proyecto", ReportSettings(), blocks, {})
+            pages = PdfReader(target).pages
+            texts = [" ".join(page.extract_text().split()) for page in pages]
+            body_start = next(index for index, text in enumerate(texts) if "Contenido técnico" in text)
+            self.assertGreater(body_start, 1)
+            contents = " ".join(texts[:body_start])
+            self.assertIn("ÍNDICE", contents)
+            for index in range(60):
+                title = f"APARTADO {index:03d} & <control>"
+                number = next(
+                    page + 1 for page in range(body_start, len(texts)) if title in texts[page]
+                )
+                self.assertRegex(contents, rf"\b{number}\s+{re.escape(title)}")
+            self.assertTrue(all(page.get("/Annots") for page in pages[:body_start]))
+
+    def test_contents_styles_and_depth_are_shared_in_odt(self):
+        """Unifica niveles sin perder tipografia ni los destinos tras filtrar detalles."""
+        settings = ReportSettings(text_styles={"index": {"font": "Courier New", "size": 12}})
+        blocks = [(1, "Primera"), (3, "Detalle excluido"), (2, "Segunda")]
+        with TemporaryDirectory() as folder:
+            for writer in (write_quality_odt, write_rcd_odt):
+                target = Path(folder) / "contents.odt"
+                if writer is write_quality_odt:
+                    writer(target, "Proyecto", settings, blocks, {})
+                else:
+                    writer(blocks, "Proyecto", settings, target)
+                with ZipFile(target) as archive:
+                    content = ET.fromstring(archive.read("content.xml"))
+                    styles = ET.fromstring(archive.read("styles.xml"))
+                toc = content.find(".//" + _tag("text:table-of-content"))
+                references = list(toc.iter(_tag("text:bookmark-ref")))
+                self.assertEqual(
+                    [ref.get(_tag("text:ref-name")) for ref in references],
+                    ["PPTPHeading0", "PPTPHeading2"],
+                )
+                for level in (1, 2):
+                    style = next(
+                        node for root in (content, styles) for node in root.iter(_tag("style:style"))
+                        if node.get(_tag("style:name")) == f"PPTPContents{level}"
+                    )
+                    props = style.find(_tag("style:text-properties"))
+                    self.assertEqual(props.get(_tag("fo:font-family")), "Courier New")
+                    self.assertEqual(props.get(_tag("fo:font-size")), "12pt")
+                    tab = style.find(".//" + _tag("style:tab-stop"))
+                    self.assertEqual(tab.get(_tag("style:type")), "right")
+                    self.assertEqual(tab.get(_tag("style:leader-char")), ".")
+            write_quality_odt(target, "Proyecto", settings, [(0, "Texto sin secciones")], {})
+            with ZipFile(target) as archive:
+                content = ET.fromstring(archive.read("content.xml"))
+            self.assertIsNone(content.find(".//" + _tag("text:table-of-content")))
 
     def test_quality_and_rcd_share_project_narrative_styles(self):
         """Aplica plantilla y tipografía del proyecto a texto, títulos y listas."""
@@ -44,9 +332,10 @@ class NarrativeLayoutTests(unittest.TestCase):
                         write_rcd_odt(blocks, "Proyecto", settings, target)
                     with ZipFile(target) as archive:
                         content = ET.fromstring(archive.read("content.xml"))
+                        style_root = ET.fromstring(archive.read("styles.xml"))
                     styles = {
                         style.get(_tag("style:name")): style
-                        for style in content.iter(_tag("style:style"))
+                        for root in (content, style_root) for style in root.iter(_tag("style:style"))
                     }
                     for suffix, role in (("Body", "body"), ("Heading1", "heading1"),
                                          ("Bullet1", "list")):

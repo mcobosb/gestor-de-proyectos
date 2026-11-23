@@ -1,5 +1,6 @@
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -15,6 +16,56 @@ from odt_reports import write_certification_odt, write_report_odt
 
 
 class ReportCalculationsTests(unittest.TestCase):
+    def test_section_contents_in_budget_and_certification_exports(self):
+        """Indexa capitulos independientes, pero no resumenes ni listados incrustados."""
+        from bc3_gui import ProjectItem
+        from budget_reports import build_pdf_report
+        from odt_reports import _tag
+        from pypdf import PdfReader
+        from report_layout import ReportLayout
+
+        items = [ProjectItem(
+            "P1", "01#", "ud", "Partida", 3, 10, certifications={"2026-10-01": 20},
+        )]
+        app = SimpleNamespace(
+            budget_items=items, chapter_order=["01#"], report_settings=ReportSettings(),
+            _project_title=lambda: "Proyecto", _chapter_title=lambda code: "Preparación",
+        )
+        with tempfile.TemporaryDirectory() as folder:
+            for detail in (True, False):
+                report = "Presupuesto mediciones" if detail else "Presupuesto resumen"
+                certification = CERTIFICATION_REPORT_NAMES[1 if detail else 0]
+                for writer, extension, certified in (
+                    (write_pdf, "pdf", False), (write_report_odt, "odt", False),
+                    (write_certification_pdf, "pdf", True), (write_certification_odt, "odt", True),
+                ):
+                    with self.subTest(detail=detail, writer=writer.__name__):
+                        target = Path(folder) / f"report.{extension}"
+                        if certified:
+                            writer(items, app._chapter_title, "Proyecto", app.report_settings,
+                                   certification, target, "2026-10-01", 1, "Octubre")
+                        else:
+                            writer(app, report, target)
+                        if extension == "odt":
+                            with ZipFile(target) as archive:
+                                xml = ElementTree.fromstring(archive.read("content.xml"))
+                            toc = xml.find(".//" + _tag("text:table-of-content"))
+                            self.assertEqual(toc is not None, detail)
+                            if detail:
+                                source = toc.find(_tag("text:table-of-content-source"))
+                                self.assertEqual(source.get(_tag("text:use-index-marks")), "true")
+                                marks = list(xml.iter(_tag("text:toc-mark")))
+                                self.assertEqual(len(marks), 1)
+                                self.assertIn("Preparación", marks[0].get(_tag("text:string-value")))
+                        else:
+                            pages = PdfReader(target).pages
+                            self.assertEqual("ÍNDICE" in pages[0].extract_text(), detail)
+                            if detail:
+                                self.assertTrue(pages[0].get("/Annots"))
+                                self.assertIn("Preparación", pages[1].extract_text())
+            story, _ = build_pdf_report(app, "Presupuesto mediciones", ReportLayout(), embedded=True)
+            self.assertFalse(any(getattr(block, "_contents_heading", None) for block in story))
+
     def test_deviations_use_original_plan_and_include_uncertified_items(self):
         """Preserve original monthly forecasts and reconcile rounded row totals."""
         from bc3_gui import ProjectItem

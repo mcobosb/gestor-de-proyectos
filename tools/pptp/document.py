@@ -770,19 +770,6 @@ def write_document(
             [(level, text.replace("**", "")) for level, text in blocks if level > 0],
             max_level=toc_depth,
         )
-        for style in document.automatic_styles:
-            name = style.get(_tag("style:name"), "")
-            if re.fullmatch(r"PPTPContents[1-6]", name):
-                style.set(_tag("style:parent-style-name"), "PPTPBody")
-                properties = style.find(_tag("style:paragraph-properties"))
-                properties.set(_tag("fo:text-align"), "start")
-                properties.set(_tag("fo:line-height"), "115%")
-                properties.set(_tag("fo:margin-bottom"), "4pt")
-                properties.set(_tag("fo:keep-with-next"), "auto")
-                ET.SubElement(style, _tag("style:text-properties"), {
-                    _tag("fo:font-size"): "10pt",
-                    _tag("fo:font-weight"): "bold" if name == "PPTPContents1" else "normal",
-                })
         heading_index = 0
         for level, text in blocks:
             if level == 0 and text == INDEX_TOKEN:
@@ -852,7 +839,7 @@ def write_document(
         from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
         from reportlab.platypus import KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Table
         from reportlab.platypus.doctemplate import LayoutError
-        from reportlab.platypus.tableofcontents import TableOfContents
+        from tools._shared.pdf_contents import contents_table, contents_title
         from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
 
         layout = ReportLayout(
@@ -862,22 +849,13 @@ def write_document(
         )
         body = ParagraphStyle("PPTPBody", parent=layout.normal, fontSize=10,
                               leading=13, spaceAfter=6, alignment=TA_JUSTIFY)
-        toc = TableOfContents()
-        toc.levelStyles = [
-            ParagraphStyle(
-                f"PPTPContents{level}", parent=body, fontSize=10,
-                leading=13, leftIndent=12 * level, firstLineIndent=0,
-                rightIndent=24, spaceBefore=4 if level == 0 else 0,
-                alignment=TA_LEFT,
-            ) for level in range(toc_depth)
-        ]
-        toc.levelStyles = layout.index_styles(toc.levelStyles)
+        toc = contents_table(layout, toc_depth)
         bullet_styles = {
             depth: pdf_list_style(f"PPTPBullet{depth}", body, depth)
             for depth in bullet_depths
         }
         story = [
-            layout.text("ÍNDICE", layout.title_style), toc, PageBreak(),
+            contents_title(layout), toc, PageBreak(),
         ]
 
         def pdf_paragraph(text: str, style, marker=None):

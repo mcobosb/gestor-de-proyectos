@@ -541,6 +541,7 @@ def detect_wastes(state: RcdState, app: BudgetApp) -> None:
 
 def detect_waste_items(state: RcdState, items: list[ProjectItem]) -> None:
     """Conserva coincidencias por residuo para un conjunto concreto de partidas."""
+    items = [item for item in items if not item.source.startswith(RCD_BUDGET_SOURCE)]
     index = ler_catalog.by_work_unit(ler_catalog.CATALOG_PATH)
     by_item: list[set[str]] = [set() for _ in items]
     for key, group, code, _, pattern in WASTES:

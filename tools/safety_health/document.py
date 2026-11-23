@@ -1102,6 +1102,7 @@ def _pdf_reference_markup(text: str, targets: dict[str, str]) -> str:
 def _pdf_blue_table(block: _Block, layout: ReportLayout):
     """Maqueta tablas ESS con cabecera azul, filas alternas y anchos propios."""
     from reportlab.lib import colors
+    from reportlab.lib.enums import TA_JUSTIFY
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.platypus import Paragraph, Table
 
@@ -1181,8 +1182,10 @@ def _pdf_blue_table(block: _Block, layout: ReportLayout):
     )
     category_style = ParagraphStyle("ESSCatalogueType", parent=text)
     cell_list_style = pdf_list_style("ESSCellList", text)
+    project_text = ParagraphStyle("ESSProjectSummaryText", parent=text, alignment=TA_JUSTIFY)
+    project_list = pdf_list_style("ESSProjectSummaryList", project_text, justified=True)
 
-    def cell_text(value, style):
+    def cell_text(value, style, *, project_description=False):
         """Da sangria tambien a las listas incluidas en las celdas del resumen."""
         lines = value.splitlines()
         if not any(_LIST_ITEM_RE.match(line.strip()) for line in lines):
@@ -1192,7 +1195,7 @@ def _pdf_blue_table(block: _Block, layout: ReportLayout):
             item = _LIST_ITEM_RE.match(line.strip())
             paragraph = layout.text(
                 item.group(2) if item else line or "\N{NO-BREAK SPACE}",
-                cell_list_style if item else style,
+                (project_list if project_description else cell_list_style) if item else style,
             )
             if item:
                 paragraph.bulletText = item.group(1)
@@ -1208,7 +1211,9 @@ def _pdf_blue_table(block: _Block, layout: ReportLayout):
                 ) if block.headers == _CATALOGUE_HEADERS and column == 1 else (
                     cell_text(
                         value, category_style if block.headers == _CATALOGUE_HEADERS and column == 0
-                        else header if index in block.section_rows else text,
+                        else header if index in block.section_rows else
+                        project_text if block.project_summary and column == 1 else text,
+                        project_description=block.project_summary and column == 1,
                     )
                 )
                 for column, value in enumerate(row)
@@ -1255,6 +1260,14 @@ def _add_odt_blue_table_styles(document) -> None:
         })
     add_odt_blue_table_cells(document, "ESSSummary")
     add_odt_list_style(document, "ESSCellList", "ESSSummaryText")
+    style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+        _tag("style:name"): "ESSProjectSummaryText", _tag("style:family"): "paragraph",
+        _tag("style:parent-style-name"): "ESSSummaryText",
+    })
+    ET.SubElement(style, _tag("style:paragraph-properties"), {
+        _tag("fo:text-align"): "justify",
+    })
+    add_odt_list_style(document, "ESSProjectSummaryList", "ESSSummaryText", justified=True)
 
 
 def _write_odt_blue_table(document, block: _Block) -> None:
@@ -1296,6 +1309,9 @@ def _write_odt_blue_table(document, block: _Block) -> None:
                 _tag("table:style-name"),
                 "ESSSummaryBlueCell" if index % 2 == 0 else "ESSSummaryWhiteCell",
             )
+            project_description = block.project_summary and column == 1
+            text_style = "ESSProjectSummaryText" if project_description else "ESSSummaryText"
+            list_style = "ESSProjectSummaryList" if project_description else "ESSCellList"
             lines = block.rows[index][column].splitlines()
             if any(_LIST_ITEM_RE.match(line.strip()) for line in lines):
                 for child in list(cell):
@@ -1303,11 +1319,14 @@ def _write_odt_blue_table(document, block: _Block) -> None:
                 for line in lines:
                     item = _LIST_ITEM_RE.match(line.strip())
                     paragraph = ET.SubElement(cell, _tag("text:p"), {
-                        _tag("text:style-name"): "ESSCellList" if item else "ESSSummaryText",
+                        _tag("text:style-name"): list_style if item else text_style,
                     })
                     paragraph.text = item.group(1) if item else line
                     if item:
                         ET.SubElement(paragraph, _tag("text:tab")).tail = item.group(2)
+            elif project_description:
+                for paragraph in cell.findall(_tag("text:p")):
+                    paragraph.set(_tag("text:style-name"), text_style)
     if block.headers == _CATALOGUE_HEADERS:
         rows = table.findall(_tag("table:table-row"))
         start = 0
@@ -1444,15 +1463,8 @@ def _write_pdf(app, target, content: _StudyContent) -> None:
         )
         for level in range(1, 5)
     }
-    toc_styles = [
-        ParagraphStyle(
-            f"ESSContents{level}", parent=body, fontSize=10,
-            leading=13, leftIndent=12 * level, firstLineIndent=0,
-            rightIndent=24, spaceBefore=4 if level == 0 else 0,
-            alignment=TA_LEFT,
-        )
-        for level in range(DEFAULT_TOC_DEPTH)
-    ]
+    from tools._shared.pdf_contents import contents_styles, contents_title
+
     class StudyContents(TableOfContents):
         """Recibe solo las entradas del documento al que pertenece cada indice."""
 
@@ -1477,8 +1489,9 @@ def _write_pdf(app, target, content: _StudyContent) -> None:
             story.append(layout.text(document_title, layout.title_style))
         toc = StudyContents()
         toc.document_index = document_index
-        toc.levelStyles = layout.index_styles(toc_styles)
-        story.extend((layout.text("ÍNDICE", layout.title_style, role="index"), toc, PageBreak()))
+        toc.levelStyles = contents_styles(layout, DEFAULT_TOC_DEPTH)
+        toc.dotsMinLevel = 0
+        story.extend((contents_title(layout), toc, PageBreak()))
         for block, label in _tables_with_labels(blocks):
             if block.kind == "heading":
                 paragraph = layout.text(block.text, heading_styles[block.level])
@@ -1674,19 +1687,6 @@ def _write_odt(app, target, content: _StudyContent) -> None:
                     document.table(
                         block.headers, block.rows, ratios=_column_ratios(block.headers),
                     )
-    for style in document.automatic_styles:
-        name = style.get(_tag("style:name"), "")
-        if re.fullmatch(r"PPTPContents[1-6]", name):
-            style.set(_tag("style:parent-style-name"), "ESSBody")
-            properties = style.find(_tag("style:paragraph-properties"))
-            properties.set(_tag("fo:text-align"), "start")
-            properties.set(_tag("fo:line-height"), "115%")
-            properties.set(_tag("fo:margin-bottom"), "4pt")
-            properties.set(_tag("fo:keep-with-next"), "auto")
-            ET.SubElement(style, _tag("style:text-properties"), {
-                _tag("fo:font-size"): "10pt",
-                _tag("fo:font-weight"): "bold" if name == "PPTPContents1" else "normal",
-            })
     _link_odt_references(document, _catalogue_targets(content))
     document.name_text_styles({
         "ESSBody": "ESS - Cuerpo",

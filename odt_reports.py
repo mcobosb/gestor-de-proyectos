@@ -97,6 +97,7 @@ class _OdtReport:
 
     def chapter(
         self, code: str, title: str, *, new_page: bool = False, blue_header: bool = False,
+        bookmark: str | None = None, contents_text: str | None = None,
     ) -> None:
         """Dibuja la banda de capítulo con las mismas columnas que el PDF."""
         self.pending_page_break = self.pending_page_break or new_page
@@ -104,6 +105,13 @@ class _OdtReport:
             [], [[code, title]], ratios=[65, CONTENT_WIDTH - 65],
             bold_rows=(0,), bold_text_style="ChapterTitle", chapter=True, blue_header=blue_header,
         )
+        if bookmark is not None:
+            paragraph = next(self.body[-1].iter(_tag("text:p")))
+            ET.SubElement(paragraph, _tag("text:bookmark"), {_tag("text:name"): bookmark})
+            ET.SubElement(paragraph, _tag("text:toc-mark"), {
+                _tag("text:outline-level"): "1",
+                _tag("text:string-value"): contents_text or f"{code} — {title}",
+            })
 
     def heading(
         self, text: str, level: int = 2, style: str | None = None, *,
@@ -121,16 +129,22 @@ class _OdtReport:
     def table_of_contents(
         self, headings: list[tuple[int, str]], *, max_level: int = 6,
         name: str = "PPTPContents", bookmark_offset: int = 0,
-        source_styles: dict[int, str] | None = None,
+        source_styles: dict[int, str] | None = None, use_index_marks: bool = False,
     ) -> None:
         """Inserta un indice ODF, opcionalmente limitado a estilos de un documento."""
+        from tools._shared.document_layout import add_odt_contents_styles
+
+        add_odt_contents_styles(self, max_level)
         toc = ET.SubElement(self.body, _tag("text:table-of-content"), {
             _tag("text:name"): name,
             _tag("text:protected"): "false",
         })
         source = ET.SubElement(toc, _tag("text:table-of-content-source"), {
             _tag("text:outline-level"): str(max_level),
-            _tag("text:use-outline-level"): "false" if source_styles is not None else "true",
+            _tag("text:use-outline-level"): (
+                "false" if source_styles is not None or use_index_marks else "true"
+            ),
+            _tag("text:use-index-marks"): "true" if use_index_marks else "false",
         })
         if source_styles is not None:
             source.set(_tag("text:use-index-source-styles"), "true")
@@ -142,7 +156,7 @@ class _OdtReport:
                     _tag("text:style-name"): style_name,
                 })
         title = ET.SubElement(source, _tag("text:index-title-template"), {
-            _tag("text:style-name"): "ReportTitle",
+            _tag("text:style-name"): "ReportContentsTitle",
         })
         title.text = "ÍNDICE"
         for level in range(1, max_level + 1):
@@ -162,25 +176,12 @@ class _OdtReport:
             _tag("text:name"): f"{name}Title",
         })
         ET.SubElement(title, _tag("text:p"), {
-            _tag("text:style-name"): "ReportTitle",
+            _tag("text:style-name"): "ReportContentsTitle",
         }).text = "ÍNDICE"
         for index, (level, text) in enumerate(headings):
             if level > max_level:
                 continue
             style_name = f"PPTPContents{level}"
-            if not any(style.get(_tag("style:name")) == style_name for style in self.automatic_styles):
-                style = ET.SubElement(self.automatic_styles, _tag("style:style"), {
-                    _tag("style:name"): style_name, _tag("style:family"): "paragraph",
-                    _tag("style:parent-style-name"): "ReportBody",
-                })
-                properties = ET.SubElement(style, _tag("style:paragraph-properties"), {
-                    _tag("fo:margin-left"): f"{(level - 1) * 12}pt",
-                })
-                tabs = ET.SubElement(properties, _tag("style:tab-stops"))
-                ET.SubElement(tabs, _tag("style:tab-stop"), {
-                    _tag("style:position"): f"{CONTENT_WIDTH - (level - 1) * 12}pt",
-                    _tag("style:type"): "right", _tag("style:leader-char"): ".",
-                })
             paragraph = ET.SubElement(body, _tag("text:p"), {
                 _tag("text:style-name"): style_name,
             })
@@ -206,6 +207,21 @@ class _OdtReport:
                 _tag("fo:break-after"): "page",
             })
         self.paragraph("", "PPTPContentsBreak")
+
+    def insert_table_of_contents(
+        self, headings: list[tuple[int, str]], *, position: int = 0,
+        max_level: int = 2, name: str = "ReportContents", use_index_marks: bool = False,
+    ) -> None:
+        """Incluye un indice antes del contenido ya construido si tiene secciones."""
+        if not headings:
+            return
+        previous_count = len(self.body)
+        self.table_of_contents(
+            headings, max_level=max_level, name=name, use_index_marks=use_index_marks,
+        )
+        for offset, element in enumerate(list(self.body)[previous_count:]):
+            self.body.remove(element)
+            self.body.insert(position + offset, element)
 
     def paragraph(self, text: str, style: str = "ReportBody", *, parent=None) -> None:
         """Añade un párrafo con estilo reutilizable y conserva sus saltos de línea."""
@@ -429,6 +445,10 @@ class _OdtReport:
 
     def write(self, target: Path) -> None:
         """Empaqueta el documento, los estilos, metadatos y recursos en un ODT."""
+        self.name_text_styles({
+            "ReportContentsTitle": "Índice - Título",
+            **{f"PPTPContents{level}": f"Índice - Nivel {level}" for level in range(1, 7)},
+        })
         styles = self._styles_xml()
         if self.layout:
             style_odt_tree(self.content_root, self.layout.text_styles, _tag)
@@ -882,6 +902,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
     if not embedded:
         document.header_columns, document.header_ratios = column_headers, column_ratios
     listing_caption = report if embedded else ""
+    contents_headings = []
     codes = list(dict.fromkeys([*app.chapter_order, *(item.chapter for item in app.budget_items)]))
     groups = [
         (code, [item for item in app.budget_items if item.chapter == code])
@@ -896,10 +917,17 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
 
     def chapter(code, *, new_page=False):
         """Añade el título del capítulo y su nombre visible."""
+        label = f"{format_chapter_code(code)} — {app._chapter_title(code)}"
+        if report == "Cuadro de precios 1 y 2 por capitulos":
+            label = f"{document.page_titles[document.current_page]} · {label}"
         document.chapter(
             format_chapter_code(code), app._chapter_title(code), new_page=new_page,
             blue_header=embedded and report == "Descompuestos",
+            bookmark=f"PPTPHeading{len(contents_headings)}" if not embedded else None,
+            contents_text=label,
         )
+        if not embedded:
+            contents_headings.append((1, label))
 
     def total(label, value, major=True):
         """Añade una línea de total con la divisa del proyecto."""
@@ -1167,6 +1195,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
 
     if not embedded:
         document.append_signature(settings)
+        document.insert_table_of_contents(contents_headings, max_level=1, use_index_marks=True)
 
 
 def write_report_odt(app, report: str, target: Path) -> None:
@@ -1271,6 +1300,7 @@ def write_certification_odt(
         for chapter_index, code in enumerate(codes):
             document.chapter(
                 format_chapter_code(code), chapter_title(code), new_page=chapter_index > 0,
+                bookmark=f"PPTPHeading{chapter_index}",
             )
             for item, amount in certified:
                 if item.chapter != code:
@@ -1352,4 +1382,8 @@ def write_certification_odt(
         )
 
     document.append_signature(settings, with_contractor=True)
+    if detail:
+        document.insert_table_of_contents([
+            (1, f"{format_chapter_code(code)} — {chapter_title(code)}") for code in codes
+        ], max_level=1, use_index_marks=True)
     document.write(target)
