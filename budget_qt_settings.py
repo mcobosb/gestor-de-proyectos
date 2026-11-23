@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable
+from xml.etree import ElementTree as ET
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -36,6 +38,7 @@ from budget_reports import ReportSettings
 from budget_qt_theme import THEMES
 from document_styles import FLAGS, FONTS, ROLES
 from project_standards import DOCUMENT_STANDARDS, PROJECT_DISCIPLINES, document_control_text
+from tools._shared.drawing_templates import TITLE_BLOCK_HELP, read_title_block_fields
 
 
 @dataclass(frozen=True)
@@ -387,6 +390,13 @@ class SettingsDialog(QDialog):
             row = QHBoxLayout()
             row.addWidget(field, 1)
             row.addWidget(button)
+            if field is self.drawing_title_block_path:
+                self.drawing_title_block_info_button = QToolButton()
+                self.drawing_title_block_info_button.setText("i")
+                self.drawing_title_block_info_button.setToolTip("Etiquetas del cajetín SVG")
+                self.drawing_title_block_info_button.setAccessibleName("Información sobre las etiquetas del cajetín")
+                self.drawing_title_block_info_button.clicked.connect(self._drawing_title_block_info)
+                row.addWidget(self.drawing_title_block_info_button)
             form.addRow(label, row)
         note = QLabel(
             "Deja vacías las rutas de informes, maestro o logo para utilizar los recursos incluidos. "
@@ -559,8 +569,23 @@ class SettingsDialog(QDialog):
         """Vincula el archivo de referencia del cajetín para los planos."""
         self._select_file(
             self.drawing_title_block_path, "Selecciona el cajetín tipo de planos",
-            "Plantillas de planos (*.dxf *.dwg *.dwt *.odg *.svg *.pdf);;Todos los archivos (*)",
+            "Cajetín SVG (*.svg);;Plantillas de planos (*.dxf *.dwg *.dwt *.odg *.pdf);;Todos los archivos (*)",
         )
+
+    def _drawing_title_block_info(self) -> None:
+        """Explica la convención e identifica los campos del SVG vinculado."""
+        message = TITLE_BLOCK_HELP
+        raw_path = self.drawing_title_block_path.text().strip()
+        if raw_path and Path(raw_path).suffix.casefold() == ".svg":
+            try:
+                fields = read_title_block_fields(Path(raw_path))
+            except (OSError, ET.ParseError, ValueError) as exc:
+                message += f"\n\nNo se pudo analizar el cajetín seleccionado: {exc}"
+            else:
+                message += "\n\nCampos reconocidos en el archivo seleccionado: " + (
+                    ", ".join(fields) if fields else "ninguno; revisa los IDs según estas instrucciones."
+                )
+        QMessageBox.information(self, "Etiquetas del cajetín SVG", message)
 
     def _select_file(self, field: QLineEdit, title: str, file_filter: str) -> None:
         """Abre el selector de archivos y guarda la ruta seleccionada."""

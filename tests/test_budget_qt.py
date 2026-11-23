@@ -324,6 +324,19 @@ class BudgetQtWindowTests(unittest.TestCase):
             dialog.master_logo_path.setText(master_logo)
             with patch.object(QFileDialog, "getOpenFileName", return_value=(drawing_title_block, "")):
                 dialog._select_drawing_title_block()
+            svg = Path(directory) / "cajetin.svg"
+            svg.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg">'
+                '<text id="titulo_plano">Plano de prueba</text></svg>', encoding="utf-8",
+            )
+            dialog.drawing_title_block_path.setText(str(svg))
+            with patch.object(QMessageBox, "information") as information:
+                dialog.drawing_title_block_info_button.click()
+            help_text = information.call_args.args[2]
+            self.assertIn("Propiedades del objeto", help_text)
+            self.assertIn("numero_plano", help_text)
+            self.assertIn("Campos reconocidos en el archivo seleccionado: titulo_plano", help_text)
+            dialog.drawing_title_block_path.setText(drawing_title_block)
             font, size = dialog.style_controls["heading1"]
             font.setCurrentText("Arial")
             size.setValue(18)
@@ -895,6 +908,8 @@ class BudgetQtWindowTests(unittest.TestCase):
             window = BudgetMainWindow()
             self.addCleanup(QCoreApplication.sendPostedEvents, None, QEvent.Type.DeferredDelete)
             self.addCleanup(window.deleteLater)
+            window.budget_items = [ProjectItem("PAV", "01#", "m²", "Pavimento", 80, 10)]
+            window.chapter_order = ["01#"]
             window._open_tool("rcd")
             tool = window._project_windows[-1]
             panel = tool.facilities_tab
@@ -914,12 +929,12 @@ class BudgetQtWindowTests(unittest.TestCase):
                 dialog.accept()
                 return dialog.result()
 
-            with patch.object(FacilityDialog, "exec", autospec=True, side_effect=accept_fixture):
+            with patch.object(FacilityDialog, "exec", new=accept_fixture):
                 panel.add_button.click()
             self.assertEqual(len(panel.catalog.load()), 1)
             self.assertEqual(len(tool.data.management.facilities), 1)
             edits.update(name="Centro Beta", province_access="Sevilla / Sur", nima="0098765432")
-            with patch.object(FacilityDialog, "exec", autospec=True, side_effect=accept_fixture):
+            with patch.object(FacilityDialog, "exec", new=accept_fixture):
                 panel.add_button.click()
             self.assertEqual(len(panel.catalog.load()), 2)
             panel.search.setText("CORDOBA r5")
@@ -929,7 +944,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             edits.update(name="Áridos de prueba", holder="Titular editado", address="Camino 18",
                          province_access="Córdoba / Acceso nuevo", nima="0012345678",
                          authorization="GRU-EDITADA / R5")
-            with patch.object(FacilityDialog, "exec", autospec=True, side_effect=accept_fixture):
+            with patch.object(FacilityDialog, "exec", new=accept_fixture):
                 panel.edit_button.click()
             edited = next(facility for facility in panel.catalog.load() if facility.nima == "0012345678")
             for key, value in edits.items():

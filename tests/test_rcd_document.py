@@ -238,8 +238,14 @@ class RcdDocumentTests(unittest.TestCase):
                             table for table in content.iter(_tag("table:table"))
                             if "Planta seleccionada de prueba" in "".join(table.itertext())
                         )
-                        header = table.find(_tag("table:table-row")).find(_tag("table:table-cell"))
-                        self.assertEqual(header.get(_tag("table:style-name")), "RcdTableCellHeader")
+                        header_rows = table.find(_tag("table:table-header-rows"))
+                        header = header_rows.find(_tag("table:table-row")).find(_tag("table:table-cell"))
+                        style = next(
+                            style for style in content.iter(_tag("style:style"))
+                            if style.get(_tag("style:name")) == header.get(_tag("table:style-name"))
+                        )
+                        properties = style.find(_tag("style:table-cell-properties"))
+                        self.assertEqual(properties.get(_tag("fo:background-color")), "#4472C4")
                         caption = next(
                             paragraph for paragraph in content.iter(_tag("text:p"))
                             if "Centros de gestión de residuos previstos" in "".join(paragraph.itertext())

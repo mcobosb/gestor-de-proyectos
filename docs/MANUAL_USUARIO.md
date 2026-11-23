@@ -137,6 +137,16 @@ En esa misma pestaña, **Cajetín tipo de planos** permite vincular un archivo
 mediante **Examinar…**. Su ruta se conserva con la configuración del proyecto;
 puedes vaciarla para desvincularlo. Es una referencia para los planos, sin
 modificar el archivo original ni insertarlo automáticamente en los planos existentes.
+El botón **i**, junto al selector, explica cómo nombrar los campos de un **SVG**
+y muestra cuáles reconoce en el archivo vinculado. En Inkscape utiliza
+**Propiedades del objeto → ID**, con un único objeto de texto editable por campo:
+`titulo_proyecto`, `expediente`, `titulo_plano`, `numero_plano`, `escala`, `fecha`,
+`autor` y `cargo`. Los IDs deben ser únicos, en minúsculas y sin llaves.
+La etiqueta visible del editor puede coincidir, pero el reconocimiento se hace
+por el ID SVG. No conviertas los textos dinámicos en trayectos ni en imágenes;
+los rótulos fijos deben tener otros IDs. Puedes omitir los campos que no uses.
+Los datos generales corresponden al proyecto y los de título, número, escala
+y fecha se concretan por plano. El resto de formatos se mantiene como referencia.
 
 Los índices internos de RCDs, Justificación de precios, Control de calidad,
 PPTP y Seguridad y Salud se limitan a los estilos propios de cada documento.
@@ -862,6 +872,40 @@ situada en Andalucía según los municipios configurados, no para otras ubicacio
 Las selecciones, incluidas las desmarcadas, se conservan al guardar y reabrir
 el proyecto; no se vuelven a marcar automáticamente. Si no seleccionas ninguna
 ni hay texto particular, permanece el aviso de prevención pendiente.
+
+### Centros de gestión
+
+La cuarta pestaña permite mantener un **catálogo local de instalaciones** y
+marcar las previstas para el proyecto. El catálogo comienza vacío: no es una
+base oficial ni acredita que una instalación esté autorizada. Puedes consultar
+SIRA desde **Consulta → Instalaciones gestoras/productoras de residuos**.
+
+**Añadir centro…** abre una ficha con **Instalación**, **Titular**, **Dirección**,
+**Provincia / Acceso**, **Código NIMA** y **Autorización / Operación**. Al guardar,
+el centro se añade al catálogo y queda marcado para el proyecto. **Editar centro…**
+permite modificar todos esos datos. El nombre es obligatorio; el NIMA, si se
+introduce, debe tener diez dígitos y conserva sus ceros iniciales. Los demás
+datos desconocidos pueden quedar pendientes, sin inventar autorizaciones.
+
+El filtro busca en todos los campos, sin distinguir acentos ni mayúsculas;
+admite varias palabras. **Solo centros del proyecto** limita la vista a los
+marcados. Filtrar no cambia las selecciones. Desmarcar retira el centro del
+informe, pero no lo borra del catálogo. Se detectan duplicados por NIMA o por
+identificación y emplazamiento, y se avisa si otra ventana cambió la ficha
+antes de guardarla. **Actualizar catálogo** recupera los cambios disponibles.
+
+El catálogo se guarda en `rcd_centros_gestion.sqlite3`, dentro de los datos de
+usuario de la aplicación, y se reutiliza en otros proyectos. El JSON del proyecto
+conserva una copia de los centros marcados: al moverlo a otro equipo no depende
+del catálogo original. Editar un centro marcado actualiza el catálogo y el
+proyecto actual, sin reescribir los proyectos anteriores. Las copias procedentes
+de otro equipo pueden incorporarse al catálogo local editándolas y guardándolas.
+
+En **PDF y ODT**, los centros seleccionados aparecen en el apartado **1.8**,
+después de los destinos por LER, en una tabla con caption previo,
+**Centros de gestión de residuos previstos**, y el estilo azul estándar.
+Los campos sin completar mantienen avisos **PENDIENTE**. La selección de un
+centro no sustituye la comprobación de los residuos y operaciones autorizados.
 
 ### Incorporar la gestión de residuos al presupuesto
 
