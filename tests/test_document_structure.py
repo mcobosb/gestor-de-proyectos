@@ -40,6 +40,39 @@ from project_standards import document_control_text
 class DocumentStructureTests(unittest.TestCase):
     """Comprueba la generación de documentos técnicos y del maestro ODM."""
 
+    def test_master_replaces_legacy_five_column_traceability_and_punctuated_index(self) -> None:
+        """No confunde referencias de portada con el índice ni exige seis columnas antiguas."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "plantilla_antigua.odt"
+            template = _new_report("Carátula", "Proyecto", ReportSettings())
+            cover_text = "Referencia de portada: ÍNDICE GENERAL DEL PROYECTO."
+            template.paragraph(cover_text)
+            template.paragraph("TABLA DE TRAZABILIDAD")
+            template.table(
+                ["CÓDIGO DOCUMENTO", "FECHA EDICIÓN", "EDITADO", "FECHA COMPROBACIÓN", "VALIDADO"],
+                [("DATO_ANTIGUO",) * 5],
+            )
+            template.paragraph("ÍNDICE GENERAL DEL PROYECTO.")
+            template.paragraph("ÍNDICE_ANTIGUO")
+            template.write(source)
+            output = root / "Maestro.odm"
+            write_project_master(
+                source, output, fields={}, traceability=[("MAESTRO", output.name, "", "", "", "")],
+                links=[], folder=root, index_entries=[],
+                logo=Path(__file__).resolve().parents[1] / "iconos" / "Arranque.jpg",
+            )
+            with ZipFile(output) as archive:
+                content = ET.fromstring(archive.read("content.xml"))
+            body = content.find(f"{_tag('office:body')}/{_tag('office:text')}")
+            self.assertIn(cover_text, "".join(body.itertext()))
+            tables = body.findall(_tag("table:table"))
+            self.assertEqual(len(tables), 1)
+            self.assertEqual(tables[0].get(_tag("table:name")), "ProjectTraceabilityTable")
+            self.assertEqual(len(tables[0].findall(_tag("table:table-column"))), 6)
+            self.assertNotIn("DATO_ANTIGUO", "".join(body.itertext()))
+            self.assertNotIn("ÍNDICE_ANTIGUO", "".join(body.itertext()))
+
     def test_master_keeps_generated_traceability_when_template_index_precedes_it(self) -> None:
         """El índice de una plantilla antigua no puede borrar la nueva trazabilidad."""
         with TemporaryDirectory() as directory:

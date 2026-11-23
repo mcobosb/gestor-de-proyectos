@@ -43,6 +43,9 @@ Helvetica si Arial Narrow no está instalada.
 El resumen de la actuación se justifica en el estudio RCD y en la tabla de
 datos del proyecto de Seguridad y Salud. Sus viñetas mantienen la sangría
 francesa y un solo tabulador tras el marcador, también al pegar texto con «•».
+En RCD también se justifican los listados de **Prescripciones de almacenamiento,
+manejo y gestión en obra** y **Normativa de referencia**, incluidas sus sublistas,
+tanto en PDF como en ODT. Se conservan las sangrías, los tabuladores y los enlaces normativos.
 
 Los índices de PDF, ODT y del maestro ODM comparten el título **ÍNDICE**,
 sangrías por nivel, primer nivel en negrita, puntos guía y números de página

@@ -214,12 +214,6 @@ def _fill_traceability(
     automatic = root.find(_tag("office:automatic-styles"))
     if body is None or automatic is None:
         raise ValueError("El maestro no contiene el cuerpo o los estilos automáticos ODF.")
-    previous = next((
-        candidate for candidate in body if candidate.tag == _tag("table:table")
-        and any(_is_traceability_header(row) for row in candidate.iter(_tag("table:table-row")))
-    ), None)
-    if previous is not None:
-        body.remove(previous)
     position = next(
         index + 1 for index, child in enumerate(body)
         if child.get(_tag("text:style-name")) == "ProjectTraceabilityHeading"
@@ -319,15 +313,25 @@ def _prepare_master_sections(root, styles) -> tuple[str, str, str]:
     headings = {
         title: next((
             child for child in children if child.tag in {_tag("text:p"), _tag("text:h")}
-            and "".join(child.itertext()).strip().upper() == title
+            and " ".join("".join(child.itertext()).split()).rstrip(".:").upper() in aliases
         ), None)
-        for title in ("HOJA DE TRAZABILIDAD", "ÍNDICE GENERAL DEL PROYECTO")
+        for title, aliases in (
+            ("HOJA DE TRAZABILIDAD", {"HOJA DE TRAZABILIDAD", "TABLA DE TRAZABILIDAD"}),
+            ("ÍNDICE GENERAL DEL PROYECTO", {"ÍNDICE GENERAL DEL PROYECTO"}),
+        )
     }
     trace_heading, index_heading = headings.values()
     old_table = next((
         child for child in children if child.tag == _tag("table:table")
         and any(_is_traceability_header(row) for row in child.iter(_tag("table:table-row")))
     ), None)
+    if trace_heading is not None:
+        following = next((
+            child for child in children[children.index(trace_heading) + 1:]
+            if child.tag != _tag("text:p") or len(child) or (child.text or "").strip()
+        ), None)
+        if following is not None and following.tag == _tag("table:table"):
+            old_table = following
     positions = [children.index(node) for node in (*headings.values(), old_table) if node is not None]
     cover_end = min(positions, default=len(children))
     cover_page = pages.get("Standard")
@@ -417,6 +421,8 @@ def _prepare_master_sections(root, styles) -> tuple[str, str, str]:
     if list(body).index(trace_heading) > list(body).index(index_heading):
         body.remove(trace_heading)
         body.insert(list(body).index(index_heading), trace_heading)
+    if old_table is not None:
+        body.remove(old_table)
     return (
         "ProjectTraceabilityPage", "ProjectIndexPage",
         continuation.get(_tag("style:name"), ""),
@@ -667,10 +673,10 @@ def _append_index_and_sections(
     heading_index = next((
         index for index, child in enumerate(children)
         if child.tag == _tag("text:p")
-        and "ÍNDICE GENERAL DEL PROYECTO" in "".join(child.itertext()).upper()
+        and child.get(_tag("text:style-name")) == "ProjectIndexHeading"
     ), None)
     if heading_index is None:
-        raise ValueError("La plantilla no contiene el índice general del proyecto.")
+        raise ValueError("No se creó el encabezado del índice del documento maestro.")
     automatic = root.find(_tag("office:automatic-styles"))
     if automatic is None:
         automatic = ET.Element(_tag("office:automatic-styles"))
