@@ -13,7 +13,7 @@ from budget_reports import ReportSettings
 from tools._shared.budget_sources import RCD_BUDGET_SOURCE
 from tools.rcd import RcdState, detect_waste_items
 from tools.rcd import ler_catalog
-from tools.rcd.document import StudyTable, study_blocks, write_study
+from tools.rcd.document import DOCUMENT_FIELDS, StudyTable, study_blocks, write_study
 
 
 class RcdDocumentTests(unittest.TestCase):
@@ -56,6 +56,16 @@ class RcdDocumentTests(unittest.TestCase):
         self.assertEqual(table.rows[2][2], "Selección manual")
         self.assertFalse(any(self.generated.code in row[2] for row in table.rows))
         self.assertEqual(self.state.to_dict(), before)
+
+    def test_pending_fields_replace_their_line_prefix_but_keep_completed_text(self):
+        """Distingue los campos sin completar de la documentación ya cumplimentada."""
+        self.state.documentation["recovery"] = "Se entregará a un gestor autorizado."
+        blocks = study_blocks(self.state, "Proyecto", self.settings, app=self.app)
+        texts = [block[1] for block in blocks if isinstance(block, tuple)]
+        for key in ("prevention", "separation", "reuse", "destinations", "facilities", "regional"):
+            self.assertIn(f"[PENDIENTE: {DOCUMENT_FIELDS[key]}]", texts)
+        self.assertIn("Previsión particular: Se entregará a un gestor autorizado.", texts)
+        self.assertFalse(any("PENDIENTE DE CONCRETAR:" in text for text in texts))
 
     def test_detection_and_catalogue_links_ignore_study_outputs_not_ler_or_chapter_17(self):
         """Usa la marca de origen, conservando partidas y códigos LER 17 legítimos."""

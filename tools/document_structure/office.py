@@ -14,6 +14,7 @@ from tools._shared.document_layout import (
     add_odt_blue_table_cells, add_odt_blue_table_headers, add_odt_contents_styles,
     style_odt_blue_table,
 )
+from tools._shared.document_pending import LIBRARY_NAME, SCRIPT_URI, macro_entries
 
 MASTER_NAME = "Documento maestro.odm"
 _MASTER_MIME = "application/vnd.oasis.opendocument.text-master"
@@ -632,6 +633,10 @@ def _append_index_and_sections(
         body.insert(insertion, paragraph)
         insertion += 1
 
+    launcher = ET.Element(_tag("text:p"))
+    _set_paragraph_text(launcher, "Revisar pendientes del proyecto", SCRIPT_URI)
+    body.insert(insertion, launcher)
+
     known_styles = root.find(_tag("office:automatic-styles"))
     for index, path in enumerate(links, 1):
         section = ET.Element(_tag("text:section"), {
@@ -770,13 +775,19 @@ def write_project_master(
         f"ProjectDocumentPage{index}" for index in range(1, len(footer_titles) + 1)
     ]
     with ZipFile(source) as original, ZipFile(output, "w", ZIP_DEFLATED) as result:
+        names = original.namelist()
+        library_path = f"Basic/{LIBRARY_NAME}/script-lb.xml"
+        macros = macro_entries(
+            original.read("Basic/script-lc.xml") if "Basic/script-lc.xml" in names else None,
+            original.read(library_path) if library_path in names else None,
+        )
         template_content = ET.fromstring(original.read("content.xml"))
         traceability_page = _traceability_master_page(template_content)
         index_page = _index_master_page(template_content)
         logo_resource = _logo_resource_name(original.namelist())
         result.writestr("mimetype", _MASTER_MIME, compress_type=ZIP_STORED)
-        for name in original.namelist():
-            if name == "mimetype":
+        for name in names:
+            if name == "mimetype" or name in macros:
                 continue
             data = original.read(name)
             if name in {"content.xml", "styles.xml"}:
@@ -824,6 +835,18 @@ def write_project_master(
                     _tag("manifest:full-path"): logo_resource,
                     _tag("manifest:media-type"): "image/jpeg",
                 })
+                declared_paths = {
+                    entry.get(_tag("manifest:full-path")) for entry in manifest
+                }
+                for path, media_type in [
+                    ("Basic/", "application/vnd.sun.star.basic-library"),
+                    *((path, "text/xml") for path in macros),
+                ]:
+                    if path not in declared_paths:
+                        ET.SubElement(manifest, _tag("manifest:file-entry"), {
+                            _tag("manifest:full-path"): path,
+                            _tag("manifest:media-type"): media_type,
+                        })
                 data = ET.tostring(manifest, encoding="utf-8", xml_declaration=True)
             elif name == "meta.xml":
                 metadata = ET.fromstring(data)
@@ -833,6 +856,8 @@ def write_project_master(
                 data = ET.tostring(metadata, encoding="utf-8", xml_declaration=True)
             result.writestr(name, data)
         result.writestr(logo_resource, logo.read_bytes())
+        for path, data in macros.items():
+            result.writestr(path, data)
 
 
 def renumber_annex(path: Path, previous: int, current: int) -> None:

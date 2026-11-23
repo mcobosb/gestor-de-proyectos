@@ -122,7 +122,7 @@ def study_variables(state: RcdState, title: str, settings: ReportSettings) -> di
     }
     values.update({
         key: state.documentation.get(key, "").strip()
-        or f"[PENDIENTE DE CONCRETAR: {label}]"
+        or f"[PENDIENTE: {label}]"
         for key, label in DOCUMENT_FIELDS.items()
     })
     values["nota_modelo"] = ""
@@ -164,6 +164,18 @@ def substitute(source: str, values: dict[str, str]) -> str:
         return values[key]
 
     return re.sub(r"\{\{([^{}]+)\}\}", replacement, source)
+
+
+def _pending_lines(source: str, values: dict[str, str]) -> str:
+    """Deja solo el marcador pendiente, sin eliminar texto de campos cumplimentados."""
+    def replacement(match: re.Match[str]) -> str:
+        """Retira el prefijo únicamente en la misma línea del campo sin completar."""
+        key = match[1].strip()
+        if key in DOCUMENT_FIELDS and values[key].startswith("[PENDIENTE:"):
+            return "{{" + key + "}}"
+        return match[0]
+
+    return re.sub(r"(?m)^[^\r\n{}]*\{\{([^{}\r\n]+)\}\}", replacement, source)
 
 
 def study_tables(
@@ -304,7 +316,7 @@ def study_blocks(
                 else:
                     blocks.append((0, "No se han encontrado vínculos por código exacto en el presupuesto."))
         else:
-            for level, text in text_blocks(part):
+            for level, text in text_blocks(_pending_lines(part, values)):
                 if level == 0 and text == DESCRIPTION_MARKER:
                     blocks.extend(text_blocks(summary or ""))
                     continue
