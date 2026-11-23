@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.1.0 — 2026-11-23
+
+- **RCDs.** Previsiones de segregación, reutilización y valorización, destinos por
+  código LER y medidas preventivas seleccionables, guardados con el proyecto.
+  Catálogo local ampliable de centros de gestión, con búsqueda, edición y tabla
+  de instalaciones seleccionadas en el apartado 1.8 del estudio PDF/ODT.
+- El presupuesto de RCDs se referencia en el apartado 1.11, con capítulo e
+  importe reales en cifras y letras, sin una sección presupuestaria duplicada.
+- **Estructura documental.** Mejoras en la trazabilidad y sus referencias
+  normativas, revisión de pendientes e índices internos limitados a cada anejo.
+  Correcciones de tipografía y presentación de tablas en los documentos enlazados.
+- **Plantillas de planos.** Vinculación del cajetín por proyecto y ayuda sobre
+  los identificadores SVG estándar, con reconocimiento de sus campos editables.
+
 ## 2.0.0 — 2026-11-19
 
 - **Atomización del proyecto.** El nuevo formato de carpeta guarda capítulos y

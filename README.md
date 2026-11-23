@@ -4,14 +4,17 @@ Aplicación de escritorio para Windows que reúne el presupuesto, la documentaci
 
 [Descargas](https://github.com/mcobosb/gestor-de-proyectos/releases) · [Manual de usuario](docs/MANUAL_USUARIO.md) · [Guía detallada](docs/GUIA_DETALLADA.md) · [Historial de cambios](CHANGELOG.md)
 
-## Release v2.0.0
+## Release v2.1.0
+
+- **RCDs:** previsiones de gestión, medidas preventivas y destinos por LER, con un catálogo local ampliable de centros de gestión e incorporación al estudio PDF/ODT.
+- **Documentación:** mejoras de trazabilidad, estilos e índices propios de cada anejo dentro del documento maestro.
+- **Cajetines de planos:** vinculación de la plantilla y guía de identificadores estándar para sus campos SVG.
+
+## Otras funciones principales
 
 - **Atomización del proyecto:** los capítulos y las partidas se guardan en archivos independientes. Los proyectos anteriores siguen siendo compatibles y se pueden migrar al nuevo formato.
 - **Trabajo colaborativo:** comparte una carpeta de proyecto, consulta quién está activo y edita con bloqueos por sección, detección de conflictos y cifrado opcional.
 - **Visor BIM:** abre modelos IFC en 3D con árbol, propiedades, selección, aislamiento y cortes. Revisa las equivalencias IFC 4.3 → BCCA y añade mediciones al presupuesto con trazabilidad por `GlobalId`.
-
-## Otras funciones principales
-
 - **Presupuestos BC3 (FIEBDC-3):** importa presupuestos y edita capítulos, partidas, mediciones, descomposiciones y precios.
 - **Bases de precios:** carga BCCA u otras bases BC3, busca por código o descripción y copia partidas al presupuesto. Las bases se descargan por separado.
 - **Estructura documental:** consulta el índice de un proyecto de obra civil y copia las plantillas ODT seleccionadas.
