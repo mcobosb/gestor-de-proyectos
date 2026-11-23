@@ -154,6 +154,9 @@ al nombre del maestro, abre directamente esta pestaña sin perder la selección 
 
 La vista previa muestra el texto que Estructura documental insertará justo antes
 de la tabla de trazabilidad del nuevo ODM, con los ámbitos y las normas elegidos.
+La redacción comienza con «Esta hoja tiene por objeto identificar los documentos
+que integran el proyecto y llevar el registro de su edición, revisión y validación».
+Una línea en blanco separa el párrafo del título de la tabla de trazabilidad.
 Sin selecciones se incluye únicamente la explicación general del control documental.
 No se declara automáticamente cumplimiento, obligatoriedad ni certificación.
 Las selecciones se guardan en el proyecto, no como valores globales para los

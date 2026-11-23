@@ -176,7 +176,20 @@ class DocumentStructureTests(unittest.TestCase):
             self.assertEqual([ET.tostring(node) for node in list(body)[:len(cover)]],
                              [ET.tostring(node) for node in cover])
             table = body.find(_tag("table:table"))
-            self.assertEqual(body[list(body).index(table) - 1].text, introduction)
+            table_position = list(body).index(table)
+            self.assertEqual(body[table_position - 3].text, introduction)
+            self.assertEqual(body[table_position - 2].tag, _tag("text:p"))
+            self.assertFalse("".join(body[table_position - 2].itertext()))
+            self.assertEqual(body[table_position - 1].text,
+                             "Tabla 1. Trazabilidad de los documentos del proyecto")
+            caption_style = next(
+                node for node in styles.iter(_tag("style:style"))
+                if node.get(_tag("style:name")) == "ProjectTraceabilityCaption"
+            )
+            properties = caption_style.find(_tag("style:text-properties"))
+            self.assertEqual(properties.get(_tag("fo:font-family")), "Arial Narrow")
+            self.assertEqual(properties.get(_tag("fo:font-size")), "8pt")
+            self.assertEqual(properties.get(_tag("fo:font-weight")), "bold")
             self.assertIsNotNone(table.find(_tag("table:table-header-rows")))
             self.assertEqual([
                 tuple("".join(cell.itertext()) for cell in row.findall(_tag("table:table-cell")))

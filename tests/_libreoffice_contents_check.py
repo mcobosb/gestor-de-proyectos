@@ -28,7 +28,7 @@ def check(target, expected):
         resolver = local.ServiceManager.createInstanceWithContext(
             "com.sun.star.bridge.UnoUrlResolver", local,
         )
-        deadline = time.monotonic() + 30
+        deadline = time.monotonic() + 60
         while True:
             try:
                 context = resolver.resolve(f"uno:pipe,name={pipe};urp;StarOffice.ComponentContext")
@@ -77,6 +77,7 @@ def check(target, expected):
                     assert int(match[1]) == page, (title, match[1], page)
                     pages.add(page)
             assert len(pages) > 2 and max(pages) > 3, pages
+            header_count = 0
             for table in document.TextTables:
                 if table.getCellByName("A1").String != "HEADER_PLAIN":
                     continue
@@ -87,6 +88,8 @@ def check(target, expected):
                     actual = (cursor.CharFontName, cursor.CharHeight, cursor.CharWeight)
                     assert actual == ("Arial Narrow", 8.0, 150.0), actual
                     assert cell.BackColor == 0x4472C4, cell.BackColor
+                    header_count += 1
+            assert header_count == 3, header_count
             print(f"OK: {len(indices)} índices locales y páginas reales; vínculos actualizados={refreshed}.",
                   flush=True)
     finally:
@@ -94,6 +97,8 @@ def check(target, expected):
             document.close(True)
         if desktop is not None:
             desktop.terminate()
+        else:
+            process.terminate()
         process.wait(timeout=10)
 
 

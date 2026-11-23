@@ -13,7 +13,8 @@ PROJECT_DISCIPLINES = {
 # Código, alcance resumido y ficha oficial; no implican certificación ni obligatoriedad.
 DOCUMENT_STANDARDS = {
     "une_157001": (
-        "UNE 157001:2014", "elaboración formal de los documentos de un proyecto técnico",
+        "UNE 157001:2014",
+        "criterios generales para la elaboración formal de los documentos que constituyen un proyecto técnico",
         "https://www.une.org/encuentra-tu-norma/busca-tu-norma/norma?c=N0052985",
     ),
     "iso_21502": (
@@ -39,8 +40,8 @@ DOCUMENT_STANDARDS = {
 }
 
 DOCUMENT_CONTROL_TEXT = (
-    "Esta hoja permite identificar los documentos del proyecto y registrar su edición, "
-    "revisión y validación."
+    "Esta hoja tiene por objeto identificar los documentos que integran el proyecto y llevar "
+    "el registro de su edición, revisión y validación."
 )
 
 
@@ -58,17 +59,25 @@ def document_control_text(disciplines: list[str], standards: list[str]) -> str:
     validate_selection(disciplines, PROJECT_DISCIPLINES, "Los tipos de proyecto")
     validate_selection(standards, DOCUMENT_STANDARDS, "Las referencias normativas")
     parts = [DOCUMENT_CONTROL_TEXT]
-    if disciplines:
-        parts.append("Ámbitos del proyecto: " + "; ".join(
-            label for key, label in PROJECT_DISCIPLINES.items() if key in disciplines
-        ) + ".")
+    scope = "; ".join(
+        "ingeniería industrial" if key == "industrial" else label.lower()
+        for key, label in PROJECT_DISCIPLINES.items() if key in disciplines
+    )
     if standards:
-        parts.append("Referencias seleccionadas, según su ámbito de aplicación: " + "; ".join(
-            f"{code} ({scope})" for key, (code, scope, _) in DOCUMENT_STANDARDS.items()
-            if key in standards
-        ) + ".")
-        parts.append(
-            "Estas referencias orientan la organización y el control documental; su selección "
-            "no acredita por sí sola el cumplimiento de las normas ni la certificación del proyecto."
+        references = "; ".join(
+            f"la norma {code} ({description})"
+            for key, (code, description, _) in DOCUMENT_STANDARDS.items() if key in standards
         )
+        prefix = (
+            f"Para un proyecto en el ámbito de {scope}, se toman"
+            if scope else "Se toman"
+        )
+        parts.append(f"{prefix} como marco de referencia aplicable {references}.")
+        parts.append(
+            "Dichas referencias orientan la estructura y el control documental del trabajo, "
+            "sin que su mera selección implique la acreditación formal del cumplimiento "
+            "normativo ni la certificación del proyecto."
+        )
+    elif scope:
+        parts.append(f"El proyecto se desarrolla en el ámbito de {scope}.")
     return " ".join(parts)

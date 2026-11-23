@@ -183,8 +183,9 @@ class PriceDocumentTests(unittest.TestCase):
                     write_document(self.app, target, {})
                 with ZipFile(target) as archive:
                     content = ET.fromstring(archive.read("content.xml"))
+                    styles = ET.fromstring(archive.read("styles.xml"))
                 style = next(
-                    node for node in content.iter(_tag("style:style"))
+                    node for root in (content, styles) for node in root.iter(_tag("style:style"))
                     if node.get(_tag("style:name")) == "PricesListingHeading"
                 )
                 self.assertEqual(style.get(_tag("style:parent-style-name")), "TemplateHeading")

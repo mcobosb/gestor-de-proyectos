@@ -8,12 +8,12 @@ from xml.etree import ElementTree as ET
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
 from odt_reports import _tag
-from document_styles import style_odt_paragraphs, style_role
+from document_styles import style_odt_paragraphs, style_odt_tree, style_role
 from report_layout import replace_template_fields
 from project_standards import DOCUMENT_CONTROL_TEXT
 from tools._shared.document_layout import (
     add_odt_blue_table_cells, add_odt_blue_table_headers, add_odt_contents_styles,
-    style_odt_blue_table,
+    style_odt_blue_table, table_labels,
 )
 from tools._shared.document_pending import LIBRARY_NAME, SCRIPT_URI, macro_entries
 
@@ -290,7 +290,15 @@ def _fill_traceability(
     })
     paragraph.text = introduction
     body.insert(position, paragraph)
-    body.insert(position + 1, table)
+    body.insert(position + 1, ET.Element(_tag("text:p"), {
+        _tag("text:style-name"): "ProjectTraceabilityIntroduction",
+    }))
+    caption = ET.Element(_tag("text:p"), {
+        _tag("text:style-name"): "ProjectTraceabilityCaption",
+    })
+    caption.text = table_labels(1, "Trazabilidad de los documentos del proyecto")[1]
+    body.insert(position + 2, caption)
+    body.insert(position + 3, table)
 
 
 def _style_traceability(root) -> None:
@@ -394,9 +402,17 @@ def _prepare_master_sections(root, styles) -> tuple[str, str, str]:
             introduction.set(_tag("style:parent-style-name"), parent)
             break
     ET.SubElement(introduction, _tag("style:paragraph-properties"), {
-        _tag("fo:text-align"): "justify", _tag("fo:margin-bottom"): "0.3cm",
+        _tag("fo:text-align"): "justify", _tag("fo:margin-bottom"): "0pt",
         _tag("fo:keep-with-next"): "always",
     })
+    caption = ET.SubElement(named, _tag("style:style"), {
+        _tag("style:name"): "ProjectTraceabilityCaption", _tag("style:family"): "paragraph",
+    })
+    ET.SubElement(caption, _tag("style:paragraph-properties"), {
+        _tag("fo:keep-with-next"): "always", _tag("fo:margin-top"): "0pt",
+        _tag("fo:margin-bottom"): "4pt",
+    })
+    style_odt_tree(caption, {}, _tag)
     text_style = ET.SubElement(named, _tag("style:style"), {
         _tag("style:name"): "ProjectTraceabilityText", _tag("style:family"): "paragraph",
     })
