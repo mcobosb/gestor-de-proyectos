@@ -335,6 +335,17 @@ class BudgetMainWindow(QMainWindow):
             )
             action.setProperty("searchIcon", True)
             action.setIconVisibleInMenu(True)
+        sira = self._action(
+            "Instalaciones gestoras/productoras de residuos",
+            lambda checked=False: self._open_web_page(
+                "https://www.juntadeandalucia.es/medioambiente/sira-buscador-publico/",
+                "SIRA", "Referencia abierta en el navegador.",
+            ),
+        )
+        sira.setIcon(icon)
+        sira.setProperty("searchIcon", True)
+        sira.setIconVisibleInMenu(True)
+        self._references_menu.addAction(sira)
 
         collaboration_menu = menu.addMenu("Colaboración")
         collaboration_menu.addAction(

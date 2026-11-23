@@ -22,6 +22,10 @@ En las siguientes ocasiones basta con ejecutar el último comando. Mantén junto
 los módulos principales y las carpetas `iconos` y `tools`.
 La aplicación utiliza PySide6. En **Archivo → Configuración → Apariencia** puedes elegir el tema **Sistema**, **Claro** u **Oscuro**. Los tres usan acentos suaves: azul para el presupuesto y los botones principales, verde azulado para la base de referencia y la presencia de colaboradores, y ciruela para la pestaña activa.
 
+En **Consultas → Instalaciones gestoras/productoras de residuos** se abre el
+[buscador público SIRA de la Junta de Andalucía](https://www.juntadeandalucia.es/medioambiente/sira-buscador-publico/)
+en el navegador.
+
 En **Archivo → Configuración → Estilos de documentos** puedes definir la
 tipografía del proyecto: títulos, texto normal, listas, índice, tablas, cabecera,
 pie y firma. Elige la fuente y el tamaño y usa **N**, **C** y **S** para

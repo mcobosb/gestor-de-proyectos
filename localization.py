@@ -91,6 +91,10 @@ _TEXT = {
         "Repris initialement du résumé enregistré dans le PPTP ; vous pouvez le modifier ici.",
     ),
     "Consultas": ("References", "Références"),
+    "Instalaciones gestoras/productoras de residuos": (
+        "Waste management/production facilities",
+        "Installations de gestion/production de déchets",
+    ),
     "Buscador de {kind}": ("{kind} search", "Recherche {kind}"),
     "Buscar por código o texto:": ("Search by code or text:", "Rechercher par code ou texte :"),
     "Ver ficha oficial": ("Open official entry", "Ouvrir la fiche officielle"),

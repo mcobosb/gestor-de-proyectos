@@ -1485,7 +1485,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
     def test_query_menu_entries_have_visible_search_icons_and_open_their_catalogues(self) -> None:
-        """Las lupas de Consultas no cambian cuál de los tres buscadores se abre."""
+        """Conserva los buscadores locales y abre SIRA en el navegador externo."""
         with (
             tempfile.TemporaryDirectory() as directory,
             patch("budget_qt_window.user_data_directory", return_value=Path(directory)),
@@ -1495,13 +1495,27 @@ class BudgetQtWindowTests(unittest.TestCase):
                 menu = next(action.menu() for action in window.menuBar().actions()
                             if action.text() == "Consultas")
                 entries = menu.actions()
-                self.assertEqual([entry.text() for entry in entries], ["NTP", "UNE", "LER"])
+                self.assertEqual([entry.text() for entry in entries], [
+                    "NTP", "UNE", "LER", "Instalaciones gestoras/productoras de residuos",
+                ])
                 with patch.object(window, "open_reference_search") as open_catalogue:
-                    for entry in entries:
+                    for entry in entries[:3]:
                         self.assertTrue(entry.isIconVisibleInMenu())
                         self.assertFalse(entry.icon().isNull())
                         entry.trigger()
                         open_catalogue.assert_called_with(entry.text())
+                with patch("budget_qt_window.webbrowser.open", return_value=True) as browser:
+                    entries[3].trigger()
+                    browser.assert_called_once_with(
+                        "https://www.juntadeandalucia.es/medioambiente/sira-buscador-publico/",
+                    )
+                with (
+                    patch("budget_qt_window.webbrowser.open", return_value=False),
+                    patch.object(QMessageBox, "critical") as error,
+                ):
+                    entries[3].trigger()
+                    error.assert_called_once()
+                    self.assertEqual(error.call_args.args[1], "SIRA")
             finally:
                 window.close()
                 self.application.processEvents()
