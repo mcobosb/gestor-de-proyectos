@@ -22,7 +22,7 @@ from tools._shared.document_layout import (
     LIST_INDENT, TABLE_HEADER_BACKGROUND, add_odt_blue_table_cells, add_odt_list_style,
     add_odt_narrative_styles,
     pdf_blue_table_style, pdf_list_style,
-    split_list_item,
+    split_list_item, template_paragraph_styles,
 )
 
 
@@ -485,7 +485,9 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable |
         add_odt_list_style(document, f"PricesList{depth}", "PricesBody", depth - 1)
     style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
         _tag("style:name"): "PricesListingHeading", _tag("style:family"): "paragraph",
-        _tag("style:parent-style-name"): "PricesHeading1",
+        _tag("style:parent-style-name"): template_paragraph_styles(
+            document.template_header,
+        ).get("heading1", "Heading1"),
     })
     ET.SubElement(style, _tag("style:paragraph-properties"), {
         _tag("fo:break-before"): "page", _tag("fo:keep-with-next"): "always",

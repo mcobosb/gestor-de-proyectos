@@ -83,6 +83,72 @@ class PriceDocumentTests(unittest.TestCase):
             author="Autor único del anejo", indirect_costs=6,
         )
 
+    def test_listing_headings_and_blue_rows_preserve_template_and_table_layout(self):
+        """Conserva títulos de plantilla y resalta solo las filas solicitadas."""
+        from odt_reports import _tag
+        from tools._shared.document_layout import TABLE_HEADER_BACKGROUND
+
+        target = self.folder / "listados.odt"
+        with patch("tools.price_justification.document.narrative", return_value=[]):
+            write_document(self.app, target, {})
+        with ZipFile(target) as archive:
+            content = ET.fromstring(archive.read("content.xml"))
+            styles = ET.fromstring(archive.read("styles.xml"))
+        declared = {
+            style.get(_tag("style:name")): style
+            for root in (styles, content) for style in root.iter(_tag("style:style"))
+        }
+        parent = declared["PricesListingHeading"].get(_tag("style:parent-style-name"))
+        self.assertTrue(parent.startswith("TemplateHeading"), parent)
+        self.assertIsNotNone(styles.find(
+            f".//{_tag('office:styles')}/{_tag('style:style')}[@{_tag('style:name')}='{parent}']",
+        ))
+        for title, _ in LISTINGS:
+            heading = next(
+                node for node in content.iter(_tag("text:h"))
+                if "".join(node.itertext()) == title
+            )
+            self.assertEqual(heading.get(_tag("text:style-name")), "PricesListingHeading")
+        for blue, original in (
+            ("BlueHeaderCell", "TintedHeaderCell"),
+            ("BlueHeaderCellLast", "TintedHeaderCellLast"),
+            ("BlueChapterCell", "ChapterCell"),
+            ("BlueChapterCellLast", "ChapterCellLast"),
+        ):
+            props = dict(declared[blue].find(_tag("style:table-cell-properties")).attrib)
+            self.assertEqual(props.pop(_tag("fo:background-color")), TABLE_HEADER_BACKGROUND)
+            original_props = dict(declared[original].find(_tag("style:table-cell-properties")).attrib)
+            original_props.pop(_tag("fo:background-color"))
+            self.assertEqual(props, original_props)
+            self.assertTrue(content.findall(
+                f".//{_tag('table:table-cell')}[@{_tag('table:style-name')}='{blue}']",
+            ))
+        for name in ("BlueTableHeader", "BlueTableHeaderRight", "BlueChapterTitle"):
+            self.assertEqual(
+                declared[name].find(_tag("style:text-properties")).get(_tag("fo:color")),
+                "#FFFFFF",
+            )
+
+    def test_embedded_pdf_listings_use_blue_headers_and_chapter_bands(self):
+        """Aplica el mismo azul en PDF sin recolorear los informes independientes."""
+        from reportlab.lib import colors
+        from reportlab.platypus import Table
+        from budget_reports import build_pdf_report
+        from report_layout import ReportLayout
+        from tools._shared.document_layout import TABLE_HEADER_BACKGROUND
+
+        blue = colors.HexColor(TABLE_HEADER_BACKGROUND)
+        for report in ("Precios elementales", "Descompuestos"):
+            for embedded in (False, True):
+                with self.subTest(report=report, embedded=embedded):
+                    story, _ = build_pdf_report(self.app, report, ReportLayout(), embedded=embedded)
+                    tables = [block for block in story if isinstance(block, Table)]
+                    self.assertTrue(tables)
+                    self.assertEqual(any(
+                        command[0] == "BACKGROUND" and command[3] == blue
+                        for table in tables for command in table._bkgrndcmds
+                    ), embedded)
+
     def test_odt_uses_project_typography_and_shared_list_layout(self):
         """Respeta la configuración para texto, títulos, tablas y viñetas."""
         from odt_reports import _tag

@@ -415,7 +415,10 @@ def build_pdf_report(
     def chapter(code):
         """Inserta la banda de capítulo con su código normalizado y su título."""
         story.append(Spacer(1, 2 * mm))
-        story.append(layout.chapter(format_chapter_code(code), app._chapter_title(code)))
+        story.append(layout.chapter(
+            format_chapter_code(code), app._chapter_title(code),
+            blue_header=embedded and report == "Descompuestos",
+        ))
 
     def item_heading(item, value=None):
         """Añade la partida en negrita y su descripción sangrada, con importe opcional."""
@@ -496,7 +499,8 @@ def build_pdf_report(
             subtotal_rows = [i for i, row in enumerate(rows) if str(row[3]).startswith("Grupo ")]
             layout.add_data_table(story, report, table(["CÓDIGO", "CANTIDAD", "UD.", "RESUMEN", "PRECIO/UD.", "IMPORTE"],
                                rows, [50, 45, 18, 290, 50, 57], bold_rows=subtotal_rows,
-                               highlighted_rows=subtotal_rows, tinted_rows=embedded))
+                               highlighted_rows=subtotal_rows, tinted_rows=embedded,
+                               blue_header=embedded and report == "Precios elementales"))
         else:
             story.append(text(
                 "No hay precios elementales identificados en el proyecto."

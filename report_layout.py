@@ -1042,7 +1042,8 @@ class ReportLayout:
             from tools._shared.document_layout import TABLE_ALTERNATE_BACKGROUND
 
             tint = colors.HexColor(TABLE_ALTERNATE_BACKGROUND)
-            style.append(("BACKGROUND", (0, 0), (-1, 0), tint))
+            if not blue_header:
+                style.append(("BACKGROUND", (0, 0), (-1, 0), tint))
             if rows:
                 style.append(("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, tint]))
         if background is not None:
@@ -1055,17 +1056,21 @@ class ReportLayout:
         block.setStyle(TableStyle(style))
         return block
 
-    def chapter(self, code, title):
+    def chapter(self, code, title, *, blue_header=False):
         """Construye la banda de capítulo y evita separarla del siguiente contenido."""
         from reportlab.lib.styles import ParagraphStyle
+        from reportlab.lib import colors
+        from tools._shared.document_layout import TABLE_HEADER_BACKGROUND
 
         chapter_style = ParagraphStyle(
             "report-chapter", parent=self.bold, fontSize=10 if self.certification else 12, leading=14,
+            textColor=colors.white if blue_header else self.bold.textColor,
         )
         block = self.table(
             [], [[self.text(code, chapter_style), self.text(title, chapter_style)]],
             [65, self.content_width - 65],
-            background="#00EEEE" if self.certification else "#C7D0DF",
+            background=TABLE_HEADER_BACKGROUND if blue_header else
+            "#00EEEE" if self.certification else "#C7D0DF",
         )
         block.keepWithNext = True
         return block

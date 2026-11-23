@@ -545,6 +545,11 @@ la numeración de página. Antes de cada tabla de datos se incluye una referenci
 en el texto («Véase la Tabla X.»), seguida del título «Tabla X. …». Los elementos
 de maquetación (por ejemplo, las columnas de firma) no se numeran.
 
+En **Justificación de precios**, los títulos de las secciones 3, 4 y 5 conservan
+el estilo de encabezado de la plantilla ODT. La cabecera del listado de precios
+elementales y las bandas de capítulo del listado de descompuestos usan fondo
+azul y texto blanco en ODT y PDF.
+
 En **Justificación de precios → Editar costes indirectos…**, revisa las filas de
 personal, instalaciones provisionales y levantamientos o análisis, separados
 por franjas de color. Las tarifas

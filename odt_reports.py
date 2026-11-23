@@ -6,7 +6,9 @@ from decimal import Decimal
 from pathlib import Path
 from xml.etree import ElementTree as ET
 from zipfile import ZIP_STORED, ZIP_DEFLATED, ZipFile
-from tools._shared.document_layout import TABLE_ALTERNATE_BACKGROUND, table_labels
+from tools._shared.document_layout import (
+    TABLE_ALTERNATE_BACKGROUND, TABLE_HEADER_BACKGROUND, table_labels,
+)
 from document_styles import style_odt_paragraphs, style_odt_tree
 
 from budget_reports import (
@@ -93,12 +95,14 @@ class _OdtReport:
         self.page_titles[self.current_page] = title
         self.pending_page_break = bool(len(self.body))
 
-    def chapter(self, code: str, title: str, *, new_page: bool = False) -> None:
+    def chapter(
+        self, code: str, title: str, *, new_page: bool = False, blue_header: bool = False,
+    ) -> None:
         """Dibuja la banda de capítulo con las mismas columnas que el PDF."""
         self.pending_page_break = self.pending_page_break or new_page
         self.table(
             [], [[code, title]], ratios=[65, CONTENT_WIDTH - 65],
-            bold_rows=(0,), bold_text_style="ChapterTitle", chapter=True,
+            bold_rows=(0,), bold_text_style="ChapterTitle", chapter=True, blue_header=blue_header,
         )
 
     def heading(
@@ -279,6 +283,7 @@ class _OdtReport:
         ratios=(), right_columns=(), chapter: bool = False, keep_next: bool = False,
         highlighted_rows=(), cell_style="", write_cell=None, caption: str = "",
         width_fraction: float = 1.0, tinted_rows: bool = False, centered: bool = False,
+        blue_header: bool = False,
         center_columns: tuple[int, ...] = (), infer_right_columns: bool = True,
     ) -> None:
         """Añade una tabla ODF con estilos semánticos para cabecera, texto y énfasis."""
@@ -354,6 +359,8 @@ class _OdtReport:
                 )
                 if tinted_rows and (header or alternate) and background in {"HeaderCell", "BodyCell", "TotalCell"}:
                     background = "Tinted" + background
+                if blue_header and (header or chapter):
+                    background = "BlueChapterCell" if chapter else "BlueHeaderCell"
                 cell = ET.SubElement(row, _tag("table:table-cell"), {
                     _tag("table:style-name"): background,
                     _tag("office:value-type"): "string",
@@ -370,6 +377,8 @@ class _OdtReport:
                 )
                 if not header and bold_text_style in {"TableItemTitle", "AuxiliaryTitle"} and index != 2:
                     text_style = "TableTotal"
+                if blue_header and (header or chapter):
+                    text_style = "Blue" + text_style
                 if index in center_columns:
                     centered_style = text_style + "Center"
                     if centered_style not in centered_styles and not any(
@@ -492,6 +501,12 @@ class _OdtReport:
             ET.SubElement(style, _tag("style:paragraph-properties"), {
                 _tag("fo:text-align"): "end",
             })
+        for name in ("TableHeader", "TableHeaderRight", "ChapterTitle", "ChapterTitleRight"):
+            style = ET.SubElement(styles, _tag("style:style"), {
+                _tag("style:name"): "Blue" + name, _tag("style:family"): "paragraph",
+                _tag("style:parent-style-name"): name,
+            })
+            ET.SubElement(style, _tag("style:text-properties"), {_tag("fo:color"): "#FFFFFF"})
         for section, name in (("header", "ReportHeader"), ("footer", "FooterText")):
             borders = self.template_borders.get(section, {})
             if borders:
@@ -509,6 +524,8 @@ class _OdtReport:
             for style in self.template_header["automatic_styles"]:
                 automatic.append(deepcopy(style))
         for name, background in (("HeaderCell", "#FFFFFF"), ("BodyCell", "#FFFFFF"),
+                                 ("BlueHeaderCell", TABLE_HEADER_BACKGROUND),
+                                 ("BlueChapterCell", TABLE_HEADER_BACKGROUND),
                                  ("TintedHeaderCell", TABLE_ALTERNATE_BACKGROUND),
                                  ("TintedBodyCell", TABLE_ALTERNATE_BACKGROUND),
                                  ("TintedTotalCell", TABLE_ALTERNATE_BACKGROUND),
@@ -532,7 +549,7 @@ class _OdtReport:
                 **({
                     _tag("fo:border-top"): "0.6pt solid #000000",
                     _tag("fo:border-bottom"): "0.5pt solid #000000",
-                } if name in {"HeaderCell", "TintedHeaderCell"} else {}),
+                } if name in {"HeaderCell", "TintedHeaderCell", "BlueHeaderCell"} else {}),
             })
             self.automatic_styles.append(deepcopy(style))
             last_style = deepcopy(style)
@@ -881,6 +898,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
         """Añade el título del capítulo y su nombre visible."""
         document.chapter(
             format_chapter_code(code), app._chapter_title(code), new_page=new_page,
+            blue_header=embedded and report == "Descompuestos",
         )
 
     def total(label, value, major=True):
@@ -966,6 +984,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                     bold_rows=[i for i, row in enumerate(rows) if str(row[3]).startswith("Grupo ")],
                     highlighted_rows=[i for i, row in enumerate(rows) if str(row[3]).startswith("Grupo ")],
                     caption=report, tinted_rows=embedded,
+                    blue_header=embedded and report == "Precios elementales",
                 )
             else:
                 document.paragraph(
