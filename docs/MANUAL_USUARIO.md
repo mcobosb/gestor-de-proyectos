@@ -107,6 +107,12 @@ estructura de carpetas al mover la entrega. Al abrir el maestro en LibreOffice,
 acepta la actualización de enlaces o utiliza **Herramientas → Actualizar →
 Vínculos** para incorporar los cambios de los subdocumentos.
 
+Antes de cada anejo, el maestro incluye una portada independiente con
+«ANEJO Nº X» a 26 pt y el nombre del anejo debajo a 32 pt, alineados a la derecha.
+Conserva el encabezado y el pie de la plantilla, con el rótulo del anejo y la
+numeración de página. Estas portadas pertenecen al ODM, no al ODT enlazado:
+se mantienen al actualizar o sustituir los textos de los anejos.
+
 Los maestros generados antes de esta corrección conservan sus vínculos anteriores.
 Puedes corregirlos en LibreOffice o volver a generar la entrega, teniendo en
 cuenta que la regeneración reemplaza los archivos generados, incluidos los

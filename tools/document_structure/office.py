@@ -646,6 +646,69 @@ def _append_index_and_sections(
         body.append(section)
 
 
+def _add_annex_covers(root, entries: list[dict[str, str]], links: list[Path]) -> None:
+    """Inserta portadas propias del maestro, fuera de las secciones vinculadas."""
+    body = root.find(f"{_tag('office:body')}/{_tag('office:text')}")
+    automatic = root.find(_tag("office:automatic-styles"))
+    if body is None or automatic is None:
+        raise ValueError("El maestro no contiene el cuerpo o los estilos de los documentos.")
+    annexes = {
+        entry["href"]: entry for entry in entries if "annex_number" in entry
+    }
+    if not annexes:
+        return
+    title_style = ET.SubElement(automatic, _tag("style:style"), {
+        _tag("style:name"): "ProjectAnnexCoverTitle",
+        _tag("style:family"): "paragraph",
+    })
+    ET.SubElement(title_style, _tag("style:paragraph-properties"), {
+        _tag("fo:text-align"): "end", _tag("fo:margin-top"): "0.6cm",
+        _tag("fo:margin-bottom"): "0cm", _tag("fo:line-height"): "115%",
+    })
+    ET.SubElement(title_style, _tag("style:text-properties"), {
+        _tag("fo:font-size"): "32pt", _tag("fo:font-weight"): "bold",
+        _tag("style:font-size-asian"): "32pt", _tag("style:font-size-complex"): "32pt",
+    })
+    sections = {
+        child.get(_tag("text:name")): child for child in body
+        if child.tag == _tag("text:section")
+    }
+    for index, path in enumerate(links, 1):
+        entry = annexes.get(_master_link(path))
+        if entry is None:
+            continue
+        number = entry["annex_number"]
+        title = entry.get("annex_title", "").strip()
+        if not number.isdecimal() or int(number) < 1 or not title:
+            raise ValueError("La portada de un anejo no tiene número o título válido.")
+        section = sections[f"Documento vinculado {index}"]
+        position = list(body).index(section) - 1
+        number_style = ET.SubElement(automatic, _tag("style:style"), {
+            _tag("style:name"): f"ProjectAnnexCoverNumber{index}",
+            _tag("style:family"): "paragraph",
+            _tag("style:master-page-name"): f"ProjectDocumentPage{index}",
+        })
+        ET.SubElement(number_style, _tag("style:paragraph-properties"), {
+            _tag("fo:break-before"): "page", _tag("fo:keep-with-next"): "always",
+            _tag("fo:text-align"): "end", _tag("fo:margin-top"): "6cm",
+            _tag("fo:margin-bottom"): "0cm", _tag("fo:line-height"): "115%",
+        })
+        ET.SubElement(number_style, _tag("style:text-properties"), {
+            _tag("fo:font-size"): "26pt", _tag("fo:font-weight"): "bold",
+            _tag("style:font-size-asian"): "26pt", _tag("style:font-size-complex"): "26pt",
+        })
+        number_paragraph = ET.Element(_tag("text:p"), {
+            _tag("text:style-name"): f"ProjectAnnexCoverNumber{index}",
+        })
+        number_paragraph.text = f"ANEJO Nº {number}"
+        title_paragraph = ET.Element(_tag("text:p"), {
+            _tag("text:style-name"): "ProjectAnnexCoverTitle",
+        })
+        title_paragraph.text = title.upper()
+        body.insert(position, number_paragraph)
+        body.insert(position + 1, title_paragraph)
+
+
 def write_project_master(
     source: Path,
     output: Path,
@@ -708,6 +771,7 @@ def write_project_master(
                         root = ET.fromstring(data)
                     _style_traceability(root)
                     _style_document_page_breaks(root, master_page_names)
+                    _add_annex_covers(root, index_entries, links)
                     data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
                     result.writestr(name, data)
                     continue

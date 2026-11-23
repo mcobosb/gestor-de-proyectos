@@ -481,6 +481,8 @@ def generate_project_package(
                         "text": f"ANEJO Nº {annex_number}. {title}",
                         "style": "P19",
                         "href": _master_href(relative),
+                        "annex_number": str(annex_number),
+                        "annex_title": title,
                     })
                     traceability.append((
                         f"DOC01-A{annex_number:02}", title, "", author, "", "",

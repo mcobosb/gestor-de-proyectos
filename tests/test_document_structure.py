@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
@@ -17,7 +18,8 @@ from PySide6.QtCore import QCoreApplication, QEvent, QLockFile, Qt
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from budget_qt_window import BudgetMainWindow
-from odt_reports import _tag
+from budget_reports import ReportSettings
+from odt_reports import _new_report, _tag
 from tools.document_structure.catalog import (
     DOCUMENTATION_PROCEDURE_FIELDS, TEMPLATES, template_paths,
 )
@@ -34,6 +36,143 @@ from qt_localization import get_document_save_path
 
 class DocumentStructureTests(unittest.TestCase):
     """Comprueba la generación de documentos técnicos y del maestro ODM."""
+
+    def test_annex_covers_belong_to_master_and_keep_template_pages(self) -> None:
+        """Las portadas se separan de los vínculos y mantienen la cabecera y el pie."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            template = root / "plantilla_maestro.odt"
+            document = _new_report("Plantilla del maestro", "Proyecto de prueba", ReportSettings())
+            document.table_references = False
+            for name, page in (("TestTraceability", "Standard"), ("TestIndex", "Section1")):
+                style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+                    _tag("style:name"): name, _tag("style:family"): "paragraph",
+                    _tag("style:master-page-name"): page,
+                })
+                ET.SubElement(style, _tag("style:paragraph-properties"), {
+                    _tag("fo:break-before"): "page",
+                })
+            document.paragraph("HOJA DE TRAZABILIDAD", "TestTraceability")
+            document.table(
+                ["CÓDIGO", "DOCUMENTO", "FECHA EDICIÓN", "EDITADO", "FECHA COMPROBACIÓN", "VALIDADO"],
+                [("",) * 6],
+            )
+            table = document.body[-1]
+            header = table.find(_tag("table:table-header-rows"))
+            table.insert(list(table).index(header), header[0])
+            table.remove(header)
+            document.section("ÍNDICE GENERAL DEL PROYECTO")
+            document.paragraph("ÍNDICE GENERAL DEL PROYECTO", "TestIndex")
+            document.write(template)
+            settings = ReportSettings(
+                master_template_path=str(template),
+                master_logo_path=str(Path(__file__).resolve().parents[1] / "iconos" / "Arranque.jpg"),
+            )
+            app = SimpleNamespace(
+                report_settings=settings, budget_items=[], planning_state={}, pptp_state={},
+                _project_title=lambda: "Proyecto de prueba",
+            )
+            project = root / "proyecto.json"
+            project.touch()
+            master, _ = generate_project_package(
+                project, app, "Maestro.odm",
+                [
+                    {"kind": "tool", "number": "15", "title": "Justificación de precios"},
+                    {"kind": "template", "number": "20", "title": "Conservación y mantenimiento"},
+                ],
+                [], include_pptp=True,
+                memory_documents=[{"title": "Objeto", "outline": ["Alcance"]}],
+            )
+            with ZipFile(master) as archive:
+                content = ET.fromstring(archive.read("content.xml"))
+                styles = ET.fromstring(archive.read("styles.xml"))
+            body = content.find(f"{_tag('office:body')}/{_tag('office:text')}")
+            declared = {
+                style.get(_tag("style:name")): style
+                for style in content.iter(_tag("style:style"))
+            }
+            covers = [
+                node for node in body
+                if node.get(_tag("text:style-name"), "").startswith("ProjectAnnexCoverNumber")
+            ]
+            self.assertEqual(["".join(node.itertext()) for node in covers], ["ANEJO Nº 1", "ANEJO Nº 2"])
+            for index, cover in enumerate(covers, 1):
+                document_index = index + 1
+                position = list(body).index(cover)
+                title, page_break, section = list(body)[position + 1:position + 4]
+                self.assertEqual(title.get(_tag("text:style-name")), "ProjectAnnexCoverTitle")
+                self.assertEqual(
+                    page_break.get(_tag("text:style-name")), f"ProjectDocumentPageBreak{document_index}",
+                )
+                self.assertIsNotNone(section.find(_tag("text:section-source")))
+                self.assertFalse(any(
+                    node.get(_tag("text:style-name"), "").startswith("ProjectAnnexCover")
+                    for node in section.iter()
+                ))
+                number_style = declared[cover.get(_tag("text:style-name"))]
+                self.assertEqual(
+                    number_style.get(_tag("style:master-page-name")), f"ProjectDocumentPage{document_index}",
+                )
+                self.assertEqual(
+                    number_style.find(_tag("style:paragraph-properties")).get(_tag("fo:break-before")),
+                    "page",
+                )
+                for style, size in ((number_style, "26pt"), (declared["ProjectAnnexCoverTitle"], "32pt")):
+                    self.assertEqual(
+                        style.find(_tag("style:paragraph-properties")).get(_tag("fo:text-align")), "end",
+                    )
+                    self.assertEqual(
+                        style.find(_tag("style:text-properties")).get(_tag("fo:font-size")), size,
+                    )
+                page = next(
+                    node for node in styles.iter(_tag("style:master-page"))
+                    if node.get(_tag("style:name")) == f"ProjectDocumentPage{document_index}"
+                )
+                template_page = next(styles.iter(_tag("style:master-page")))
+                self.assertEqual(
+                    ET.tostring(page.find(_tag("style:header"))),
+                    ET.tostring(template_page.find(_tag("style:header"))),
+                )
+                self.assertIn(f"ANEJO Nº {index}", "".join(page.find(_tag("style:footer")).itertext()))
+                self.assertIsNotNone(page.find(f".//{_tag('text:page-number')}"))
+            for path in master.parent.rglob("*.odt"):
+                with ZipFile(path) as archive:
+                    self.assertNotIn(b"ProjectAnnexCover", archive.read("content.xml"))
+
+            soffice = shutil.which("soffice") or str(
+                Path(os.environ.get("PROGRAMFILES", r"C:\Program Files"))
+                / "LibreOffice" / "program" / "soffice.exe"
+            )
+            if Path(soffice).is_file():
+                from pypdf import PdfReader
+
+                subprocess.run(
+                    [soffice, f"-env:UserInstallation={(root / 'lo-profile').as_uri()}",
+                     "--headless", "--convert-to", "pdf", "--outdir", str(root), str(master)],
+                    check=True, capture_output=True, timeout=90,
+                )
+                pages = PdfReader(root / "Maestro.pdf").pages
+                for number, title in (
+                    (1, "JUSTIFICACIÓN DE PRECIOS"), (2, "CONSERVACIÓN Y MANTENIMIENTO"),
+                ):
+                    cover_pages = [
+                        index for index, page in enumerate(pages)
+                        if f"ANEJO Nº {number}\n" in page.extract_text()
+                    ]
+                    self.assertEqual(len(cover_pages), 1)
+                    page_index = cover_pages[0]
+                    self.assertIn(title, pages[page_index].extract_text())
+                    self.assertIn(f"ANEJO Nº {number}:", pages[page_index + 1].extract_text())
+                    runs = []
+                    pages[page_index].extract_text(visitor_text=lambda text, cm, tm, font, size: runs.append((text, size)))
+                    self.assertTrue(any(
+                        text.strip() == f"ANEJO Nº {number}" and abs(size - 26) < 0.1
+                        for text, size in runs
+                    ))
+                    self.assertTrue(any(
+                        title.split()[0] in text and abs(size - 32) < 0.1
+                        for text, size in runs
+                    ))
 
     def test_external_destination_can_be_changed_and_regenerated(self) -> None:
         """Cada carpeta conserva su propio historial y los enlaces del ODM funcionan."""
