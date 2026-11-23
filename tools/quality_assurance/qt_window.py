@@ -257,6 +257,7 @@ class QualityWindow(QDialog):
             return
         selection = get_document_save_path(
             self, "Generar anejo", "Plan de control de calidad.pdf",
+            document_section="DOC01",
         )
         if selection is None:
             return

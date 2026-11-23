@@ -956,6 +956,7 @@ class SafetyProposalDialogQt(QDialog):
                 self,
                 "Generar Estudio de Seguridad y Salud",
                 "Estudio de Seguridad y Salud.pdf",
+                document_section="DOC01",
             )
             if selection is None:
                 return

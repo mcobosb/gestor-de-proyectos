@@ -49,7 +49,7 @@ from PySide6.QtWidgets import (
 
 
 from budget_qt_dialogs import ItemEditor, MeasurementEditor
-from qt_localization import get_document_save_path
+from qt_localization import document_save_initial_path, get_document_save_path
 from PySide6.QtWidgets import QTreeWidgetItemIterator
 from app_paths import application_directory, user_data_directory
 from budget_config import (
@@ -2703,14 +2703,30 @@ class BudgetMainWindow(QMainWindow):
         self._set_status("Configuración de informes guardada.")
         return True
 
+    def _document_export_initial_path(
+        self, filename: str, document_section: str,
+    ) -> Path | None:
+        """Obtiene la ruta inicial y muestra errores del registro documental."""
+        try:
+            return document_save_initial_path(self, filename, document_section)
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(
+                self, "Estructura documental",
+                f"No se puede consultar la ruta de la entrega documental:\n{exc}",
+            )
+            return None
+
     def export_budget_ods(self) -> None:
         """Exporta presupuesto y mediciones a una hoja ODS."""
         if not self.budget_items:
             QMessageBox.information(self, "Presupuesto vacío", "No hay partidas que exportar.")
             return
+        initial_path = self._document_export_initial_path("presupuesto.ods", "DOC04")
+        if initial_path is None:
+            return
         path, _ = QFileDialog.getSaveFileName(
             self, translate("Exportar presupuesto", source_language="es"),
-            "presupuesto.ods", "ODS (*.ods)",
+            str(initial_path), "ODS (*.ods)",
         )
         if not path:
             return
@@ -2759,9 +2775,12 @@ class BudgetMainWindow(QMainWindow):
         if not self.budget_items:
             QMessageBox.information(self, "Presupuesto vacío", "No hay mediciones que exportar.")
             return
+        initial_path = self._document_export_initial_path("mediciones.csv", "DOC04")
+        if initial_path is None:
+            return
         path, _ = QFileDialog.getSaveFileName(
             self, translate("Exportar mediciones", source_language="es"),
-            "mediciones.csv", "CSV (*.csv)",
+            str(initial_path), "CSV (*.csv)",
         )
         if not path:
             return
@@ -2789,10 +2808,13 @@ class BudgetMainWindow(QMainWindow):
                 self, "Presupuesto vacío", "No hay partidas que exportar."
             )
             return
+        initial_path = self._document_export_initial_path(f"{report}.ods", "DOC04")
+        if initial_path is None:
+            return
         path, _ = QFileDialog.getSaveFileName(
             self,
             translate(f"Exportar {report.lower()}", source_language="es"),
-            f"{report}.ods",
+            str(initial_path),
             f"{translate('Hoja ODS', source_language='es')} (*.ods)",
         )
         if not path:
@@ -2864,6 +2886,7 @@ class BudgetMainWindow(QMainWindow):
             self,
             f"Guardar informe: {report}",
             f"{report}.pdf",
+            document_section="DOC04",
         )
         if selection is None:
             return

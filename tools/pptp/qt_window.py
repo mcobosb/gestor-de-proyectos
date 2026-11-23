@@ -623,6 +623,7 @@ class PptpWindowQt(QDialog):
         )
         selection = get_document_save_path(
             self, "Generar PPTP", "PPTP.pdf",
+            document_section="DOC03",
         )
         if selection is None:
             return

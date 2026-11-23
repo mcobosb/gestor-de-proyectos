@@ -33,6 +33,9 @@ DOCUMENT_FOLDERS = (
     "DOC03 - PLIEGO DE PRESCRIPCIONES TÉCNICAS PARTICULARES",
     "DOC04 - PRESUPUESTO",
 )
+DOCUMENT_SECTIONS = {
+    f"DOC{index:02}": folder for index, folder in enumerate(DOCUMENT_FOLDERS, 1)
+}
 MEMORY_DOCUMENT_TITLE = "Memoria Descriptiva y Justificativa"
 
 
@@ -103,6 +106,21 @@ def suggested_destination(project: Path) -> Path:
         if root.is_dir():
             return root
     return _project_root(project)
+
+
+def suggested_document_directory(project: Path, section: str) -> Path | None:
+    """Sugiere la carpeta del documento dentro de la última entrega registrada."""
+    try:
+        folder = DOCUMENT_SECTIONS[section]
+    except KeyError as exc:
+        raise ValueError(f"Sección documental desconocida: {section}") from exc
+    data = _read_receipt(project)
+    records = _delivery_records(project, data)
+    if not records:
+        return None
+    root = _delivery_root(project, records[-1]["raiz"])
+    directory = root / TECHNICAL_DOCUMENTS_FOLDER / folder
+    return directory if directory.is_dir() else None
 
 
 def generated_at(project: Path, *, destination: Path | None = None) -> str | None:

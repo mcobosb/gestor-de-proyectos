@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
 
 from budget_core import format_chapter_code, fmt_number
 from localization import translate
-from qt_localization import get_document_save_path
+from qt_localization import document_save_initial_path, get_document_save_path
 from tools._shared.reference_pill import add_reference_pill
 from tools._shared.scheduling import (
     RELATIONS,
@@ -628,6 +628,7 @@ class PlanningWindowQt(QDialog):
             self,
             "Guardar planificación",
             "Plan de trabajo.pdf",
+            document_section="DOC02",
         )
         if selection is None:
             return
@@ -713,10 +714,20 @@ class GanttPreviewDialogQt(QDialog):
 
     def save_copy(self) -> None:
         """Guarda una copia del Gantt en PDF o PNG."""
+        try:
+            initial_path = document_save_initial_path(
+                self.parent(), "plan_de_trabajo.pdf", "DOC02",
+            )
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(
+                self, "Estructura documental",
+                f"No se puede consultar la ruta de la entrega documental:\n{exc}",
+            )
+            return
         target, _ = QFileDialog.getSaveFileName(
             self,
             translate("Guardar plan de trabajo", source_language="es"),
-            "plan_de_trabajo.pdf",
+            str(initial_path),
             "PDF (*.pdf);;PNG (*.png)",
         )
         if not target:

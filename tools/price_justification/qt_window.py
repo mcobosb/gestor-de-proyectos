@@ -463,6 +463,7 @@ class PriceJustificationWindowQt(QDialog):
                 self,
                 "Guardar justificación de precios",
                 "Justificación de precios.pdf",
+                document_section="DOC01",
             )
             if selection is None:
                 return

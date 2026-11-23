@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import shutil
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 from urllib.parse import unquote, urljoin
@@ -24,9 +25,11 @@ from tools.document_structure.generation import (
     DOCUMENT_FOLDERS, MEMORY_DOCUMENT_TITLE,
     TECHNICAL_DOCUMENTS_FOLDER, default_master_name,
     generate_project_package, generated_at, receipt_path,
+    suggested_document_directory,
 )
 from tools.document_structure.office import MASTER_LOGO, MASTER_TEMPLATE
 from tools.document_structure.qt_window import DocumentStructureWindow
+from qt_localization import get_document_save_path
 
 
 class DocumentStructureTests(unittest.TestCase):
@@ -186,6 +189,42 @@ class DocumentStructureTests(unittest.TestCase):
             finally:
                 window.deleteLater()
                 QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+    def test_document_save_picker_uses_latest_delivery_section(self) -> None:
+        """Las herramientas sugieren la carpeta correspondiente a la última entrega."""
+        QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "proyecto.json"
+            destination = root / "entrega"
+            expected_directory = (
+                destination / TECHNICAL_DOCUMENTS_FOLDER / DOCUMENT_FOLDERS[1]
+            )
+            expected_directory.mkdir(parents=True)
+            project.touch()
+            receipt_path(project).write_text(json.dumps({
+                "fecha": "2026-01-01T00:00:00+00:00",
+                "ubicaciones": [{
+                    "raiz": str(destination),
+                    "fecha": "2026-01-01T00:00:00+00:00",
+                }],
+            }), encoding="utf-8")
+            self.assertEqual(
+                suggested_document_directory(project, "DOC02"), expected_directory,
+            )
+            parent = SimpleNamespace(app=SimpleNamespace(project_path=project))
+            with patch(
+                "qt_localization.QFileDialog.getSaveFileName",
+                return_value=("", ""),
+            ) as picker:
+                self.assertIsNone(get_document_save_path(
+                    parent, "Guardar planificación", "Plan de trabajo.pdf",
+                    document_section="DOC02",
+                ))
+            self.assertEqual(
+                picker.call_args.args[2],
+                str(expected_directory / "Plan de trabajo.odt"),
+            )
 
     def test_legacy_record_remains_usable_after_changing_destination(self) -> None:
         """Conserva el historial previo cuando el registro aún no contiene ubicaciones."""

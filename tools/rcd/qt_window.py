@@ -462,6 +462,7 @@ class RcdWindowQt(QDialog):
             self,
             "Generar estudio RCDs",
             "Estudio de gestión de RCDs.pdf",
+            document_section="DOC01",
         )
         if selection is None:
             return

@@ -362,6 +362,7 @@ class CertificationWindowQt(QDialog):
             self,
             f"Generar {report}",
             f"{report} {index + 1} {month.key}.pdf",
+            document_section="DOC04",
         )
         if selection is None:
             return

@@ -63,7 +63,8 @@ _QT_TEXT = {
 
 
 def get_document_save_path(
-    parent: QWidget | None, caption: str, filename: str,
+    parent: QWidget | None, caption: str, filename: str, *,
+    document_section: str | None = None,
 ) -> tuple[Path, str] | None:
     """Permite elegir PDF u ODT en un diálogo Qt traducido al idioma activo."""
     filters = {"odt": "ODT (*.odt)", "pdf": "PDF (*.pdf)"}
@@ -78,10 +79,19 @@ def get_document_save_path(
             f"{translate('Guardar informe', source_language='es')}: "
             f"{translate(caption[len('Guardar informe: '):], source_language='es')}"
         )
+    try:
+        initial_path = document_save_initial_path(parent, filename, document_section)
+    except (OSError, ValueError) as exc:
+        QMessageBox.warning(
+            parent,
+            translate("Estructura documental", source_language="es"),
+            f"No se puede consultar la ruta de la entrega documental:\n{exc}",
+        )
+        return None
     path, selected_filter = QFileDialog.getSaveFileName(
         parent,
         localized_caption,
-        str(Path(filename).with_suffix(".odt")),
+        str(initial_path.with_suffix(".odt")),
         ";;".join(filters.values()),
         filters["odt"],
         QFileDialog.Option.DontUseNativeDialog,
@@ -112,6 +122,23 @@ def get_document_save_path(
             ) != QMessageBox.StandardButton.Yes:
                 return None
     return target, suffix
+
+
+def document_save_initial_path(
+    parent: QWidget | None, filename: str, document_section: str | None = None,
+) -> Path:
+    """Construye la ruta inicial, usando la carpeta de entrega si existe."""
+    initial_path = Path(filename)
+    if document_section is None or parent is None:
+        return initial_path
+    app = getattr(parent, "app", parent)
+    project = getattr(app, "project_path", None)
+    if project is None:
+        return initial_path
+    from tools.document_structure.generation import suggested_document_directory
+
+    directory = suggested_document_directory(Path(project), document_section)
+    return directory / initial_path.name if directory is not None else initial_path
 
 
 class _QtButtonTranslator(QTranslator):
