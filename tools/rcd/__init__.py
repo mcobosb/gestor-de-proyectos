@@ -13,6 +13,7 @@ import unicodedata
 
 from .._shared.budget_sources import RCD_BUDGET_SOURCE, TRANSPORT_PREFIX
 from . import ler_catalog
+from .management import RcdManagement
 
 if TYPE_CHECKING:
     from bc3_gui import BudgetApp, ProjectItem
@@ -273,6 +274,7 @@ class RcdState:
     sources: dict[str, str] = field(default_factory=dict)
     demolition: list[DemolitionMeasurement] = field(default_factory=list)
     documentation: dict[str, str] = field(default_factory=dict)
+    management: RcdManagement = field(default_factory=RcdManagement)
 
     def to_dict(self) -> dict:
         """Serializa las estimaciones, las marcas manuales y su procedencia."""
@@ -290,6 +292,7 @@ class RcdState:
                        for key, value in documentation.items())):
             raise ValueError("Los datos del estudio RCDs deben contener textos.")
         state.documentation = dict(documentation)
+        state.management = RcdManagement.from_dict(data.get("management", {}))
         for section in ("inputs", "groups", "selected", "evidence", "sources"):
             if not isinstance(data.get(section, {}), dict):
                 raise ValueError(f"Sección RCDs no válida: {section}.")
@@ -503,11 +506,9 @@ def initial_state(app: BudgetApp) -> RcdState:
     earth_budget = Decimal(0)
     earth_volume = Decimal(0)
     earth_codes = []
-    waste_codes = []
     for item in app.budget_items:
         text = normalize(f"{item.summary} {item.text} {app._chapter_title(item.chapter)}")
         if re.search(r"gestion.*residu|tratamiento.*residu|canon.*vertedero", text):
-            waste_codes.append(item.code)
             continue
         budget += Decimal(str(item.import_total))
         if re.search(r"excav|movimiento de tierras|desmonte|trabajos previos", text):
@@ -519,10 +520,6 @@ def initial_state(app: BudgetApp) -> RcdState:
             earth_volume += Decimal(str(item.measurement))
             earth_codes.append(item.code)
     state.inputs["budget"] = number(budget, "Presupuesto")
-    state.sources["budget"] = (
-        "PEM de partidas; exclusión orientativa de gestión de residuos: " + ", ".join(waste_codes)
-        if waste_codes else "Suma del PEM. Revisa si hay gestión de residuos no identificada."
-    )
     if earth_codes:
         state.inputs["earth_volume"] = number(earth_volume, "Excavación")
         state.sources["earth_volume"] = "Suma de partidas m³ de excavación: " + ", ".join(earth_codes)

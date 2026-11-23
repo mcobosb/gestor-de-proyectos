@@ -10,8 +10,8 @@ import re
 from typing import TYPE_CHECKING
 from xml.etree import ElementTree as ET
 
-from budget_reports import report_output_format
-from tools._shared.budget_sources import RCD_BUDGET_SOURCE
+from budget_reports import amount_in_words, money, report_output_format
+from tools._shared.budget_sources import RCD_BUDGET_SOURCE, matches_tool_chapter
 from tools._library_editor import library_members, read_markdown
 from tools._library_markdown import document_markdown, text_blocks
 from tools.document_structure.catalog import RCD_NUMBER
@@ -22,6 +22,7 @@ from tools._shared.document_layout import (
     pdf_list_style, project_document_variables, split_list_item, style_odt_blue_table,
 )
 from . import ler_catalog
+from .management import DESTINATIONS, PREVENTION, SELECTIONS, selected_wastes
 from collaborative_storage import shared_library_path
 
 if TYPE_CHECKING:
@@ -55,11 +56,28 @@ DOCUMENTS = (
     ("01_memoria.md", "1. Memoria y antecedentes"),
     ("02_identificacion_estimacion.md", "1.3–1.4. Identificación y estimación"),
     ("03_medidas_gestion.md", "1.5–1.10. Medidas y operaciones de gestión"),
+    ("08_presupuesto.md", "1.11. Presupuesto de gestión"),
     ("04_obligaciones.md", "2.1. Obligaciones de los agentes"),
     ("05_prescripciones.md", "2.2. Prescripciones de gestión"),
     ("06_documentacion.md", "2.3. Documentación y trazabilidad"),
     ("07_normativa.md", "2.4. Normativa"),
-    ("08_presupuesto.md", "3. Presupuesto de gestión"),
+)
+BUDGET_SECTION = """## 1.11. PRESUPUESTO DE GESTIÓN DE RCDs
+
+El presupuesto de gestión de RCDs se encuentra en el capítulo {{capitulo_presupuesto_rcds}} del presupuesto del proyecto.
+
+El presupuesto de gestión de RCDs asciende a {{presupuesto_rcds}}.
+"""
+BUDGET_FIELDS = {
+    "capitulo_presupuesto_rcds": "Capítulo de gestión de RCDs en el presupuesto",
+    "presupuesto_rcds": "Importe del capítulo de gestión de RCDs",
+}
+LEGACY_PREVENTION_TEXT = (
+    "Se ajustarán las compras y mediciones, se planificarán los desmontajes y cortes, "
+    "se protegerán los acopios frente a deterioros y se estudiarán suministros con "
+    "embalajes retornables, sistemas reutilizables y posibilidades de devolución al proveedor.\n\n"
+    "Se evitarán mezclas que conviertan fracciones aprovechables en residuos no valorizables. "
+    "El personal conocerá las zonas de depósito y las instrucciones de separación.\n\n"
 )
 DOCUMENT_FIELDS = {
     "prevention": "Prevención y reducción de residuos",
@@ -107,7 +125,52 @@ def load_documents(archive_path: Path) -> list[tuple[str, str]]:
     missing = [name for name, _ in DOCUMENTS if name not in members]
     if missing:
         raise ValueError("Faltan documentos base del estudio RCDs: " + ", ".join(missing))
-    return [(name, read_markdown(archive_path, name)) for name, _ in DOCUMENTS]
+    documents = []
+    for name, _ in DOCUMENTS:
+        text = read_markdown(archive_path, name)
+        if name == "03_medidas_gestion.md":
+            text = text.replace("\r\n", "\n").replace(LEGACY_PREVENTION_TEXT, "")
+        if name == "08_presupuesto.md" and re.match(
+            r"#\s+3\.\s+PRESUPUESTO", document_markdown(text).lstrip(), re.IGNORECASE,
+        ):
+            text = BUDGET_SECTION
+        documents.append((name, text))
+    return documents
+
+
+def _budget_reference_variables(app: BudgetApp | None, settings: ReportSettings) -> dict[str, str]:
+    """Cita el capítulo económico real sin confundirlo con la estimación del modelo."""
+    from budget_core import format_chapter_code, format_currency
+
+    values = {key: f"[PENDIENTE: {label}]" for key, label in BUDGET_FIELDS.items()}
+    if app is None:
+        return values
+    chapters = {
+        item.chapter for item in app.budget_items if item.source.startswith(RCD_BUDGET_SOURCE)
+    }
+    if not chapters:
+        chapters = {
+            item.chapter for item in app.budget_items
+            if matches_tool_chapter("rcd", item.chapter, app._chapter_title(item.chapter))
+        }
+    if not chapters:
+        return values
+    if len(chapters) != 1:
+        values["capitulo_presupuesto_rcds"] = (
+            "[PENDIENTE: Hay varios capítulos de gestión de RCDs; identificar el que debe citarse]"
+        )
+        return values
+    chapter = next(iter(chapters))
+    total = money(sum(
+        (Decimal(str(item.import_total)) for item in app.budget_items if item.chapter == chapter),
+        Decimal(0),
+    ))
+    values["capitulo_presupuesto_rcds"] = format_chapter_code(chapter).removeprefix("CAP. ")
+    values["presupuesto_rcds"] = (
+        f"{amount_in_words(total, settings.currency, settings.custom_currency)} "
+        f"({format_currency(float(total), settings.currency, settings.custom_currency)})"
+    )
+    return values
 
 
 def study_variables(state: RcdState, title: str, settings: ReportSettings) -> dict[str, str]:
@@ -171,11 +234,11 @@ def _pending_lines(source: str, values: dict[str, str]) -> str:
     def replacement(match: re.Match[str]) -> str:
         """Retira el prefijo únicamente en la misma línea del campo sin completar."""
         key = match[1].strip()
-        if key in DOCUMENT_FIELDS and values[key].startswith("[PENDIENTE:"):
-            return "{{" + key + "}}"
+        if (key in DOCUMENT_FIELDS or key in BUDGET_FIELDS) and values[key].startswith("[PENDIENTE:"):
+            return "{{" + key + "}}" + ("" if key in BUDGET_FIELDS else match[2])
         return match[0]
 
-    return re.sub(r"(?m)^[^\r\n{}]*\{\{([^{}\r\n]+)\}\}", replacement, source)
+    return re.sub(r"(?m)^[^\r\n{}]*\{\{([^{}\r\n]+)\}\}([^\r\n{}]*)", replacement, source)
 
 
 def study_tables(
@@ -184,10 +247,10 @@ def study_tables(
 ) -> dict[str, list[StudyTable]]:
     """Reutiliza las filas del cálculo existente sin distribuir artificialmente cantidades por LER."""
     from budget_core import currency_label, fmt_number
-    from . import GROUPS, HEADERS, INPUTS, WASTES, budget_calculation, calculation_rows, number
+    from . import GROUPS, INPUTS, WASTES, budget_calculation, calculation_rows, number
 
     lines, groups = budget_calculation(state)
-    sections, details = calculation_rows(state, lines, groups)
+    _, details = calculation_rows(state, lines, groups)
     weights = {group.key: group.weight for group in groups}
     values = project_document_variables(title, settings)
     pem = (
@@ -263,11 +326,6 @@ def study_tables(
                 ("plastic", "Plásticos", Decimal("0.5")), ("paper", "Papel y cartón", Decimal("0.5")),
              )], [3, 1, 1], right_columns=(0,), center_columns=(1, 2),
         )],
-        "tabla_presupuesto": [
-            StudyTable(label, list(HEADERS), rows, [40, 15, 17, 14, 14],
-                       (0,) if label.startswith("TOTAL") else ())
-            for label, rows in sections
-        ],
     }
 
 
@@ -283,6 +341,7 @@ def study_blocks(
     summary = work_summary(app) if app is not None else None
     links = ler_catalog.match_rows(app.budget_items) if app is not None else []
     values = study_variables(state, title, settings)
+    values.update(_budget_reference_variables(app, settings))
     library_path = shared_library_path(
         app, "rcd", LIBRARY_PATH
     ) if app is not None else LIBRARY_PATH
@@ -299,14 +358,35 @@ def study_blocks(
         source = re.sub(r"^([ \t]*\{\{tabla_proyecto\}\}[ \t]*)$",
                         rf"\1\n\n## {DESCRIPTION_HEADING}\n\n{DESCRIPTION_MARKER}", source,
                         flags=re.MULTILINE)
-    marker = r"^[ \t]*\{\{(tabla_[a-z_]+)\}\}[ \t]*$"
+    management_fields = {}
+    for field, table in _management_tables(state, excluded_codes).items():
+        name = f"tabla_gestion_{field}"
+        source = re.sub(
+            r"^[^\r\n{}]*\{\{" + field + r"\}\}[^\r\n{}]*$",
+            "{{" + name + "}}", source, flags=re.MULTILINE,
+        )
+        tables[name] = [table]
+        management_fields[name] = field
+    prevention = _prevention_blocks(state, values["normativa_autonomica"])
+    narrative = {"medidas_prevencion": prevention} if prevention else {}
+    if prevention:
+        source = re.sub(
+            r"^[^\r\n{}]*\{\{prevention\}\}[^\r\n{}]*$",
+            "{{medidas_prevencion}}", source, flags=re.MULTILINE,
+        )
+        management_fields["medidas_prevencion"] = "prevention"
+    marker = r"^[ \t]*\{\{(tabla_[a-z_]+|medidas_prevencion)\}\}[ \t]*$"
     counts = Counter(re.findall(marker, source, flags=re.MULTILINE))
-    if set(counts) != set(tables) or any(count != 1 for count in counts.values()):
-        raise ValueError("La biblioteca RCDs debe contener una vez cada marcador de las tablas del estudio.")
+    if set(counts) != set(tables) | set(narrative) or any(count != 1 for count in counts.values()):
+        raise ValueError("La biblioteca RCDs debe contener una vez cada marcador del estudio.")
     blocks: list[StudyBlock] = []
     for index, part in enumerate(re.split(marker, source, flags=re.MULTILINE)):
         if index % 2:
-            blocks.extend(tables[part])
+            blocks.extend(narrative[part] if part in narrative else tables[part])
+            if part in management_fields:
+                observation = state.documentation.get(management_fields[part], "").strip()
+                if observation:
+                    blocks.append((0, "Observaciones: " + observation))
             if part == "tabla_residuos" and app is not None:
                 if links:
                     blocks.append(StudyTable(
@@ -324,6 +404,94 @@ def study_blocks(
                 if text.strip():
                     blocks.append((level, text))
     return blocks
+
+
+def _prevention_blocks(state: RcdState, regional_reference: str) -> list[StudyBlock]:
+    """Emite las medidas elegidas sin afirmar actuaciones ya ejecutadas ni usos autorizados."""
+    if not state.management.prevention:
+        return []
+    blocks: list[StudyBlock] = [
+        (0, "De acuerdo con el artículo 4.1.a), apartado 2.º, del Real Decreto 105/2008 "
+            "y con la jerarquía de residuos de la Ley 7/2022, se prevén las siguientes medidas "
+            "para la obra, que se concretarán en el Plan de Gestión de Residuos."),
+        (0, regional_reference),
+    ]
+    number = 0
+    for title, options in PREVENTION.values():
+        measures = [
+            (-1, f"• {label}: {text}") for key, (label, text, _general) in options.items()
+            if key in state.management.prevention
+        ]
+        if measures:
+            number += 1
+            blocks.append((3, f"1.9.{number}. {title}"))
+            blocks.extend(measures)
+    return blocks
+
+
+def _management_tables(state: RcdState, excluded_codes: set[str]) -> dict[str, StudyTable]:
+    """Convierte decisiones explícitas en tablas y conserva avisos para los datos incompletos."""
+    plan = state.management
+    result = {}
+    fields = {"segregation": "separation", "reuse": "reuse", "recovery": "recovery"}
+    titles = {
+        "segregation": "Previsión de segregación",
+        "reuse": "Medidas de reutilización previstas",
+        "recovery": "Operaciones de valorización previstas en la obra",
+    }
+    for section, options in SELECTIONS.items():
+        selected = plan.selections[section]
+        if not selected:
+            continue
+        rows = []
+        for key, label in options.items():
+            if key not in selected:
+                continue
+            if key == "other":
+                label += " " + (plan.details.get(section, "").strip()
+                                 or "[PENDIENTE: Precisar otra operación]")
+            if section == "segregation":
+                condition = (
+                    plan.details.get(section, "").strip()
+                    or "[PENDIENTE: Justificación de la fracción mezclada y su tratamiento]"
+                ) if key == "mixed" else ""
+                rows.append([label, condition])
+            elif section == "reuse":
+                destination = "No procede" if key == "none" else (
+                    plan.reuse_destinations.get(key, "").strip()
+                    or "[PENDIENTE: Destino inicial de reutilización]"
+                )
+                rows.append([label, destination])
+            else:
+                rows.append([label])
+        headers = (["Operación prevista", "Condiciones"] if section == "segregation"
+                   else ["Operación prevista", "Destino inicial"] if section == "reuse"
+                   else ["Operación prevista"])
+        result[fields[section]] = StudyTable(
+            titles[section], headers, rows, [3, 2] if len(headers) == 2 else [1],
+        )
+    rows = []
+    for metadata in selected_wastes(state, excluded_codes):
+        code = metadata[0]
+        record = plan.destinations.get(code, {})
+        key = record.get("destination", "")
+        destination = DESTINATIONS.get(key, f"[PENDIENTE: Destino del residuo {code}]")
+        detail = record.get("details", "").strip()
+        if detail:
+            destination += ": " + detail
+        elif key == "other":
+            destination += ": [PENDIENTE: Precisar otro destino]"
+        facility = record.get("facility", "").strip() or (
+            "Propia obra" if key == "onsite" else f"[PENDIENTE: Gestor/instalación para {code}]"
+        )
+        rows.append([*metadata, destination, facility])
+    if rows:
+        result["destinations"] = StudyTable(
+            "Destino previsto de los residuos por código LER",
+            ["Código LER", "Residuo", "Tipo", "Nivel", "Destino previsto", "Gestor / instalación"],
+            rows, [1.1, 2.2, 1.5, 0.8, 2.4, 2],
+        )
+    return result
 
 
 def _odt_law_links(paragraph: ET.Element, text: str) -> None:
@@ -384,6 +552,7 @@ def _justified_list_section(text: str) -> bool:
         "descripción de la actuación",
         "prescripciones de almacenamiento, manejo y gestión en obra",
         "normativa de referencia",
+        "medidas de prevención",
     }
 
 

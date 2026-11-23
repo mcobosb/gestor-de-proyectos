@@ -717,7 +717,9 @@ certificación de cantidades reales ni de cumplimiento normativo.
 ### Paso 1. Datos de cálculo
 
 Completa los campos pendientes (o indica cero si no proceden) y revisa los
-valores recuperados, cuya procedencia se muestra junto a cada campo:
+valores recuperados. Se muestran las partidas de origen de la superficie y la
+excavación, y se advierte del carácter estimado del movimiento de tierras;
+no se repiten avisos genéricos junto a tarifas y coeficientes:
 
 - **Superficie afectada**: se usa automáticamente la mayor medición de una
   partida de obra en m², aunque hubiese un valor guardado. No se suman
@@ -819,6 +821,43 @@ y evidencias dentro del JSON del proyecto. El disquete negro indica cambios
 pendientes. Cerrar conserva las ediciones aceptadas en memoria; guarda el
 proyecto para persistirlas.
 
+### Previsiones de gestión y destinos
+
+En la segunda pestaña del paso de revisión, selecciona las previsiones de
+**segregación**, **reutilización** y **valorización en la obra**. Puedes marcar
+varias; **No se prevé…** es excluyente con las operaciones concretas del mismo
+grupo. Indica el destino inicial de cada reutilización y concreta las opciones
+**Otros** y la justificación de la fracción mezclada cuando las selecciones.
+
+La tabla de destinos reúne una fila por **LER seleccionado**, con residuo,
+tipo y nivel del modelo. Elige el destino habitual en el desplegable e identifica
+el gestor o instalación previstos; **Otro destino** requiere una descripción.
+No se asigna vertedero automáticamente. Revisa la clasificación legal y la
+habilitación del gestor: las opciones no constituyen una autorización.
+Desmarcar y volver a marcar un residuo conserva su destino.
+
+Las decisiones se guardan en el JSON y aparecen en el PDF y el ODT, conservando
+como observaciones los textos particulares anteriores. Se permite exportar sin
+completarlas: los datos que falten mantienen avisos **PENDIENTE** específicos.
+
+### Medidas preventivas
+
+La tercera pestaña organiza las medidas en cuatro bloques: **diseño y proyecto**,
+**suministro, acopio y manipulación**, **ejecución y demolición**, y **residuos
+peligrosos y formación**. Las medidas generales vienen marcadas inicialmente.
+Las específicas —industrialización, equilibrio de tierras, materiales reciclados,
+demolición selectiva y reutilización directa— se activan solo si proceden.
+Todas las casillas son revisables; desmarcarlas no exime de obligaciones legales.
+
+Solo las medidas seleccionadas se incorporan al apartado **1.9**, agrupadas
+en subapartados y redactadas como previsiones, no como actuaciones ya acreditadas.
+Se cita el artículo **4.1.a), apartado 2.º, del RD 105/2008** y la jerarquía de
+la **Ley 7/2022**. El **Decreto 73/2012** se menciona para la parte de la obra
+situada en Andalucía según los municipios configurados, no para otras ubicaciones.
+Las selecciones, incluidas las desmarcadas, se conservan al guardar y reabrir
+el proyecto; no se vuelven a marcar automáticamente. Si no seleccionas ninguna
+ni hay texto particular, permanece el aviso de prevención pendiente.
+
 ### Incorporar la gestión de residuos al presupuesto
 
 El icono **+** indica que una herramienta incorpora datos al presupuesto
@@ -840,9 +879,10 @@ calculado como precio. Se mantienen las siete filas, incluso las de importe
 cero, sin añadir otra partida de total que duplicaría el coste.
 
 Los importes de estas partidas se redondean individualmente a céntimos: sin
-costes indirectos, el total del capítulo coincide con el informe RCDs. Si hay
+costes indirectos, el total del capítulo coincide con la estimación de la herramienta. Si hay
 **costes indirectos** configurados, se aplican además, con el mismo criterio
-que en las demás partidas. El informe RCDs conserva los costes directos.
+que en las demás partidas. El apartado **1.11** del informe cita el total real
+del capítulo, incluidos sus costes indirectos.
 Las demás partidas mantienen su comportamiento de cálculo anterior.
 
 Al volver a guardar se actualizan las mediciones y precios de las partidas
@@ -862,9 +902,16 @@ todavía debes guardar el proyecto para conservarlo en disco.
 
 **Generar informe RCDs** utiliza **PDF u ODT** y la **plantilla de cabecera y pie**
 elegidos en el diálogo de guardado y en **Archivo → Configuración**, respectivamente.
-Incluye la tabla económica de la hoja
-Presupuesto (tipología, volumen, precio de gestión, importe y porcentaje del
-presupuesto), datos de cálculo y residuos seleccionados con su procedencia.
+Incluye los datos de cálculo y los residuos seleccionados con su procedencia.
+El apartado **1.11. Presupuesto de gestión de RCDs**, al final de la memoria,
+cita el código actual del capítulo del presupuesto y su importe en letra,
+seguido de la cifra entre paréntesis. Se toma el total real del capítulo,
+incluidas sus partidas manuales y costes indirectos, sin añadir GG, BI ni IVA;
+no se sustituye por la estimación de la herramienta. Si falta el capítulo o
+hay varios capítulos generados sin una referencia única, se dejan marcadores
+**PENDIENTE**. Las bibliotecas anteriores se adaptan al exportar sin sobrescribirlas.
+Se elimina la sección independiente **3. Presupuesto de gestión de RCDs** y sus
+tablas; el cálculo económico detallado sigue disponible en la herramienta.
 La tabla **Residuos seleccionados** se ordena por **Código LER**, manteniendo
 juntas sus procedencias. Las partidas generadas por el propio estudio no se
 utilizan para detectar residuos ni como procedencias o vínculos LER, con

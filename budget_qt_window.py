@@ -82,6 +82,7 @@ from budget_project import (
 )
 from budget_reports import REPORT_NAMES, ReportSettings, write_pdf
 from budget_qt_settings import SettingsDialog
+from tools._shared.budget_sources import matches_tool_chapter
 from budget_qt_theme import THEMES, apply_theme, search_icon
 from tools._shared.reference_pill import add_reference_pill
 from localization import LANGUAGES, set_language, translate
@@ -1850,32 +1851,7 @@ class BudgetMainWindow(QMainWindow):
         chapters.update(item.chapter for item in self.budget_items)
         for chapter in chapters:
             title = self._chapter_title(chapter)
-            normalized = unicodedata.normalize(
-                "NFKD", f"{chapter} {title}".casefold()
-            )
-            text = re.sub(
-                r"[^a-z0-9]+",
-                " ",
-                "".join(
-                    char for char in normalized if not unicodedata.combining(char)
-                ),
-            ).strip()
-            code = re.sub(r"[^a-z0-9]", "", chapter.casefold())
-            if tool == "rcd":
-                matches = (
-                    re.search(r"\b(?:rcds?|residuos?|escombros?)\b", text)
-                    or re.search(r"\br\s+c\s+d\s*s?\b", text)
-                    or re.fullmatch(r"rcds?\d*", code)
-                )
-            else:
-                matches = (
-                    re.search(
-                        r"\b(?:seguridad|salud)\b|\bprevencion\b.*\briesgos\b|"
-                        r"\bs\s+(?:y\s+)?s\b",
-                        text,
-                    )
-                    or re.fullmatch(r"(?:ss|sys)\d*", code)
-                )
+            matches = matches_tool_chapter(tool, chapter, title)
             members = [
                 item for item in self.budget_items if item.chapter == chapter
             ]

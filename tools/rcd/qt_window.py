@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -60,6 +61,7 @@ from . import (
 )
 from .._shared.budget_sources import TRANSPORT_PREFIX
 from .document import DOCUMENTS, LIBRARY_PATH, load_documents
+from .management_qt import ManagementTab, PreventionTab
 
 
 class RcdWindowQt(QDialog):
@@ -88,6 +90,7 @@ class RcdWindowQt(QDialog):
         self.pages.addWidget(self._build_review_page())
         self._restore_page()
         self.app.budget_refreshed.connect(self._refresh_insert_actions)
+        self.app.budget_refreshed.connect(self.management_tab.refresh_destinations)
         self._refresh_insert_actions()
 
     def _build_inputs_page(self) -> QWidget:
@@ -130,8 +133,14 @@ class RcdWindowQt(QDialog):
                 label_widget.setBuddy(field)
                 grid.addWidget(label_widget, index, 0)
                 grid.addWidget(field, index, 1)
-                source = self.data.sources.get(key, "Valor del modelo.")
-                hint = QLabel(("PENDIENTE — " if self.data.inputs[key] is None else "") + source)
+                source = self.data.sources.get(key, "") if key in {
+                    "surface", "earth_volume", "earth_budget",
+                } else ""
+                if source == "Revisado manualmente.":
+                    source = ""
+                hint = QLabel(" — ".join(filter(None, (
+                    "PENDIENTE" if self.data.inputs[key] is None else "", source,
+                ))))
                 if key == "surface":
                     self.surface_hint = hint
                 hint.setWordWrap(True)
@@ -186,12 +195,17 @@ class RcdWindowQt(QDialog):
         self.save_button.clicked.connect(self.save)
         actions.addWidget(self.save_button)
         layout.addLayout(actions)
+        self.review_tabs = QTabWidget()
+        layout.addWidget(self.review_tabs, 1)
+        residues = QWidget()
+        residues_layout = QVBoxLayout(residues)
+        self.review_tabs.addTab(residues, "Residuos y presupuesto")
         help_text = QLabel(
             "Marca los residuos aplicables. Las coincidencias son orientativas; "
             "revisa especialmente residuos peligrosos y códigos LER."
         )
         help_text.setWordWrap(True)
-        layout.addWidget(help_text)
+        residues_layout.addWidget(help_text)
         self.waste_table = QTableWidget(0, 6)
         self.waste_table.setObjectName("rcdWasteTable")
         self.waste_table.setAlternatingRowColors(True)
@@ -203,7 +217,7 @@ class RcdWindowQt(QDialog):
         self.waste_table.setColumnHidden(1, True)
         _format_table(self.waste_table, 5, (54, 0, 170, 104, 280))
         self.waste_table.itemChanged.connect(self._waste_changed)
-        layout.addWidget(self.waste_table, 2)
+        residues_layout.addWidget(self.waste_table, 2)
         self.preview_table = QTableWidget(0, 5)
         self.preview_table.setObjectName("rcdPreviewTable")
         self.preview_table.setAlternatingRowColors(True)
@@ -212,7 +226,11 @@ class RcdWindowQt(QDialog):
         _format_table(self.preview_table, 0)
         for column in range(1, 5):
             self.preview_table.setColumnWidth(column, 125)
-        layout.addWidget(self.preview_table, 1)
+        residues_layout.addWidget(self.preview_table, 1)
+        self.management_tab = ManagementTab(self)
+        self.review_tabs.addTab(self.management_tab, "Previsiones de gestión y destinos")
+        self.prevention_tab = PreventionTab(self)
+        self.review_tabs.addTab(self.prevention_tab, "Medidas preventivas")
         self.status_label = QLabel()
         layout.addWidget(self.status_label)
         return page
@@ -316,6 +334,7 @@ class RcdWindowQt(QDialog):
             for column, value in enumerate(values, 1):
                 self.waste_table.setItem(row, column, QTableWidgetItem(value))
         self.waste_table.blockSignals(False)
+        self.management_tab.refresh_destinations()
         self.refresh_preview()
 
     def _waste_changed(self, item: QTableWidgetItem) -> None:
@@ -327,6 +346,7 @@ class RcdWindowQt(QDialog):
             return
         self.data.selected[key] = item.checkState() == Qt.CheckState.Checked
         self.changed()
+        self.management_tab.refresh_destinations()
         self.refresh_preview()
 
     def refresh_preview(self) -> None:

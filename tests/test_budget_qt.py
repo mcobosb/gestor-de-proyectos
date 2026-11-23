@@ -770,6 +770,8 @@ class BudgetQtWindowTests(unittest.TestCase):
             "budget_qt_window.user_data_directory", return_value=Path(directory)
         ):
             window = BudgetMainWindow()
+            self.addCleanup(QCoreApplication.sendPostedEvents, None, QEvent.Type.DeferredDelete)
+            self.addCleanup(window.deleteLater)
             window.budget_items = [
                 ProjectItem("EXC", "01#", "m3", "Excavación de tierras", 10, 20),
                 ProjectItem("DEM", "02#", "m2", "Demolición de hormigón", 50, 10),
@@ -798,6 +800,33 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertIn("DEM", tool.data.sources["surface"])
             self.assertEqual(tool.waste_table.rowCount(), 57)
             self.assertEqual(tool.preview_table.rowCount(), 8)
+            self.assertEqual(tool.review_tabs.count(), 3)
+            prevention = tool.prevention_tab
+            self.assertTrue(prevention.checkboxes["purchasing"].isChecked())
+            self.assertFalse(prevention.checkboxes["selective_demolition"].isChecked())
+            prevention.checkboxes["industrialized"].setChecked(True)
+            prevention.checkboxes["purchasing"].setChecked(False)
+            self.assertIn("industrialized", window.rcd_state["management"]["prevention"])
+            self.assertNotIn("purchasing", window.rcd_state["management"]["prevention"])
+            management = tool.management_tab
+            management.checkboxes["segregation", "removal"].setChecked(True)
+            management.checkboxes["segregation", "selective"].setChecked(True)
+            management.checkboxes["reuse", "none"].setChecked(True)
+            management.checkboxes["reuse", "earth"].setChecked(True)
+            self.assertFalse(management.checkboxes["reuse", "none"].isChecked())
+            management.checkboxes["reuse", "metals"].setChecked(True)
+            management.reuse_destinations["earth"].setCurrentText("Propia obra")
+            management.checkboxes["recovery", "none"].setChecked(True)
+            management.checkboxes["recovery", "r4"].setChecked(True)
+            self.assertFalse(management.checkboxes["recovery", "none"].isChecked())
+            destinations = management.destination_table
+            self.assertGreater(destinations.rowCount(), 0)
+            ler = destinations.item(0, 0).text()
+            destination = destinations.cellWidget(0, 4)
+            destination.setCurrentIndex(destination.findData("recycling"))
+            destinations.cellWidget(0, 5).setText("Gestor de prueba")
+            self.assertEqual(tool.data.management.destinations[ler]["destination"], "recycling")
+            self.assertEqual(window.rcd_state["management"]["selections"]["reuse"], ["earth", "metals"])
             selected = tool.data.selected["40"]
             waste_item = next(
                 tool.waste_table.item(row, 0)
@@ -833,6 +862,13 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertAlmostEqual(transport.measurement, 24.0)
             self.assertFalse(tool.demolition_button.isEnabled())
             self.assertFalse(dialog.apply_button.isEnabled())
+            project = Path(directory) / "previsiones.json"
+            self.assertTrue(window._write_project_file(project))
+            stored = json.loads(project.read_text(encoding="utf-8"))["rcds"]["management"]
+            self.assertEqual(stored["destinations"][ler]["facility"], "Gestor de prueba")
+            self.assertEqual(stored["reuse_destinations"]["earth"], "Propia obra")
+            self.assertIn("industrialized", stored["prevention"])
+            self.assertNotIn("purchasing", stored["prevention"])
             window.budget_tree.setCurrentItem(None)
             window.budget_items.remove(transport)
             window.refresh_budget_tree()
@@ -1065,12 +1101,16 @@ class BudgetQtWindowTests(unittest.TestCase):
                 encoding="utf-8",
             )
             window = BudgetMainWindow()
+            self.addCleanup(QCoreApplication.sendPostedEvents, None, QEvent.Type.DeferredDelete)
+            self.addCleanup(window.deleteLater)
             with patch.object(QMessageBox, "critical") as error:
                 self.assertFalse(window._load_project_file(path))
             error.assert_called_once()
             path.write_text(
                 json.dumps({"items": [], "rcds": {
                     "documentation": {"reuse": "Texto"}, "inputs": {"surface": 500},
+                    "sources": {"budget": "PEM; exclusión del capítulo 17"},
+                    "management": {"prevention": ["industrialized"]},
                 }}),
                 encoding="utf-8",
             )
@@ -1081,6 +1121,10 @@ class BudgetQtWindowTests(unittest.TestCase):
             tool = window._project_windows[-1]
             self.assertEqual(float(tool.variables["surface"].text()), 80)
             self.assertTrue(tool.variables["surface"].isReadOnly())
+            self.assertTrue(tool.prevention_tab.checkboxes["industrialized"].isChecked())
+            self.assertFalse(tool.prevention_tab.checkboxes["purchasing"].isChecked())
+            hints = [label.text() for label in tool.pages.widget(0).findChildren(QLabel)]
+            self.assertFalse(any("exclusión" in text or "Valor del modelo" in text for text in hints))
             window.budget_items.clear()
             tool.show_inputs()
             self.assertEqual(tool.variables["surface"].text(), "")
