@@ -133,6 +133,11 @@ estructura de carpetas al mover la entrega. Al abrir el maestro en LibreOffice,
 acepta la actualización de enlaces o utiliza **Herramientas → Actualizar →
 Vínculos** para incorporar los cambios de los subdocumentos.
 
+En esa misma pestaña, **Cajetín tipo de planos** permite vincular un archivo
+mediante **Examinar…**. Su ruta se conserva con la configuración del proyecto;
+puedes vaciarla para desvincularlo. Es una referencia para los planos, sin
+modificar el archivo original ni insertarlo automáticamente en los planos existentes.
+
 Los índices internos de RCDs, Justificación de precios, Control de calidad,
 PPTP y Seguridad y Salud se limitan a los estilos propios de cada documento.
 Después de actualizar los vínculos o editar el contenido, utiliza **Herramientas →

@@ -83,6 +83,7 @@ class ReportSettings:
     document_standards: list[str] = field(default_factory=list)
     show_author: bool = True
     text_styles: dict[str, dict[str, str | float | bool]] = field(default_factory=dict)
+    drawing_title_block_path: str = ""
 
     @property
     def document_author(self) -> str:
@@ -170,7 +171,7 @@ class ReportSettings:
                     raise ValueError("La divisa personalizada debe tener como máximo 12 caracteres.")
                 values[key] = custom_currency
             elif key in {
-                "template_path", "master_template_path", "master_logo_path",
+                "template_path", "master_template_path", "master_logo_path", "drawing_title_block_path",
             }:
                 if not isinstance(value, str):
                     raise ValueError("Las rutas de plantillas y logos deben ser texto.")

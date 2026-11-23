@@ -318,9 +318,12 @@ class BudgetQtWindowTests(unittest.TestCase):
             report_template = str(Path.cwd() / "informes.odt")
             master_template = str(Path.cwd() / "maestro.odt")
             master_logo = str(Path.cwd() / "logo.jpg")
+            drawing_title_block = str(Path(directory) / "cajetin.dxf")
             dialog.template_path.setText(report_template)
             dialog.master_template_path.setText(master_template)
             dialog.master_logo_path.setText(master_logo)
+            with patch.object(QFileDialog, "getOpenFileName", return_value=(drawing_title_block, "")):
+                dialog._select_drawing_title_block()
             font, size = dialog.style_controls["heading1"]
             font.setCurrentText("Arial")
             size.setValue(18)
@@ -333,6 +336,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertEqual(values["template_path"], report_template)
             self.assertEqual(values["master_template_path"], master_template)
             self.assertEqual(values["master_logo_path"], master_logo)
+            self.assertEqual(values["drawing_title_block_path"], drawing_title_block)
             saved = ReportSettings.from_dict(values)
             reopened = SettingsDialog(window, ReportSettings.from_dict(saved.to_dict()),
                                       "Proyecto configurado", "es", lambda language: True)
@@ -342,6 +346,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertEqual(reopened.report_fields["service"].text(), "Servicio configurado")
             self.assertEqual(reopened.master_template_path.text(), master_template)
             self.assertEqual(reopened.master_logo_path.text(), master_logo)
+            self.assertEqual(reopened.drawing_title_block_path.text(), drawing_title_block)
             self.assertTrue(reopened.discipline_checks["civil"].isChecked())
             self.assertTrue(reopened.discipline_checks["installations"].isChecked())
             self.assertTrue(reopened.standard_checks["iso_10006"].isChecked())
@@ -357,6 +362,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             restored = ReportSettings.from_dict(payload["report_settings"])
             self.assertEqual(restored.document_standards, ["une_157001", "iso_10006"])
             self.assertEqual(restored.project_disciplines, ["civil", "installations"])
+            self.assertEqual(restored.drawing_title_block_path, drawing_title_block)
             self.assertEqual(window._read_report_settings().document_standards, [])
             self.assertEqual(window.default_report_settings.project_disciplines, [])
             window.close()

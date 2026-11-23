@@ -373,10 +373,13 @@ class SettingsDialog(QDialog):
         self.master_template_path.setPlaceholderText("Usar plantilla.odt incluida en el módulo")
         self.master_logo_path = QLineEdit(self.settings.master_logo_path)
         self.master_logo_path.setPlaceholderText("Usar logo.jpg incluido en el módulo")
+        self.drawing_title_block_path = QLineEdit(self.settings.drawing_title_block_path)
+        self.drawing_title_block_path.setPlaceholderText("Sin cajetín vinculado")
         fields = (
             ("Plantilla de informes (cabecera y pie, ODT)", self.template_path, self._select_template),
             ("Plantilla del documento maestro (ODT)", self.master_template_path, self._select_master_template),
             ("Logo del documento maestro (JPEG)", self.master_logo_path, self._select_master_logo),
+            ("Cajetín tipo de planos", self.drawing_title_block_path, self._select_drawing_title_block),
         )
         for label, field, callback in fields:
             button = QPushButton("Examinar…")
@@ -386,7 +389,8 @@ class SettingsDialog(QDialog):
             row.addWidget(button)
             form.addRow(label, row)
         note = QLabel(
-            "Deja una ruta vacía para utilizar el recurso incluido en el módulo. "
+            "Deja vacías las rutas de informes, maestro o logo para utilizar los recursos incluidos. "
+            "El cajetín de planos es opcional y se guarda como archivo de referencia del proyecto. "
             "La plantilla del documento maestro debe conservar la estructura ODT "
             "con marcadores de proyecto, índice, trazabilidad y logo."
         )
@@ -551,6 +555,13 @@ class SettingsDialog(QDialog):
             "Imagen JPEG (*.jpg *.jpeg)",
         )
 
+    def _select_drawing_title_block(self) -> None:
+        """Vincula el archivo de referencia del cajetín para los planos."""
+        self._select_file(
+            self.drawing_title_block_path, "Selecciona el cajetín tipo de planos",
+            "Plantillas de planos (*.dxf *.dwg *.dwt *.odg *.svg *.pdf);;Todos los archivos (*)",
+        )
+
     def _select_file(self, field: QLineEdit, title: str, file_filter: str) -> None:
         """Abre el selector de archivos y guarda la ruta seleccionada."""
         path, _ = QFileDialog.getOpenFileName(
@@ -674,6 +685,7 @@ class SettingsDialog(QDialog):
             "template_path": self.template_path.text(),
             "master_template_path": self.master_template_path.text(),
             "master_logo_path": self.master_logo_path.text(),
+            "drawing_title_block_path": self.drawing_title_block_path.text(),
             "municipality_codes": self.location_selector.codes,
             "cpv_codes": self.cpv_selector.codes,
             "project_disciplines": [

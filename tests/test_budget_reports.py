@@ -146,6 +146,7 @@ class ReportCalculationsTests(unittest.TestCase):
         for data in (
             None, [], {"author": 123}, {"vat": True}, {"vat": "NaN"}, {"vat": -1},
             {"template_path": 123}, {"template_path": "plantilla.odt"},
+            {"drawing_title_block_path": 123}, {"drawing_title_block_path": "cajetin.dxf"},
             {"output_format": "docx"},
             {"indirect_costs": True}, {"indirect_costs": "nan"},
             {"indirect_costs": "inf"}, {"indirect_costs": -1},
@@ -171,6 +172,7 @@ class ReportCalculationsTests(unittest.TestCase):
         )
         self.assertEqual(ReportSettings.from_dict({}).indirect_costs, 0)
         self.assertEqual(ReportSettings.from_dict({"indirect_costs": "3,5"}).indirect_costs, 3.5)
+        self.assertEqual(ReportSettings.from_dict({}).drawing_title_block_path, "")
 
     def test_report_format_comes_from_destination_extension(self):
         """The chosen extension overrides the legacy global format."""
