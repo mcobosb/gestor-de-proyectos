@@ -318,24 +318,36 @@ class BudgetQtWindowTests(unittest.TestCase):
             report_template = str(Path.cwd() / "informes.odt")
             master_template = str(Path.cwd() / "maestro.odt")
             master_logo = str(Path.cwd() / "logo.jpg")
-            drawing_title_block = str(Path(directory) / "cajetin.dxf")
+            drawing_title_block = directory
             dialog.template_path.setText(report_template)
             dialog.master_template_path.setText(master_template)
             dialog.master_logo_path.setText(master_logo)
-            with patch.object(QFileDialog, "getOpenFileName", return_value=(drawing_title_block, "")):
+            with patch.object(QFileDialog, "getExistingDirectory", return_value=drawing_title_block):
                 dialog._select_drawing_title_block()
-            svg = Path(directory) / "cajetin.svg"
+            with patch.object(QFileDialog, "getExistingDirectory", return_value=""):
+                dialog._select_drawing_title_block()
+            self.assertEqual(dialog.drawing_title_block_path.text(), drawing_title_block)
+            svg = Path(directory) / "cajetin_A4.svg"
             svg.write_text(
                 '<svg xmlns="http://www.w3.org/2000/svg">'
                 '<text id="titulo_plano">Plano de prueba</text></svg>', encoding="utf-8",
             )
-            dialog.drawing_title_block_path.setText(str(svg))
+            a3 = Path(directory) / "cajetin_A3.svg"
+            a3.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg"><text id="numero_plano">02</text></svg>',
+                encoding="utf-8",
+            )
             with patch.object(QMessageBox, "information") as information:
                 dialog.drawing_title_block_info_button.click()
             help_text = information.call_args.args[2]
             self.assertIn("Propiedades del objeto", help_text)
             self.assertIn("numero_plano", help_text)
-            self.assertIn("Campos reconocidos en el archivo seleccionado: titulo_plano", help_text)
+            self.assertIn("A4 — cajetin_A4.svg. Campos reconocidos: titulo_plano", help_text)
+            self.assertIn("A3 — cajetin_A3.svg. Campos reconocidos: numero_plano", help_text)
+            a3.unlink()
+            with patch.object(QMessageBox, "information") as information:
+                dialog.drawing_title_block_info_button.click()
+            self.assertIn("A3: no se pudo resolver", information.call_args.args[2])
             dialog.drawing_title_block_path.setText(drawing_title_block)
             font, size = dialog.style_controls["heading1"]
             font.setCurrentText("Arial")

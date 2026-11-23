@@ -133,20 +133,29 @@ estructura de carpetas al mover la entrega. Al abrir el maestro en LibreOffice,
 acepta la actualización de enlaces o utiliza **Herramientas → Actualizar →
 Vínculos** para incorporar los cambios de los subdocumentos.
 
-En esa misma pestaña, **Cajetín tipo de planos** permite vincular un archivo
-mediante **Examinar…**. Su ruta se conserva con la configuración del proyecto;
-puedes vaciarla para desvincularlo. Es una referencia para los planos, sin
-modificar el archivo original ni insertarlo automáticamente en los planos existentes.
+En esa misma pestaña, **Carpeta de cajetines de planos (A4 / A3)** permite elegir
+una carpeta mediante **Examinar…**. Se guarda con la configuración del proyecto
+y puedes vaciarla para desvincularla. Dentro de esa carpeta, utiliza un SVG
+para cada formato, con **A4** o **A3** en el nombre, por ejemplo `cajetin_A4.svg`
+y `cajetin_A3.svg`. No se distinguen mayúsculas ni se buscan subcarpetas.
+No se confunde A4 con A40. Si falta un formato, hay varios candidatos o un
+nombre contiene A4 y A3, se avisa sin elegir otro tamaño ni un archivo arbitrario.
+Las configuraciones antiguas que guardaban un archivo se resuelven desde su
+carpeta, aplicando estas mismas reglas. No se modifican los SVG originales
+ni los planos existentes al vincular la carpeta.
 El botón **i**, junto al selector, explica cómo nombrar los campos de un **SVG**
-y muestra cuáles reconoce en el archivo vinculado. En Inkscape utiliza
+y muestra el archivo y los campos reconocidos para A4 y A3, o el motivo por
+el que no puede resolver cada formato. En Inkscape utiliza
 **Propiedades del objeto → ID**, con un único objeto de texto editable por campo:
 `titulo_proyecto`, `expediente`, `titulo_plano`, `numero_plano`, `escala`, `fecha`,
 `autor` y `cargo`. Los IDs deben ser únicos, en minúsculas y sin llaves.
+Si el cajetín tiene dos bloques de firma, utiliza además `autor_2` y `cargo_2`
+para la segunda autoría y su titulación o cargo; ambos son opcionales.
 La etiqueta visible del editor puede coincidir, pero el reconocimiento se hace
 por el ID SVG. No conviertas los textos dinámicos en trayectos ni en imágenes;
 los rótulos fijos deben tener otros IDs. Puedes omitir los campos que no uses.
 Los datos generales corresponden al proyecto y los de título, número, escala
-y fecha se concretan por plano. El resto de formatos se mantiene como referencia.
+y fecha se concretan por plano.
 
 Los índices internos de RCDs, Justificación de precios, Control de calidad,
 PPTP y Seguridad y Salud se limitan a los estilos propios de cada documento.

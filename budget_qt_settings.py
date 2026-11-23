@@ -38,7 +38,7 @@ from budget_reports import ReportSettings
 from budget_qt_theme import THEMES
 from document_styles import FLAGS, FONTS, ROLES
 from project_standards import DOCUMENT_STANDARDS, PROJECT_DISCIPLINES, document_control_text
-from tools._shared.drawing_templates import TITLE_BLOCK_HELP, read_title_block_fields
+from tools._shared.drawing_templates import TITLE_BLOCK_HELP, find_title_block, read_title_block_fields
 
 
 @dataclass(frozen=True)
@@ -377,12 +377,12 @@ class SettingsDialog(QDialog):
         self.master_logo_path = QLineEdit(self.settings.master_logo_path)
         self.master_logo_path.setPlaceholderText("Usar logo.jpg incluido en el módulo")
         self.drawing_title_block_path = QLineEdit(self.settings.drawing_title_block_path)
-        self.drawing_title_block_path.setPlaceholderText("Sin cajetín vinculado")
+        self.drawing_title_block_path.setPlaceholderText("Carpeta con cajetin_A4.svg y cajetin_A3.svg")
         fields = (
             ("Plantilla de informes (cabecera y pie, ODT)", self.template_path, self._select_template),
             ("Plantilla del documento maestro (ODT)", self.master_template_path, self._select_master_template),
             ("Logo del documento maestro (JPEG)", self.master_logo_path, self._select_master_logo),
-            ("Cajetín tipo de planos", self.drawing_title_block_path, self._select_drawing_title_block),
+            ("Carpeta de cajetines de planos (A4 / A3)", self.drawing_title_block_path, self._select_drawing_title_block),
         )
         for label, field, callback in fields:
             button = QPushButton("Examinar…")
@@ -400,7 +400,7 @@ class SettingsDialog(QDialog):
             form.addRow(label, row)
         note = QLabel(
             "Deja vacías las rutas de informes, maestro o logo para utilizar los recursos incluidos. "
-            "El cajetín de planos es opcional y se guarda como archivo de referencia del proyecto. "
+            "La carpeta de cajetines es opcional; se busca A4 o A3 en los nombres de los SVG según el formato del plano. "
             "La plantilla del documento maestro debe conservar la estructura ODT "
             "con marcadores de proyecto, índice, trazabilidad y logo."
         )
@@ -566,25 +566,31 @@ class SettingsDialog(QDialog):
         )
 
     def _select_drawing_title_block(self) -> None:
-        """Vincula el archivo de referencia del cajetín para los planos."""
-        self._select_file(
-            self.drawing_title_block_path, "Selecciona el cajetín tipo de planos",
-            "Cajetín SVG (*.svg);;Plantillas de planos (*.dxf *.dwg *.dwt *.odg *.pdf);;Todos los archivos (*)",
+        """Vincula la carpeta de cajetines para resolver el formato de cada plano."""
+        initial = self.drawing_title_block_path.text().strip()
+        if initial and Path(initial).is_file():
+            initial = str(Path(initial).parent)
+        path = QFileDialog.getExistingDirectory(
+            self, "Selecciona la carpeta de cajetines A4 y A3", initial,
         )
+        if path:
+            self.drawing_title_block_path.setText(path)
 
     def _drawing_title_block_info(self) -> None:
-        """Explica la convención e identifica los campos del SVG vinculado."""
+        """Explica la convención y comprueba por separado los cajetines A4 y A3."""
         message = TITLE_BLOCK_HELP
         raw_path = self.drawing_title_block_path.text().strip()
-        if raw_path and Path(raw_path).suffix.casefold() == ".svg":
-            try:
-                fields = read_title_block_fields(Path(raw_path))
-            except (OSError, ET.ParseError, ValueError) as exc:
-                message += f"\n\nNo se pudo analizar el cajetín seleccionado: {exc}"
-            else:
-                message += "\n\nCampos reconocidos en el archivo seleccionado: " + (
-                    ", ".join(fields) if fields else "ninguno; revisa los IDs según estas instrucciones."
-                )
+        if raw_path:
+            for paper_size in ("A4", "A3"):
+                try:
+                    path = find_title_block(Path(raw_path), paper_size)
+                    fields = read_title_block_fields(path)
+                except (OSError, ET.ParseError, ValueError) as exc:
+                    message += f"\n\n{paper_size}: no se pudo resolver el cajetín: {exc}"
+                else:
+                    message += f"\n\n{paper_size} — {path.name}. Campos reconocidos: " + (
+                        ", ".join(fields) if fields else "ninguno; revisa los IDs según estas instrucciones."
+                    )
         QMessageBox.information(self, "Etiquetas del cajetín SVG", message)
 
     def _select_file(self, field: QLineEdit, title: str, file_filter: str) -> None:
