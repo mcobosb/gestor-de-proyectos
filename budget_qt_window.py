@@ -2647,7 +2647,7 @@ class BudgetMainWindow(QMainWindow):
             self.collaboration_nickname = collaboration_nickname
         return True
 
-    def open_report_settings(self) -> None:
+    def open_report_settings(self, *, project_standards: bool = False) -> None:
         """Abre la configuración general con sus pestañas completas."""
         try:
             dialog = SettingsDialog(
@@ -2662,10 +2662,12 @@ class BudgetMainWindow(QMainWindow):
         except ValueError as exc:
             QMessageBox.critical(self, "Configuración", str(exc))
             return
+        if project_standards:
+            dialog.tabs.setCurrentWidget(dialog.standards_tab)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         if not self._save_report_settings(dialog.values()):
-            self.open_report_settings()
+            self.open_report_settings(project_standards=project_standards)
 
     def _save_report_settings(self, data: dict) -> bool:
         """Valida, persiste y aplica la configuración del proyecto."""
@@ -2677,7 +2679,8 @@ class BudgetMainWindow(QMainWindow):
                 key: value for key, value in data.items() if key != "project_title"
             })
             defaults = settings.to_dict()
-            defaults.pop("text_styles")
+            for key in ("text_styles", "project_disciplines", "document_standards"):
+                defaults.pop(key)
             self.report_settings_path.write_text(
                 json.dumps(defaults, ensure_ascii=False, indent=2),
                 encoding="utf-8",

@@ -79,6 +79,8 @@ class ReportSettings:
     guarantee_period: str = ""
     municipality_codes: list[str] = field(default_factory=list)
     cpv_codes: list[str] = field(default_factory=list)
+    project_disciplines: list[str] = field(default_factory=list)
+    document_standards: list[str] = field(default_factory=list)
     show_author: bool = True
     text_styles: dict[str, dict[str, str | float | bool]] = field(default_factory=dict)
 
@@ -119,7 +121,12 @@ class ReportSettings:
             if key not in data:
                 continue
             value = data[key]
-            if key in {"municipality_codes", "cpv_codes"}:
+            if key in {"project_disciplines", "document_standards"}:
+                from project_standards import DOCUMENT_STANDARDS, PROJECT_DISCIPLINES, validate_selection
+
+                options = PROJECT_DISCIPLINES if key == "project_disciplines" else DOCUMENT_STANDARDS
+                values[key] = validate_selection(value, options, key)
+            elif key in {"municipality_codes", "cpv_codes"}:
                 if not isinstance(value, list) or any(
                     not isinstance(code, str) for code in value
                 ):

@@ -286,7 +286,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertEqual(
                 [dialog.tabs.tabText(index) for index in range(dialog.tabs.count())],
                 [
-                    "Informes", "Plantillas", "Idioma", "Apariencia", "Colaboración",
+                    "Informes", "Plantillas", "Tipo de proyecto y normas", "Idioma", "Apariencia", "Colaboración",
                     "Emplazamiento", "CPV", "Estilos de documentos",
                 ],
             )
@@ -308,6 +308,12 @@ class BudgetQtWindowTests(unittest.TestCase):
             dialog.report_fields["service"].setText("Servicio configurado")
             self.assertTrue(dialog.show_author.isChecked())
             dialog.show_author.setChecked(False)
+            dialog.discipline_checks["civil"].setChecked(True)
+            dialog.discipline_checks["installations"].setChecked(True)
+            dialog.standard_checks["une_157001"].setChecked(True)
+            dialog.standard_checks["iso_10006"].setChecked(True)
+            self.assertIn("ISO 10006:2017", dialog.standards_preview.toPlainText())
+            self.assertNotIn("ISO 19650", dialog.standards_preview.toPlainText())
             dialog.report_fields["indirect_costs"].setText("7.5")
             report_template = str(Path.cwd() / "informes.odt")
             master_template = str(Path.cwd() / "maestro.odt")
@@ -336,10 +342,23 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertEqual(reopened.report_fields["service"].text(), "Servicio configurado")
             self.assertEqual(reopened.master_template_path.text(), master_template)
             self.assertEqual(reopened.master_logo_path.text(), master_logo)
+            self.assertTrue(reopened.discipline_checks["civil"].isChecked())
+            self.assertTrue(reopened.discipline_checks["installations"].isChecked())
+            self.assertTrue(reopened.standard_checks["iso_10006"].isChecked())
+            self.assertFalse(reopened.standard_checks["iso_19650_1"].isChecked())
             reopened.reject()
             self.assertEqual(values["indirect_costs"], "7.5")
             self.assertNotIn("output_format", values)
             dialog.reject()
+            self.assertTrue(window._save_report_settings(values))
+            target = Path(directory) / "proyecto.json"
+            self.assertTrue(window._write_project_file(target))
+            payload = json.loads(target.read_text(encoding="utf-8"))
+            restored = ReportSettings.from_dict(payload["report_settings"])
+            self.assertEqual(restored.document_standards, ["une_157001", "iso_10006"])
+            self.assertEqual(restored.project_disciplines, ["civil", "installations"])
+            self.assertEqual(window._read_report_settings().document_standards, [])
+            self.assertEqual(window.default_report_settings.project_disciplines, [])
             window.close()
             self.application.processEvents()
 

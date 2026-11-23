@@ -15,6 +15,7 @@ from zipfile import BadZipFile
 from PySide6.QtCore import QLockFile
 
 from budget_project import atomic_json_write
+from project_standards import document_control_text
 from tools._shared.document_layout import (
     add_odt_blue_table_cells, add_odt_blue_table_headers, style_odt_blue_table,
 )
@@ -587,6 +588,9 @@ def generate_project_package(
                 index_entries=entries, traceability=traceability,
                 links=master_links, folder=stage / TECHNICAL_DOCUMENTS_FOLDER,
                 text_styles=settings.text_styles, logo=master_logo,
+                document_control_text=document_control_text(
+                    settings.project_disciplines, settings.document_standards,
+                ),
             )
 
             files = [path for path in stage.rglob("*") if path.is_file()]

@@ -10,6 +10,7 @@ from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 from odt_reports import _tag
 from document_styles import style_odt_paragraphs, style_role
 from report_layout import replace_template_fields
+from project_standards import DOCUMENT_CONTROL_TEXT
 from tools._shared.document_layout import (
     add_odt_blue_table_cells, add_odt_blue_table_headers, add_odt_contents_styles,
     style_odt_blue_table,
@@ -205,7 +206,8 @@ def _is_traceability_header(row) -> bool:
 
 
 def _fill_traceability(
-    root, rows: list[tuple[str, str, str, str, str, str]],
+    root, rows: list[tuple[str, str, str, str, str, str]], *,
+    introduction: str = DOCUMENT_CONTROL_TEXT,
 ) -> None:
     """Genera las seis columnas sin depender de filas de ejemplo de la plantilla."""
     body = root.find(f"{_tag('office:body')}/{_tag('office:text')}")
@@ -217,13 +219,11 @@ def _fill_traceability(
         and any(_is_traceability_header(row) for row in candidate.iter(_tag("table:table-row")))
     ), None)
     if previous is not None:
-        position = list(body).index(previous)
         body.remove(previous)
-    else:
-        position = next(
-            index + 1 for index, child in enumerate(body)
-            if child.get(_tag("text:style-name")) == "ProjectTraceabilityHeading"
-        )
+    position = next(
+        index + 1 for index, child in enumerate(body)
+        if child.get(_tag("text:style-name")) == "ProjectTraceabilityHeading"
+    )
     style = ET.SubElement(automatic, _tag("style:style"), {
         _tag("style:name"): "ProjectTraceabilityTable", _tag("style:family"): "table",
     })
@@ -254,17 +254,19 @@ def _fill_traceability(
             ET.SubElement(cell, _tag("text:p"), {
                 _tag("text:style-name"): "TableHeader" if index == 0 else "ProjectTraceabilityText",
             }).text = value
-    body.insert(position, table)
+    paragraph = ET.Element(_tag("text:p"), {
+        _tag("text:style-name"): "ProjectTraceabilityIntroduction",
+    })
+    paragraph.text = introduction
+    body.insert(position, paragraph)
+    body.insert(position + 1, table)
 
 
 def _style_traceability(root) -> None:
     """Aplica a la tabla de trazabilidad el estilo azul compartido de los anejos."""
     table = next((
         candidate for candidate in root.iter(_tag("table:table"))
-        if any(
-            _is_traceability_header(row)
-            for row in candidate.iter(_tag("table:table-row"))
-        )
+        if candidate.get(_tag("table:name")) == "ProjectTraceabilityTable"
     ), None)
     if table is None:
         raise ValueError("No se encontró la tabla de trazabilidad del documento maestro.")
@@ -343,6 +345,17 @@ def _prepare_master_sections(root, styles) -> tuple[str, str, str]:
         automatic = ET.Element(_tag("office:automatic-styles"))
         root.insert(list(root).index(root.find(_tag("office:body"))), automatic)
     known_named = {style.get(_tag("style:name")) for style in named}
+    introduction = ET.SubElement(named, _tag("style:style"), {
+        _tag("style:name"): "ProjectTraceabilityIntroduction", _tag("style:family"): "paragraph",
+    })
+    for parent in ("TemplateBody", "Text_20_body", "Standard"):
+        if parent in known_named:
+            introduction.set(_tag("style:parent-style-name"), parent)
+            break
+    ET.SubElement(introduction, _tag("style:paragraph-properties"), {
+        _tag("fo:text-align"): "justify", _tag("fo:margin-bottom"): "0.3cm",
+        _tag("fo:keep-with-next"): "always",
+    })
     text_style = ET.SubElement(named, _tag("style:style"), {
         _tag("style:name"): "ProjectTraceabilityText", _tag("style:family"): "paragraph",
     })
@@ -395,6 +408,15 @@ def _prepare_master_sections(root, styles) -> tuple[str, str, str]:
         heading.tag = _tag("text:p")
         heading.set(_tag("text:style-name"), prefix + "Heading")
         _set_paragraph_text(heading, label)
+    trace_heading = next(
+        child for child in body if child.get(_tag("text:style-name")) == "ProjectTraceabilityHeading"
+    )
+    index_heading = next(
+        child for child in body if child.get(_tag("text:style-name")) == "ProjectIndexHeading"
+    )
+    if list(body).index(trace_heading) > list(body).index(index_heading):
+        body.remove(trace_heading)
+        body.insert(list(body).index(index_heading), trace_heading)
     return (
         "ProjectTraceabilityPage", "ProjectIndexPage",
         continuation.get(_tag("style:name"), ""),
@@ -812,6 +834,7 @@ def write_project_master(
     folder: Path,
     text_styles=None,
     logo: Path = MASTER_LOGO,
+    document_control_text: str = DOCUMENT_CONTROL_TEXT,
 ) -> None:
     """Construye el ODM desde la carátula elegida, sin alterar sus recursos originales."""
     if not source.is_file():
@@ -861,7 +884,7 @@ def write_project_master(
                     _insert_template_logos(root, logo_resource)
                 root = replace_template_fields(root, replacements)
                 if name == "content.xml":
-                    _fill_traceability(root, traceability)
+                    _fill_traceability(root, traceability, introduction=document_control_text)
                     _append_index_and_sections(root, index_entries, links, folder)
                     _add_page_number_fields(root, page_paragraphs)
                     if text_styles:

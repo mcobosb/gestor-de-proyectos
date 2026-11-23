@@ -126,6 +126,25 @@ estructura de carpetas al mover la entrega. Al abrir el maestro en LibreOffice,
 acepta la actualización de enlaces o utiliza **Herramientas → Actualizar →
 Vínculos** para incorporar los cambios de los subdocumentos.
 
+#### Tipo de proyecto y referencias normativas
+
+En **Configuración → Tipo de proyecto y normas** puedes combinar obra civil,
+edificación, instalaciones, industrial, sistemas/TI y otros ámbitos. Selecciona
+expresamente las referencias aplicables: UNE 157001, ISO 21502, ISO 10006,
+ISO 19650-1 (información BIM), ISO/IEC/IEEE 15288 e ISO/IEC/IEEE 29148.
+Cada opción indica su edición y permite abrir la ficha oficial de UNE o ISO;
+comprueba su aplicabilidad y las posibles actualizaciones antes de seleccionarla.
+En **Estructura documental**, el botón **Tipo de proyecto y normas…**, junto
+al nombre del maestro, abre directamente esta pestaña sin perder la selección de documentos.
+
+La vista previa muestra el texto que Estructura documental insertará justo antes
+de la tabla de trazabilidad del nuevo ODM, con los ámbitos y las normas elegidos.
+Sin selecciones se incluye únicamente la explicación general del control documental.
+No se declara automáticamente cumplimiento, obligatoriedad ni certificación.
+Las selecciones se guardan en el proyecto, no como valores globales para los
+siguientes proyectos. Los documentos ya generados no se modifican al cambiar
+esta configuración: hay que regenerarlos, conservando antes las ediciones manuales.
+
 #### Revisión de textos pendientes en el ODM
 
 Estructura documental incorpora en los nuevos maestros una macro de revisión.

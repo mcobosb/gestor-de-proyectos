@@ -16,9 +16,10 @@ from zipfile import ZipFile
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QCoreApplication, QEvent, QLockFile, Qt
-from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QMessageBox
 
 from budget_qt_window import BudgetMainWindow
+from budget_qt_settings import SettingsDialog
 from budget_reports import ReportSettings
 from odt_reports import _new_report, _tag
 from tools.document_structure.catalog import (
@@ -33,10 +34,83 @@ from tools.document_structure.generation import (
 from tools.document_structure.office import MASTER_LOGO, MASTER_TEMPLATE, write_project_master
 from tools.document_structure.qt_window import DocumentStructureWindow
 from qt_localization import get_document_save_path
+from project_standards import document_control_text
 
 
 class DocumentStructureTests(unittest.TestCase):
     """Comprueba la generación de documentos técnicos y del maestro ODM."""
+
+    def test_master_keeps_generated_traceability_when_template_index_precedes_it(self) -> None:
+        """El índice de una plantilla antigua no puede borrar la nueva trazabilidad."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "indice_primero.odt"
+            template = _new_report("Carátula", "Proyecto", ReportSettings())
+            template.paragraph("ÍNDICE GENERAL DEL PROYECTO")
+            template.paragraph("Índice antiguo")
+            template.paragraph("HOJA DE TRAZABILIDAD")
+            template.table(
+                ["CÓDIGO", "DOCUMENTO", "FECHA EDICIÓN", "EDITADO", "FECHA COMPROBACIÓN", "VALIDADO"],
+                [("Antiguo",) * 6],
+            )
+            template.write(source)
+            app = SimpleNamespace(
+                report_settings=ReportSettings(
+                    master_template_path=str(source),
+                    master_logo_path=str(Path(__file__).resolve().parents[1] / "iconos" / "Arranque.jpg"),
+                ),
+                budget_items=[], planning_state={}, pptp_state={},
+                _project_title=lambda: "Proyecto",
+            )
+            project = root / "proyecto.json"
+            project.touch()
+            output, _ = generate_project_package(
+                project, app, "Maestro.odm",
+                [{"kind": "template", "number": "01", "title": "Base", "outline": ["Alcance"]}], [],
+            )
+            self.assertTrue((output.parent / DOCUMENT_FOLDERS[0] / "ANEJO 01 - Base.odt").is_file())
+            with ZipFile(output) as archive:
+                content = ET.fromstring(archive.read("content.xml"))
+            body = content.find(f"{_tag('office:body')}/{_tag('office:text')}")
+            table = next(node for node in body if node.tag == _tag("table:table"))
+            index = next(
+                node for node in body if node.get(_tag("text:style-name")) == "ReportContentsTitle"
+            )
+            self.assertLess(list(body).index(table), list(body).index(index))
+            self.assertIn("MAESTRO", "".join(table.itertext()))
+            self.assertNotIn("Antiguo", "".join(table.itertext()))
+
+    def test_settings_shortcut_opens_project_standards_and_preserves_selection(self) -> None:
+        """El botón abre la pestaña correcta de la configuración real del proyecto."""
+        QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            app = BudgetMainWindow()
+            window = DocumentStructureWindow(app)
+            app.report_settings.document_standards = ["iso_10006"]
+            window._annexes[0].setCheckState(0, Qt.CheckState.Checked)
+            selected = window._selected_annexes()
+            opened = []
+
+            def inspect_dialog(dialog):
+                """Comprueba el destino sin entrar en un bucle modal de pruebas."""
+                opened.append(dialog)
+                self.assertIs(dialog.tabs.currentWidget(), dialog.standards_tab)
+                self.assertTrue(dialog.standard_checks["iso_10006"].isChecked())
+                return QDialog.DialogCode.Rejected
+
+            try:
+                with patch.object(SettingsDialog, "exec", inspect_dialog):
+                    window._standards_button.click()
+                self.assertEqual(len(opened), 1)
+                self.assertEqual(window._selected_annexes(), selected)
+            finally:
+                for dialog in opened:
+                    dialog.deleteLater()
+                window.deleteLater()
+                app.deleteLater()
+                QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
     def test_master_generates_traceability_and_index_from_cover_only_template(self) -> None:
         """La plantilla aporta la carátula y su diseño, no las tablas de la aplicación."""
@@ -54,10 +128,12 @@ class DocumentStructureTests(unittest.TestCase):
                 ("MAESTRO", output.name, "", "Ana", "", ""),
                 ("DOC01-A01", "Gestión de residuos", "", "Ana", "", ""),
             ]
+            introduction = document_control_text(["civil", "installations"], ["une_157001", "iso_10006"])
             write_project_master(
                 source, output, fields={}, traceability=rows, links=[], folder=root,
                 index_entries=[{"text": "DOCUMENTO Nº 1. MEMORIA Y ANEJOS.", "style": "P18"}],
                 logo=Path(__file__).resolve().parents[1] / "iconos" / "Arranque.jpg",
+                document_control_text=introduction,
             )
             with ZipFile(output) as archive:
                 content = ET.fromstring(archive.read("content.xml"))
@@ -67,6 +143,7 @@ class DocumentStructureTests(unittest.TestCase):
             self.assertEqual([ET.tostring(node) for node in list(body)[:len(cover)]],
                              [ET.tostring(node) for node in cover])
             table = body.find(_tag("table:table"))
+            self.assertEqual(body[list(body).index(table) - 1].text, introduction)
             self.assertIsNotNone(table.find(_tag("table:table-header-rows")))
             self.assertEqual([
                 tuple("".join(cell.itertext()) for cell in row.findall(_tag("table:table-cell")))
@@ -137,6 +214,8 @@ class DocumentStructureTests(unittest.TestCase):
             settings = ReportSettings(
                 master_template_path=str(template),
                 master_logo_path=str(Path(__file__).resolve().parents[1] / "iconos" / "Arranque.jpg"),
+                project_disciplines=["building", "civil"],
+                document_standards=["iso_19650_1", "iso_21502"],
             )
             app = SimpleNamespace(
                 report_settings=settings, budget_items=[], planning_state={}, pptp_state={},
@@ -159,6 +238,13 @@ class DocumentStructureTests(unittest.TestCase):
             with ZipFile(master) as archive:
                 content = ET.fromstring(archive.read("content.xml"))
                 styles = ET.fromstring(archive.read("styles.xml"))
+            introduction = next(
+                node for node in content.iter(_tag("text:p"))
+                if node.get(_tag("text:style-name")) == "ProjectTraceabilityIntroduction"
+            )
+            self.assertEqual(introduction.text, document_control_text(
+                settings.project_disciplines, settings.document_standards,
+            ))
             body = content.find(f"{_tag('office:body')}/{_tag('office:text')}")
             declared = {
                 style.get(_tag("style:name")): style

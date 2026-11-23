@@ -50,7 +50,12 @@ class DocumentStructureWindow(QDialog):
 
         naming = QFormLayout()
         self.master_name = QLineEdit(default_master_name(self.app.report_settings.expediente))
-        naming.addRow("Documento maestro (.odm)", self.master_name)
+        master_row = QHBoxLayout()
+        master_row.addWidget(self.master_name, 1)
+        self._standards_button = QPushButton("Tipo de proyecto y normas…")
+        self._standards_button.clicked.connect(self._open_project_standards)
+        master_row.addWidget(self._standards_button)
+        naming.addRow("Documento maestro (.odm)", master_row)
         layout.addLayout(naming)
 
         self.tree = QTreeWidget()
@@ -102,6 +107,11 @@ class DocumentStructureWindow(QDialog):
 
         self.tree.itemChanged.connect(self._update_selection)
         self.tree.currentItemChanged.connect(self._refresh_plan_file_button)
+        self.refresh_generation()
+
+    def _open_project_standards(self) -> None:
+        """Abre la pestaña normativa y mantiene la selección documental al volver."""
+        self.app.open_report_settings(project_standards=True)
         self.refresh_generation()
 
     def _item(self, parent, title: str, availability: str) -> QTreeWidgetItem:

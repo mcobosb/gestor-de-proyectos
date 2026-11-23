@@ -35,6 +35,7 @@ from municipalities import load_municipalities, municipality_search_key
 from budget_reports import ReportSettings
 from budget_qt_theme import THEMES
 from document_styles import FLAGS, FONTS, ROLES
+from project_standards import DOCUMENT_STANDARDS, PROJECT_DISCIPLINES, document_control_text
 
 
 @dataclass(frozen=True)
@@ -214,6 +215,8 @@ class SettingsDialog(QDialog):
         layout.addWidget(self.tabs)
         self.tabs.addTab(self._reports_tab(), "Informes")
         self.tabs.addTab(self._templates_tab(), "Plantillas")
+        self.standards_tab = self._standards_tab()
+        self.tabs.addTab(self.standards_tab, "Tipo de proyecto y normas")
         self.tabs.addTab(self._language_tab(), "Idioma")
         self.tabs.addTab(self._appearance_tab(), "Apariencia")
         self.tabs.addTab(self._collaboration_tab(), "Colaboración")
@@ -229,6 +232,61 @@ class SettingsDialog(QDialog):
         buttons.accepted.connect(self._accept_reports)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _standards_tab(self) -> QWidget:
+        """Selecciona disciplinas y referencias sin atribuir cumplimiento automático."""
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        help_text = QLabel(
+            "Selecciona los ámbitos y las referencias aplicables. No se asignan normas "
+            "automáticamente ni se declara su cumplimiento. El texto se incluye antes "
+            "de la tabla de trazabilidad del ODM."
+        )
+        help_text.setWordWrap(True)
+        layout.addWidget(help_text)
+        layout.addWidget(QLabel("Tipos de proyecto (se pueden combinar)"))
+        self.discipline_checks: dict[str, QCheckBox] = {}
+        self.standard_checks: dict[str, QCheckBox] = {}
+        for key, label in PROJECT_DISCIPLINES.items():
+            check = QCheckBox(label)
+            check.setChecked(key in self.settings.project_disciplines)
+            layout.addWidget(check)
+            self.discipline_checks[key] = check
+        layout.addWidget(QLabel("Referencias normativas (selección expresa)"))
+        for key, (code, scope, url) in DOCUMENT_STANDARDS.items():
+            row = QHBoxLayout()
+            check = QCheckBox(code)
+            check.setAccessibleName(f"{code}: {scope}")
+            check.setChecked(key in self.settings.document_standards)
+            row.addWidget(check)
+            description = QLabel(scope)
+            description.setWordWrap(True)
+            row.addWidget(description, 1)
+            source = QLabel(f'<a href="{url}">Ficha oficial</a>')
+            source.setAccessibleName(f"Ficha oficial de {code}")
+            source.setOpenExternalLinks(True)
+            row.addWidget(source)
+            layout.addLayout(row)
+            self.standard_checks[key] = check
+        layout.addWidget(QLabel("Vista previa del texto de trazabilidad"))
+        self.standards_preview = QPlainTextEdit()
+        self.standards_preview.setReadOnly(True)
+        self.standards_preview.setMinimumHeight(130)
+        layout.addWidget(self.standards_preview)
+        for check in (*self.discipline_checks.values(), *self.standard_checks.values()):
+            check.toggled.connect(self._update_standards_preview)
+        self._update_standards_preview()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(content)
+        return scroll
+
+    def _update_standards_preview(self) -> None:
+        """Muestra exactamente el párrafo que se generará en el documento maestro."""
+        self.standards_preview.setPlainText(document_control_text(
+            [key for key, check in self.discipline_checks.items() if check.isChecked()],
+            [key for key, check in self.standard_checks.items() if check.isChecked()],
+        ))
 
     def _reports_tab(self) -> QWidget:
         """Crea los campos generales y económicos de los informes."""
@@ -618,6 +676,12 @@ class SettingsDialog(QDialog):
             "master_logo_path": self.master_logo_path.text(),
             "municipality_codes": self.location_selector.codes,
             "cpv_codes": self.cpv_selector.codes,
+            "project_disciplines": [
+                key for key, check in self.discipline_checks.items() if check.isChecked()
+            ],
+            "document_standards": [
+                key for key, check in self.standard_checks.items() if check.isChecked()
+            ],
             "text_styles": self._style_values(),
         })
         return data
