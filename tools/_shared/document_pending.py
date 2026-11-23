@@ -15,6 +15,7 @@ Global gPendingDocument As Object
 Global gPendingDialog As Object
 Global gPendingMatches As Object
 Global gPendingDocumentListener As Object
+Global gPendingCloseListener As Object
 Global gPendingListListener As Object
 Global gPendingRefreshListener As Object
 Global gPendingWindowListener As Object
@@ -86,6 +87,8 @@ Sub ShowPending()
     gPendingDialog.addTopWindowListener(gPendingWindowListener)
     gPendingDocumentListener = CreateUnoListener("PendingDocument_", "com.sun.star.util.XModifyListener")
     gPendingDocument.addModifyListener(gPendingDocumentListener)
+    gPendingCloseListener = CreateUnoListener("PendingClosing_", "com.sun.star.util.XCloseListener")
+    gPendingDocument.addCloseListener(gPendingCloseListener)
     gPendingListening = True
     gPendingOpen = True
     RefreshPending
@@ -158,6 +161,7 @@ Sub ClosePending()
     If gPendingListening Then
         gPendingListening = False
         gPendingDocument.removeModifyListener(gPendingDocumentListener)
+        gPendingDocument.removeCloseListener(gPendingCloseListener)
     End If
     gPendingDialog.dispose()
     gPendingBusy = False
@@ -168,6 +172,18 @@ Sub PendingDocument_modified(oEvent)
 End Sub
 
 Sub PendingDocument_disposing(oEvent)
+    gPendingListening = False
+    ClosePending
+End Sub
+
+Sub PendingClosing_queryClosing(oEvent, bOwnership)
+End Sub
+
+Sub PendingClosing_notifyClosing(oEvent)
+    ClosePending
+End Sub
+
+Sub PendingClosing_disposing(oEvent)
     gPendingListening = False
     ClosePending
 End Sub

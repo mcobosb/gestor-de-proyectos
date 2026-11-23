@@ -124,6 +124,28 @@ estructura de carpetas al mover la entrega. Al abrir el maestro en LibreOffice,
 acepta la actualización de enlaces o utiliza **Herramientas → Actualizar →
 Vínculos** para incorporar los cambios de los subdocumentos.
 
+#### Revisión de textos pendientes en el ODM
+
+Estructura documental incorpora en los nuevos maestros una macro de revisión.
+El enlace **Revisar pendientes del proyecto**, junto al índice, abre una ventana
+flotante con todos los marcadores `[PENDIENTE: descripción]` del maestro y sus
+subdocumentos vinculados, incluidas las tablas. Selecciona un aviso para ir al texto.
+También reconoce los marcadores antiguos `[PENDIENTE DE CONCRETAR: ...]` y los de
+configuración general. Puedes usar esta convención en documentos de otras herramientas.
+
+Al sustituir o eliminar el marcador completo, el aviso desaparece automáticamente.
+Si pertenece a un subdocumento vinculado, edita y guarda su ODT original y pulsa
+**Actualizar vínculos y pendientes** en la ventana. Así se integran los documentos
+generados por separado; no se vigilan automáticamente los archivos externos.
+La revisión no modifica ni guarda los subdocumentos. En RCD, los campos sin completar
+se generan sin el texto introductorio de su misma línea; los cumplimentados lo conservan.
+
+La macro no se ejecuta al abrir el archivo: debes iniciar la revisión y permitir
+macros solo si confías en el documento, según la seguridad habitual de LibreOffice.
+No hace falta instalar una macro global ni reducir la seguridad. Los ODM existentes
+no se actualizan automáticamente; regenerarlos reemplaza los documentos generados,
+por lo que conviene conservar primero las ediciones manuales.
+
 Antes de cada anejo, el maestro incluye una portada independiente con
 «ANEJO Nº X» a 26 pt y el nombre del anejo debajo a 32 pt, alineados a la derecha.
 Conserva el encabezado y el pie de la plantilla, con el rótulo del anejo y la

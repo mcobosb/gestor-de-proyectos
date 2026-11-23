@@ -13,7 +13,9 @@ from budget_reports import ReportSettings
 from tools._shared.budget_sources import RCD_BUDGET_SOURCE
 from tools.rcd import RcdState, detect_waste_items
 from tools.rcd import ler_catalog
-from tools.rcd.document import DOCUMENT_FIELDS, StudyTable, study_blocks, write_study
+from tools.rcd.document import (
+    DOCUMENT_FIELDS, StudyTable, _pending_lines, study_blocks, substitute, write_study,
+)
 
 
 class RcdDocumentTests(unittest.TestCase):
@@ -66,6 +68,20 @@ class RcdDocumentTests(unittest.TestCase):
             self.assertIn(f"[PENDIENTE: {DOCUMENT_FIELDS[key]}]", texts)
         self.assertIn("Previsión particular: Se entregará a un gestor autorizado.", texts)
         self.assertFalse(any("PENDIENTE DE CONCRETAR:" in text for text in texts))
+
+    def test_pending_prefix_removal_preserves_other_physical_lines_and_variable_errors(self):
+        """No elimina el contexto anterior que el lector Markdown fusionaría después."""
+        values = {
+            "reuse": "[PENDIENTE: Reutilización prevista y destino]",
+            "recovery": "Entrega a gestor.",
+        }
+        source = "Contexto anterior.\nDestino previsto: {{reuse}}\n\nPrevisión: {{recovery}}"
+        self.assertEqual(
+            substitute(_pending_lines(source, values), values),
+            "Contexto anterior.\n[PENDIENTE: Reutilización prevista y destino]\n\nPrevisión: Entrega a gestor.",
+        )
+        with self.assertRaises(ValueError):
+            substitute(_pending_lines("Otra variable: {{desconocida}}", values), values)
 
     def test_detection_and_catalogue_links_ignore_study_outputs_not_ler_or_chapter_17(self):
         """Usa la marca de origen, conservando partidas y códigos LER 17 legítimos."""
