@@ -506,7 +506,13 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable |
         _tag("fo:keep-with-next"): "always",
     })
     document.paragraph(TITLE.upper(), style="PricesDocumentTitle")
-    document.table_of_contents(headings, max_level=3, name="PricesContents")
+    document.table_of_contents(
+        headings, max_level=3, name="PricesContents",
+        source_styles={
+            1: ("PricesHeading1", "PricesListingHeading"),
+            2: "PricesHeading2", 3: "PricesHeading3",
+        },
+    )
     bookmark = 0
     for level, text in blocks:
         if isinstance(text, NarrativeTable):
@@ -535,6 +541,10 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable |
         bookmark += 1
         append_report_odt(app, report, document, embedded=True)
     document.append_signature(app.report_settings)
+    document.name_text_styles({
+        **{f"PricesHeading{level}": f"Precios - Título {level}" for level in range(1, 4)},
+        "PricesListingHeading": "Precios - Título de listado",
+    })
     document.write(target)
 
 

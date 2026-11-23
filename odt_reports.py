@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -129,7 +130,8 @@ class _OdtReport:
     def table_of_contents(
         self, headings: list[tuple[int, str]], *, max_level: int = 6,
         name: str = "PPTPContents", bookmark_offset: int = 0,
-        source_styles: dict[int, str] | None = None, use_index_marks: bool = False,
+        source_styles: Mapping[int, str | Sequence[str]] | None = None,
+        use_index_marks: bool = False,
     ) -> None:
         """Inserta un indice ODF, opcionalmente limitado a estilos de un documento."""
         from tools._shared.document_layout import add_odt_contents_styles
@@ -148,13 +150,14 @@ class _OdtReport:
         })
         if source_styles is not None:
             source.set(_tag("text:use-index-source-styles"), "true")
-            for level, style_name in source_styles.items():
+            for level, style_names in source_styles.items():
                 styles = ET.SubElement(source, _tag("text:index-source-styles"), {
                     _tag("text:outline-level"): str(level),
                 })
-                ET.SubElement(styles, _tag("text:index-source-style"), {
-                    _tag("text:style-name"): style_name,
-                })
+                for style_name in ((style_names,) if isinstance(style_names, str) else style_names):
+                    ET.SubElement(styles, _tag("text:index-source-style"), {
+                        _tag("text:style-name"): style_name,
+                    })
         title = ET.SubElement(source, _tag("text:index-title-template"), {
             _tag("text:style-name"): "ReportContentsTitle",
         })

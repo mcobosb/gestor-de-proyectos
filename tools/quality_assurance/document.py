@@ -102,7 +102,11 @@ def _write_odt(target, project, settings, blocks, data) -> None:
     doc.paragraph(TITLE, "ReportTitle")
     headings = [(level, text) for level, text in blocks if level > 0]
     if headings:
-        doc.table_of_contents(headings, max_level=DEFAULT_TOC_DEPTH, name="QualityContents")
+        doc.table_of_contents(
+            headings, max_level=DEFAULT_TOC_DEPTH, name="QualityContents",
+            source_styles={level: f"QualityHeading{level}"
+                           for level in range(1, DEFAULT_TOC_DEPTH + 1)},
+        )
     bookmark = 0
     for level, text in blocks:
         if text in TABLES:
@@ -124,6 +128,10 @@ def _write_odt(target, project, settings, blocks, data) -> None:
         else:
             doc.paragraph(text, "QualityBody")
     doc.append_signature(settings)
+    doc.name_text_styles({
+        f"QualityHeading{level}": f"Calidad - Título {level}"
+        for level in range(1, DEFAULT_TOC_DEPTH + 1)
+    })
     doc.write(target)
 
 

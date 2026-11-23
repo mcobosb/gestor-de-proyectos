@@ -1,5 +1,7 @@
 """Comprobaciones comunes de tipografía de los informes ODT."""
 from datetime import date
+import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -15,9 +17,14 @@ from pypdf import PdfReader
 
 from budget_reports import ReportSettings
 from odt_reports import _new_report, _tag
-from tools._shared.document_layout import LIST_INDENT, template_paragraph_styles
+from tools._shared.document_layout import (
+    LIST_INDENT, TABLE_HEADER_BACKGROUND, template_paragraph_styles,
+)
 from tools._shared.scheduling import PlanActivity, PlanParams
+from tools.document_structure.office import write_project_master
 from tools.planning.document import write_planning_report
+from tools.pptp.document import write_document as write_pptp_document
+from tools.price_justification.document import LISTINGS, _write_odt as write_prices_odt
 from tools.quality_assurance.document import _write_odt as write_quality_odt
 from tools.quality_assurance.document import _write_pdf as write_quality_pdf
 from tools.rcd.document import DESCRIPTION_HEADING, StudyTable, _write_odt as write_rcd_odt
@@ -30,6 +37,84 @@ from tools.safety_health.document import (
 
 class NarrativeLayoutTests(unittest.TestCase):
     """Verifica configuración y plantilla en varios generadores."""
+
+    def test_annex_contents_refresh_locally_with_real_pages_in_master(self):
+        """Cada índice conserva sus títulos y páginas al actualizar un ODM conjunto."""
+        program = Path(os.environ.get("PROGRAMFILES", r"C:\Program Files")) / "LibreOffice" / "program"
+        executable = program / "python.exe"
+        if not executable.is_file():
+            self.skipTest("La prueba UNO requiere el Python incluido en LibreOffice.")
+        expected = {
+            "RcdContents": ["RCD_ONE", "RCD_TWO", "RCD_THREE"],
+            "PricesContents": ["PRICE_ONE", "PRICE_TWO", "PRICE_THREE",
+                               *(title for title, _report in LISTINGS)],
+            "QualityContents": ["QUALITY_ONE", "QUALITY_TWO"],
+            "PPTPContents": ["PPTP_ONE", "PPTP_TWO"],
+            "ESSContents": ["SAFETY_ONE", "SAFETY_TWO"],
+        }
+        settings = ReportSettings()
+        app = SimpleNamespace(report_settings=settings, _project_title=lambda: "Proyecto")
+        with TemporaryDirectory() as folder:
+            root = Path(folder)
+            template = root / "plantilla.odt"
+            report = _new_report("Maestro", "Proyecto", settings)
+            report.paragraph("Portada")
+            report.write(template)
+            write_rcd_odt([
+                (1, "RCD_ONE"), (0, "Texto de la memoria. " * 120),
+                (2, "RCD_TWO"), (0, "Texto del apartado. " * 120),
+                (1, "RCD_THREE"),
+                StudyTable("Cabeceras", ["HEADER_PLAIN", "HEADER_RIGHT", "HEADER_CENTER"],
+                           [["A", "1", "B"]], [1, 1, 1],
+                           right_columns=(1,), center_columns=(2,)),
+            ], "Proyecto", settings, root / "rcd.odt")
+
+            def listing(_app, _report, document, **_kwargs):
+                """Sustituye solo el presupuesto ajeno al cálculo de los índices."""
+                document.paragraph("Contenido del listado. " * 120)
+
+            with patch("odt_reports.append_report_odt", side_effect=listing):
+                write_prices_odt(app, root / "precios.odt", [
+                    (1, "PRICE_ONE"), (0, "Texto de justificación. " * 120),
+                    (2, "PRICE_TWO"), (3, "PRICE_THREE"),
+                ])
+            write_quality_odt(root / "calidad.odt", "Proyecto", settings,
+                              [(1, "QUALITY_ONE"), (0, "Control. " * 120),
+                               (2, "QUALITY_TWO")], {})
+            write_pptp_document("# PPTP_ONE\n\nTexto del pliego.\n\n## PPTP_TWO",
+                                root / "pptp.odt", {"titulo_proyecto": "Proyecto"}, settings)
+            write_safety_odt(app, root / "seguridad.odt", _StudyContent(
+                "Seguridad", "Proyecto", "", "EUR", [
+                    _Block("heading", "SAFETY_ONE", 1),
+                    _Block("paragraph", "Prevención. " * 120),
+                    _Block("heading", "SAFETY_TWO", 2),
+                ],
+            ))
+            master = root / "maestro.odm"
+            write_project_master(
+                template, master, fields={}, index_entries=[], traceability=[],
+                links=[Path(name) for name in
+                       ("rcd.odt", "precios.odt", "calidad.odt", "pptp.odt", "seguridad.odt")],
+                folder=root, logo=Path(__file__).resolve().parents[1] / "iconos" / "Arranque.jpg",
+            )
+            expectations = root / "indices.json"
+            expectations.write_text(json.dumps(expected), encoding="utf-8")
+            try:
+                result = subprocess.run(
+                    [str(executable), str(Path(__file__).with_name("_libreoffice_contents_check.py")),
+                     str(master), str(expectations)], capture_output=True, text=True, timeout=120,
+                )
+            finally:
+                pid_file = root / "soffice.pid"
+                if pid_file.is_file():
+                    pid = int(pid_file.read_text().strip())
+                    subprocess.run([
+                        "powershell", "-NoProfile", "-Command",
+                        f"$p = Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}'; "
+                        f"if ($p -and $p.CommandLine.Contains('{root.name}')) "
+                        f"{{ Stop-Process -Id {pid} -Force }}",
+                    ], check=True, capture_output=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_rcd_prescriptions_and_reference_lists_are_justified(self):
         """Justifica los dos apartados y sus sublistas sin cambiar los demás."""
@@ -228,12 +313,13 @@ class NarrativeLayoutTests(unittest.TestCase):
                 )
 
     def test_rcd_header_and_section_inheritance_survives_writer(self):
-        """Conserva el mismo formato en cabeceras centradas y secciones posteriores."""
+        """Conserva la tipografía también ante estilos homónimos del maestro."""
         blocks = [
             (1, "SECCION_PRIMERA"), (0, "Texto inicial."),
             (1, "SECCION_SEGUNDA"),
             StudyTable("Cabeceras", ["HEADER_PLAIN", "HEADER_RIGHT", "HEADER_CENTER"],
-                       [["A", "1", "B"]], [1, 1, 1], right_columns=(1,), center_columns=(2,)),
+                       [["BODY_PLAIN", "1", "B"]], [1, 1, 1],
+                       right_columns=(1,), center_columns=(2,)),
         ]
         with TemporaryDirectory() as folder:
             root = Path(folder)
@@ -251,29 +337,83 @@ class NarrativeLayoutTests(unittest.TestCase):
                 style.get(_tag("style:name")): style
                 for document in (styles, content) for style in document.iter(_tag("style:style"))
             }
+            for name in ("RcdTableHeader", "RcdTableHeaderRight", "RcdTableHeaderCenter"):
+                properties = declared[name].find(_tag("style:text-properties"))
+                self.assertEqual(properties.get(_tag("fo:font-family")), "Arial Narrow")
             for name in ("RcdDocumentStart", "RcdTableHeaderCenter"):
                 self.assertIn(declared[name].get(_tag("style:parent-style-name")), named)
+            template = root / "plantilla.odt"
+            report = _new_report("Maestro", "Proyecto", ReportSettings(text_styles={
+                "table_header": {"font": "Times New Roman", "size": 12},
+            }))
+            report.paragraph("Portada")
+            report.write(template)
+            master = root / "maestro.odm"
+            write_project_master(
+                template, master, fields={}, index_entries=[], traceability=[],
+                links=[Path(target.name)], folder=root,
+                logo=Path(__file__).resolve().parents[1] / "iconos" / "Arranque.jpg",
+            )
+            with ZipFile(master) as archive:
+                cached = ET.fromstring(archive.read("content.xml"))
+            header_cell = next(style for style in cached.iter(_tag("style:style"))
+                               if style.get(_tag("style:name")) == "RcdTableHeaderCell")
+            self.assertEqual(
+                header_cell.find(_tag("style:table-cell-properties")).get(_tag("fo:background-color")),
+                TABLE_HEADER_BACKGROUND,
+            )
             soffice = shutil.which("soffice") or r"C:\Program Files\LibreOffice\program\soffice.com"
             if not Path(soffice).is_file():
                 return
             subprocess.run(
                 [soffice, f"-env:UserInstallation={(root / 'profile').as_uri()}",
-                 "--headless", "--convert-to", "pdf", "--outdir", str(root), str(target)],
+                 "--headless", "--convert-to", "pdf", "--outdir", str(root),
+                 str(target), str(master)],
                 check=True, capture_output=True, timeout=90,
             )
-            runs = {}
-            for page in PdfReader(target.with_suffix(".pdf")).pages:
-                def collect(text, cm, tm, font, size):
-                    """Recoge el formato efectivo, después de las entradas del índice."""
-                    for marker in ("SECCION_PRIMERA", "SECCION_SEGUNDA",
-                                   "HEADER_PLAIN", "HEADER_RIGHT", "HEADER_CENTER"):
-                        if marker in text:
-                            runs[marker] = (font["/BaseFont"], size)
-                page.extract_text(visitor_text=collect)
-            self.assertEqual(runs["SECCION_PRIMERA"], runs["SECCION_SEGUNDA"])
-            self.assertEqual(runs["HEADER_PLAIN"], runs["HEADER_CENTER"])
-            self.assertEqual(runs["HEADER_PLAIN"], runs["HEADER_RIGHT"])
-            self.assertAlmostEqual(runs["HEADER_CENTER"][1], 8, places=1)
+            rendered = []
+            for document in (target, master):
+                runs = {}
+                for page in PdfReader(document.with_suffix(".pdf")).pages:
+                    def collect(text, cm, tm, font, size):
+                        """Recoge la fuente efectiva sin el prefijo del subconjunto PDF."""
+                        for marker in ("SECCION_PRIMERA", "SECCION_SEGUNDA", "BODY_PLAIN",
+                                       "HEADER_PLAIN", "HEADER_RIGHT", "HEADER_CENTER"):
+                            if marker in text:
+                                runs[marker] = (font["/BaseFont"].split("+")[-1], size)
+                    page.extract_text(visitor_text=collect)
+                rendered.append(runs)
+                with self.subTest(document=document.name):
+                    for marker in ("HEADER_PLAIN", "HEADER_RIGHT", "HEADER_CENTER"):
+                        self.assertIn("Bold", runs[marker][0])
+                        self.assertEqual(runs[marker][0].removesuffix("-Bold"), runs["BODY_PLAIN"][0])
+                        self.assertAlmostEqual(runs[marker][1], 8, places=1)
+                    self.assertAlmostEqual(runs["BODY_PLAIN"][1], 8, places=1)
+            self.assertEqual(rendered[0]["SECCION_PRIMERA"], rendered[0]["SECCION_SEGUNDA"])
+            for marker in ("HEADER_PLAIN", "HEADER_RIGHT", "HEADER_CENTER"):
+                self.assertEqual(rendered[0][marker], rendered[1][marker])
+
+    def test_rcd_header_typography_respects_project_overrides(self):
+        """Los valores independientes del maestro siguen siendo personalizables."""
+        settings = ReportSettings(text_styles={
+            "table_header": {"font": "Courier New", "size": 11, "bold": False, "italic": True},
+        })
+        blocks = [StudyTable("Prueba", ["Dato", "Valor", "Ud."], [["A", "1", "m"]],
+                             [1, 1, 1], right_columns=(1,), center_columns=(2,))]
+        with TemporaryDirectory() as folder:
+            target = Path(folder) / "rcd.odt"
+            write_rcd_odt(blocks, "Proyecto", settings, target)
+            with ZipFile(target) as archive:
+                root = ET.fromstring(archive.read("content.xml"))
+            styles = {style.get(_tag("style:name")): style
+                      for style in root.iter(_tag("style:style"))}
+            for name in ("RcdTableHeader", "RcdTableHeaderRight", "RcdTableHeaderCenter"):
+                properties = styles[name].find(_tag("style:text-properties"))
+                self.assertEqual(properties.get(_tag("fo:font-family")), "Courier New")
+                self.assertEqual(properties.get(_tag("fo:font-size")), "11pt")
+                self.assertEqual(properties.get(_tag("fo:font-weight")), "normal")
+                self.assertEqual(properties.get(_tag("fo:font-style")), "italic")
+                self.assertEqual(properties.get(_tag("fo:color")), "#FFFFFF")
 
     def test_safety_contents_remain_scoped_to_each_document(self):
         """Mantiene separados los indices de memoria y pliego tras unificar su estilo."""

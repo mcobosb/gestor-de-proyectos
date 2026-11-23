@@ -133,6 +133,14 @@ estructura de carpetas al mover la entrega. Al abrir el maestro en LibreOffice,
 acepta la actualización de enlaces o utiliza **Herramientas → Actualizar →
 Vínculos** para incorporar los cambios de los subdocumentos.
 
+Los índices internos de RCDs, Justificación de precios, Control de calidad,
+PPTP y Seguridad y Salud se limitan a los estilos propios de cada documento.
+Después de actualizar los vínculos o editar el contenido, utiliza **Herramientas →
+Actualizar → Todos los índices**, o **Actualizar índice** en su menú contextual,
+para recalcular las páginas sin incorporar títulos de otros anejos.
+Los archivos antiguos necesitan regenerarse para recibir esta delimitación;
+conserva antes cualquier edición manual.
+
 #### Tipo de proyecto y referencias normativas
 
 En **Configuración → Tipo de proyecto y normas** puedes combinar obra civil,
@@ -601,6 +609,8 @@ En RCDs, **Editar documentación del estudio…** abre ese mismo editor para los
 ocho documentos base. Guarda los cambios antes de exportar. Las tablas del
 estudio comparten las cabeceras azules, las filas alternas y los bordes suaves
 de Seguridad y Salud y Justificación de precios, tanto en PDF como en ODT.
+Las cabeceras de tabla conservan Arial Narrow 8 pt en negrita también al vincular
+el ODT al maestro ODM, salvo los ajustes explícitos del proyecto.
 La **Tabla 1** cierra **1.1. Antecedentes** y deja en blanco los datos generales
 sin rellenar. **1.2. Descripción de la actuación** reutiliza la descripción
 guardada en Seguridad y Salud o, en su defecto, en el PPTP. El pie toma el número

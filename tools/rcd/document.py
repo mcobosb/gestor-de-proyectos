@@ -15,7 +15,7 @@ from tools._shared.budget_sources import RCD_BUDGET_SOURCE
 from tools._library_editor import library_members, read_markdown
 from tools._library_markdown import document_markdown, text_blocks
 from tools.document_structure.catalog import RCD_NUMBER
-from document_styles import ROLES
+from document_styles import ROLES, odt_typography
 from tools._shared.document_layout import (
     add_odt_blue_table_cells, add_odt_blue_table_headers, add_odt_list_style,
     add_odt_narrative_styles,
@@ -418,6 +418,15 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
         }).text = "{{capitulo}}"
     add_odt_blue_table_cells(document, "RcdTable")
     add_odt_blue_table_headers(document, "RcdTable", centered=True)
+    for style in document.automatic_styles:
+        if style.get(_tag("style:name")) in {
+            "RcdTableHeader", "RcdTableHeaderRight", "RcdTableHeaderCenter",
+        }:
+            # El ODM puede definir otro TableHeader y reemplazar la herencia.
+            odt_typography(style, {
+                "font": "Arial Narrow", "size": ROLES["table_header"][1],
+                "bold": True, "italic": False,
+            }, _tag)
     add_odt_narrative_styles(document, "Rcd")
     style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
         _tag("style:name"): "RcdDocumentStart", _tag("style:family"): "paragraph",
@@ -439,7 +448,10 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
         _tag("fo:margin-bottom"): "5pt",
     })
     document.paragraph(TITLE, "RcdDocumentTitle")
-    document.table_of_contents(headings, max_level=2, name="RcdContents")
+    document.table_of_contents(
+        headings, max_level=2, name="RcdContents",
+        source_styles={1: ("RcdHeading1", "RcdDocumentStart"), 2: "RcdHeading2"},
+    )
     heading_index = 0
     main_seen = False
     justified_section_level = 0
@@ -480,7 +492,10 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
         else:
             document.paragraph(text, "RcdBody")
             _odt_link_paragraph_spans(document.body[-1])
-    document.name_text_styles({"RcdHeading1": "RCD - Título 1", "RcdBody": "RCD - Cuerpo"})
+    document.name_text_styles({
+        "RcdHeading1": "RCD - Título 1", "RcdHeading2": "RCD - Título 2",
+        "RcdDocumentStart": "RCD - Inicio de sección", "RcdBody": "RCD - Cuerpo",
+    })
     document.append_signature(settings)
     document.write(target)
 

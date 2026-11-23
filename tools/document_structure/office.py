@@ -28,6 +28,39 @@ def _master_link(path: Path) -> str:
     return "../" + quote(path.as_posix(), safe="/")
 
 
+def _merge_index_source_styles(styles, links: list[Path], folder: Path) -> None:
+    """Conserva los estilos nombrados que delimitan cada índice vinculado."""
+    named = styles.find(_tag("office:styles"))
+    if named is None:
+        raise ValueError("El maestro no contiene estilos de documento.")
+    known = {style.get(_tag("style:name")) for style in named}
+    for path in links:
+        with ZipFile(folder / path) as document:
+            content = ET.fromstring(document.read("content.xml"))
+            source = ET.fromstring(document.read("styles.xml"))
+        declared = {
+            style.get(_tag("style:name")): style
+            for style in source.findall(f"{_tag('office:styles')}/{_tag('style:style')}")
+        }
+        pending = [
+            node.get(_tag("text:style-name"))
+            for node in content.iter(_tag("text:index-source-style"))
+        ]
+        for name in pending:
+            if name not in declared and name not in known:
+                raise ValueError(f"El índice de {path.name} usa un estilo no definido: {name}")
+        while pending:
+            name = pending.pop()
+            if name in known:
+                continue
+            style = declared[name]
+            named.append(deepcopy(style))
+            known.add(name)
+            parent = style.get(_tag("style:parent-style-name"))
+            if parent in declared and parent not in known:
+                pending.append(parent)
+
+
 def _styles(xml: bytes, project: str, section: str, text_styles) -> bytes:
     """Añade cabecera y pie con un campo de página, no un número literal."""
     root = ET.fromstring(xml)
@@ -83,8 +116,12 @@ def _master_content(xml: bytes, links: list[Path], folder: Path) -> bytes:
             raise ValueError(f"El documento vinculado no contiene texto ODF: {path.name}")
         source_styles = linked_root.find(_tag("office:automatic-styles"))
         if source_styles is not None:
-            typography = [style for style in source_styles
-                          if style.get(_tag("style:name"), "").startswith("ProjectTypography_")]
+            typography = [
+                style for style in source_styles
+                if style.get(_tag("style:name"), "").startswith("ProjectTypography_")
+                or (style.get(_tag("style:family")) in {"paragraph", "table-cell"}
+                    and style_role(style.get(_tag("style:name"), ""), odt=True) == "table_header")
+            ]
             if typography:
                 cached = root.find(_tag("office:automatic-styles"))
                 if cached is None:
@@ -743,6 +780,8 @@ def _append_index_and_sections(
             typography = [
                 style for style in source_styles
                 if style.get(_tag("style:name"), "").startswith("ProjectTypography_")
+                or (style.get(_tag("style:family")) in {"paragraph", "table-cell"}
+                    and style_role(style.get(_tag("style:name"), ""), odt=True) == "table_header")
             ]
             if typography:
                 if known_styles is None:
@@ -874,6 +913,7 @@ def write_project_master(
         traceability_page, index_page, document_page = _prepare_master_sections(
             template_content, template_styles,
         )
+        _merge_index_source_styles(template_styles, links, folder)
         logo_resource = _logo_resource_name(original.namelist())
         result.writestr("mimetype", _MASTER_MIME, compress_type=ZIP_STORED)
         for name in names:

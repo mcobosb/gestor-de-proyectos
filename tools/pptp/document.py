@@ -769,6 +769,7 @@ def write_document(
         document.table_of_contents(
             [(level, text.replace("**", "")) for level, text in blocks if level > 0],
             max_level=toc_depth,
+            source_styles={level: f"PPTPHeading{level}" for level in range(1, toc_depth + 1)},
         )
         heading_index = 0
         for level, text in blocks:

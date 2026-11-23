@@ -1650,11 +1650,13 @@ def _write_odt(app, target, content: _StudyContent) -> None:
         headings = [(block.level, block.text) for block in blocks if block.kind == "heading"]
         document.table_of_contents(
             headings, max_level=DEFAULT_TOC_DEPTH, bookmark_offset=bookmark_index,
-            name=f"ESSDocument{index}Contents" if scoped_contents else "PPTPContents",
+            name=f"ESSDocument{index}Contents" if scoped_contents else "ESSContents",
             source_styles={
                 level: f"ESSDocument{index}Heading{level}"
                 for level in range(1, DEFAULT_TOC_DEPTH + 1)
-            } if scoped_contents else None,
+            } if scoped_contents else {
+                level: f"ESSHeading{level}" for level in range(1, DEFAULT_TOC_DEPTH + 1)
+            },
         )
         for block, label in _tables_with_labels(blocks):
             if block.kind == "heading":
