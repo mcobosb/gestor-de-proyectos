@@ -30,13 +30,82 @@ from tools.document_structure.generation import (
     generate_project_package, generated_at, receipt_path,
     suggested_document_directory,
 )
-from tools.document_structure.office import MASTER_LOGO, MASTER_TEMPLATE
+from tools.document_structure.office import MASTER_LOGO, MASTER_TEMPLATE, write_project_master
 from tools.document_structure.qt_window import DocumentStructureWindow
 from qt_localization import get_document_save_path
 
 
 class DocumentStructureTests(unittest.TestCase):
     """Comprueba la generación de documentos técnicos y del maestro ODM."""
+
+    def test_master_generates_traceability_and_index_from_cover_only_template(self) -> None:
+        """La plantilla aporta la carátula y su diseño, no las tablas de la aplicación."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "caratula.odt"
+            template = _new_report("Carátula personalizada", "Proyecto de prueba", ReportSettings())
+            template.paragraph("Contenido propio de la carátula")
+            template.write(source)
+            with ZipFile(source) as archive:
+                original_content = ET.fromstring(archive.read("content.xml"))
+                original_styles = ET.fromstring(archive.read("styles.xml"))
+            output = root / "Maestro.odm"
+            rows = [
+                ("MAESTRO", output.name, "", "Ana", "", ""),
+                ("DOC01-A01", "Gestión de residuos", "", "Ana", "", ""),
+            ]
+            write_project_master(
+                source, output, fields={}, traceability=rows, links=[], folder=root,
+                index_entries=[{"text": "DOCUMENTO Nº 1. MEMORIA Y ANEJOS.", "style": "P18"}],
+                logo=Path(__file__).resolve().parents[1] / "iconos" / "Arranque.jpg",
+            )
+            with ZipFile(output) as archive:
+                content = ET.fromstring(archive.read("content.xml"))
+                styles = ET.fromstring(archive.read("styles.xml"))
+            body = content.find(f"{_tag('office:body')}/{_tag('office:text')}")
+            cover = original_content.find(f"{_tag('office:body')}/{_tag('office:text')}")
+            self.assertEqual([ET.tostring(node) for node in list(body)[:len(cover)]],
+                             [ET.tostring(node) for node in cover])
+            table = body.find(_tag("table:table"))
+            self.assertIsNotNone(table.find(_tag("table:table-header-rows")))
+            self.assertEqual([
+                tuple("".join(cell.itertext()) for cell in row.findall(_tag("table:table-cell")))
+                for row in table.findall(_tag("table:table-row"))
+            ], rows)
+            self.assertIn("ÍNDICE", "".join(body.itertext()))
+            for layout in original_styles.iter(_tag("style:page-layout")):
+                self.assertTrue(any(ET.tostring(candidate) == ET.tostring(layout)
+                                    for candidate in styles.iter(_tag("style:page-layout"))))
+            for page in original_styles.iter(_tag("style:master-page")):
+                preserved = next(
+                    node for node in styles.iter(_tag("style:master-page"))
+                    if node.get(_tag("style:name")) == page.get(_tag("style:name"))
+                )
+                self.assertEqual(preserved.attrib, page.attrib)
+                footer = page.find(_tag("style:footer"))
+                if footer is None:
+                    self.assertIsNone(preserved.find(_tag("style:footer")))
+                else:
+                    self.assertEqual(ET.tostring(preserved.find(_tag("style:footer"))),
+                                     ET.tostring(footer))
+            soffice = shutil.which("soffice") or str(
+                Path(os.environ.get("PROGRAMFILES", r"C:\Program Files"))
+                / "LibreOffice" / "program" / "soffice.exe"
+            )
+            if Path(soffice).is_file():
+                from pypdf import PdfReader
+
+                subprocess.run(
+                    [soffice, f"-env:UserInstallation={(root / 'lo-profile').as_uri()}",
+                     "--headless", "--convert-to", "pdf", "--outdir", str(root), str(output)],
+                    check=True, capture_output=True, timeout=90,
+                )
+                pages = [" ".join(page.extract_text().split()) for page in PdfReader(root / "Maestro.pdf").pages]
+                cover_page = next(index for index, text in enumerate(pages) if "Contenido propio de la carátula" in text)
+                trace_page = next(index for index, text in enumerate(pages) if "CÓDIGO" in text and "MAESTRO" in text)
+                index_page = next(index for index, text in enumerate(pages) if "DOCUMENTO Nº 1. MEMORIA Y ANEJOS." in text)
+                self.assertLess(cover_page, trace_page)
+                self.assertLess(trace_page, index_page)
 
     def test_annex_covers_belong_to_master_and_keep_template_pages(self) -> None:
         """Las portadas se separan de los vínculos y mantienen la cabecera y el pie."""
@@ -749,7 +818,7 @@ class DocumentStructureTests(unittest.TestCase):
                     )
                     traceability_page = next(
                         page for page in styles.iter(_tag("style:master-page"))
-                        if page.get(_tag("style:name")) == "Trazabilidad"
+                        if page.get(_tag("style:name")) == "ProjectTraceabilityPage"
                     )
                     self.assertIn(
                         "HOJA DE TRAZABILIDAD",
@@ -765,7 +834,7 @@ class DocumentStructureTests(unittest.TestCase):
                     )
                     index_page = next(
                         page for page in styles.iter(_tag("style:master-page"))
-                        if page.get(_tag("style:name")) == "Converted2"
+                        if page.get(_tag("style:name")) == "ProjectIndexPage"
                     )
                     self.assertIn(
                         "ÍNDICE GENERAL DEL PROYECTO",

@@ -207,44 +207,54 @@ def _is_traceability_header(row) -> bool:
 def _fill_traceability(
     root, rows: list[tuple[str, str, str, str, str, str]],
 ) -> None:
-    """Puebla la tabla de trazabilidad y conserva su encabezado y formato."""
-    table = None
-    header_index = -1
-    for candidate in root.iter(_tag("table:table")):
-        for index, row in enumerate(candidate.findall(_tag("table:table-row"))):
-            if _is_traceability_header(row):
-                table, header_index = candidate, index
-                break
-        if table is not None:
-            break
-    if table is None:
-        raise ValueError("La plantilla del documento maestro no contiene la tabla de trazabilidad.")
-
-    table_rows = table.findall(_tag("table:table-row"))
-    if header_index + 1 >= len(table_rows):
-        raise ValueError("La tabla de trazabilidad no contiene una fila de datos con formato.")
-    prototype = table_rows[header_index + 1]
-    for row in table_rows[header_index + 1:]:
-        table.remove(row)
-    header = table_rows[header_index]
-    header_position = list(table).index(header)
-    header_group = ET.Element(_tag("table:table-header-rows"))
-    table.remove(header)
-    header_group.append(header)
-    table.insert(header_position, header_group)
-    for values in rows:
-        row = deepcopy(prototype)
-        cells = row.findall(_tag("table:table-cell"))
-        if len(cells) != len(values):
-            raise ValueError("La fila de trazabilidad no coincide con las columnas de la plantilla.")
-        for cell, value in zip(cells, values):
-            paragraphs = cell.findall(_tag("text:p"))
-            if not paragraphs:
-                paragraphs = [ET.SubElement(cell, _tag("text:p"))]
-            _set_paragraph_text(paragraphs[0], value)
-            for paragraph in paragraphs[1:]:
-                cell.remove(paragraph)
-        table.append(row)
+    """Genera las seis columnas sin depender de filas de ejemplo de la plantilla."""
+    body = root.find(f"{_tag('office:body')}/{_tag('office:text')}")
+    automatic = root.find(_tag("office:automatic-styles"))
+    if body is None or automatic is None:
+        raise ValueError("El maestro no contiene el cuerpo o los estilos automáticos ODF.")
+    previous = next((
+        candidate for candidate in body if candidate.tag == _tag("table:table")
+        and any(_is_traceability_header(row) for row in candidate.iter(_tag("table:table-row")))
+    ), None)
+    if previous is not None:
+        position = list(body).index(previous)
+        body.remove(previous)
+    else:
+        position = next(
+            index + 1 for index, child in enumerate(body)
+            if child.get(_tag("text:style-name")) == "ProjectTraceabilityHeading"
+        )
+    style = ET.SubElement(automatic, _tag("style:style"), {
+        _tag("style:name"): "ProjectTraceabilityTable", _tag("style:family"): "table",
+    })
+    ET.SubElement(style, _tag("style:table-properties"), {
+        _tag("style:rel-width"): "100%", _tag("table:align"): "margins",
+    })
+    table = ET.Element(_tag("table:table"), {
+        _tag("table:name"): "ProjectTraceabilityTable",
+        _tag("table:style-name"): "ProjectTraceabilityTable",
+    })
+    for index, width in enumerate((14, 36, 14, 12, 14, 10)):
+        name = f"ProjectTraceabilityColumn{index}"
+        column_style = ET.SubElement(automatic, _tag("style:style"), {
+            _tag("style:name"): name, _tag("style:family"): "table-column",
+        })
+        ET.SubElement(column_style, _tag("style:table-column-properties"), {
+            _tag("style:rel-column-width"): f"{width}*",
+        })
+        ET.SubElement(table, _tag("table:table-column"), {_tag("table:style-name"): name})
+    header = ET.SubElement(table, _tag("table:table-header-rows"))
+    headers = ("CÓDIGO", "DOCUMENTO", "FECHA EDICIÓN", "EDITADO", "FECHA COMPROBACIÓN", "VALIDADO")
+    for index, values in enumerate([headers, *rows]):
+        if len(values) != len(headers):
+            raise ValueError("Cada fila de trazabilidad debe contener seis columnas.")
+        row = ET.SubElement(header if index == 0 else table, _tag("table:table-row"))
+        for value in values:
+            cell = ET.SubElement(row, _tag("table:table-cell"), {_tag("office:value-type"): "string"})
+            ET.SubElement(cell, _tag("text:p"), {
+                _tag("text:style-name"): "TableHeader" if index == 0 else "ProjectTraceabilityText",
+            }).text = value
+    body.insert(position, table)
 
 
 def _style_traceability(root) -> None:
@@ -271,54 +281,124 @@ def _style_traceability(root) -> None:
     style_odt_blue_table(table, "Traceability")
 
 
-def _paragraph_master_page(root, paragraph) -> str:
-    """Resuelve el estilo de página asociado al estilo de un párrafo."""
-    paragraph_style = paragraph.get(_tag("text:style-name"))
-    for style in root.iter(_tag("style:style")):
-        if (
-            style.get(_tag("style:family")) == "paragraph"
-            and style.get(_tag("style:name")) == paragraph_style
-        ):
-            return style.get(_tag("style:master-page-name"), "")
-    return ""
-
-
-def _traceability_master_page(root) -> str:
-    """Encuentra el estilo de página que precede a la tabla de trazabilidad."""
+def _prepare_master_sections(root, styles) -> tuple[str, str, str]:
+    """Añade trazabilidad e índice con páginas propias y el diseño de la plantilla."""
     body = root.find(f"{_tag('office:body')}/{_tag('office:text')}")
-    if body is None:
-        raise ValueError("La plantilla no contiene un cuerpo de texto ODF.")
-    table_index = next((
-        index for index, child in enumerate(body)
-        if child.tag == _tag("table:table")
-        and any(
-            _is_traceability_header(row)
-            for row in child.iter(_tag("table:table-row"))
-        )
-    ), None)
-    if table_index is None:
-        raise ValueError("La plantilla del documento maestro no contiene la tabla de trazabilidad.")
-    for child in reversed(list(body)[:table_index]):
-        if child.tag == _tag("text:p"):
-            page_name = _paragraph_master_page(root, child)
-            if page_name:
-                return page_name
-    raise ValueError("La plantilla no asigna una página maestra a la hoja de trazabilidad.")
+    masters = styles.find(_tag("office:master-styles"))
+    named = styles.find(_tag("office:styles"))
+    if body is None or masters is None or named is None:
+        raise ValueError("La plantilla debe contener texto, estilos y páginas maestras ODF.")
+    pages = {
+        page.get(_tag("style:name"), ""): page
+        for page in masters.findall(_tag("style:master-page"))
+    }
+    if not pages or "" in pages:
+        raise ValueError("La plantilla no contiene estilos de página maestros.")
+    paragraph_styles = {
+        style.get(_tag("style:name")): style
+        for source in (styles, root) for style in source.iter(_tag("style:style"))
+        if style.get(_tag("style:family")) == "paragraph"
+    }
 
+    def paragraph_page(paragraph):
+        """Resuelve también los estilos de párrafo heredados de la plantilla."""
+        name = paragraph.get(_tag("text:style-name")) if paragraph is not None else ""
+        visited = set()
+        while name in paragraph_styles and name not in visited:
+            visited.add(name)
+            style = paragraph_styles[name]
+            page = style.get(_tag("style:master-page-name"))
+            if page in pages:
+                return pages[page]
+            name = style.get(_tag("style:parent-style-name"))
+        return None
 
-def _index_master_page(root) -> str:
-    """Encuentra la página maestra asociada al título del índice general."""
-    body = root.find(f"{_tag('office:body')}/{_tag('office:text')}")
-    if body is None:
-        raise ValueError("La plantilla no contiene un cuerpo de texto ODF.")
-    heading = next((
-        paragraph for paragraph in body.iter(_tag("text:p"))
-        if "ÍNDICE GENERAL DEL PROYECTO" in "".join(paragraph.itertext()).upper()
+    children = list(body)
+    headings = {
+        title: next((
+            child for child in children if child.tag in {_tag("text:p"), _tag("text:h")}
+            and "".join(child.itertext()).strip().upper() == title
+        ), None)
+        for title in ("HOJA DE TRAZABILIDAD", "ÍNDICE GENERAL DEL PROYECTO")
+    }
+    trace_heading, index_heading = headings.values()
+    old_table = next((
+        child for child in children if child.tag == _tag("table:table")
+        and any(_is_traceability_header(row) for row in child.iter(_tag("table:table-row")))
     ), None)
-    page_name = _paragraph_master_page(root, heading) if heading is not None else ""
-    if not page_name:
-        raise ValueError("La plantilla no asigna una página maestra al índice general.")
-    return page_name
+    positions = [children.index(node) for node in (*headings.values(), old_table) if node is not None]
+    cover_end = min(positions, default=len(children))
+    cover_page = pages.get("Standard")
+    if cover_page is None:
+        cover_page = next(iter(pages.values()))
+    for child in children[:cover_end]:
+        for paragraph in child.iter():
+            if paragraph.tag in {_tag("text:p"), _tag("text:h")}:
+                page = paragraph_page(paragraph)
+                if page is not None:
+                    cover_page = page
+    continuation = pages.get(cover_page.get(_tag("style:next-style-name")), cover_page)
+    automatic = root.find(_tag("office:automatic-styles"))
+    if automatic is None:
+        automatic = ET.Element(_tag("office:automatic-styles"))
+        root.insert(list(root).index(root.find(_tag("office:body"))), automatic)
+    known_named = {style.get(_tag("style:name")) for style in named}
+    text_style = ET.SubElement(named, _tag("style:style"), {
+        _tag("style:name"): "ProjectTraceabilityText", _tag("style:family"): "paragraph",
+    })
+    for parent in ("TableText", "TemplateBody", "Standard"):
+        if parent in known_named:
+            text_style.set(_tag("style:parent-style-name"), parent)
+            break
+    if "TableHeader" not in known_named:
+        header_style = ET.SubElement(named, _tag("style:style"), {
+            _tag("style:name"): "TableHeader", _tag("style:family"): "paragraph",
+            _tag("style:parent-style-name"): "ProjectTraceabilityText",
+        })
+        ET.SubElement(header_style, _tag("style:text-properties"), {_tag("fo:font-weight"): "bold"})
+    for heading, label, prefix in (
+        (trace_heading, "HOJA DE TRAZABILIDAD", "ProjectTraceability"),
+        (index_heading, "ÍNDICE GENERAL DEL PROYECTO", "ProjectIndex"),
+    ):
+        base = paragraph_page(heading)
+        page = deepcopy(base if base is not None else continuation)
+        page_name = prefix + "Page"
+        page.set(_tag("style:name"), page_name)
+        page.set(_tag("style:next-style-name"), page_name)
+        masters.append(page)
+        previous = paragraph_styles.get(heading.get(_tag("text:style-name"))) if heading is not None else None
+        style = deepcopy(previous) if previous is not None else ET.Element(_tag("style:style"))
+        style.attrib.update({
+            _tag("style:name"): prefix + "Heading", _tag("style:family"): "paragraph",
+            _tag("style:master-page-name"): page_name,
+        })
+        if previous is None:
+            for parent in ("TemplateHeading", "Heading_20_1", "Heading1", "Standard"):
+                if parent in known_named:
+                    style.set(_tag("style:parent-style-name"), parent)
+                    break
+            ET.SubElement(style, _tag("style:text-properties"), {
+                _tag("fo:font-weight"): "bold", _tag("fo:font-size"): "16pt",
+            })
+        properties = style.find(_tag("style:paragraph-properties"))
+        if properties is None:
+            properties = ET.SubElement(style, _tag("style:paragraph-properties"))
+        properties.set(_tag("fo:break-before"), "page")
+        properties.set(_tag("fo:keep-with-next"), "always")
+        named.append(style)
+        if heading is None:
+            heading = ET.Element(_tag("text:p"))
+            if prefix == "ProjectTraceability":
+                body.insert(cover_end, heading)
+            else:
+                body.append(heading)
+        heading.tag = _tag("text:p")
+        heading.set(_tag("text:style-name"), prefix + "Heading")
+        _set_paragraph_text(heading, label)
+    return (
+        "ProjectTraceabilityPage", "ProjectIndexPage",
+        continuation.get(_tag("style:name"), ""),
+    )
 
 
 def _set_page_master_footer(root, page, label: str) -> None:
@@ -486,7 +566,7 @@ def _document_footer_titles(
     ]
 
 
-def _add_document_master_pages(root, titles: list[str]) -> None:
+def _add_document_master_pages(root, titles: list[str], *, base_page_name: str) -> None:
     """Crea un estilo de página por documento con su nombre en el pie."""
     if not titles:
         return
@@ -495,37 +575,16 @@ def _add_document_master_pages(root, titles: list[str]) -> None:
         raise ValueError("La plantilla no contiene estilos de página maestros.")
     base = next((
         page for page in masters.findall(_tag("style:master-page"))
-        if page.find(_tag("style:footer")) is not None
-        and any(
-            paragraph.find(".//" + _tag("text:page-number")) is not None
-            for paragraph in page.iter(_tag("text:p"))
-        )
+        if page.get(_tag("style:name")) == base_page_name
     ), None)
     if base is None:
-        raise ValueError("La plantilla no contiene un pie de página numerado.")
+        raise ValueError("No se encontró la página base de los documentos vinculados.")
     for index, title in enumerate(titles, 1):
         name = f"ProjectDocumentPage{index}"
         page = deepcopy(base)
         page.set(_tag("style:name"), name)
         page.set(_tag("style:next-style-name"), name)
-        for footer_name in ("style:footer", "style:footer-first"):
-            footer = page.find(_tag(footer_name))
-            if footer is None:
-                continue
-            paragraph = next((
-                item for item in footer.iter(_tag("text:p"))
-                if item.find(".//" + _tag("text:page-number")) is not None
-            ), None)
-            if paragraph is None:
-                continue
-            page_number = paragraph.find(".//" + _tag("text:page-number"))
-            if page_number is None:
-                continue
-            page_number = deepcopy(page_number)
-            for child in list(paragraph):
-                paragraph.remove(child)
-            paragraph.text = f"{title} - "
-            paragraph.append(page_number)
+        _set_page_master_footer(root, page, title)
         masters.append(page)
 
 
@@ -782,8 +841,10 @@ def write_project_master(
             original.read(library_path) if library_path in names else None,
         )
         template_content = ET.fromstring(original.read("content.xml"))
-        traceability_page = _traceability_master_page(template_content)
-        index_page = _index_master_page(template_content)
+        template_styles = ET.fromstring(original.read("styles.xml"))
+        traceability_page, index_page, document_page = _prepare_master_sections(
+            template_content, template_styles,
+        )
         logo_resource = _logo_resource_name(original.namelist())
         result.writestr("mimetype", _MASTER_MIME, compress_type=ZIP_STORED)
         for name in names:
@@ -791,7 +852,7 @@ def write_project_master(
                 continue
             data = original.read(name)
             if name in {"content.xml", "styles.xml"}:
-                root = ET.fromstring(data)
+                root = template_content if name == "content.xml" else template_styles
                 page_paragraphs = {
                     index for index, paragraph in enumerate(root.iter(_tag("text:p")))
                     if "{{no_pagina}}" in "".join(paragraph.itertext())
@@ -819,7 +880,7 @@ def write_project_master(
                     _set_template_section_footers(
                         root, traceability_page, index_page,
                     )
-                    _add_document_master_pages(root, footer_titles)
+                    _add_document_master_pages(root, footer_titles, base_page_name=document_page)
                 data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
             elif name == "META-INF/manifest.xml":
                 manifest = ET.fromstring(data)

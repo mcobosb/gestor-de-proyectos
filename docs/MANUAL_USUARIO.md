@@ -116,8 +116,10 @@ La carátula de **plantilla.odt** se conserva en el maestro, con los datos del
 proyecto, presupuesto, plazo, fecha y logo incorporados. En **Configuración →
 Plantillas** puedes elegir otra plantilla ODT y un logo JPEG; si dejas las rutas
 vacías, se utilizan los recursos incluidos en el módulo. La plantilla alternativa
-debe conservar los marcadores y la estructura de portada, índice y trazabilidad.
-El índice y la tabla de trazabilidad reflejan los documentos incluidos. El maestro
+debe aportar la carátula, sus marcadores, cabeceras, pies, estilos y formato.
+No necesita contener una tabla de trazabilidad, filas de ejemplo ni un índice:
+la aplicación genera ambos con los documentos incluidos, en páginas propias que
+conservan el diseño de la plantilla sin alterar la carátula. El maestro
 enlaza la memoria, los anejos, el pliego y el presupuesto como subdocumentos, y
 los archivos de planos desde el índice. Las rutas son relativas y se conserva la
 estructura de carpetas al mover la entrega. Al abrir el maestro en LibreOffice,
