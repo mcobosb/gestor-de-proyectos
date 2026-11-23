@@ -62,6 +62,7 @@ from . import (
 from .._shared.budget_sources import TRANSPORT_PREFIX
 from .document import DOCUMENTS, LIBRARY_PATH, load_documents
 from .management_qt import ManagementTab, PreventionTab
+from .facilities_qt import FacilitiesTab
 
 
 class RcdWindowQt(QDialog):
@@ -231,6 +232,8 @@ class RcdWindowQt(QDialog):
         self.review_tabs.addTab(self.management_tab, "Previsiones de gestión y destinos")
         self.prevention_tab = PreventionTab(self)
         self.review_tabs.addTab(self.prevention_tab, "Medidas preventivas")
+        self.facilities_tab = FacilitiesTab(self)
+        self.review_tabs.addTab(self.facilities_tab, "Centros de gestión")
         self.status_label = QLabel()
         layout.addWidget(self.status_label)
         return page

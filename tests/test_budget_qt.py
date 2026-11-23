@@ -806,7 +806,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertIn("DEM", tool.data.sources["surface"])
             self.assertEqual(tool.waste_table.rowCount(), 57)
             self.assertEqual(tool.preview_table.rowCount(), 8)
-            self.assertEqual(tool.review_tabs.count(), 3)
+            self.assertEqual(tool.review_tabs.count(), 4)
             prevention = tool.prevention_tab
             self.assertTrue(prevention.checkboxes["purchasing"].isChecked())
             self.assertFalse(prevention.checkboxes["selective_demolition"].isChecked())
@@ -880,6 +880,82 @@ class BudgetQtWindowTests(unittest.TestCase):
             window.refresh_budget_tree()
             self.assertTrue(tool.demolition_button.isEnabled())
             tool.reject()
+            window.is_dirty = False
+            window.close()
+            self.application.processEvents()
+
+    def test_rcd_facility_catalog_filters_edits_and_saves_project_copies(self) -> None:
+        """Añade y edita centros reutilizables sin perder selecciones al filtrar."""
+        from tools.rcd import RcdState
+        from tools.rcd.facilities_qt import FacilitiesTab, FacilityDialog
+
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            self.addCleanup(QCoreApplication.sendPostedEvents, None, QEvent.Type.DeferredDelete)
+            self.addCleanup(window.deleteLater)
+            window._open_tool("rcd")
+            tool = window._project_windows[-1]
+            panel = tool.facilities_tab
+            self.assertEqual(panel.table.rowCount(), 0)
+            with patch.object(FacilityDialog, "exec", return_value=QDialog.DialogCode.Rejected):
+                panel.add_button.click()
+            self.assertFalse(panel.catalog.path.exists())
+            edits = {
+                "name": "Áridos de prueba", "holder": "Titular de prueba", "address": "Camino 12",
+                "province_access": "Córdoba / Norte", "nima": "0012345678", "authorization": "GRU-PRUEBA / R5",
+            }
+
+            def accept_fixture(dialog):
+                """Rellena la ficha y recorre su validación real antes de aceptar."""
+                for key, value in edits.items():
+                    dialog.fields[key].setText(value)
+                dialog.accept()
+                return dialog.result()
+
+            with patch.object(FacilityDialog, "exec", autospec=True, side_effect=accept_fixture):
+                panel.add_button.click()
+            self.assertEqual(len(panel.catalog.load()), 1)
+            self.assertEqual(len(tool.data.management.facilities), 1)
+            edits.update(name="Centro Beta", province_access="Sevilla / Sur", nima="0098765432")
+            with patch.object(FacilityDialog, "exec", autospec=True, side_effect=accept_fixture):
+                panel.add_button.click()
+            self.assertEqual(len(panel.catalog.load()), 2)
+            panel.search.setText("CORDOBA r5")
+            self.assertEqual(panel.table.rowCount(), 1)
+            self.assertEqual(panel.table.item(0, 1).text(), "Áridos de prueba")
+            panel.table.setCurrentCell(0, 0)
+            edits.update(name="Áridos de prueba", holder="Titular editado", address="Camino 18",
+                         province_access="Córdoba / Acceso nuevo", nima="0012345678",
+                         authorization="GRU-EDITADA / R5")
+            with patch.object(FacilityDialog, "exec", autospec=True, side_effect=accept_fixture):
+                panel.edit_button.click()
+            edited = next(facility for facility in panel.catalog.load() if facility.nima == "0012345678")
+            for key, value in edits.items():
+                self.assertEqual(getattr(edited, key), value)
+            panel.search.setText("No hay coincidencias")
+            self.assertEqual(panel.table.rowCount(), 0)
+            self.assertEqual(len(tool.data.management.facilities), 2)
+            panel.search.clear()
+            beta = next(row for row in range(panel.table.rowCount())
+                        if panel.table.item(row, 1).text() == "Centro Beta")
+            panel.table.item(beta, 0).setCheckState(Qt.CheckState.Unchecked)
+            self.assertEqual(len(tool.data.management.facilities), 1)
+            self.assertEqual(len(panel.catalog.load()), 2)
+            panel.selected_only.setChecked(True)
+            self.assertEqual(panel.table.rowCount(), 1)
+            project = Path(directory) / "centros.json"
+            self.assertTrue(window._write_project_file(project))
+            stored = json.loads(project.read_text(encoding="utf-8"))["rcds"]
+            restored = RcdState.from_dict(stored)
+            self.assertEqual(restored.management.facilities, [edited])
+            self.assertEqual(window.rcd_state["management"]["facilities"][0]["nima"], "0012345678")
+            window.recent_reference_bases_path = Path(directory) / "otro_equipo" / "referencias.json"
+            portable = FacilitiesTab(tool)
+            self.assertEqual(portable.table.rowCount(), 1)
+            self.assertEqual(portable.table.item(0, 1).text(), edited.name)
+            self.assertEqual(portable.entries, {})
             window.is_dirty = False
             window.close()
             self.application.processEvents()

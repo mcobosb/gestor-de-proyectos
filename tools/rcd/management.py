@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from .facilities import WasteFacility, facilities_from_data
+
 if TYPE_CHECKING:
     from . import RcdState
 
@@ -176,6 +178,7 @@ class RcdManagement:
     reuse_destinations: dict[str, str] = field(default_factory=dict)
     destinations: dict[str, dict[str, str]] = field(default_factory=dict)
     prevention: list[str] = field(default_factory=lambda: list(DEFAULT_PREVENTION))
+    facilities: list[WasteFacility] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: object) -> RcdManagement:
@@ -185,6 +188,7 @@ class RcdManagement:
         if not isinstance(data, dict):
             raise ValueError("Las previsiones de gestión RCDs deben ser un objeto JSON.")
         plan = cls()
+        plan.facilities = facilities_from_data(data.get("facilities", []))
         prevention = data.get("prevention", plan.prevention)
         prevention_codes = {key for _title, options in PREVENTION.values() for key in options}
         if (not isinstance(prevention, list)

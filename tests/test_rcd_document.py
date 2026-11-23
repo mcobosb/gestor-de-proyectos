@@ -16,6 +16,7 @@ from tools._shared.budget_sources import RCD_BUDGET_SOURCE
 from tools.rcd import RcdState, detect_waste_items
 from tools.rcd import ler_catalog
 from tools.rcd.management import selected_wastes
+from tools.rcd.facilities import FACILITY_FIELDS, WasteFacility
 from tools.rcd.document import (
     BUDGET_FIELDS, DOCUMENT_FIELDS, LEGACY_PREVENTION_TEXT, LIBRARY_PATH, StudyTable, _pending_lines,
     study_blocks, substitute, write_study,
@@ -200,6 +201,10 @@ class RcdDocumentTests(unittest.TestCase):
             "industrialized", "earth_balance", "purchasing", "selective_demolition", "training",
         ]
         self.state.documentation["prevention"] = "Medida preventiva particular conservada."
+        self.state.management.facilities = [WasteFacility(
+            "Planta seleccionada de prueba", holder="Titular de prueba", address="Camino de prueba 12",
+            province_access="Córdoba / Acceso norte", nima="0012345678", authorization="GRU-PRUEBA / R5",
+        )]
         rows = selected_wastes(self.state, {self.generated.code})
         self.assertEqual([row[0] for row in rows], ["01 04 08", "17 01 01", "17 03 02"])
         self.assertTrue(all(row[3] == "Nivel II" for row in rows))
@@ -212,6 +217,13 @@ class RcdDocumentTests(unittest.TestCase):
                             and block.caption == "Destino previsto de los residuos por código LER")
         self.assertEqual([row[:4] for row in destinations.rows], rows)
         self.assertTrue(all(row[-1] == "Gestor de prueba" for row in destinations.rows))
+        facilities = next(block for block in blocks if isinstance(block, StudyTable)
+                          and block.caption == "Centros de gestión de residuos previstos")
+        self.assertEqual(facilities.headers, list(FACILITY_FIELDS.values()))
+        center = blocks.index(facilities)
+        section = blocks.index((2, "1.9. MEDIDAS DE PREVENCIÓN"))
+        self.assertLess(blocks.index(destinations), center)
+        self.assertLess(center, section)
         with TemporaryDirectory() as folder:
             for extension in ("odt", "pdf"):
                 with self.subTest(extension=extension):
@@ -219,7 +231,21 @@ class RcdDocumentTests(unittest.TestCase):
                     write_study(self.state, "Proyecto", self.settings, target, app=self.app)
                     if extension == "odt":
                         with ZipFile(target) as archive:
-                            text = " ".join(ET.fromstring(archive.read("content.xml")).itertext())
+                            content = ET.fromstring(archive.read("content.xml"))
+                            text = " ".join(content.itertext())
+                        from odt_reports import _tag
+                        table = next(
+                            table for table in content.iter(_tag("table:table"))
+                            if "Planta seleccionada de prueba" in "".join(table.itertext())
+                        )
+                        header = table.find(_tag("table:table-row")).find(_tag("table:table-cell"))
+                        self.assertEqual(header.get(_tag("table:style-name")), "RcdTableCellHeader")
+                        caption = next(
+                            paragraph for paragraph in content.iter(_tag("text:p"))
+                            if "Centros de gestión de residuos previstos" in "".join(paragraph.itertext())
+                        )
+                        body = next(parent for parent in content.iter() if caption in list(parent))
+                        self.assertIs(body[list(body).index(caption) + 1], table)
                     else:
                         text = " ".join(page.extract_text() for page in PdfReader(target).pages)
                     text = " ".join(text.split())
@@ -229,11 +255,24 @@ class RcdDocumentTests(unittest.TestCase):
                                      "Sistemas constructivos industrializados y desmontables",
                                      "Compra ajustada y suministro escalonado",
                                      "Demolición selectiva", "Información a operarios y subcontratas",
-                                     "Medida preventiva particular conservada."):
+                                     "Medida preventiva particular conservada.",
+                                     "Centros de gestión de residuos previstos",
+                                     "Planta seleccionada de prueba", "Titular de prueba", "Camino de prueba 12",
+                                     "Córdoba / Acceso norte", "0012345678", "GRU-PRUEBA / R5"):
                         self.assertIn(expected, text)
                     self.assertNotIn("Acopio protegido en obra", text)
                     for field in ("separation", "reuse", "recovery", "destinations", "prevention"):
                         self.assertNotIn(f"[PENDIENTE: {DOCUMENT_FIELDS[field]}]", text)
+
+    def test_facilities_export_even_without_ler_and_mark_only_missing_data(self):
+        """Mantiene la tabla de centros y los datos incompletos sin inventar autorizaciones."""
+        self.state.selected = {key: False for key in self.state.selected}
+        self.state.management.facilities = [WasteFacility("Centro por concretar")]
+        blocks = study_blocks(self.state, "Proyecto", self.settings, app=self.app)
+        table = next(block for block in blocks if isinstance(block, StudyTable)
+                     and block.caption == "Centros de gestión de residuos previstos")
+        self.assertEqual(table.rows[0][0], "Centro por concretar")
+        self.assertTrue(all(value.startswith("[PENDIENTE:") for value in table.rows[0][1:]))
 
     def test_prevention_uses_correct_reference_and_only_applicable_regional_law(self):
         """Numera los cuatro bloques y no atribuye normativa andaluza a otras ubicaciones."""

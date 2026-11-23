@@ -23,6 +23,7 @@ from tools._shared.document_layout import (
 )
 from . import ler_catalog
 from .management import DESTINATIONS, PREVENTION, SELECTIONS, selected_wastes
+from .facilities import FACILITY_FIELDS
 from collaborative_storage import shared_library_path
 
 if TYPE_CHECKING:
@@ -359,13 +360,13 @@ def study_blocks(
                         rf"\1\n\n## {DESCRIPTION_HEADING}\n\n{DESCRIPTION_MARKER}", source,
                         flags=re.MULTILINE)
     management_fields = {}
-    for field, table in _management_tables(state, excluded_codes).items():
+    for field, field_tables in _management_tables(state, excluded_codes).items():
         name = f"tabla_gestion_{field}"
         source = re.sub(
             r"^[^\r\n{}]*\{\{" + field + r"\}\}[^\r\n{}]*$",
             "{{" + name + "}}", source, flags=re.MULTILINE,
         )
-        tables[name] = [table]
+        tables[name] = field_tables
         management_fields[name] = field
     prevention = _prevention_blocks(state, values["normativa_autonomica"])
     narrative = {"medidas_prevencion": prevention} if prevention else {}
@@ -429,10 +430,10 @@ def _prevention_blocks(state: RcdState, regional_reference: str) -> list[StudyBl
     return blocks
 
 
-def _management_tables(state: RcdState, excluded_codes: set[str]) -> dict[str, StudyTable]:
+def _management_tables(state: RcdState, excluded_codes: set[str]) -> dict[str, list[StudyTable]]:
     """Convierte decisiones explícitas en tablas y conserva avisos para los datos incompletos."""
     plan = state.management
-    result = {}
+    result: dict[str, list[StudyTable]] = {}
     fields = {"segregation": "separation", "reuse": "reuse", "recovery": "recovery"}
     titles = {
         "segregation": "Previsión de segregación",
@@ -467,9 +468,9 @@ def _management_tables(state: RcdState, excluded_codes: set[str]) -> dict[str, S
         headers = (["Operación prevista", "Condiciones"] if section == "segregation"
                    else ["Operación prevista", "Destino inicial"] if section == "reuse"
                    else ["Operación prevista"])
-        result[fields[section]] = StudyTable(
+        result[fields[section]] = [StudyTable(
             titles[section], headers, rows, [3, 2] if len(headers) == 2 else [1],
-        )
+        )]
     rows = []
     for metadata in selected_wastes(state, excluded_codes):
         code = metadata[0]
@@ -486,11 +487,18 @@ def _management_tables(state: RcdState, excluded_codes: set[str]) -> dict[str, S
         )
         rows.append([*metadata, destination, facility])
     if rows:
-        result["destinations"] = StudyTable(
+        result["destinations"] = [StudyTable(
             "Destino previsto de los residuos por código LER",
             ["Código LER", "Residuo", "Tipo", "Nivel", "Destino previsto", "Gestor / instalación"],
             rows, [1.1, 2.2, 1.5, 0.8, 2.4, 2],
-        )
+        )]
+    if plan.facilities:
+        result.setdefault("destinations", []).append(StudyTable(
+            "Centros de gestión de residuos previstos", list(FACILITY_FIELDS.values()),
+            [[getattr(facility, key) or f"[PENDIENTE: {label} de {facility.name}]"
+              for key, label in FACILITY_FIELDS.items()] for facility in plan.facilities],
+            [1.5, 1.3, 1.7, 1.5, 1, 1.7],
+        ))
     return result
 
 
