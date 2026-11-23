@@ -31,6 +31,66 @@ from tools.safety_health.document import (
 class NarrativeLayoutTests(unittest.TestCase):
     """Verifica configuración y plantilla en varios generadores."""
 
+    def test_rcd_prescriptions_and_reference_lists_are_justified(self):
+        """Justifica los dos apartados y sus sublistas sin cambiar los demás."""
+        from report_layout import ReportLayout
+        from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
+
+        blocks = [
+            (2, "2.2. PRESCRIPCIONES DE ALMACENAMIENTO, MANEJO Y GESTIÓN EN OBRA"),
+            (-1, "• ALMACENAMIENTO_PRUEBA " + "Condiciones de almacenamiento y protección. " * 12),
+            (3, "2.2.1. Condiciones particulares"),
+            (-2, "• MANEJO_PRUEBA " + "Se mantendrán las zonas de acopio. " * 12),
+            (2, "2.3. DOCUMENTACIÓN Y TRAZABILIDAD"),
+            (-1, "• CONTROL_DOCUMENTACIÓN Texto de otro apartado."),
+            (2, "2.4. NORMATIVA DE REFERENCIA"),
+            (-1, "• Real Decreto 105/2008, " + "referencia aplicable a la gestión de residuos. " * 12),
+            (1, "3. PRESUPUESTO"),
+            (-1, "• CONTROL_PRESUPUESTO Texto fuera de los apartados solicitados."),
+        ]
+        captured = []
+        render = ReportLayout.paragraph
+
+        def capture(layout, markup, style=None, **kwargs):
+            """Observa los estilos que se utilizan realmente al generar el PDF."""
+            paragraph = render(layout, markup, style, **kwargs)
+            if paragraph.bulletText:
+                captured.append(paragraph)
+            return paragraph
+
+        with TemporaryDirectory() as folder:
+            target = Path(folder) / "listas.pdf"
+            with patch.object(ReportLayout, "paragraph", capture):
+                write_rcd_pdf(blocks, "Proyecto", ReportSettings(), target)
+            self.assertEqual(len(captured), 5)
+            for index, paragraph in enumerate(captured):
+                self.assertEqual(paragraph.style.alignment,
+                                 TA_LEFT if index in (2, 4) else TA_JUSTIFY)
+                self.assertEqual(paragraph.style.leftIndent - paragraph.style.bulletIndent, LIST_INDENT)
+            target = Path(folder) / "listas.odt"
+            write_rcd_odt(blocks, "Proyecto", ReportSettings(), target)
+            with ZipFile(target) as archive:
+                content = ET.fromstring(archive.read("content.xml"))
+                styles = ET.fromstring(archive.read("styles.xml"))
+            declared = {
+                style.get(_tag("style:name")): style
+                for root in (content, styles) for style in root.iter(_tag("style:style"))
+            }
+            paragraphs = [
+                node for node in content.iter(_tag("text:p"))
+                if node.find(_tag("text:tab")) is not None
+                and node.text == "•"
+            ]
+            self.assertEqual(len(paragraphs), 5)
+            for index, paragraph in enumerate(paragraphs):
+                style = declared[paragraph.get(_tag("text:style-name"))]
+                props = style.find(_tag("style:paragraph-properties"))
+                self.assertEqual(props.get(_tag("fo:text-align")),
+                                 "start" if index in (2, 4) else "justify")
+                self.assertEqual(props.get(_tag("fo:text-indent")), f"-{LIST_INDENT}pt")
+                self.assertEqual(len(paragraph.findall(_tag("text:tab"))), 1)
+            self.assertIsNotNone(paragraphs[3].find(_tag("text:a")))
+
     def test_work_summary_justifies_text_and_preserves_hanging_bullets(self):
         """Conserva viñetas pegadas con tabulador sin duplicar la sangría del resumen."""
         from report_layout import ReportLayout
@@ -74,7 +134,7 @@ class NarrativeLayoutTests(unittest.TestCase):
                 target = Path(folder) / f"{kind}.odt"
                 if kind == "rcd":
                     write_rcd_odt(blocks, "Proyecto", ReportSettings(), target)
-                    list_style, text_style = "RcdSummaryBullet1", "RcdBody"
+                    list_style, text_style = "RcdJustifiedBullet1", "RcdBody"
                 else:
                     content = _StudyContent("Seguridad", "Proyecto", "", "EUR", [table])
                     write_safety_odt(SimpleNamespace(report_settings=ReportSettings()), target, content)

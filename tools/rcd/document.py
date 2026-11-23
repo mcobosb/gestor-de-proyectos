@@ -377,6 +377,16 @@ def _table_alignment(table: StudyTable, number: int) -> tuple[tuple[int, ...] | 
     return table.right_columns, ()
 
 
+def _justified_list_section(text: str) -> bool:
+    """Reconoce los apartados aunque se cambie su numeración o sus mayúsculas."""
+    title = re.sub(r"^\d[\d.]*\s+", "", text.strip()).casefold()
+    return title in {
+        "descripción de la actuación",
+        "prescripciones de almacenamiento, manejo y gestión en obra",
+        "normativa de referencia",
+    }
+
+
 def write_study(
     state: RcdState, title: str, settings: ReportSettings, target: Path, *,
     project_pem: float | None = None, app: BudgetApp | None = None,
@@ -417,7 +427,7 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
     for level in sorted({block[0] for block in blocks if isinstance(block, tuple) and block[0] < 0}):
         add_odt_list_style(document, f"RcdBullet{-level}", "RcdBody", -level - 1)
         add_odt_list_style(
-            document, f"RcdSummaryBullet{-level}", "RcdBody", -level - 1, justified=True,
+            document, f"RcdJustifiedBullet{-level}", "RcdBody", -level - 1, justified=True,
         )
     headings = [block for block in blocks if isinstance(block, tuple) and block[0] > 0]
     title_style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
@@ -432,7 +442,7 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
     document.table_of_contents(headings, max_level=2, name="RcdContents")
     heading_index = 0
     main_seen = False
-    in_description = False
+    justified_section_level = 0
     for block in blocks:
         if isinstance(block, StudyTable):
             document.table_caption(block.caption, include_reference=False)
@@ -449,7 +459,10 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
             continue
         level, text = block
         if level > 0:
-            in_description = text == DESCRIPTION_HEADING
+            if _justified_list_section(text):
+                justified_section_level = level
+            elif level <= justified_section_level:
+                justified_section_level = 0
             style = "RcdDocumentStart" if level == 1 and main_seen else f"RcdHeading{level}"
             document.heading(text, level, style=style, bookmark=f"PPTPHeading{heading_index}")
             heading_index += 1
@@ -458,7 +471,7 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
             marker, label = split_list_item(text)
             paragraph = ET.SubElement(document.body, _tag("text:p"), {
                 _tag("text:style-name"): (
-                    f"RcdSummaryBullet{-level}" if in_description else f"RcdBullet{-level}"
+                    f"RcdJustifiedBullet{-level}" if justified_section_level else f"RcdBullet{-level}"
                 ),
             })
             paragraph.text = marker
@@ -500,8 +513,8 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
         level: pdf_list_style(f"RcdBullet{-level}", body, -level - 1)
         for level in sorted({block[0] for block in blocks if isinstance(block, tuple) and block[0] < 0})
     }
-    summary_bullets = {
-        level: pdf_list_style(f"RcdSummaryBullet{-level}", body, -level - 1, justified=True)
+    justified_bullets = {
+        level: pdf_list_style(f"RcdJustifiedBullet{-level}", body, -level - 1, justified=True)
         for level in bullets
     }
     headings = {}
@@ -519,7 +532,7 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
              contents, PageBreak()]
     heading_index = 0
     main_seen = False
-    in_description = False
+    justified_section_level = 0
     for block in blocks:
         if isinstance(block, StudyTable):
             layout.table_caption(story, block.caption, body=body, include_reference=False)
@@ -539,7 +552,10 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
             continue
         level, text = block
         if level > 0:
-            in_description = text == DESCRIPTION_HEADING
+            if _justified_list_section(text):
+                justified_section_level = level
+            elif level <= justified_section_level:
+                justified_section_level = 0
             if level == 1 and main_seen:
                 story.append(PageBreak())
             paragraph = layout.text(text, headings[level])
@@ -549,7 +565,7 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
             story.append(paragraph)
         elif level < 0:
             marker, label = split_list_item(text)
-            style = summary_bullets[level] if in_description else bullets[level]
+            style = justified_bullets[level] if justified_section_level else bullets[level]
             story.append(layout.paragraph(_pdf_law_links(label), style, bulletText=marker))
         else:
             story.append(layout.paragraph(_pdf_law_links(text), body))
