@@ -101,6 +101,34 @@ class RcdDocumentTests(unittest.TestCase):
         self.generated.source = "SS:chapter"
         self.assertFalse(BudgetMainWindow._has_external_tool_chapter(self.app, "safety"))
 
+    def test_external_safety_chapter_requires_exact_title(self):
+        """Solo el nombre completo del capítulo activa la protección de Seguridad y Salud."""
+        from budget_qt_window import BudgetMainWindow
+
+        self.app.chapter_order = ["17#", "SS#"]
+        self.generated.chapter = "SS#"
+        self.generated.source = "manual"
+        for title, expected in (
+            ("SEGURIDAD Y SALUD", True),
+            ("  Seguridad   y salud  ", True),
+            ("Señalización de seguridad", False),
+            ("Salud", False),
+            ("Prevención de riesgos laborales", False),
+            ("Seguridad y salud complementaria", False),
+            ("Instalaciones", False),
+        ):
+            with self.subTest(title=title):
+                self.app.chapter_titles["SS#"] = title
+                self.assertEqual(
+                    BudgetMainWindow._has_external_tool_chapter(self.app, "safety"),
+                    expected,
+                )
+        self.app.chapter_titles["SS#"] = "SEGURIDAD Y SALUD"
+        self.generated.source = "SS:chapter"
+        self.assertFalse(BudgetMainWindow._has_external_tool_chapter(self.app, "safety"))
+        self.app.budget_items.remove(self.generated)
+        self.assertFalse(BudgetMainWindow._has_external_tool_chapter(self.app, "safety"))
+
     def test_missing_and_ambiguous_chapters_remain_pending(self):
         """No inventa capítulos ni sustituye su importe por el modelo o por cero."""
         for app in (None, SimpleNamespace(

@@ -427,10 +427,12 @@ Los umbrales del RD 105/2008 no eximen de la clasificación de la Ley 7/2022.
 El ODS de trabajo
 no es necesario para ejecutar la herramienta y no se incluye en el instalador.
 
-Si un presupuesto BC3 ya incluye capítulos de RCDs o de Seguridad y Salud, su
-herramienta correspondiente queda desactivada para evitar duplicarlos o recalcularlos.
-Se reconocen por el nombre o código del capítulo (residuos, escombros, RCDs,
-seguridad y salud, seguridad e higiene o prevención de riesgos).
+Si un presupuesto BC3 ya incluye partidas en un capítulo externo de RCDs o de
+Seguridad y Salud, se conservan para evitar duplicarlas o recalcularlas. Los
+capítulos de RCDs se reconocen por su nombre o código (residuos, escombros o
+RCDs). Para Seguridad y Salud se exige el nombre completo «Seguridad y Salud»,
+sin distinguir mayúsculas ni espacios adicionales; el código no interviene.
+En ese caso no se crea otro capítulo preventivo ni se genera el estudio.
 Los capítulos generados por este programa conservan el acceso: al abrir la
 herramienta desde su proyecto JSON se cargan los datos guardados sin recalcular
 ni modificar las partidas. Los cambios se aplican al aceptarlos o guardarlos
