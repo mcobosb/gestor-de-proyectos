@@ -6,7 +6,7 @@ from pathlib import Path, PurePosixPath
 import webbrowser
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtGui import QCloseEvent, QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -81,7 +81,11 @@ class ChapterSelectionDialogQt(QDialog):
         self.app = app
         self.on_continue = on_continue
         self.setWindowTitle("Seguridad y salud — capítulos a analizar")
-        self.resize(850, 560)
+        screen = QGuiApplication.primaryScreen()
+        available = screen.availableGeometry() if screen is not None else None
+        width = 850 if available is None else min(850, max(700, available.width() - 48))
+        height = 560 if available is None else min(560, max(360, available.height() - 64))
+        self.resize(width, height)
         layout = QVBoxLayout(self)
         note = QLabel(
             "Marca los capítulos que se analizarán. RCDs y Control de Calidad "
@@ -89,6 +93,11 @@ class ChapterSelectionDialogQt(QDialog):
         )
         note.setWordWrap(True)
         layout.addWidget(note)
+        choices_scroll = QScrollArea()
+        choices_scroll.setWidgetResizable(True)
+        choices_content = QWidget()
+        choices_layout = QVBoxLayout(choices_content)
+        choices_layout.setContentsMargins(0, 0, 0, 0)
         self.choices: dict[str, QCheckBox] = {}
         for chapter in study_chapters(app):
             checkbox = QCheckBox(
@@ -96,8 +105,10 @@ class ChapterSelectionDialogQt(QDialog):
             )
             checkbox.setChecked(chapter.selected)
             self.choices[chapter.code] = checkbox
-            layout.addWidget(checkbox)
-        layout.addStretch()
+            choices_layout.addWidget(checkbox)
+        choices_layout.addStretch()
+        choices_scroll.setWidget(choices_content)
+        layout.addWidget(choices_scroll, 1)
         actions = QHBoxLayout()
         actions.addStretch()
         cancel = QPushButton("Cancelar")

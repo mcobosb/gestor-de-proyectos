@@ -13,7 +13,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import (
     QApplication, QDialog, QDialogButtonBox, QFileDialog, QLabel, QLineEdit, QMainWindow, QMessageBox,
-    QPushButton, QSplashScreen, QSplitter, QTreeView, QVBoxLayout,
+    QPushButton, QScrollArea, QSplashScreen, QSplitter, QTreeView, QVBoxLayout,
 )
 from PySide6.QtCore import QCoreApplication, QEvent, Qt, QTimer, QUrl
 from PySide6.QtTest import QTest
@@ -1313,6 +1313,12 @@ class BudgetQtWindowTests(unittest.TestCase):
                 ProjectItem("P", "01#", "ud", "Obra", 1, 10)
             ]
             dialog = ChapterSelectionDialogQt(window, lambda choices: None)
+            scroll = next(
+                child for child in dialog.findChildren(QScrollArea)
+            )
+            self.assertTrue(scroll.widgetResizable())
+            self.assertLessEqual(dialog.height(), 560)
+            self.assertGreater(dialog.height(), 0)
             self.assertTrue(all(
                 check.isChecked() for check in dialog.choices.values()
             ))
