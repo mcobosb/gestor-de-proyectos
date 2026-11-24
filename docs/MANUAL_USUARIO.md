@@ -26,6 +26,9 @@ En **Consultas → Instalaciones gestoras/productoras de residuos** se abre el
 [buscador público SIRA de la Junta de Andalucía](https://www.juntadeandalucia.es/medioambiente/sira-buscador-publico/)
 en el navegador.
 
+En **Consultas → Bloques CAD** se abre [Bloques AutoCAD](https://www.bloquesautocad.com/)
+en el navegador.
+
 En **Archivo → Configuración → Estilos de documentos** puedes definir la
 tipografía del proyecto: títulos, texto normal, listas, índice, tablas, cabecera,
 pie y firma. Elige la fuente y el tamaño y usa **N**, **C** y **S** para

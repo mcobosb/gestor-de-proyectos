@@ -2170,7 +2170,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
     def test_query_menu_entries_have_visible_search_icons_and_open_their_catalogues(self) -> None:
-        """Conserva los buscadores locales y abre SIRA en el navegador externo."""
+        """Conserva los buscadores locales y abre las consultas web."""
         with (
             tempfile.TemporaryDirectory() as directory,
             patch("budget_qt_window.user_data_directory", return_value=Path(directory)),
@@ -2182,6 +2182,7 @@ class BudgetQtWindowTests(unittest.TestCase):
                 entries = menu.actions()
                 self.assertEqual([entry.text() for entry in entries], [
                     "NTP", "UNE", "LER", "Instalaciones gestoras/productoras de residuos",
+                    "Bloques CAD",
                 ])
                 with patch.object(window, "open_reference_search") as open_catalogue:
                     for entry in entries[:3]:
@@ -2201,6 +2202,19 @@ class BudgetQtWindowTests(unittest.TestCase):
                     entries[3].trigger()
                     error.assert_called_once()
                     self.assertEqual(error.call_args.args[1], "SIRA")
+                cad = entries[4]
+                self.assertTrue(cad.isIconVisibleInMenu())
+                self.assertFalse(cad.icon().isNull())
+                with patch("budget_qt_window.webbrowser.open", return_value=True) as browser:
+                    cad.trigger()
+                    browser.assert_called_once_with("https://www.bloquesautocad.com/")
+                with (
+                    patch("budget_qt_window.webbrowser.open", return_value=False),
+                    patch.object(QMessageBox, "critical") as error,
+                ):
+                    cad.trigger()
+                    error.assert_called_once()
+                    self.assertEqual(error.call_args.args[1], "Bloques CAD")
             finally:
                 window.close()
                 self.application.processEvents()

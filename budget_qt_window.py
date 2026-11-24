@@ -437,6 +437,17 @@ class BudgetMainWindow(QMainWindow):
         sira.setProperty("searchIcon", True)
         sira.setIconVisibleInMenu(True)
         self._references_menu.addAction(sira)
+        cad = self._action(
+            "Bloques CAD",
+            lambda checked=False: self._open_web_page(
+                "https://www.bloquesautocad.com/",
+                "Bloques CAD", "Referencia abierta en el navegador.",
+            ),
+        )
+        cad.setIcon(icon)
+        cad.setProperty("searchIcon", True)
+        cad.setIconVisibleInMenu(True)
+        self._references_menu.addAction(cad)
 
         self._collaboration_menu = collaboration_menu = QMenu("Colaboración", menu)
         menu.addMenu(collaboration_menu)
