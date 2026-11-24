@@ -440,6 +440,27 @@ class RcdReportTests(unittest.TestCase):
         text = " ".join(block[1] for block in blocks if isinstance(block, tuple))
         self.assertIn("Decreto 73/2012", text)
 
+    def test_complete_study_has_reference_normative_without_pending_markers(self):
+        from tools.rcd.document import study_blocks
+
+        blocks = study_blocks(example_state(), "Proyecto", ReportSettings())
+        text = " ".join(block[1] for block in blocks if isinstance(block, tuple))
+        for reference in (
+            "Ley 7/2022",
+            "Real Decreto 105/2008",
+            "Real Decreto 553/2020",
+            "Real Decreto 646/2020",
+            "Decisión 2000/532/CE",
+            "Real Decreto 180/2015",
+            "Real Decreto 110/2015",
+            "Real Decreto 1055/2022",
+            "Real Decreto 9/2005",
+            "Ley 21/2013",
+        ):
+            self.assertIn(reference, text)
+        normative = text[text.find("2.4. NORMATIVA DE REFERENCIA"):]
+        self.assertNotIn("PENDIENTE", normative)
+
 
 class RcdWindowTests(unittest.TestCase):
     def setUp(self):

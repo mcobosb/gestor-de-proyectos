@@ -40,11 +40,21 @@ DESCRIPTION_MARKER = "{{descripcion_actuacion}}"
 COMPACT_TABLE_WIDTH = 0.80
 LAW_URLS = {
     "Ley 7/2022": "https://www.boe.es/eli/es/l/2022/04/08/7/con",
+    "Ley 31/1995": "https://www.boe.es/eli/es/l/1995/11/08/31/con",
+    "Ley 21/2013": "https://www.boe.es/eli/es/l/2013/12/09/21/con",
+    "Ley 37/2003": "https://www.boe.es/eli/es/l/2003/11/17/37/con",
     "Real Decreto 105/2008": "https://www.boe.es/eli/es/rd/2008/02/01/105/con",
     "Real Decreto 553/2020": "https://www.boe.es/eli/es/rd/2020/06/02/553/con",
     "Real Decreto 646/2020": "https://www.boe.es/eli/es/rd/2020/07/07/646/con",
     "Real Decreto 396/2006": "https://www.boe.es/eli/es/rd/2006/03/31/396/con",
     "Real Decreto 108/1991": "https://www.boe.es/eli/es/rd/1991/02/01/108/con",
+    "Real Decreto 180/2015": "https://www.boe.es/eli/es/rd/2015/02/17/180/con",
+    "Real Decreto 110/2015": "https://www.boe.es/eli/es/rd/2015/02/20/110/con",
+    "Real Decreto 1055/2022": "https://www.boe.es/eli/es/rd/2022/12/27/1055/con",
+    "Real Decreto 9/2005": "https://www.boe.es/eli/es/rd/2005/01/14/9/con",
+    "Real Decreto 1627/1997": "https://www.boe.es/eli/es/rd/1997/10/24/1627/con",
+    "Real Decreto 486/1997": "https://www.boe.es/eli/es/rd/1997/04/14/486/con",
+    "Real Decreto 1432/2008": "https://www.boe.es/eli/es/rd/2008/08/29/1432/con",
     "Orden APM/1007/2017": "https://www.boe.es/eli/es/o/2017/10/10/apm1007/con",
     "Decisión 2000/532/CE": "https://eur-lex.europa.eu/eli/dec/2000/532/oj?locale=es",
 }
@@ -189,6 +199,11 @@ def study_variables(state: RcdState, title: str, settings: ReportSettings) -> di
         or f"[PENDIENTE: {label}]"
         for key, label in DOCUMENT_FIELDS.items()
     })
+    if values["regional"].startswith("[PENDIENTE:"):
+        values["regional"] = (
+            "Se aplicarán las disposiciones autonómicas y las ordenanzas municipales "
+            "vigentes en el emplazamiento, junto con los condicionados de licencia."
+        )
     values["nota_modelo"] = ""
     values["metodo_estimacion"] = MEASURED_NOTE if state.demolition else (
         "Se aplica el modelo estimativo revisable de superficie afectada, coeficiente de "
@@ -231,12 +246,14 @@ def substitute(source: str, values: dict[str, str]) -> str:
 
 
 def _pending_lines(source: str, values: dict[str, str]) -> str:
-    """Deja solo el marcador pendiente, sin eliminar texto de campos cumplimentados."""
+    """Elimina líneas de datos pendientes y conserva solo los pendientes económicos explícitos."""
     def replacement(match: re.Match[str]) -> str:
-        """Retira el prefijo únicamente en la misma línea del campo sin completar."""
+        """Retira de las líneas documentales los marcadores sin dato real."""
         key = match[1].strip()
-        if (key in DOCUMENT_FIELDS or key in BUDGET_FIELDS) and values[key].startswith("[PENDIENTE:"):
-            return "{{" + key + "}}" + ("" if key in BUDGET_FIELDS else match[2])
+        if key in DOCUMENT_FIELDS and values[key].startswith("[PENDIENTE:"):
+            return ""
+        if key in BUDGET_FIELDS and values[key].startswith("[PENDIENTE:"):
+            return "{{" + key + "}}" + match[2]
         return match[0]
 
     return re.sub(r"(?m)^[^\r\n{}]*\{\{([^{}\r\n]+)\}\}([^\r\n{}]*)", replacement, source)
