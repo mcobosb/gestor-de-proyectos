@@ -1461,6 +1461,23 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertEqual(check.checkState(), Qt.CheckState.Unchecked)
             code = check.data(Qt.ItemDataRole.UserRole)
             check.setCheckState(Qt.CheckState.Checked)
+            tool.drawings_format.setCurrentText("A3")
+            self.assertEqual(tool.drawings_table.rowCount(), 12)
+            self.assertTrue(window.safety_health_state["drawings"]["selected"][code])
+            self.assertTrue(all(
+                tool.drawings_table.item(index, 0).data(Qt.ItemDataRole.UserRole).startswith("A3-")
+                or tool.drawings_table.item(index, 0).data(Qt.ItemDataRole.UserRole) == code
+                for index in range(tool.drawings_table.rowCount())
+            ))
+            tool.drawings_format.setCurrentText("A4")
+            custom_row = next(
+                index for index in range(tool.drawings_table.rowCount())
+                if tool.drawings_table.item(index, 0).data(Qt.ItemDataRole.UserRole) == code
+            )
+            self.assertEqual(
+                tool.drawings_table.item(custom_row, 0).checkState(),
+                Qt.CheckState.Checked,
+            )
             reopened = SafetyHealthWindowQt(window)
             row = next(
                 row for row in range(reopened.drawings_table.rowCount())

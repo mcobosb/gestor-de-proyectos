@@ -46,6 +46,17 @@ SHEETS = (
     DrawingSheet("SEN10B", "Señales de advertencia e información", "FSS_SEÑ_10b_v01_20261124.svg"),
     DrawingSheet("SEN11", "Dúmper y carretilla portapaneles", "FSS_SEÑ_11_v01_20261124.svg"),
     DrawingSheet("ZAN13", "Protecciones en zanjas, huecos y aberturas", "FSS_ZAN_13_v01_20261124.svg"),
+    DrawingSheet("A3-AUX09", "Elementos auxiliares de izado", "FSS_AUX_09_20261124.svg", paper="A3"),
+    DrawingSheet("A3-AUX10", "Elementos auxiliares de seguridad", "FSS_AUX_10_20261124.svg", paper="A3"),
+    DrawingSheet("A3-CER11", "Cerramiento perimetral", "FSS_CER_11_20261124.svg", paper="A3"),
+    DrawingSheet("A3-COD05", "Código de señales de maniobra", "FSS_COD_05_20261124.svg", paper="A3"),
+    DrawingSheet("A3-ELE08", "Instalación eléctrica provisional", "FSS_ELE_08_20261124.svg", paper="A3"),
+    DrawingSheet("A3-EME06", "Teléfonos de emergencia", "FSS_EME_06_20261124.svg", paper="A3"),
+    DrawingSheet("A3-EPI07", "Equipos de protección individual", "FSS_EPI_07_20261124.svg", paper="A3"),
+    DrawingSheet("A3-SEN01", "Salvamento, evacuación y extinción", "FSS_SEÑ_01_20261124.svg", paper="A3"),
+    DrawingSheet("A3-SEN02", "Señales de peligro y riesgos eléctricos", "FSS_SEÑ_02_20261124.svg", paper="A3"),
+    DrawingSheet("A3-SEN03", "Señales de obligación", "FSS_SEÑ_03_20261124.svg", paper="A3"),
+    DrawingSheet("A3-SEN04", "Señales de prohibición", "FSS_SEÑ_04_20261124.svg", paper="A3"),
 )
 
 
@@ -414,11 +425,13 @@ def render_drawings(app, state: dict) -> list[bytes]:
         raise ValueError(
             "Faltan fichas seleccionadas en la biblioteca personal: " + ", ".join(missing)
         )
-    sheets = [sheet for sheet in catalog if selection["selected"].get(sheet.code, False)]
+    sheets = [
+        sheet for sheet in catalog
+        if selection["selected"].get(sheet.code, False)
+        and (sheet.paper == selection["paper"] or sheet.path is not None)
+    ]
     if not sheets:
         return []
-    if selection["paper"] == "A4" and any(sheet.paper == "A3" for sheet in sheets):
-        raise ValueError("Los planos A3 seleccionados requieren el formato A3; desmárcalos o cambia el formato.")
     directory = app.report_settings.drawing_title_block_path.strip()
     if not directory:
         raise ValueError("Configura la carpeta de cajetines de planos en los ajustes del proyecto.")

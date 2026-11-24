@@ -128,6 +128,22 @@ class SafetyDrawingsTests(unittest.TestCase):
                 {f"{sheet.paper}/{sheet.filename}" for sheet in SHEETS},
             )
 
+    def test_packaged_a3_sheets_have_no_outer_frame(self):
+        """Conserva las fichas A3 sin su contorno rectangular exterior."""
+        outer_frame = "M 386.676,650.105 V 3052.91 H 1976.99 V 650.105 H 386.676"
+        with ZipFile(LIBRARY) as archive:
+            a3_sheets = [sheet for sheet in SHEETS if sheet.paper == "A3"]
+            self.assertEqual(len(a3_sheets), 11)
+            for sheet in a3_sheets:
+                root = ET.fromstring(archive.read(f"A3/{sheet.filename}"))
+                self.assertFalse(
+                    any(
+                        element.tag.endswith("}path") and element.get("d") == outer_frame
+                        for element in root.iter()
+                    ),
+                    sheet.filename,
+                )
+
     def test_packaged_a4_paints_contrast_with_white_paper(self):
         with ZipFile(LIBRARY) as archive:
             for sheet in SHEETS:
@@ -175,8 +191,10 @@ class SafetyDrawingsTests(unittest.TestCase):
                 self.assertGreater(pixel(paired, 250, 145).blue(), 200)
                 self.assertGreater(pixel(native, 20, 145).green(), 100)
                 self.assertGreater(pixel(native, 300, 145).green(), 100)
-                with self.assertRaisesRegex(ValueError, "requieren el formato A3"):
-                    render_drawings(app, {"paper": "A4", "selected": selected})
+                self.assertEqual(
+                    len(render_drawings(app, {"paper": "A4", "selected": selected})),
+                    2,
+                )
 
     def test_title_block_updates_nested_fields_without_modifying_original(self):
         with TemporaryDirectory() as directory:

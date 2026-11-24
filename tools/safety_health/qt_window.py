@@ -372,8 +372,8 @@ class SafetyHealthWindowQt(QDialog):
         page = QWidget()
         layout = QVBoxLayout(page)
         note = QLabel(
-            "Selecciona las fichas que correspondan a la obra tras su revisión técnica. "
-            "A4 incluye una ficha por plano; A3 incluye hasta dos fichas A4 o un plano A3. "
+            "Selecciona las fichas del formato elegido que correspondan a la obra tras su revisión técnica. "
+            "Las fichas personales también están disponibles en ambos formatos. "
             "Se utiliza el cajetín configurado para el proyecto. Revisa la legibilidad "
             "y el contenido antes de utilizar los planos."
         )
@@ -417,7 +417,7 @@ class SafetyHealthWindowQt(QDialog):
         layout.addWidget(splitter, 1)
         self._populate_drawings(saved)
         self.pages.addTab(page, "Planos")
-        self.drawings_format.currentTextChanged.connect(self._save_drawings)
+        self.drawings_format.currentTextChanged.connect(self._drawings_format_changed)
         self.drawings_table.itemChanged.connect(self._save_drawings)
         self.drawings_table.itemSelectionChanged.connect(self._preview_drawing)
         self.pages.currentChanged.connect(self._drawings_page_changed)
@@ -426,8 +426,12 @@ class SafetyHealthWindowQt(QDialog):
         """Añade también referencias guardadas a fichas que ya no están disponibles."""
         self._drawing_sheets = {sheet.code: sheet for sheet in available_sheets()}
         selected = saved["selected"] if saved else {}
-        rows = [(sheet.code, f"{sheet.title} (A3)" if sheet.paper == "A3" else sheet.title)
-                for sheet in self._drawing_sheets.values()]
+        paper = self.drawings_format.currentText()
+        rows = [
+            (sheet.code, sheet.title)
+            for sheet in self._drawing_sheets.values()
+            if sheet.paper == paper or sheet.path is not None
+        ]
         rows.extend(
             (code, f"Ficha no disponible: {code}")
             for code in selected if code not in self._drawing_sheets
@@ -492,17 +496,26 @@ class SafetyHealthWindowQt(QDialog):
         if index == 1 and "drawings" not in self.app.safety_health_state:
             self._save_drawings()
 
+    def _drawings_format_changed(self, *_args) -> None:
+        """Cambia el catálogo visible sin perder las decisiones del otro formato."""
+        saved = restore_drawings(self.app.safety_health_state.get("drawings"))
+        self._populate_drawings(saved)
+        self._save_drawings()
+
     def _save_drawings(self, *_args) -> None:
         """Guarda el formato y todas las decisiones explícitas del usuario."""
         self.commit_basic_state()
         state = dict(self.app.safety_health_state)
+        saved = restore_drawings(state.get("drawings"))
+        selected = dict(saved["selected"]) if saved else {}
+        selected.update({
+            str(self.drawings_table.item(row, 0).data(Qt.ItemDataRole.UserRole)):
+            self.drawings_table.item(row, 0).checkState() == Qt.CheckState.Checked
+            for row in range(self.drawings_table.rowCount())
+        })
         state["drawings"] = restore_drawings({
             "paper": self.drawings_format.currentText(),
-            "selected": {
-                str(self.drawings_table.item(row, 0).data(Qt.ItemDataRole.UserRole)):
-                self.drawings_table.item(row, 0).checkState() == Qt.CheckState.Checked
-                for row in range(self.drawings_table.rowCount())
-            },
+            "selected": selected,
         })
         self.app.safety_health_state = state
         self.app._mark_dirty()
