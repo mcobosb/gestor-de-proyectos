@@ -69,6 +69,7 @@ def item_from_data(data: dict) -> ProjectItem:
         chapter=str(data["chapter"]),
         unit=str(data.get("unit", "")),
         summary=str(data.get("summary", "")),
+        subchapter=str(data.get("subchapter", "")),
         measurement=float(data.get("measurement", 0.0)),
         unit_price=float(data.get("unit_price", 0.0)),
         round_import_total=round_import_total,
@@ -164,6 +165,7 @@ def _item_payload(item: ProjectItem) -> dict:
         "storage_id": item.storage_id,
         "code": item.code,
         "chapter": item.chapter,
+        "subchapter": item.subchapter,
         "unit": item.unit,
         "summary": item.summary,
         "measurement": item.measurement,
@@ -268,6 +270,17 @@ def decode_project_payload(
         if not isinstance(entry, dict):
             raise ValueError("Hay una partida con datos no válidos.")
         items.append(item_from_data(entry))
+    if budget_dataset is not None:
+        hierarchy = {
+            item.code: (item.chapter, item.subchapter)
+            for item in budget_dataset.to_project_items()
+        }
+        for item in items:
+            if item.subchapter:
+                continue
+            origin = hierarchy.get(item.code)
+            if origin is not None:
+                item.chapter, item.subchapter = origin
     for item in items:
         item.set_indirect_costs(settings.indirect_costs)
     storage_ids = [item.storage_id for item in items]

@@ -332,6 +332,75 @@ class MeasurementLineTests(unittest.TestCase):
 
 
 class BudgetItemsFromBc3Tests(unittest.TestCase):
+    def test_legacy_project_payload_inherits_subchapter_from_bc3(self):
+        """Reconstruye subcapítulos ausentes en proyectos guardados antes de esta versión."""
+        from budget_project import decode_project_payload
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "nested.bc3"
+            path.write_text(
+                "~C|01##||Presupuesto|40||0|\n"
+                "~C|01#||Capítulo raíz|40||0|\n"
+                "~C|01.1#||Subcapítulo uno|20||0|\n"
+                "~C|P1|m|Partida uno|10||0|\n"
+                "~D|01##|01#\\1\\1\\|\n"
+                "~D|01#|01.1#\\1\\1\\|\n"
+                "~D|01.1#|P1\\1\\1\\|\n",
+                encoding="cp1252",
+            )
+            dataset = Bc3Dataset(path)
+            payload = {
+                "title": "Proyecto",
+                "source_budget_bc3": str(path),
+                "chapters": {"order": ["01#"], "titles": {"01#": "Capítulo raíz"}},
+                "items": [{
+                    "storage_id": "0123456789abcdef0123456789abcdef",
+                    "code": "P1",
+                    "chapter": "01#",
+                    "unit": "m",
+                    "summary": "Partida uno",
+                    "measurement": 1,
+                    "unit_price": 10,
+                }],
+            }
+            document = decode_project_payload(
+                payload,
+                Path(directory) / "proyecto.json",
+                ReportSettings(),
+                budget_dataset=dataset,
+                source_budget_path=path,
+            )
+            self.assertEqual(document.items[0].subchapter, "01.1#")
+
+    def test_nested_chapters_are_integrated_into_the_root_chapter(self):
+        """Integra recursivamente las partidas de subcapítulos en el capítulo raíz."""
+        from budget_core import Bc3Dataset
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "nested.bc3"
+            path.write_text(
+                "~C|01##||Presupuesto|40||0|\n"
+                "~C|01#||Capítulo raíz|40||0|\n"
+                "~C|01.1#||Subcapítulo uno|20||0|\n"
+                "~C|01.2#||Subcapítulo dos|20||0|\n"
+                "~C|P1|m|Partida uno|10||0|\n"
+                "~C|P2|m|Partida dos|10||0|\n"
+                "~D|01##|01#\\1\\1\\|\n"
+                "~D|01#|01.1#\\1\\1\\01.2#\\1\\1\\|\n"
+                "~D|01.1#|P1\\1\\1\\|\n"
+                "~D|01.2#|P2\\1\\1\\|\n",
+                encoding="cp1252",
+            )
+            dataset = Bc3Dataset(path)
+            items = dataset.to_project_items()
+            self.assertEqual(dataset.root_codes, ["01#"])
+            self.assertEqual([item.code for item in items], ["P1", "P2"])
+            self.assertEqual({item.chapter for item in items}, {"01#"})
+            self.assertEqual(
+                [(item.code, item.subchapter) for item in items],
+                [("P1", "01.1#"), ("P2", "01.2#")],
+            )
+
     def test_bc3_detail_lines_reproduce_declared_measurement(self):
         """Verify bc3 detail lines reproduce declared measurement."""
         dataset = Bc3Dataset(BUDGET_PATH)

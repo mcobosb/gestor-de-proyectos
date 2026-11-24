@@ -251,6 +251,7 @@ class ProjectItem:
     indirect_costs: float = 0.0
     round_import_total: bool = False
     storage_id: str = field(default_factory=lambda: uuid4().hex)
+    subchapter: str = ""
 
     def set_indirect_costs(self, percentage: float, direct_price: float | None = None) -> None:
         """Aplica el recargo sin perder el precio directo ni acumular porcentajes."""
@@ -473,7 +474,7 @@ class Bc3Dataset:
         """Convierte las partidas de los capítulos raíz en elementos del presupuesto."""
         items: list[ProjectItem] = []
 
-        def add_chapter(chapter: str) -> None:
+        def add_chapter(chapter: str, root_chapter: str, subchapter: str = "") -> None:
             """Recorre un capítulo y añade sus partidas presupuestables al resultado."""
             concept = self.concepts.get(chapter)
             if concept is None:
@@ -483,7 +484,7 @@ class Bc3Dataset:
                 if child is None:
                     continue
                 if is_chapter_code(code):
-                    add_chapter(code)
+                    add_chapter(code, root_chapter, code)
                     continue
                 if child.ctype != "0" or not child.summary:
                     continue
@@ -491,7 +492,7 @@ class Bc3Dataset:
                 items.append(
                     ProjectItem(
                         code=code,
-                        chapter=chapter,
+                        chapter=root_chapter,
                         unit=child.unit,
                         summary=child.summary.upper(),
                         measurement=measured.total if measured else decomposition_quantity,
@@ -502,11 +503,12 @@ class Bc3Dataset:
                         measurement_detail=measured.detail if measured else "",
                         measurement_lines=parse_measurement_lines(measured.detail if measured else ""),
                         decomposition=list(child.children),
+                        subchapter=subchapter,
                     )
                 )
 
         for chapter in self.root_codes:
-            add_chapter(chapter)
+            add_chapter(chapter, chapter)
         return items
 
     def calculate_rendimiento(self, code: str) -> float:

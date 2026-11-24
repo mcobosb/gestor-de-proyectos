@@ -24,6 +24,7 @@ class ItemEditor(QDialog):
         layout = QVBoxLayout(self)
         form = QFormLayout()
         self.chapter = QLineEdit(item.chapter if item else (chapters[-1] if chapters else "01#"))
+        self.subchapter = QLineEdit(item.subchapter if item else "")
         self.code = QLineEdit(item.code if item else "")
         self.unit = QLineEdit(item.unit if item else "ud")
         self.summary = QLineEdit(item.summary if item else "")
@@ -41,6 +42,7 @@ class ItemEditor(QDialog):
         self.rendimiento.setValue(item.rendimiento if item else 0.0)
         for label, widget in (
             ("Capítulo", self.chapter),
+            ("Subcapítulo", self.subchapter),
             ("Código", self.code),
             ("Unidad", self.unit),
             ("Resumen", self.summary),
@@ -59,6 +61,7 @@ class ItemEditor(QDialog):
         """Devuelve los valores normalizados del formulario."""
         return {
             "chapter": self.chapter.text().strip(),
+            "subchapter": self.subchapter.text().strip(),
             "code": self.code.text().strip(),
             "unit": self.unit.text().strip(),
             "summary": self.summary.text().strip(),

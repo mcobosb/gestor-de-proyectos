@@ -1120,6 +1120,7 @@ class BudgetMainWindow(QMainWindow):
                 item = self._build_item_from_reference(base, child_code)
                 if item is not None:
                     item.chapter = code
+                    item.subchapter = "" if chapter == code else chapter
                     item.measurement = 1.0
                     self._insert_item(item)
                     added += 1
@@ -1141,6 +1142,7 @@ class BudgetMainWindow(QMainWindow):
             self.budget_refreshed.emit()
             return
         chapter_items: dict[str, QTreeWidgetItem] = {}
+        subchapter_items: dict[str, dict[str, QTreeWidgetItem]] = {}
         total = 0.0
         for chapter in self.chapter_order:
             branch = QTreeWidgetItem((
@@ -1155,6 +1157,7 @@ class BudgetMainWindow(QMainWindow):
             branch.setExpanded(True)
             self.budget_tree.addTopLevelItem(branch)
             chapter_items[chapter] = branch
+            subchapter_items[chapter] = {}
         for index, item in enumerate(self.budget_items):
             self._ensure_chapter(item.chapter)
             if item.chapter not in chapter_items:
@@ -1182,7 +1185,29 @@ class BudgetMainWindow(QMainWindow):
             matches = not term or term in own_text or bool(resource_matches)
             if not matches:
                 continue
-            row = QTreeWidgetItem(chapter_items[item.chapter], (
+            parent = chapter_items[item.chapter]
+            if item.subchapter:
+                subbranch = subchapter_items[item.chapter].get(item.subchapter)
+                if subbranch is None:
+                    subbranch = QTreeWidgetItem((
+                        format_chapter_code(item.subchapter),
+                        CONCEPT_TYPES["chapter"],
+                        self.chapter_titles.get(item.subchapter, item.subchapter),
+                        "",
+                        self._format_currency(sum(
+                            candidate.import_total
+                            for candidate in self.budget_items
+                            if candidate.chapter == item.chapter
+                            and candidate.subchapter == item.subchapter
+                        )),
+                    ))
+                    subbranch.setData(0, ROW_KIND, "subchapter")
+                    subbranch.setData(0, ROW_DATA, item.subchapter)
+                    subbranch.setExpanded(True)
+                    parent.addChild(subbranch)
+                    subchapter_items[item.chapter][item.subchapter] = subbranch
+                parent = subbranch
+            row = QTreeWidgetItem(parent, (
                 item.code,
                 CONCEPT_TYPES[self._budget_concept_type(item)],
                 item.summary,
@@ -1299,6 +1324,10 @@ class BudgetMainWindow(QMainWindow):
             self.selected_chapter = str(data)
             self.selected_budget_index = None
             self._show_item_details(None)
+        elif kind == "subchapter":
+            self.selected_chapter = None
+            self.selected_budget_index = None
+            self._show_item_details(None)
         elif kind in {"item", "resource"}:
             self.selected_chapter = None
             self.selected_budget_index = int(data)
@@ -1395,6 +1424,7 @@ class BudgetMainWindow(QMainWindow):
             unit_price=float(values["price"]),
             rendimiento=float(values["rendimiento"]),
             source="manual",
+            subchapter=str(values["subchapter"]),
         )
         self._insert_item(item)
         self._mark_dirty()
@@ -1446,6 +1476,7 @@ class BudgetMainWindow(QMainWindow):
             return
         item.chapter = str(values["chapter"])
         self._ensure_chapter(item.chapter)
+        item.subchapter = str(values["subchapter"])
         item.code = str(values["code"])
         item.unit = str(values["unit"])
         item.summary = str(values["summary"])
