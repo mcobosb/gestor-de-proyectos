@@ -572,6 +572,7 @@ class SettingsDialog(QDialog):
             initial = str(Path(initial).parent)
         path = QFileDialog.getExistingDirectory(
             self, "Selecciona la carpeta de cajetines A4 y A3", initial,
+            QFileDialog.Option.DontUseNativeDialog,
         )
         if path:
             self.drawing_title_block_path.setText(path)

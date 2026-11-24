@@ -12,7 +12,8 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import (
-    QApplication, QDialog, QDialogButtonBox, QFileDialog, QLabel, QLineEdit, QMainWindow, QMessageBox,
+    QApplication, QDialog, QDialogButtonBox, QFileDialog, QFileSystemModel, QLabel,
+    QLineEdit, QMainWindow, QMessageBox,
     QPushButton, QScrollArea, QSplashScreen, QSplitter, QTreeView, QVBoxLayout,
 )
 from PySide6.QtCore import QCoreApplication, QEvent, Qt, QTimer, QUrl
@@ -335,6 +336,47 @@ class BudgetQtWindowTests(unittest.TestCase):
                 self.assertIn(expected, labels)
             window.close()
             self.application.processEvents()
+
+    def test_title_block_folder_picker_shows_files_and_selects_folder(self) -> None:
+        """El selector muestra los SVG sin convertir la selección en un archivo."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            self.addCleanup(window.close)
+            settings = SettingsDialog(window, ReportSettings(), "Proyecto", "es", lambda language: True)
+            self.addCleanup(settings.close)
+            svg = Path(directory) / "cajetin_A4.svg"
+            svg.write_text("<svg/>", encoding="utf-8")
+            settings.drawing_title_block_path.setText(str(svg))
+            visible_files = []
+            attempts = 0
+
+            def inspect_picker() -> None:
+                """Espera la carga del modelo y acepta la carpeta si se muestra el SVG."""
+                nonlocal attempts
+                picker = self.application.activeModalWidget()
+                if not isinstance(picker, QFileDialog):
+                    return
+                model = picker.findChild(QFileSystemModel)
+                if model is not None:
+                    root = model.index(directory)
+                    visible_files[:] = [
+                        model.fileName(model.index(row, 0, root))
+                        for row in range(model.rowCount(root))
+                    ]
+                attempts += 1
+                if svg.name in visible_files:
+                    picker.accept()
+                elif attempts < 100:
+                    QTimer.singleShot(50, inspect_picker)
+                else:
+                    picker.reject()
+
+            QTimer.singleShot(50, inspect_picker)
+            settings._select_drawing_title_block()
+            self.assertIn(svg.name, visible_files)
+            self.assertEqual(Path(settings.drawing_title_block_path.text()), Path(directory))
 
     def test_settings_dialog_exposes_every_tab_and_preserves_report_fields(self) -> None:
         """Configura informes, idioma, municipios y CPV en una sola ventana."""
