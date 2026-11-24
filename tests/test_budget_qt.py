@@ -926,6 +926,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             tool = window._project_windows[-1]
             panel = tool.facilities_tab
             self.assertEqual(panel.table.rowCount(), 0)
+            self.assertEqual(panel.table.horizontalHeaderItem(4).text(), "Códigos LER")
             with patch.object(FacilityDialog, "exec", return_value=QDialog.DialogCode.Rejected):
                 panel.add_button.click()
             self.assertFalse(panel.catalog.path.exists())
@@ -952,6 +953,10 @@ class BudgetQtWindowTests(unittest.TestCase):
             panel.search.setText("CORDOBA r5")
             self.assertEqual(panel.table.rowCount(), 1)
             self.assertEqual(panel.table.item(0, 1).text(), "Áridos de prueba")
+            self.assertEqual(
+                panel.table.item(0, 1).toolTip(),
+                "Áridos de prueba",
+            )
             panel.table.setCurrentCell(0, 0)
             edits.update(name="Áridos de prueba", holder="Titular editado", address="Camino 18",
                          province_access="Córdoba / Acceso nuevo", nima="0012345678",

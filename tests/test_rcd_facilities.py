@@ -12,6 +12,37 @@ from tools.rcd.facilities import FacilityCatalog, WasteFacility
 class FacilityCatalogTests(unittest.TestCase):
     """Comprueba altas, ediciones y protección de los datos de otros proyectos."""
 
+    def test_import_csv_coordinates_and_distance(self):
+        """Importa una fila CSV, conserva NIMA y calcula distancias WGS84."""
+        from tools.rcd.facilities import (
+            FacilityCatalog, haversine_km, parse_utm_coordinates,
+        )
+
+        point = parse_utm_coordinates(
+            "ETRS89 / UTM 30N (EPSG:25830): E=576169.61 m, N=4137857.10 m"
+        )
+        self.assertIsNotNone(point)
+        self.assertAlmostEqual(point[0], 37.38434, places=3)
+        self.assertAlmostEqual(point[1], -2.13959, places=3)
+        self.assertAlmostEqual(haversine_km(0, 0, 0, 1), 111.195, places=2)
+        with TemporaryDirectory() as directory:
+            csv_path = Path(directory) / "centros.csv"
+            csv_path.write_text(
+                "\ufeffidInstalacion;denominacionEmpresa;denominacionInstalacion;nima;"
+                "numInscripcion;codLer;tiposOperacion;operacionesPorLER;provincia;"
+                "municipio;telefono;email;urlDetalle;erroresDetalle;coordenadas\n"
+                "2;Empresa;Instalacion;0400000003;AN000019;170204,170301;"
+                "R12,R1201;{};Almería;Albox;;;;;"
+                "ETRS89 / UTM 30N (EPSG:25830): E=576169.61 m, N=4137857.10 m\n",
+                encoding="utf-8",
+            )
+            catalog = FacilityCatalog(Path(directory) / "centros.sqlite3")
+            self.assertEqual(catalog.import_csv(csv_path, replace=True), 1)
+            facility = catalog.load()[0]
+            self.assertEqual(facility.nima, "0400000003")
+            self.assertEqual(facility.ler_codes, "170204, 170301")
+            self.assertEqual(facility.municipality, "Albox")
+
     def test_catalog_grows_and_project_snapshots_remain_independent(self):
         """Reutiliza el catálogo sin alterar copias de proyectos ya guardados."""
         with TemporaryDirectory() as directory:
