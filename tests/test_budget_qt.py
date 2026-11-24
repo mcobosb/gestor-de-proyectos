@@ -1673,6 +1673,72 @@ class BudgetQtWindowTests(unittest.TestCase):
                 window.close()
                 self.application.processEvents()
 
+    def test_tool_menu_entries_keep_related_visible_icons(self) -> None:
+        """Muestra un icono temático junto a cada herramienta del desplegable."""
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("budget_qt_window.user_data_directory", return_value=Path(directory)),
+        ):
+            window = BudgetMainWindow()
+            try:
+                window.show()
+                self.application.processEvents()
+                menu = next(
+                    action.menu()
+                    for action in window.menuBar().actions()
+                    if action.text() == "Herramientas"
+                )
+                entries = menu.actions()
+                self.assertTrue(entries)
+                icons = {}
+                for entry in entries:
+                    with self.subTest(tool=entry.text()):
+                        self.assertTrue(entry.property("toolIcon"))
+                        self.assertTrue(entry.isIconVisibleInMenu())
+                        self.assertFalse(entry.icon().isNull())
+                        icons[entry.text()] = entry.icon().pixmap(32, 32).toImage()
+                self.assertNotEqual(
+                    icons["Certificaciones"],
+                    icons["PPTP (BCCA · Junta de Andalucía)"],
+                )
+            finally:
+                window.close()
+                self.application.processEvents()
+
+    def test_information_menu_entries_keep_related_visible_icons(self) -> None:
+        """Muestra iconos en todas las opciones del menú de información."""
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("budget_qt_window.user_data_directory", return_value=Path(directory)),
+        ):
+            window = BudgetMainWindow()
+            try:
+                window.show()
+                self.application.processEvents()
+                menu = next(
+                    action.menu()
+                    for action in window.menuBar().actions()
+                    if action.text() == "Información"
+                )
+                entries = menu.actions()
+                self.assertTrue(entries)
+                for entry in entries:
+                    with self.subTest(action=entry.text()):
+                        self.assertTrue(entry.property("informationIcon"))
+                        self.assertTrue(entry.isIconVisibleInMenu())
+                        self.assertFalse(entry.icon().isNull())
+                price_entries = entries[2].menu().actions()
+                self.assertTrue(price_entries)
+                self.assertTrue(all(
+                    entry.property("informationIcon")
+                    and entry.isIconVisibleInMenu()
+                    and not entry.icon().isNull()
+                    for entry in price_entries
+                ))
+            finally:
+                window.close()
+                self.application.processEvents()
+
     def test_reference_search_qt_filters_and_exposes_only_visible_entry(self) -> None:
         """Consulta NTP/UNE sin conservar ventanas o datos heredados Tk."""
         with tempfile.TemporaryDirectory() as directory, patch(
@@ -1831,12 +1897,21 @@ class BudgetQtWindowTests(unittest.TestCase):
                 for action in window.menuBar().actions()[0].menu().actions()
                 if action.text()
             ]
-            self.assertTrue(all(action.icon().isNull() for action in buttons))
+            self.assertTrue(all(
+                action.icon().isNull()
+                for action in buttons
+                if not action.property("toolIcon")
+            ))
             self.assertTrue(all(
                 action.icon().isNull()
                 for top_action in window.menuBar().actions()
                 if top_action.menu() is not None
                 for action in top_action.menu().actions()
+                if not (
+                    action.property("toolIcon")
+                    or action.property("searchIcon")
+                    or action.property("informationIcon")
+                )
             ))
             dialog = SettingsDialog(
                 window,

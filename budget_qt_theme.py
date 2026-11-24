@@ -64,6 +64,37 @@ _ICON_RULES = {
     "expandir": ("view-fullscreen", QStyle.StandardPixmap.SP_TitleBarMaxButton),
 }
 
+_TOOL_ICON_RULES = {
+    "document_structure": (
+        "x-office-document",
+        QStyle.StandardPixmap.SP_FileDialogContentsView,
+    ),
+    "invoicing": (
+        "x-office-spreadsheet",
+        QStyle.StandardPixmap.SP_FileDialogDetailedView,
+    ),
+    "planning": (
+        "x-office-calendar",
+        QStyle.StandardPixmap.SP_FileDialogInfoView,
+    ),
+    "price_justification": (
+        "accessories-calculator",
+        QStyle.StandardPixmap.SP_FileDialogContentsView,
+    ),
+    "quality_assurance": (
+        "task-due",
+        QStyle.StandardPixmap.SP_DialogApplyButton,
+    ),
+    "rcd": (
+        "user-trash",
+        QStyle.StandardPixmap.SP_TrashIcon,
+    ),
+    "safety_health": (
+        "security-high",
+        QStyle.StandardPixmap.SP_MessageBoxWarning,
+    ),
+}
+
 
 def _key(value: str) -> str:
     """Normaliza etiquetas para localizar su icono visual."""
@@ -123,6 +154,112 @@ def search_icon(widget: QWidget) -> QIcon:
     return QIcon(pixmap)
 
 
+def certification_icon(widget: QWidget) -> QIcon:
+    """Dibuja un sello con una marca de validación para certificaciones."""
+    pixmap = QPixmap(32, 32)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    color = widget.palette().color(QPalette.ColorRole.WindowText)
+    with QPainter(pixmap) as painter:
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(color, 2)
+        painter.setPen(pen)
+        painter.drawEllipse(7, 3, 18, 18)
+        painter.drawEllipse(10, 6, 12, 12)
+        pen.setWidth(2)
+        painter.setPen(pen)
+        painter.drawLine(12, 12, 15, 15)
+        painter.drawLine(15, 15, 20, 9)
+        painter.drawLine(10, 20, 12, 29)
+        painter.drawLine(12, 20, 16, 25)
+        painter.drawLine(16, 25, 20, 20)
+        painter.drawLine(20, 20, 23, 29)
+    return QIcon(pixmap)
+
+
+def technical_document_icon(widget: QWidget) -> QIcon:
+    """Dibuja una hoja técnica con cotas y una referencia de plano."""
+    pixmap = QPixmap(32, 32)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    color = widget.palette().color(QPalette.ColorRole.WindowText)
+    with QPainter(pixmap) as painter:
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(color, 2)
+        painter.setPen(pen)
+        painter.drawRect(5, 3, 22, 26)
+        painter.drawLine(9, 8, 23, 8)
+        painter.drawLine(9, 24, 23, 24)
+        painter.drawLine(9, 12, 9, 21)
+        painter.drawLine(23, 12, 23, 21)
+        painter.drawLine(7, 14, 25, 14)
+        painter.drawLine(16, 10, 16, 18)
+        painter.drawLine(12, 22, 20, 22)
+        painter.drawLine(7, 12, 11, 12)
+        painter.drawLine(7, 21, 11, 21)
+        painter.drawLine(21, 12, 25, 12)
+        painter.drawLine(21, 21, 25, 21)
+    return QIcon(pixmap)
+
+
+def information_icon(widget: QWidget, text: str) -> QIcon:
+    """Obtiene un icono relacionado con una entrada del menú de información."""
+    normalized = _key(text)
+    if normalized == _key("Bases de precios de referencia"):
+        theme_name, fallback = (
+            "folder-documents",
+            QStyle.StandardPixmap.SP_DirLinkIcon,
+        )
+    elif normalized.startswith("version "):
+        theme_name, fallback = (
+            "help-about",
+            QStyle.StandardPixmap.SP_MessageBoxInformation,
+        )
+    elif "github" in normalized:
+        theme_name, fallback = (
+            "applications-internet",
+            QStyle.StandardPixmap.SP_ComputerIcon,
+        )
+    elif "licencia" in normalized:
+        theme_name, fallback = (
+            "text-x-generic",
+            QStyle.StandardPixmap.SP_FileIcon,
+        )
+    elif "buy me a coffee" in normalized or "apoyar" in normalized:
+        theme_name, fallback = (
+            "emblem-favorite",
+            QStyle.StandardPixmap.SP_DialogApplyButton,
+        )
+    elif "pyside" in normalized:
+        theme_name, fallback = (
+            "help-about",
+            QStyle.StandardPixmap.SP_MessageBoxInformation,
+        )
+    else:
+        theme_name, fallback = (
+            "applications-engineering",
+            QStyle.StandardPixmap.SP_FileDialogInfoView,
+        )
+    return QIcon.fromTheme(
+        theme_name,
+        widget.style().standardIcon(fallback),
+    )
+
+
+def tool_icon(widget: QWidget, name: str) -> QIcon:
+    """Obtiene un icono temático para una herramienta registrada."""
+    if name == "certifications":
+        return certification_icon(widget)
+    if name == "pptp":
+        return technical_document_icon(widget)
+    theme_name, fallback = _TOOL_ICON_RULES.get(
+        name,
+        ("applications-system", QStyle.StandardPixmap.SP_ComputerIcon),
+    )
+    return QIcon.fromTheme(
+        theme_name,
+        widget.style().standardIcon(fallback),
+    )
+
+
 def decorate_widget(widget: QWidget) -> None:
     """Asigna iconos a botones y barras operativas y respeta excepciones de menú."""
     app = QApplication.instance()
@@ -153,11 +290,21 @@ def decorate_widget(widget: QWidget) -> None:
             menu = top_action.menu()
             if menu is not None:
                 for action in menu.actions():
-                    action.setIcon(search_icon(menu) if action.property("searchIcon") else QIcon())
+                    if action.property("searchIcon"):
+                        action.setIcon(search_icon(menu))
+                    elif not (
+                        action.property("toolIcon")
+                        or action.property("informationIcon")
+                    ):
+                        action.setIcon(QIcon())
                     submenu = action.menu()
                     if submenu is not None:
                         for child in submenu.actions():
-                            child.setIcon(QIcon())
+                            if not (
+                                child.property("toolIcon")
+                                or child.property("informationIcon")
+                            ):
+                                child.setIcon(QIcon())
 
 
 class _QtDecorationFilter(QObject):

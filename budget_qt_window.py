@@ -83,7 +83,13 @@ from budget_project import (
 from budget_reports import REPORT_NAMES, ReportSettings, write_pdf
 from budget_qt_settings import SettingsDialog
 from tools._shared.budget_sources import matches_tool_chapter
-from budget_qt_theme import THEMES, apply_theme, search_icon
+from budget_qt_theme import (
+    THEMES,
+    apply_theme,
+    information_icon,
+    search_icon,
+    tool_icon,
+)
 from tools._shared.reference_pill import add_reference_pill
 from localization import LANGUAGES, set_language, translate
 from qt_localization import apply_button_language
@@ -323,7 +329,9 @@ class BudgetMainWindow(QMainWindow):
         ):
             if tool.name == "bim":
                 continue
-            action = tools_menu.addAction(tool.label)
+            action = tools_menu.addAction(tool_icon(tools_menu, tool.name), tool.label)
+            action.setProperty("toolIcon", True)
+            action.setIconVisibleInMenu(True)
             action.triggered.connect(
                 lambda checked=False, name=tool.name: self._open_tool(name)
             )
@@ -371,13 +379,34 @@ class BudgetMainWindow(QMainWindow):
             bim_menu.addAction("Abrir archivo IFC…", lambda: self._open_tool("bim"))
 
         info_menu = menu.addMenu("Información")
-        info_menu.addAction(APPLICATION_NAME).setEnabled(False)
-        info_menu.addAction(
+
+        def add_information_action(label: str, callback=None):
+            """Añade una entrada visible con icono al menú de información."""
+            action = (
+                info_menu.addAction(information_icon(info_menu, label), label)
+                if callback is None
+                else info_menu.addAction(
+                    information_icon(info_menu, label), label, callback
+                )
+            )
+            action.setProperty("informationIcon", True)
+            action.setIconVisibleInMenu(True)
+            return action
+
+        add_information_action(APPLICATION_NAME).setEnabled(False)
+        add_information_action(
             f"Versión {APPLICATION_VERSION} — {APPLICATION_RELEASE_DATE:%d/%m/%Y}"
         ).setEnabled(False)
-        price_menu = info_menu.addMenu("Bases de precios de referencia")
+        price_menu = QMenu("Bases de precios de referencia", info_menu)
+        price_action = info_menu.addMenu(price_menu)
+        price_action.setIcon(
+            information_icon(info_menu, "Bases de precios de referencia")
+        )
+        price_action.setProperty("informationIcon", True)
+        price_action.setIconVisibleInMenu(True)
         for label, url in REFERENCE_PRICE_DATABASES:
-            price_menu.addAction(
+            action = price_menu.addAction(
+                information_icon(price_menu, label),
                 label,
                 lambda checked=False, selected=url: self._open_web_page(
                     selected,
@@ -385,12 +414,14 @@ class BudgetMainWindow(QMainWindow):
                     "Base de precios abierta en el navegador.",
                 ),
             )
-        info_menu.addAction("Repositorio en GitHub", self.open_repository)
-        info_menu.addAction("Licencia y responsabilidad…", self.show_license_info)
-        info_menu.addAction(
+            action.setProperty("informationIcon", True)
+            action.setIconVisibleInMenu(True)
+        add_information_action("Repositorio en GitHub", self.open_repository)
+        add_information_action("Licencia y responsabilidad…", self.show_license_info)
+        add_information_action(
             "Apoyar el proyecto (Buy Me a Coffee)", self.open_donation_page
         )
-        info_menu.addAction("Acerca de PySide6…", self.show_about_qt)
+        add_information_action("Acerca de PySide6…", self.show_about_qt)
 
     def _build_toolbar(self) -> None:
         """Añade las acciones rápidas del presupuesto."""
