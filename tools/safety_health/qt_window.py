@@ -373,9 +373,9 @@ class SafetyHealthWindowQt(QDialog):
         layout = QVBoxLayout(page)
         note = QLabel(
             "Selecciona las fichas que correspondan a la obra tras su revisión técnica. "
-            "A4 incluye una ficha por plano; A3 incluye dos. Se utiliza el cajetín "
-            "configurado para el proyecto. Se conservan los colores y la atribución originales; "
-            "revisa la legibilidad, especialmente de los textos amarillos."
+            "A4 incluye una ficha por plano; A3 incluye hasta dos fichas A4 o un plano A3. "
+            "Se utiliza el cajetín configurado para el proyecto. Revisa la legibilidad "
+            "y el contenido antes de utilizar los planos."
         )
         note.setWordWrap(True)
         layout.addWidget(note)
@@ -426,7 +426,8 @@ class SafetyHealthWindowQt(QDialog):
         """Añade también referencias guardadas a fichas que ya no están disponibles."""
         self._drawing_sheets = {sheet.code: sheet for sheet in available_sheets()}
         selected = saved["selected"] if saved else {}
-        rows = [(sheet.code, sheet.title) for sheet in self._drawing_sheets.values()]
+        rows = [(sheet.code, f"{sheet.title} (A3)" if sheet.paper == "A3" else sheet.title)
+                for sheet in self._drawing_sheets.values()]
         rows.extend(
             (code, f"Ficha no disponible: {code}")
             for code in selected if code not in self._drawing_sheets

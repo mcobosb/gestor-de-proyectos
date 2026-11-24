@@ -97,7 +97,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
                 with self.subTest(output_format=output_format):
                     app = self.make_app(output_format)
                     app.report_settings.municipality_codes = ["140386", "280796"]
-                    app.safety_health_state["resumen_actuacion"] = "Resumen preventivo revisado."
+                    app.safety_health_state["resumen_actuacion"] = "La actuación de ACME mejora la red."
                     target = Path(folder) / f"estudio.{output_format}"
 
                     warnings = write_study_report(app, target)
@@ -227,7 +227,10 @@ class SafetyHealthStudyTests(unittest.TestCase):
                     )
                     self.assertNotIn("PRESUPUESTO DE SEGURIDAD Y SALUD", text)
                     self.assertNotIn("{{", text)
-                    self.assertIn("RESUMEN PREVENTIVO REVISADO.", text)
+                    self.assertIn("La actuación de ACME mejora la red.", text)
+                    self.assertNotIn("véase la tabla", text.casefold())
+                    self.assertIn("Tabla 1. Datos del proyecto", text)
+                    self.assertIn("La prevención se integrará en la planificación", text)
                     self.assertNotIn("Resumen automatico segun las partidas presupuestarias", text)
                     self.assertNotIn("DATOS DEL PROYECTO", text)
                     self.assertIn(
@@ -327,13 +330,13 @@ class SafetyHealthStudyTests(unittest.TestCase):
         app.pptp_state = {"variables": {"bullet_capitulos_obra": "Renovación de la red de agua."}}
         content = _build_study_content(app)
         text = "\n".join(block.text for block in content.blocks)
-        self.assertIn("RENOVACIÓN DE LA RED DE AGUA.", text)
+        self.assertIn("Renovación de la red de agua.", text)
         self.assertNotIn("Resumen automatico segun las partidas presupuestarias", text)
         app.safety_health_state["resumen_actuacion"] = "Resumen preventivo revisado."
         content = _build_study_content(app)
         text = "\n".join(block.text for block in content.blocks)
-        self.assertIn("RESUMEN PREVENTIVO REVISADO.", text)
-        self.assertNotIn("RENOVACIÓN DE LA RED DE AGUA.", text)
+        self.assertIn("Resumen preventivo revisado.", text)
+        self.assertNotIn("Renovación de la red de agua.", text)
         app.safety_health_state["resumen_actuacion"] = ""
         content = _build_study_content(app)
         self.assertIn(
@@ -352,7 +355,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
         rows = dict(summary.rows)
         self.assertEqual(rows["Municipio"], "LUCENA (CÓRDOBA); CÓRDOBA (CÓRDOBA); MADRID (MADRID)")
         self.assertEqual(rows["Provincia"], "CÓRDOBA; MADRID")
-        self.assertEqual(rows["Comunidad autonoma"], "ANDALUCÍA; MADRID, COMUNIDAD DE")
+        self.assertEqual(rows["Comunidad autónoma"], "ANDALUCÍA; MADRID, COMUNIDAD DE")
         pending = "\n".join(block.text for block in content.blocks if block.kind == "paragraph")
         for datum in ("el municipio", "la provincia", "la comunidad autonoma"):
             self.assertNotIn(f"Falta definir {datum}", pending)
@@ -667,7 +670,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
         self.assertIn("evaluación identifica riesgo residual", definitions["MP-HUMECTACION"])
         self.assertIn("[VALIDAR]", definitions["R-SIN-CATALOGO"])
         self.assertIn(
-            "[VALIDAR] No existe descripcion de catalogo para R-SIN-CATALOGO.",
+            "[VALIDAR] No existe descripción de catálogo para R-SIN-CATALOGO.",
             content.warnings,
         )
         summary_rows = dict(next(

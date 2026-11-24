@@ -3,6 +3,8 @@ from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
+from xml.etree import ElementTree as ET
+from zipfile import ZipFile
 
 from bc3_gui import ProjectItem
 from budget_reports import ReportSettings
@@ -14,6 +16,41 @@ from tools.safety_health import (
 
 
 class SafetyHealthTests(unittest.TestCase):
+    def test_study_preserves_summary_case_and_omits_table_references_in_both_formats(self):
+        """Conserva el resumen revisado, las tildes y los títulos de las tablas."""
+        app = SimpleNamespace(
+            budget_items=[
+                ProjectItem("01AAB00001", "01#", "m2", "Demolición", measurement=1, unit_price=10),
+                ProjectItem("SS-A", "CAP.02#", "ud", "Protección", measurement=1,
+                            unit_price=1, source="SS:A"),
+            ],
+            chapter_order=["01#", "CAP.02#"],
+            chapter_titles={"01#": "Obra", "CAP.02#": "Seguridad y salud"},
+            report_settings=ReportSettings(),
+            planning_state={},
+            safety_health_state={"resumen_actuacion": "La actuación de ACME mejora la red."},
+            _project_title=lambda: "Proyecto de prueba",
+            _chapter_title=lambda chapter: {"01#": "Obra", "CAP.02#": "Seguridad y salud"}[chapter],
+            _component_dataset=lambda item: None,
+            _budget_concept_type=lambda item, code=None: "0",
+        )
+        with tempfile.TemporaryDirectory() as folder:
+            for output_format in ("pdf", "odt"):
+                with self.subTest(output_format=output_format):
+                    app.report_settings.output_format = output_format
+                    target = Path(folder) / f"estudio.{output_format}"
+                    write_study_report(app, target)
+                    if output_format == "pdf":
+                        text = " ".join(page.extract_text() or "" for page in PdfReader(target).pages)
+                    else:
+                        with ZipFile(target) as archive:
+                            text = "".join(ET.fromstring(archive.read("content.xml")).itertext())
+                    text = " ".join(text.split())
+                    self.assertIn("La actuación de ACME mejora la red.", text)
+                    self.assertIn("La prevención se integrará en la planificación", text)
+                    self.assertIn("Tabla 1. Datos del proyecto", text)
+                    self.assertNotIn("véase la tabla", text.casefold())
+
     def test_workforce_uses_whole_people_with_at_least_one_per_planned_team(self):
         """No diluye una plantilla de una persona al redondear las jornadas hacia arriba."""
         app = SimpleNamespace(

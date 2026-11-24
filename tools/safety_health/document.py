@@ -176,9 +176,9 @@ def _display_value(value: str) -> str:
 
 
 def _template_value(name: str, value: str) -> str:
-    """Conserva criterios y normativa redactada y capitaliza los demas datos del proyecto."""
+    """Conserva el resumen y los textos normativos; capitaliza los demás datos."""
     return value if name in {
-        "justificacion_estudio", "normativa_confirmada", "normas_une",
+        "descripcion_obras", "justificacion_estudio", "normativa_confirmada", "normas_une",
     } else _display_value(value)
 
 
@@ -612,12 +612,12 @@ def _build_study_content(app) -> _StudyContent:
     )
     duration_text = (
         f"{assessment.duration_days} días laborables"
-        if assessment.duration_days else missing("el plazo de ejecucion")
+        if assessment.duration_days else missing("el plazo de ejecución")
     )
     workers_text = f"{int(assessment.peak_workers)} " + (
         "persona" if assessment.peak_workers == 1 else "personas"
     )
-    pending.append("[VALIDAR] Confirmar el numero maximo real de trabajadores simultaneos.")
+    pending.append("[VALIDAR] Confirmar el número máximo real de trabajadores simultáneos.")
     if assessment.worker_days <= 0:
         pending.append("[VALIDAR] Confirmar el volumen de mano de obra previsto.")
 
@@ -635,7 +635,7 @@ def _build_study_content(app) -> _StudyContent:
     if not centers and translate(center_condition.get("description", ""), "es") != center_default:
         centers = center_condition.get("description", "")
     if not centers and saved_conditions.get("centro_asistencial", {}).get("applicability") != "no":
-        centers = missing("el centro asistencial de referencia y su telefono")
+        centers = missing("el centro asistencial de referencia y su teléfono")
 
     location = str(getattr(settings, "location", "")).strip()
     start_date = "[VALIDAR] Falta definir la fecha de inicio prevista."
@@ -646,7 +646,7 @@ def _build_study_content(app) -> _StudyContent:
         try:
             start_date = date.fromisoformat(planned_start).strftime("%d/%m/%Y")
         except ValueError:
-            pending.append("[VALIDAR] La fecha de inicio guardada en la planificacion no es valida.")
+            pending.append("[VALIDAR] La fecha de inicio guardada en la planificación no es válida.")
     else:
         pending.append("[VALIDAR] Falta definir la fecha de inicio prevista.")
 
@@ -662,7 +662,7 @@ def _build_study_content(app) -> _StudyContent:
         project_type += "\n\n" + "\n".join(f"• {chapter}" for chapter in chapter_titles)
     unit_names = list(dict.fromkeys(f"{item.code} — {item.summary}" for item in work_items))
     bcca_codes = ", ".join(dict.fromkeys(matched_codes)) or missing(
-        "los codigos BCCA identificados"
+        "los códigos BCCA identificados"
     )
     surfaces = [
         Decimal(str(item.measurement)) for item in work_items
@@ -672,7 +672,7 @@ def _build_study_content(app) -> _StudyContent:
         raise ValueError("Las mediciones de superficie deben ser finitas y no negativas.")
     surface_text = (
         f"{_format_number(max(surfaces))} m²"
-        if surfaces else missing("la superficie de actuacion")
+        if surfaces else missing("la superficie de actuación")
     )
     municipalities = resolve_municipalities(getattr(settings, "municipality_codes", []))
     municipality_names = "; ".join(
@@ -687,16 +687,16 @@ def _build_study_content(app) -> _StudyContent:
     ))
 
     data_values = {
-        "Titulo del proyecto": project_title or missing("el titulo oficial del proyecto"),
+        "Titulo del proyecto": project_title or missing("el título oficial del proyecto"),
         "Tipo de actuacion": project_type,
         "Promotor / entidad": str(getattr(settings, "organization", "")).strip()
         or missing("la entidad promotora"),
         "Municipio": municipality_names or missing("el municipio"),
         "Provincia": provinces or missing("la provincia"),
-        "Comunidad autonoma": communities or missing("la comunidad autonoma"),
+        "Comunidad autonoma": communities or missing("la comunidad autónoma"),
         "Emplazamiento": location or missing("el emplazamiento de la obra"),
         "Tecnico redactor": (
-            settings.document_author.strip() or missing("el tecnico redactor")
+            settings.document_author.strip() or missing("el técnico redactor")
         ) if settings.show_author else "",
         "Fecha de emision": date.today().strftime("%d/%m/%Y"),
         "Presupuesto de ejecucion material": _format_amount(totals["pem"], currency),
@@ -709,7 +709,7 @@ def _build_study_content(app) -> _StudyContent:
         "Superficie, longitud o volumen": surface_text,
         "Fecha prevista de inicio": start_date,
         "Descripcion de las obras": description,
-        "Partidas presupuestarias": "Relacion completa en el anexo de trazabilidad presupuestaria.",
+        "Partidas presupuestarias": "Relación completa en el anexo de trazabilidad presupuestaria.",
         "Unidades de obra aplicables": "; ".join(unit_names),
         "Codigos BCCA identificados": bcca_codes,
         "Centro asistencial": centers,
@@ -911,8 +911,8 @@ def _build_study_content(app) -> _StudyContent:
         described.add(reference)
         description_text = catalogues.get(reference)
         if description_text is None:
-            pending.append(f"[VALIDAR] No existe descripcion de catalogo para {reference}.")
-            description_text = "[VALIDAR] Descripcion de catalogo pendiente."
+            pending.append(f"[VALIDAR] No existe descripción de catálogo para {reference}.")
+            description_text = "[VALIDAR] Descripción de catálogo pendiente."
         catalogue_rows.append((
             _CATEGORY_LABELS[reference.split("-", 1)[0]], reference, description_text,
         ))
@@ -926,7 +926,7 @@ def _build_study_content(app) -> _StudyContent:
         )
         project_data_rows[row_index] = (
             project_data_rows[row_index][0],
-            references or "[VALIDAR] Identificación pendiente; véase la Tabla 5.",
+            references or "[VALIDAR] Identificación pendiente.",
         )
     blocks[summary_index] = replace(blocks[summary_index], rows=tuple(project_data_rows))
     if catalogue_rows:
@@ -1517,7 +1517,9 @@ def _write_pdf(app, target, content: _StudyContent, drawings: list[bytes], paper
                 story.append(layout.text(block.text, caption_style))
             elif label is not None:
                 number, title = label
-                layout.table_caption(story, title, number=number, body=body, caption=caption_style)
+                layout.table_caption(
+                    story, title, number=number, body=body, caption=caption_style, include_reference=False,
+                )
                 if block.project_summary or block.blue_table:
                     story.append(_pdf_blue_table(block, layout))
                 else:
@@ -1704,7 +1706,9 @@ def _write_odt(app, target, content: _StudyContent, drawings: list[bytes], paper
                 document.paragraph(block.text, style="ESSCaption")
             elif label is not None:
                 number, title = label
-                document.table_caption(title, number=number, body="ESSBody", caption="ESSCaption")
+                document.table_caption(
+                    title, number=number, body="ESSBody", caption="ESSCaption", include_reference=False,
+                )
                 if block.project_summary or block.blue_table:
                     _write_odt_blue_table(document, block)
                 else:

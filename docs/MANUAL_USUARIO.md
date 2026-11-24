@@ -627,16 +627,21 @@ copia también esa biblioteca: si falta una ficha seleccionada, el programa lo
 indicará y no generará un estudio incompleto.
 
 Al generar el estudio en PDF u ODT se añaden los planos como imágenes de página
-completa: una ficha en cada A4 vertical o hasta dos fichas en cada A3 horizontal.
+completa: una ficha en cada A4 vertical o hasta dos fichas A4 en cada A3
+horizontal. Los planos A3 de la biblioteca ocupan un plano A3 completo y pueden
+combinarse con las fichas A4 en el mismo estudio; para incluirlos hay que
+seleccionar el formato A3.
 Configura previamente la carpeta de cajetines en los ajustes del proyecto. El
 cajetín A4 debe reservar la banda inferior y el A3 la banda derecha; los SVG
 se ajustan proporcionalmente al papel. Se rellenan los campos identificados
 del cajetín con los datos disponibles, la fecha de generación, el número y
 título del plano y la escala «S/E»; los campos que no existan en el SVG no se
-añaden. Los SVG originales no se modifican. Revisa la disposición, legibilidad
-y contenido preventivo antes de utilizar el estudio; algunas fichas originales
-contienen líneas o textos amarillos de bajo contraste. Se conserva la
-atribución de sus autores.
+añaden. El título del proyecto se reparte en dos líneas cuando es necesario y,
+si aún es demasiado largo, se reduce su tamaño. Reserva espacio para ambas
+líneas en el cajetín; si el campo define un área rectangular de texto, se usa su
+anchura para el ajuste. Los SVG originales no se modifican. En las fichas incluidas se han
+oscurecido los trazos de bajo contraste; se conserva la atribución de sus autores.
+Revisa la disposición, legibilidad y contenido preventivo antes de utilizar el estudio.
 
 En **Editar biblioteca de fichas...**, tanto en PPTP como en Seguridad y Salud,
 se resaltan en verde las fichas vinculadas al proyecto y todas las carpetas
@@ -697,7 +702,9 @@ En los documentos generados, las viñetas y las listas numeradas comparten
 tabuladores y sangría francesa. Los pies se escriben en mayúsculas sin perder
 la numeración de página. Antes de cada tabla de datos se incluye una referencia
 en el texto («Véase la Tabla X.»), seguida del título «Tabla X. …». Los elementos
-de maquetación (por ejemplo, las columnas de firma) no se numeran.
+de maquetación (por ejemplo, las columnas de firma) no se numeran. Los estudios
+de Seguridad y Salud y de RCD conservan los títulos de tabla, sin esas referencias
+automáticas.
 
 En **Justificación de precios**, los títulos de las secciones 3, 4 y 5 heredan
 el estilo **TemplateHeading** de la plantilla ODT, no **Heading 1**, y mantienen

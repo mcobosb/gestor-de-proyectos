@@ -1,9 +1,11 @@
 """Selección y composición de los planos de Seguridad y Salud."""
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date
 import hashlib
+import math
 from pathlib import Path
 import re
 from xml.etree import ElementTree as ET
@@ -26,6 +28,7 @@ class DrawingSheet:
     title: str
     filename: str
     path: Path | None = None
+    paper: str = "A4"
 
 
 SHEETS = (
@@ -146,7 +149,7 @@ def read_sheet(sheet: DrawingSheet) -> bytes:
     try:
         if sheet.path is None:
             with ZipFile(LIBRARY) as archive:
-                return archive.read(sheet.filename)
+                return archive.read(f"{sheet.paper}/{sheet.filename}")
         with sheet.path.open("rb") as source:
             data = source.read(MAX_SVG_BYTES + 1)
     except (OSError, KeyError, BadZipFile) as exc:
@@ -207,8 +210,161 @@ def _filled_title_block(path: Path, fields: dict[str, str]) -> bytes:
                 leaf.text = ""
         else:
             element.text = fields[identifier]
+        if identifier == "titulo_proyecto":
+            _wrap_project_title(root, element)
     _flatten_simple_text_spans(root)
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
+def _wrap_project_title(root: ET.Element, element: ET.Element) -> None:
+    """Distribuye el título en dos líneas y reduce su tamaño si aún no cabe."""
+    from PySide6.QtGui import QFont, QFontMetricsF
+
+    text = " ".join("".join(element.itertext()).split())
+    if not text:
+        return
+    namespace = "{http://www.w3.org/2000/svg}"
+    first = next((child for child in element if child.tag == namespace + "tspan"), None)
+    leaf = next((node for node in first.iter() if not list(node)), first) if first is not None else element
+    parents = {child: parent for parent in root.iter() for child in parent}
+    ancestors = []
+    current = element
+    while current is not None:
+        ancestors.append(current)
+        current = parents.get(current)
+    descendants = []
+    current = leaf
+    while current is not element:
+        descendants.append(current)
+        current = parents[current]
+    properties = {}
+    size = 12.0
+    element_size = size
+    for node in list(reversed(ancestors)) + list(reversed(descendants)):
+        if node is None:
+            continue
+        local = {}
+        for name in ("font-size", "font-family", "font-weight", "font-style"):
+            if name in node.attrib:
+                local[name] = node.get(name)
+        for declaration in node.get("style", "").split(";"):
+            name, separator, value = declaration.partition(":")
+            if separator and name.strip() in ("font-size", "font-family", "font-weight", "font-style"):
+                local[name.strip()] = value.strip()
+        if "font-size" in local and local["font-size"] != "inherit":
+            match = re.fullmatch(
+                r"\s*((?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))(px|pt|pc|mm|cm|in|em|%)?\s*", local["font-size"],
+            )
+            if not match:
+                raise ValueError("No se reconoce el tamaño de fuente del título del proyecto.")
+            unit = match.group(2) or "px"
+            units = {"px": 1, "pt": 4 / 3, "pc": 16, "mm": 96 / 25.4, "cm": 96 / 2.54,
+                     "in": 96, "em": size, "%": size / 100}
+            size = float(match.group(1)) * units[unit]
+        properties.update(local)
+        if node is element:
+            element_size = size
+    if not math.isfinite(size) or size <= 0:
+        raise ValueError("El tamaño de fuente del título del proyecto no es válido.")
+    font = QFont()
+    font.setFamilies([family.strip(" '\"") for family in properties.get("font-family", "sans-serif").split(",")])
+    font.setPixelSize(max(1, round(size)))
+    weight = properties.get("font-weight", "")
+    font.setBold(weight in ("bold", "bolder") or (weight.isdigit() and int(weight) >= 600))
+    font.setItalic(properties.get("font-style") in ("italic", "oblique"))
+    metrics = QFontMetricsF(font)
+
+    def width(value: str) -> float:
+        return metrics.horizontalAdvance(value) * size / font.pixelSize()
+
+    available = 32 * size
+    shape = re.search(r"shape-inside\s*:\s*url\(\s*#([^) ]+)\s*\)", element.get("style", ""))
+    if shape:
+        box = next((node for node in root.iter() if node.get("id") == shape.group(1)), None)
+        if box is not None and box.tag == namespace + "rect":
+            try:
+                box_width = float(box.get("width", ""))
+            except ValueError as exc:
+                raise ValueError("La anchura del área del título del proyecto no es válida.") from exc
+            if not math.isfinite(box_width) or box_width <= 0:
+                raise ValueError("La anchura del área del título del proyecto no es válida.")
+            available = box_width
+    if width(text) <= available:
+        return
+
+    words = text.split(" ")
+    if len(words) > 1:
+        choices = [(" ".join(words[:i]), " ".join(words[i:])) for i in range(1, len(words))]
+    else:
+        choices = [(text[:i], text[i:]) for i in range(1, len(text))]
+    if not choices:
+        return
+    lines = min(choices, key=lambda pair: max(width(pair[0]), width(pair[1])))
+    maximum = max(width(line) for line in lines)
+    if maximum > available:
+        factor = available / maximum
+        for node in element.iter():
+            if node is element:
+                node.set("font-size", str(element_size * factor))
+            if node is not element and "font-size" in node.attrib:
+                value = re.fullmatch(
+                    r"\s*((?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))(px|pt|pc|mm|cm|in|em|%)?\s*",
+                    node.get("font-size", ""),
+                )
+                if not value and node.get("font-size") != "inherit":
+                    raise ValueError("No se puede ajustar el tamaño de fuente del título del proyecto.")
+                if value and value.group(2) not in ("em", "%"):
+                    node.set("font-size", f"{float(value.group(1)) * factor}{value.group(2) or ''}")
+            style = node.get("style")
+            if style:
+                def scale_style(match: re.Match) -> str:
+                    if node is element:
+                        return f"{match.group(1)}{element_size * factor}px"
+                    value = re.fullmatch(
+                        r"\s*((?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))(px|pt|pc|mm|cm|in|em|%)?\s*",
+                        match.group(2),
+                    )
+                    if not value:
+                        if match.group(2).strip() == "inherit":
+                            return match.group(0)
+                        raise ValueError("No se puede ajustar el tamaño de fuente del título del proyecto.")
+                    if value.group(2) in ("em", "%"):
+                        return match.group(0)
+                    return f"{match.group(1)}{float(value.group(1)) * factor}{value.group(2) or ''}"
+                node.set("style", re.sub(
+                    r"(font-size\s*:\s*)([^;]+)", scale_style, style,
+                ))
+
+    try:
+        x = float(element.get("x", ""))
+        y = float(element.get("y", ""))
+    except ValueError as exc:
+        raise ValueError("El título del proyecto necesita una posición x e y en el cajetín.") from exc
+    line_y = y + size * 1.25
+    if first is not None:
+        spans = [child for child in element if child.tag == namespace + "tspan"]
+        if len(spans) > 1 and spans[1].get("y") is not None:
+            try:
+                line_y = float(spans[1].get("y"))
+            except ValueError as exc:
+                raise ValueError("La posición de la segunda línea del título no es válida.") from exc
+    leaf.text = lines[0]
+    second = deepcopy(element)
+    for node in second.iter():
+        node.attrib.pop("id", None)
+        if node.get("y") is not None:
+            try:
+                node.set("y", str(float(node.get("y")) + line_y - y))
+            except ValueError as exc:
+                raise ValueError("La posición de la segunda línea del título no es válida.") from exc
+    second.set("x", str(x))
+    second.set("y", str(line_y))
+    second_leaf = next((node for node in second.iter() if not list(node)), second)
+    second_leaf.text = lines[1]
+    parent = next((node for node in root.iter() if element in node), None)
+    if parent is None:
+        raise ValueError("No se pudo colocar la segunda línea del título del proyecto.")
+    parent.insert(list(parent).index(element) + 1, second)
 
 
 def _flatten_simple_text_spans(root: ET.Element) -> None:
@@ -261,6 +417,8 @@ def render_drawings(app, state: dict) -> list[bytes]:
     sheets = [sheet for sheet in catalog if selection["selected"].get(sheet.code, False)]
     if not sheets:
         return []
+    if selection["paper"] == "A4" and any(sheet.paper == "A3" for sheet in sheets):
+        raise ValueError("Los planos A3 seleccionados requieren el formato A3; desmárcalos o cambia el formato.")
     directory = app.report_settings.drawing_title_block_path.strip()
     if not directory:
         raise ValueError("Configura la carpeta de cajetines de planos en los ajustes del proyecto.")
@@ -277,9 +435,22 @@ def render_drawings(app, state: dict) -> list[bytes]:
     authors = app.report_settings.document_author.splitlines()
     roles = app.report_settings.role.splitlines()
     pages = []
-    per_page = 1 if paper == "A4" else 2
-    for offset in range(0, len(sheets), per_page):
-        group = sheets[offset:offset + per_page]
+    groups = []
+    pending = []
+    for sheet in sheets:
+        if sheet.paper == "A3":
+            if pending:
+                groups.append(pending)
+                pending = []
+            groups.append([sheet])
+        else:
+            pending.append(sheet)
+            if len(pending) == (1 if paper == "A4" else 2):
+                groups.append(pending)
+                pending = []
+    if pending:
+        groups.append(pending)
+    for group in groups:
         fields = {
             "titulo_proyecto": app._project_title(),
             "expediente": app.report_settings.expediente,
@@ -309,6 +480,7 @@ def render_drawings(app, state: dict) -> list[bytes]:
         else:
             area = QRectF(margin, margin, width - 75 * pixels_per_mm, height - 2 * margin)
         gap = 4 * pixels_per_mm
+        per_page = 1 if paper == "A4" or group[0].paper == "A3" else 2
         cell_width = (area.width() - gap * (per_page - 1)) / per_page
         for index, sheet in enumerate(group):
             renderer = QSvgRenderer(QByteArray(source[sheet.code]))
