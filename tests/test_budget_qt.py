@@ -1446,6 +1446,57 @@ class BudgetQtWindowTests(unittest.TestCase):
             window.close()
             self.application.processEvents()
 
+    def test_safety_health_second_window_fits_small_screen_and_can_continue(self) -> None:
+        """Mantiene visible la propuesta en una ventana de 800 × 550."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ), patch(
+            "tools.safety_health.drawings.user_library_directory",
+            return_value=Path(directory) / "biblioteca",
+        ):
+            window = BudgetMainWindow()
+            item = ProjectItem(
+                "01AAB00001", "01#", "m2", "Demolición",
+                measurement=1, unit_price=10,
+            )
+            window.budget_items = [item]
+            window.chapter_order = ["01#"]
+            window.safety_health_state = serialize_state(
+                proposed_lines([item]), Decimal("2"), chapter_selection={"01#": True},
+            )
+            tool = SafetyHealthWindowQt(window)
+            tool.resize(800, 550)
+            tool.show()
+            self.application.processEvents()
+            self.assertLessEqual(tool.width(), 800)
+            self.assertLessEqual(tool.height(), 550)
+            button = next(
+                button for button in tool.findChildren(QPushButton)
+                if button.text() == "Revisar propuesta de unidades…"
+            )
+            self.assertTrue(button.isVisible())
+            self.assertTrue(tool.rect().contains(button.mapTo(tool, button.rect().bottomRight())))
+            tool.centers_editor.tabs.setCurrentIndex(1)
+            self.application.processEvents()
+            last_field = list(tool.centers_editor.fields.values())[-1]
+            tool.basic_scroll.ensureWidgetVisible(last_field)
+            self.application.processEvents()
+            viewport = tool.basic_scroll.viewport()
+            self.assertGreater(tool.basic_scroll.verticalScrollBar().value(), 0)
+            self.assertLessEqual(
+                last_field.mapTo(viewport, last_field.rect().bottomRight()).y(),
+                viewport.height(),
+            )
+            self.assertTrue(tool.rect().contains(button.mapTo(tool, button.rect().bottomRight())))
+            QTest.mouseClick(button, Qt.MouseButton.LeftButton)
+            self.assertIsNotNone(tool._proposal)
+            self.assertTrue(tool._proposal.isVisible())
+            tool._proposal.close()
+            tool.close()
+            window.is_dirty = False
+            window.close()
+            self.application.processEvents()
+
     def test_safety_health_chapter_selector_requires_nonempty_scope(self) -> None:
         """La selección inicial Qt conserva la obligatoriedad de un capítulo."""
         with tempfile.TemporaryDirectory() as directory, patch(

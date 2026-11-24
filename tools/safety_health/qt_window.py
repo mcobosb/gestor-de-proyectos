@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
     QFormLayout,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -289,7 +290,12 @@ class SafetyHealthWindowQt(QDialog):
         self._regulatory: RegulatoryReviewDialogQt | None = None
         self._technical: TechnicalReviewDialogQt | None = None
         self.setWindowTitle("Seguridad y salud")
-        self.resize(1120, 800)
+        screen = self.screen() or QGuiApplication.primaryScreen()
+        available = screen.availableGeometry() if screen is not None else None
+        self.resize(
+            1120 if available is None else min(1120, max(1, available.width() - 48)),
+            800 if available is None else min(800, max(1, available.height() - 64)),
+        )
         layout = QVBoxLayout(self)
         add_reference_pill(layout, "safety_health")
         self.pages = QTabWidget()
@@ -297,6 +303,12 @@ class SafetyHealthWindowQt(QDialog):
         basic_page = QWidget()
         basic_layout = QVBoxLayout(basic_page)
         self.pages.addTab(basic_page, "Información y revisión")
+        self.basic_scroll = QScrollArea()
+        self.basic_scroll.setWidgetResizable(True)
+        basic_content = QWidget()
+        content_layout = QVBoxLayout(basic_content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        basic_layout.addWidget(self.basic_scroll, 1)
         criteria = QGroupBox("Criterios del artículo 4.1 de la LPRL")
         criteria_layout = QVBoxLayout(criteria)
         values = saved or self.study_criteria.fulfilled
@@ -321,7 +333,7 @@ class SafetyHealthWindowQt(QDialog):
         self.study_result.setStyleSheet("font-weight: 600;")
         criteria_layout.addWidget(self.study_result)
         self._update_study_result()
-        basic_layout.addWidget(criteria)
+        content_layout.addWidget(criteria)
         basics = QGroupBox("Información básica del Estudio de Seguridad y Salud")
         basics_layout = QVBoxLayout(basics)
         basics_layout.addWidget(QLabel("Resumen de la actuación"))
@@ -336,17 +348,21 @@ class SafetyHealthWindowQt(QDialog):
         basics_layout.addWidget(register, alignment=Qt.AlignmentFlag.AlignLeft)
         self.centers_editor = CareCentersEditorQt(basics, app.safety_health_state)
         basics_layout.addWidget(self.centers_editor)
-        basic_layout.addWidget(basics, 1)
-        actions = QHBoxLayout()
-        for text, slot in (
+        content_layout.addWidget(basics, 1)
+        self.basic_scroll.setWidget(basic_content)
+        actions = QGridLayout()
+        for index, (text, slot) in enumerate((
             ("Condicionantes externos…", self.open_external_conditions),
             ("Normativa y NTP…", self.open_regulatory_review),
             ("Condiciones técnicas…", self.open_technical_review),
             ("Revisar propuesta de unidades…", self.open_proposal),
-        ):
+        )):
             button = QPushButton(text)
             button.clicked.connect(slot)
-            actions.addWidget(button)
+            if index < 2:
+                actions.addWidget(button, 0, index)
+            else:
+                actions.addWidget(button, index - 1, 0, 1, 2)
         basic_layout.addLayout(actions)
         self._create_drawings_page()
 
