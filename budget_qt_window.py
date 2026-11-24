@@ -13,7 +13,7 @@ import unicodedata
 import webbrowser
 from uuid import uuid4
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QResizeEvent
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QTabWidget,
     QToolBar,
+    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -86,6 +87,7 @@ from tools._shared.budget_sources import matches_tool_chapter
 from budget_qt_theme import (
     THEMES,
     apply_theme,
+    budget_tree_icon,
     information_icon,
     search_icon,
     tool_icon,
@@ -179,6 +181,11 @@ class BudgetMainWindow(QMainWindow):
         self.quality_assurance_state: dict = {}
         self._project_windows: list[QDialog] = []
         self.project_session = 0
+        self._budget_level_mode = False
+        self._budget_level_path: list[tuple[str, str]] = []
+        self._budget_level_session = self.project_session
+        self._budget_full_expansion: dict[tuple[str, ...], bool] = {}
+        self._budget_full_selection: tuple[str, ...] | None = None
         self.project_title: str | None = None
         self.project_path: Path | None = None
         self.project_store: CollaborativeProjectStore | None = None
@@ -455,7 +462,8 @@ class BudgetMainWindow(QMainWindow):
             menu.addMenu(bim_menu)
             bim_menu.addAction("Abrir archivo IFC…", lambda: self._open_tool("bim"))
 
-        info_menu = menu.addMenu("Información")
+        info_menu = QMenu("Información", menu)
+        menu.addMenu(info_menu)
 
         def add_information_action(label: str, callback=None):
             """Añade una entrada visible con icono al menú de información."""
@@ -527,7 +535,10 @@ class BudgetMainWindow(QMainWindow):
         toolbar.addAction("Subir", lambda: self.move_selection(-1))
         toolbar.addAction("Bajar", lambda: self.move_selection(1))
         toolbar.addSeparator()
-        toolbar.addAction("Expandir / contraer", self.toggle_budget_expansion)
+        self.budget_expansion_action = self._action(
+            "Expandir / contraer", self.toggle_budget_expansion
+        )
+        toolbar.addAction(self.budget_expansion_action)
         self.summary_label = QLabel("Total: 0,00 €")
         self.summary_label.setObjectName("budgetTotal")
         toolbar.addWidget(self.summary_label)
@@ -545,6 +556,17 @@ class BudgetMainWindow(QMainWindow):
         self.project_heading = _PanelTitle("Sin título")
         titles.addWidget(self.project_heading)
         heading.addLayout(titles, 1)
+        self.budget_level_button = QToolButton()
+        self.budget_level_button.setObjectName("budgetLevelMode")
+        self.budget_level_button.setCheckable(True)
+        self.budget_level_button.setIcon(budget_tree_icon(self.budget_level_button))
+        self.budget_level_button.setIconSize(QSize(22, 22))
+        self.budget_level_button.setAccessibleName("Navegación por niveles")
+        self.budget_level_button.setToolTip(
+            "Alternar entre estructura completa y navegación por niveles."
+        )
+        self.budget_level_button.toggled.connect(self._set_budget_level_mode)
+        heading.addWidget(self.budget_level_button)
         for kind in ("2", "1", "3"):
             button = QPushButton(CONCEPT_TYPES[kind].split()[0])
             button.setCheckable(True)
@@ -560,6 +582,21 @@ class BudgetMainWindow(QMainWindow):
             self.budget_filter_buttons[kind] = button
             heading.addWidget(button)
         layout.addLayout(heading)
+        self.budget_level_bar = QWidget()
+        level_layout = QHBoxLayout(self.budget_level_bar)
+        level_layout.setContentsMargins(0, 0, 0, 0)
+        self.budget_level_back = QToolButton()
+        self.budget_level_back.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowBack)
+        )
+        self.budget_level_back.setAccessibleName("Volver al nivel anterior")
+        self.budget_level_back.setToolTip("Volver al nivel anterior")
+        self.budget_level_back.clicked.connect(self._budget_level_up)
+        level_layout.addWidget(self.budget_level_back)
+        self.budget_level_label = _PanelTitle("Capítulos")
+        level_layout.addWidget(self.budget_level_label, 1)
+        self.budget_level_bar.hide()
+        layout.addWidget(self.budget_level_bar)
         self.budget_search = QLineEdit()
         self.budget_search.setPlaceholderText("Filtrar presupuesto por código o texto…")
         self.budget_search.textChanged.connect(self.refresh_budget_tree)
@@ -571,7 +608,7 @@ class BudgetMainWindow(QMainWindow):
         self.budget_tree.setAlternatingRowColors(True)
         self.budget_tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.budget_tree.itemSelectionChanged.connect(self.on_budget_selection)
-        self.budget_tree.itemDoubleClicked.connect(self.edit_selection)
+        self.budget_tree.itemDoubleClicked.connect(self._budget_item_double_clicked)
         header = self.budget_tree.header()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
@@ -1338,14 +1375,184 @@ class BudgetMainWindow(QMainWindow):
             self._mark_dirty()
             self._set_status(f"Añadidas {added} partidas de {format_chapter_code(code)}.")
 
+    def _set_budget_level_mode(self, enabled: bool) -> None:
+        """Alterna entre la estructura completa y la navegación por niveles."""
+        if enabled:
+            self._remember_budget_tree_view()
+        self._budget_level_mode = enabled
+        self._budget_level_path.clear()
+        self._budget_level_session = self.project_session
+        self.budget_level_bar.setVisible(enabled)
+        self.budget_expansion_action.setEnabled(not enabled)
+        self.budget_tree.setRootIsDecorated(not enabled)
+        self.budget_tree.setItemsExpandable(not enabled)
+        self._clear_budget_selection()
+        self.refresh_budget_tree()
+        if not enabled:
+            self._restore_budget_tree_view()
+
+    def _budget_row_key(self, row: QTreeWidgetItem) -> tuple[str, ...] | None:
+        """Identifica una fila sin depender del índice mutable de su partida."""
+        kind = row.data(0, ROW_KIND)
+        data = row.data(0, ROW_DATA)
+        if kind == "chapter":
+            return kind, str(data)
+        if kind == "subchapter" and row.parent() is not None:
+            return kind, str(row.parent().data(0, ROW_DATA)), str(data)
+        if kind in {"item", "resource"} and isinstance(data, int) and 0 <= data < len(self.budget_items):
+            key = (kind, self.budget_items[data].storage_id)
+            return key + (row.text(0),) if kind == "resource" else key
+        return None
+
+    def _remember_budget_tree_view(self) -> None:
+        """Guarda la expansión y la selección antes de cambiar de vista."""
+        self._budget_full_expansion.clear()
+        current = self.budget_tree.currentItem()
+        self._budget_full_selection = self._budget_row_key(current) if current else None
+        iterator = QTreeWidgetItemIterator(self.budget_tree)
+        while iterator.value():
+            row = iterator.value()
+            key = self._budget_row_key(row)
+            if key is not None and row.childCount():
+                self._budget_full_expansion[key] = row.isExpanded()
+            iterator += 1
+
+    def _restore_budget_tree_view(self) -> None:
+        """Recupera las ramas y la selección que aún existan en la vista completa."""
+        iterator = QTreeWidgetItemIterator(self.budget_tree)
+        while iterator.value():
+            row = iterator.value()
+            key = self._budget_row_key(row)
+            if key is not None and key in self._budget_full_expansion:
+                row.setExpanded(self._budget_full_expansion[key])
+            if key is not None and key == self._budget_full_selection and not row.isHidden():
+                self.budget_tree.setCurrentItem(row)
+            iterator += 1
+
+    def _clear_budget_selection(self) -> None:
+        """Evita que las acciones afecten a una fila que ya no se ve."""
+        self.selected_budget_index = None
+        self.selected_chapter = None
+        self._show_item_details(None)
+
+    def _budget_level_up(self) -> None:
+        """Vuelve al nivel padre sin modificar el presupuesto."""
+        if self._budget_level_path and not self.budget_resource_filter:
+            self._budget_level_path.pop()
+            self._clear_budget_selection()
+            self.refresh_budget_tree()
+
+    def _budget_item_double_clicked(self, row: QTreeWidgetItem, column: int) -> None:
+        """Navega a los hijos o conserva la edición habitual en el modo completo."""
+        if not self._budget_level_mode:
+            self.edit_selection(row, column)
+            return
+        if self.budget_resource_filter:
+            return
+        kind = row.data(0, ROW_KIND)
+        data = row.data(0, ROW_DATA)
+        if kind in {"chapter", "subchapter"}:
+            key = str(data)
+        elif kind == "item" and isinstance(data, int) and 0 <= data < len(self.budget_items):
+            key = self.budget_items[data].storage_id
+        else:
+            return
+        self._budget_level_path.append((kind, key))
+        self._clear_budget_selection()
+        self.refresh_budget_tree()
+
+    def _budget_level_matches(self, row: QTreeWidgetItem, term: str) -> bool:
+        """Busca en una fila y sus descendientes antes de ocultar la jerarquía."""
+        text = " ".join(row.text(column) for column in range(row.columnCount())).lower()
+        if row.data(0, ROW_KIND) == "item":
+            index = row.data(0, ROW_DATA)
+            if isinstance(index, int) and 0 <= index < len(self.budget_items):
+                item = self.budget_items[index]
+                text += f" {item.chapter} {item.text}".lower()
+        return term in text or any(
+            self._budget_level_matches(row.child(index), term)
+            for index in range(row.childCount())
+        )
+
+    def _show_budget_level(self, term: str) -> None:
+        """Presenta únicamente los hijos del nivel seleccionado."""
+        parent: QTreeWidgetItem | None = None
+        labels = ["Capítulos"]
+        valid_path: list[tuple[str, str]] = []
+        for kind, key in self._budget_level_path:
+            count = parent.childCount() if parent else self.budget_tree.topLevelItemCount()
+            found = None
+            for index in range(count):
+                row = parent.child(index) if parent else self.budget_tree.topLevelItem(index)
+                if row.data(0, ROW_KIND) != kind:
+                    continue
+                data = row.data(0, ROW_DATA)
+                if kind == "item":
+                    if not isinstance(data, int) or not 0 <= data < len(self.budget_items):
+                        continue
+                    data = self.budget_items[data].storage_id
+                if data == key:
+                    found = row
+                    break
+            if found is None:
+                self._clear_budget_selection()
+                break
+            parent = found
+            valid_path.append((kind, key))
+            labels.append(f"{found.text(0)} · {found.text(2)}")
+        self._budget_level_path = valid_path
+        if parent is not None:
+            children = parent.takeChildren()
+            self.budget_tree.clear()
+            self.budget_tree.addTopLevelItems(children)
+        ancestor_matches = bool(term) and any(term in label.lower() for label in labels[1:])
+        for index in range(self.budget_tree.topLevelItemCount()):
+            row = self.budget_tree.topLevelItem(index)
+            visible = not term or ancestor_matches or self._budget_level_matches(row, term)
+            row.takeChildren()
+            row.setHidden(not visible)
+        self.budget_level_label.set_title(" / ".join(labels))
+        self.budget_level_back.setEnabled(bool(valid_path))
+
+    def _restore_budget_level_selection(self) -> None:
+        """Conserva la selección visible y descarta las filas filtradas o eliminadas."""
+        for index in range(self.budget_tree.topLevelItemCount()):
+            row = self.budget_tree.topLevelItem(index)
+            kind = row.data(0, ROW_KIND)
+            data = row.data(0, ROW_DATA)
+            if row.isHidden():
+                continue
+            if (
+                kind == "chapter" and self.selected_chapter is not None
+                and data == self.selected_chapter
+            ) or (
+                kind in {"item", "resource"} and self.selected_budget_index is not None
+                and data == self.selected_budget_index
+            ):
+                self.budget_tree.setCurrentItem(row)
+                return
+        self._clear_budget_selection()
+
     def refresh_budget_tree(self) -> None:
         """Reconstruye capítulos y partidas manteniendo la selección visible."""
+        if self._budget_level_session != self.project_session:
+            self._budget_level_path.clear()
+            self._budget_full_expansion.clear()
+            self._budget_full_selection = None
+            self._budget_level_session = self.project_session
         self.budget_tree.clear()
-        term = self.budget_search.text().strip().lower()
+        search = self.budget_search.text().strip().lower()
         if self.budget_resource_filter:
-            self._refresh_budget_resources(term)
+            self._refresh_budget_resources(search)
+            if self._budget_level_mode:
+                self.budget_level_label.set_title(
+                    "Filtro de recursos · desactívalo para navegar por niveles"
+                )
+                self.budget_level_back.setEnabled(False)
+                self._restore_budget_level_selection()
             self.budget_refreshed.emit()
             return
+        term = "" if self._budget_level_mode else search
         chapter_items: dict[str, QTreeWidgetItem] = {}
         subchapter_items: dict[str, dict[str, QTreeWidgetItem]] = {}
         total = 0.0
@@ -1452,6 +1659,9 @@ class BudgetMainWindow(QMainWindow):
             label = "Total certificación a origen" if self.certification_read_only else "Total presupuesto"
             self.summary_label.setText(f"{label}: {self._format_currency(total)}")
         self._refresh_item_lock_icons()
+        if self._budget_level_mode:
+            self._show_budget_level(search)
+            self._restore_budget_level_selection()
         self._update_actions()
         self.budget_refreshed.emit()
 
@@ -1646,9 +1856,14 @@ class BudgetMainWindow(QMainWindow):
         self.budget_items.insert(position, item)
         self.selected_budget_index = position
         self.selected_chapter = None
+        if self._budget_level_mode and not self.budget_resource_filter:
+            self._budget_level_path = [("chapter", item.chapter)]
+            if item.subchapter:
+                self._budget_level_path.append(("subchapter", item.subchapter))
         self.refresh_budget_tree()
         self._select_budget_item(position)
-        self._show_item_details(item)
+        if not self._budget_level_mode or self.selected_budget_index == position:
+            self._show_item_details(item)
 
     def _select_budget_item(self, index: int) -> None:
         """Selecciona una fila por el índice estable de la lista."""
@@ -1671,6 +1886,7 @@ class BudgetMainWindow(QMainWindow):
             QMessageBox.information(self, "Sin selección", "Selecciona una partida.")
             return
         item = self.budget_items[self.selected_budget_index]
+        old_location = (item.chapter, item.subchapter)
         if not self._acquire_item_lock(item):
             return
         editor = ItemEditor(self, item, tuple(self.chapter_order))
@@ -1695,8 +1911,13 @@ class BudgetMainWindow(QMainWindow):
         item.set_indirect_costs(self.report_settings.indirect_costs, float(values["price"]))
         if item.measurement_lines:
             item.recalculate_measurement()
+        if self._budget_level_mode and (item.chapter, item.subchapter) != old_location:
+            self._budget_level_path = [("chapter", item.chapter)]
+            if item.subchapter:
+                self._budget_level_path.append(("subchapter", item.subchapter))
         self.refresh_budget_tree()
-        self._show_item_details(item)
+        if not self._budget_level_mode or self.selected_budget_index is not None:
+            self._show_item_details(item)
         self._mark_dirty()
 
     def rename_chapter(self) -> None:

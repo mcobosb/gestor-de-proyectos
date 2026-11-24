@@ -1617,6 +1617,200 @@ class BudgetQtWindowTests(unittest.TestCase):
                 self.application.sendPostedEvents(None, QEvent.Type.DeferredDelete)
                 self.application.processEvents()
 
+    def test_budget_level_navigation_and_full_view(self) -> None:
+        """Navega por doble clic sin alterar el presupuesto ni el modo original."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            try:
+                resource = Concept("MAT", "kg", "Material", 3, "3")
+                window.budget_items = [
+                    ProjectItem(
+                        "P1", "01#", "m", "Partida bajo subcapítulo", 2, 10,
+                        subchapter="SUB#", decomposition=[("MAT", 2)],
+                        component_concepts={"MAT": resource},
+                    ),
+                    ProjectItem("P2", "01#", "ud", "Partida directa", 1, 5),
+                    ProjectItem("P3", "02#", "ud", "Otra partida", 1, 6),
+                ]
+                window.chapter_order = ["01#", "02#"]
+                window.chapter_titles = {
+                    "01#": "Primer capítulo", "02#": "Segundo capítulo", "SUB#": "Subcapítulo",
+                }
+                window.refresh_budget_tree()
+                window._reset_history()
+                window.show()
+                self.application.processEvents()
+                self.assertFalse(window.budget_level_button.icon().isNull())
+                original_total = window.summary_label.text()
+                window.budget_tree.topLevelItem(0).setExpanded(False)
+                window.budget_tree.setCurrentItem(window.budget_tree.topLevelItem(1))
+                window.budget_level_button.click()
+                self.assertEqual(window.budget_tree.topLevelItemCount(), 2)
+                self.assertEqual(window.budget_tree.topLevelItem(0).childCount(), 0)
+                self.assertFalse(window.budget_level_back.isEnabled())
+                self.assertFalse(window.budget_expansion_action.isEnabled())
+                window.budget_search.setText("MAT")
+                self.assertFalse(window.budget_tree.topLevelItem(0).isHidden())
+                self.assertTrue(window.budget_tree.topLevelItem(1).isHidden())
+                window.budget_search.clear()
+
+                def open_row(index: int) -> None:
+                    """Abre una fila mediante el mismo doble clic que usa el usuario."""
+                    row = window.budget_tree.topLevelItem(index)
+                    rect = window.budget_tree.visualItemRect(row)
+                    QTest.mouseClick(
+                        window.budget_tree.viewport(), Qt.MouseButton.LeftButton,
+                        pos=rect.center(),
+                    )
+                    QTest.mouseDClick(
+                        window.budget_tree.viewport(), Qt.MouseButton.LeftButton,
+                        pos=rect.center(),
+                    )
+                    self.application.processEvents()
+
+                open_row(0)
+                self.assertEqual(
+                    [window.budget_tree.topLevelItem(i).text(0) for i in range(2)],
+                    ["SUB", "P2"],
+                )
+                self.assertIn("Primer capítulo", window.budget_level_label.toolTip() or window.budget_level_label.text())
+                open_row(0)
+                self.assertEqual(window.budget_tree.topLevelItem(0).text(0), "P1")
+                open_row(0)
+                self.assertEqual(window.budget_tree.topLevelItem(0).text(0), "MAT")
+                window.toggle_budget_resource_filter("3")
+                self.assertIn("Filtro de recursos", window.budget_level_label.toolTip() or window.budget_level_label.text())
+                self.assertFalse(window.budget_level_back.isEnabled())
+                window.toggle_budget_resource_filter("3")
+                self.assertEqual(window.budget_tree.topLevelItem(0).text(0), "MAT")
+                window.budget_tree.setCurrentItem(window.budget_tree.topLevelItem(0))
+                self.assertEqual(window.selected_budget_index, 0)
+                window.budget_search.setText("inexistente")
+                self.assertTrue(window.budget_tree.topLevelItem(0).isHidden())
+                self.assertIsNone(window.selected_budget_index)
+                window.budget_search.clear()
+                self.assertFalse(window.budget_tree.topLevelItem(0).isHidden())
+                window.budget_level_back.click()
+                self.assertEqual(window.budget_tree.topLevelItem(0).text(0), "P1")
+                window.budget_level_back.click()
+                self.assertEqual(window.budget_tree.topLevelItem(1).text(0), "P2")
+                open_row(1)
+                self.assertEqual(window.budget_tree.topLevelItemCount(), 0)
+                window.budget_level_back.click()
+                window.budget_level_button.click()
+                self.assertEqual(window.budget_tree.topLevelItemCount(), 2)
+                self.assertGreater(window.budget_tree.topLevelItem(0).childCount(), 0)
+                self.assertFalse(window.budget_tree.topLevelItem(0).isExpanded())
+                self.assertEqual(window.budget_tree.currentItem(), window.budget_tree.topLevelItem(1))
+                self.assertTrue(window.budget_expansion_action.isEnabled())
+                self.assertEqual(window.summary_label.text(), original_total)
+                self.assertFalse(window.is_dirty)
+                with patch.object(window, "edit_selection") as edit:
+                    open_row(0)
+                    edit.assert_called_once()
+
+                window._set_certification_read_only(True)
+                window.budget_level_button.click()
+                self.assertTrue(window.budget_level_button.isChecked())
+                open_row(0)
+                self.assertEqual(window.budget_tree.topLevelItemCount(), 2)
+                self.assertTrue(window.description.isReadOnly())
+                with patch("PySide6.QtWidgets.QInputDialog.getText", return_value=("Nuevo", True)):
+                    window.new_project()
+                self.assertTrue(window.budget_level_button.isChecked())
+                self.assertFalse(window.budget_level_back.isEnabled())
+                self.assertEqual(window.budget_tree.topLevelItemCount(), 0)
+            finally:
+                window.is_dirty = False
+                window.close()
+                window.deleteLater()
+                self.application.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                self.application.processEvents()
+
+    def test_budget_level_insert_and_edit_follow_item_location(self) -> None:
+        """Las acciones de edición conservan una selección visible por niveles."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            try:
+                window.chapter_order = ["01#", "02#"]
+                window.budget_items = [
+                    ProjectItem("P1", "01#", "m", "Original", 2, 10, subchapter="SUB#"),
+                ]
+                window.refresh_budget_tree()
+                window.budget_level_button.click()
+                item = ProjectItem("P2", "02#", "m", "Añadida", 3, 5)
+                window._insert_item(item)
+                self.assertEqual(window.budget_tree.currentItem().text(0), "P2")
+                self.assertEqual(window.selected_budget_index, 1)
+                values = {
+                    "chapter": "01#", "subchapter": "SUB#", "code": "P2",
+                    "unit": "m", "summary": "Añadida", "measurement": 3,
+                    "price": 5, "rendimiento": 0,
+                }
+                with patch("budget_qt_window.ItemEditor") as editor:
+                    editor.return_value.exec.return_value = QDialog.DialogCode.Accepted
+                    editor.return_value.values.return_value = values
+                    window.edit_selection()
+                self.assertEqual(window.budget_tree.currentItem().text(0), "P2")
+                self.assertEqual(window.budget_items[1].subchapter, "SUB#")
+                self.assertIn("SUB", window.budget_level_label.toolTip() or window.budget_level_label.text())
+            finally:
+                window.is_dirty = False
+                window.close()
+                window.deleteLater()
+                self.application.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                self.application.processEvents()
+
+    def test_budget_level_button_shows_pressed_state_in_both_themes(self) -> None:
+        """El botón conserva un aspecto pulsado y un icono legible al cambiar de tema."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            try:
+                apply_theme(self.application, "light")
+                window.show()
+                self.application.processEvents()
+                button = window.budget_level_button
+                unpressed = button.grab().toImage()
+                light_icon = button.icon().pixmap(32, 32).toImage()
+                button.click()
+                self.application.processEvents()
+                pressed = button.grab().toImage()
+                changed = sum(
+                    unpressed.pixel(x, y) != pressed.pixel(x, y)
+                    for y in range(unpressed.height()) for x in range(unpressed.width())
+                )
+                self.assertGreater(changed, unpressed.width() * unpressed.height() // 5)
+                self.assertTrue(button.isChecked())
+                apply_theme(self.application, "dark")
+                self.application.processEvents()
+                dark_icon = button.icon().pixmap(32, 32).toImage()
+
+                def ink_lightness(image) -> int:
+                    """Mide el color de un trazo opaco del icono."""
+                    return next(
+                        image.pixelColor(x, y).lightness()
+                        for y in range(image.height()) for x in range(image.width())
+                        if image.pixelColor(x, y).alpha() > 200
+                    )
+
+                self.assertGreater(ink_lightness(dark_icon), ink_lightness(light_icon))
+                self.assertTrue(button.isChecked())
+                button.click()
+                self.assertFalse(button.isChecked())
+            finally:
+                apply_theme(self.application, "light")
+                window.is_dirty = False
+                window.close()
+                window.deleteLater()
+                self.application.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                self.application.processEvents()
+
     def test_planning_qt_roundtrips_parameters_sequence_and_shared_state(self) -> None:
         """Migra calendario, edición de actividades y estado compartido."""
         with tempfile.TemporaryDirectory() as directory, patch(

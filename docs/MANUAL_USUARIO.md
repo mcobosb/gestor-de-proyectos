@@ -247,6 +247,16 @@ datos, utiliza **Nuevo proyecto** o **Importar presupuesto BC3**.
 El panel del proyecto contiene capítulos y partidas. El panel de referencia
 permite consultar bases de precios.
 
+El botón con icono de árbol **Navegación por niveles**, junto al nombre del
+proyecto, alterna entre la estructura completa y una vista de un solo nivel.
+Permanece pulsado mientras esta última está activa. En ella, haz
+doble clic en un capítulo para ver sus subcapítulos y partidas directas; después,
+en un subcapítulo para ver sus partidas y en una partida para ver sus recursos.
+La flecha de regreso vuelve al nivel anterior. Para editar, selecciona una fila
+y utiliza el botón **Editar**. La búsqueda filtra el nivel visible y sus
+descendientes; los filtros de recursos siguen mostrando su listado global.
+Esta navegación también está disponible para certificaciones en solo lectura.
+
 Al crear, duplicar o incorporar partidas desde una base de referencia o un
 presupuesto BC3, el resumen y la descripción se convierten a mayúsculas.
 También se aplica a las partidas generadas de RCDs y transporte. Se conservan

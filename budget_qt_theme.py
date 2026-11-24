@@ -5,7 +5,7 @@ import unicodedata
 
 from PySide6.QtCore import QEvent, QLineF, QObject, QRectF, QTimer, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPalette, QPen, QPixmap
-from PySide6.QtWidgets import QApplication, QPushButton, QStyle, QWidget
+from PySide6.QtWidgets import QApplication, QPushButton, QStyle, QToolButton, QWidget
 from localization import translate
 
 
@@ -154,6 +154,27 @@ def search_icon(widget: QWidget) -> QIcon:
     return QIcon(pixmap)
 
 
+def budget_tree_icon(widget: QWidget) -> QIcon:
+    """Dibuja capítulos, subcapítulos y partidas conectados en árbol."""
+    pixmap = QPixmap(32, 32)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    with QPainter(pixmap) as painter:
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(widget.palette().color(QPalette.ColorRole.WindowText), 2)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.drawRoundedRect(QRectF(2, 2, 6, 6), 1, 1)
+        painter.drawLine(QLineF(5, 8, 5, 23))
+        painter.drawLine(QLineF(5, 13, 11, 13))
+        painter.drawLine(QLineF(5, 23, 11, 23))
+        painter.drawRoundedRect(QRectF(11, 10, 6, 6), 1, 1)
+        painter.drawRoundedRect(QRectF(11, 20, 6, 6), 1, 1)
+        painter.drawLine(QLineF(14, 16, 14, 18))
+        painter.drawLine(QLineF(14, 18, 22, 18))
+        painter.drawRoundedRect(QRectF(22, 15, 6, 6), 1, 1)
+    return QIcon(pixmap)
+
+
 def certification_icon(widget: QWidget) -> QIcon:
     """Dibuja un sello con una marca de validación para certificaciones."""
     pixmap = QPixmap(32, 32)
@@ -265,6 +286,9 @@ def decorate_widget(widget: QWidget) -> None:
     app = QApplication.instance()
     if app is None:
         return
+    for button in widget.findChildren(QToolButton):
+        if button.objectName() == "budgetLevelMode":
+            button.setIcon(budget_tree_icon(button))
     for button in widget.findChildren(QPushButton):
         source = button.property("sourceButtonText") or translate(button.text(), "es")
         normalized = _key(source)
@@ -364,6 +388,16 @@ def _stylesheet(theme: str) -> str:
     }}
     QToolButton:hover {{
         background: {blue_tint};
+    }}
+    QToolButton#budgetLevelMode {{
+        border: 1px solid transparent;
+    }}
+    QToolButton#budgetLevelMode:checked {{
+        background: {blue_hover};
+        border: 1px solid {accent};
+        color: {blue_text};
+        padding-top: 8px;
+        padding-bottom: 6px;
     }}
     QToolButton#saveBudgetButton {{
         background: {blue_tint};
