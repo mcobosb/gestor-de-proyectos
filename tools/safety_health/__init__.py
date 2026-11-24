@@ -18,6 +18,7 @@ from .chapter_selection import (
     study_chapters, study_items,
 )
 from .external_conditions import restore_external_conditions
+from .drawings import restore_drawings
 from .regulations import restore_review, review_context
 from .technical_conditions import restore_technical_review, technical_review_confirmed
 
@@ -57,6 +58,7 @@ def restore_project_state(data: dict) -> dict:
         regulatory_review=data.get("regulatory_review"),
         chapter_selection=data.get("chapter_selection"),
         technical_review=data.get("technical_review"),
+        drawings=data.get("drawings"),
     )
 
 
@@ -307,6 +309,7 @@ def serialize_state(
     regulatory_review: dict | None = None,
     chapter_selection: dict[str, bool] | None = None,
     technical_review: dict | None = None,
+    drawings: dict | None = None,
 ) -> dict:
     """Conserva la revisión, sus partidas y la información de centros asistenciales."""
     state = {
@@ -332,6 +335,8 @@ def serialize_state(
         state["regulatory_review"] = restore_review(regulatory_review)
     if technical_review is not None:
         state["technical_review"] = restore_technical_review(technical_review)
+    if drawings is not None:
+        state["drawings"] = restore_drawings(drawings)
     if resumen_actuacion is not None:
         state["resumen_actuacion"] = _checked_work_summary(resumen_actuacion)
     if external_conditions is not None:
@@ -353,6 +358,7 @@ def restore_state(data: object) -> tuple[list[SafetyLine], Decimal]:
         _checked_work_summary(data["resumen_actuacion"])
     restore_review(data.get("regulatory_review"))
     restore_technical_review(data.get("technical_review"))
+    restore_drawings(data.get("drawings"))
     restore_chapter_selection(data.get("chapter_selection"))
     if ("centros_asistenciales" in data
             and not isinstance(data["centros_asistenciales"], str)):
@@ -500,6 +506,7 @@ def synchronize_budget(
         regulatory_review=saved_review,
         chapter_selection=app.safety_health_state.get("chapter_selection"),
         technical_review=app.safety_health_state.get("technical_review"),
+        drawings=app.safety_health_state.get("drawings"),
     )
     app.refresh_budget_tree()
     app._mark_dirty()

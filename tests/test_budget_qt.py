@@ -1333,6 +1333,17 @@ class BudgetQtWindowTests(unittest.TestCase):
             tool = SafetyHealthWindowQt(window)
             self.assertEqual(len(tool.criteria_checks), 4)
             self.assertEqual(len(tool.lines), 3)
+            self.assertNotIn("drawings", window.safety_health_state)
+            self.assertTrue(all(
+                tool.drawings_table.item(row, 0).checkState() == Qt.CheckState.Unchecked
+                for row in range(tool.drawings_table.rowCount())
+            ))
+            tool.pages.setCurrentIndex(1)
+            self.assertEqual(window.safety_health_state["drawings"]["paper"], "A4")
+            tool.drawings_format.setCurrentText("A3")
+            first = tool.drawings_table.item(0, 0)
+            first.setCheckState(Qt.CheckState.Checked)
+            self.assertTrue(window.safety_health_state["drawings"]["selected"]["CIN12"])
             tool.summary_text.setPlainText("Resumen preventivo Qt")
             tool.commit_basic_state()
             self.assertEqual(
@@ -1356,6 +1367,12 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertTrue(proposal.insert_button.isEnabled())
             with patch.object(window, "save_project", return_value=False):
                 self.assertTrue(proposal.create_chapter())
+            self.assertEqual(window.safety_health_state["drawings"]["paper"], "A3")
+            self.assertTrue(window.safety_health_state["drawings"]["selected"]["CIN12"])
+            reopened = SafetyHealthWindowQt(window)
+            self.assertEqual(reopened.drawings_format.currentText(), "A3")
+            self.assertEqual(reopened.drawings_table.item(0, 0).checkState(), Qt.CheckState.Checked)
+            reopened.reject()
             generated = [
                 row
                 for row in window.budget_items
@@ -1364,6 +1381,66 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertEqual(len(generated), 3)
             self.assertFalse(proposal.insert_button.isEnabled())
             proposal.reject()
+            tool.reject()
+            window.is_dirty = False
+            window.close()
+            self.application.processEvents()
+
+    def test_safety_drawings_can_preview_add_and_restore_custom_svg(self) -> None:
+        """La biblioteca personal se previsualiza y su selección se conserva."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ), patch(
+            "tools.safety_health.drawings.user_library_directory",
+            return_value=Path(directory) / "biblioteca",
+        ):
+            window = BudgetMainWindow()
+            item = ProjectItem("01AAB00001", "01#", "m2", "Demolición", measurement=1, unit_price=10)
+            window.budget_items = [item]
+            window.chapter_order = ["01#"]
+            window.safety_health_state = serialize_state(
+                proposed_lines([item]), Decimal("2"), chapter_selection={"01#": True},
+            )
+            tool = SafetyHealthWindowQt(window)
+            tool.pages.setCurrentIndex(1)
+            tool.drawings_table.selectRow(0)
+            self.assertEqual(tool.drawings_preview.currentIndex(), 1)
+            path = Path(directory) / "Nueva ficha.svg"
+            path.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 200">'
+                '<rect width="100" height="200"/></svg>', encoding="utf-8",
+            )
+            with patch.object(QFileDialog, "getOpenFileName", return_value=(str(path), "")):
+                tool._add_drawing()
+            row = tool.drawings_table.currentRow()
+            self.assertEqual(tool.drawings_table.item(row, 1).text(), "Nueva ficha")
+            self.assertEqual(tool.drawings_preview.currentIndex(), 1)
+            check = tool.drawings_table.item(row, 0)
+            self.assertEqual(check.checkState(), Qt.CheckState.Unchecked)
+            code = check.data(Qt.ItemDataRole.UserRole)
+            check.setCheckState(Qt.CheckState.Checked)
+            reopened = SafetyHealthWindowQt(window)
+            row = next(
+                row for row in range(reopened.drawings_table.rowCount())
+                if reopened.drawings_table.item(row, 0).data(Qt.ItemDataRole.UserRole) == code
+            )
+            self.assertEqual(reopened.drawings_table.item(row, 0).checkState(), Qt.CheckState.Checked)
+            reopened.drawings_table.selectRow(row)
+            self.assertEqual(reopened.drawings_preview.currentIndex(), 1)
+            reopened.reject()
+            next((Path(directory) / "biblioteca").glob("*.svg")).unlink()
+            missing = SafetyHealthWindowQt(window)
+            row = next(
+                row for row in range(missing.drawings_table.rowCount())
+                if missing.drawings_table.item(row, 0).data(Qt.ItemDataRole.UserRole) == code
+            )
+            self.assertEqual(missing.drawings_table.item(row, 0).checkState(), Qt.CheckState.Checked)
+            missing.drawings_table.selectRow(row)
+            self.assertEqual(missing.drawings_preview.currentIndex(), 0)
+            self.assertIn("no está disponible", missing.drawings_preview_message.text())
+            missing.drawings_table.item(row, 0).setCheckState(Qt.CheckState.Unchecked)
+            self.assertFalse(window.safety_health_state["drawings"]["selected"][code])
+            missing.reject()
             tool.reject()
             window.is_dirty = False
             window.close()

@@ -19,6 +19,7 @@ from cpv_catalog import resolve_cpv_codes
 from .care_centers import format_centers, restore_centers
 from .chapter_selection import study_chapters, study_items
 from .external_conditions import APPLICABILITY, EXTERNAL_CONDITIONS, restore_external_conditions
+from .drawings import render_drawings, restore_drawings
 from .regulations import (
     REGULATIONS, WorkUnit, general_une_references, load_ntps, restore_review, review_context,
 )
@@ -1412,11 +1413,15 @@ def _link_odt_references(document, targets: dict[str, str]) -> None:
         paragraph.insert(0, bookmark)
 
 
-def _write_pdf(app, target, content: _StudyContent) -> None:
+def _write_pdf(app, target, content: _StudyContent, drawings: list[bytes], paper: str) -> None:
     """Maqueta el estudio con indice enlazado y paginas reales, como el PPTP."""
     from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
     from reportlab.lib.styles import ParagraphStyle
-    from reportlab.platypus import PageBreak, SimpleDocTemplate
+    from io import BytesIO
+    from reportlab.lib.pagesizes import A3, A4, landscape
+    from reportlab.platypus import (
+        BaseDocTemplate, Frame, Image, NextPageTemplate, PageBreak, PageTemplate,
+    )
     from reportlab.platypus.doctemplate import LayoutError
     from reportlab.platypus.tableofcontents import TableOfContents
 
@@ -1520,8 +1525,14 @@ def _write_pdf(app, target, content: _StudyContent) -> None:
                     story.append(layout.table(block.headers, block.rows, ratios))
 
     story.extend(layout.signature_block(settings))
+    plan_size = A4 if paper == "A4" else landscape(A3)
+    if drawings:
+        story.append(NextPageTemplate("ESSDrawings"))
+        for drawing in drawings:
+            story.append(PageBreak())
+            story.append(Image(BytesIO(drawing), width=plan_size[0] - 0.1, height=plan_size[1] - 0.1))
 
-    class StudyDocTemplate(SimpleDocTemplate):
+    class StudyDocTemplate(BaseDocTemplate):
         """Registra los destinos y las paginas del indice en cada pasada."""
 
         def afterFlowable(self, flowable) -> None:
@@ -1554,15 +1565,26 @@ def _write_pdf(app, target, content: _StudyContent) -> None:
             )
             canvas.restoreState()
 
+    frame = Frame(
+        document.leftMargin, document.bottomMargin, document.width, document.height,
+        id="ESSBody",
+    )
+    plan_frame = Frame(
+        0, 0, *plan_size, id="ESSDrawings", leftPadding=0, rightPadding=0,
+        topPadding=0, bottomPadding=0,
+    )
+    document.addPageTemplates([
+        PageTemplate(id="First", frames=frame, onPage=header, autoNextPageTemplate="Later"),
+        PageTemplate(id="Later", frames=frame, onPage=header),
+        PageTemplate(id="ESSDrawings", frames=plan_frame, pagesize=plan_size),
+    ])
     try:
-        document.multiBuild(
-            story, onFirstPage=header, onLaterPages=header,
-        )
+        document.multiBuild(story)
     except LayoutError as exc:
         raise ValueError(f"No se pudo maquetar el Estudio de Seguridad y Salud: {exc}") from exc
 
 
-def _write_odt(app, target, content: _StudyContent) -> None:
+def _write_odt(app, target, content: _StudyContent, drawings: list[bytes], paper: str) -> None:
     """Escribe el mismo estudio como documento ODT editable basado en la plantilla."""
     from xml.etree import ElementTree as ET
     from budget_core import currency_label
@@ -1701,6 +1723,98 @@ def _write_odt(app, target, content: _StudyContent) -> None:
     })
     document.append_signature(settings)
     document.write(target)
+    if drawings:
+        _append_odt_drawings(target, drawings, paper)
+
+
+def _append_odt_drawings(target: Path, drawings: list[bytes], paper: str) -> None:
+    """Añade páginas de plano con maestro propio e imágenes integradas en el ODT."""
+    from xml.etree import ElementTree as ET
+    from odt_reports import _tag
+
+    width, height = ("21cm", "29.7cm") if paper == "A4" else ("42cm", "29.7cm")
+    temporary = None
+    try:
+        with ZipFile(target) as source:
+            content = ET.fromstring(source.read("content.xml"))
+            styles = ET.fromstring(source.read("styles.xml"))
+            manifest = ET.fromstring(source.read("META-INF/manifest.xml"))
+            automatic = content.find(_tag("office:automatic-styles"))
+            body = content.find(f"{_tag('office:body')}/{_tag('office:text')}")
+            style = ET.SubElement(automatic, _tag("style:style"), {
+                _tag("style:name"): "ESSDrawingParagraph",
+                _tag("style:family"): "paragraph",
+                _tag("style:master-page-name"): "ESSDrawingPage",
+            })
+            ET.SubElement(style, _tag("style:paragraph-properties"), {
+                _tag("fo:break-before"): "page",
+                _tag("fo:margin"): "0cm",
+                _tag("fo:line-height"): "1pt",
+            })
+            graphic = ET.SubElement(automatic, _tag("style:style"), {
+                _tag("style:name"): "ESSDrawingGraphic", _tag("style:family"): "graphic",
+            })
+            ET.SubElement(graphic, _tag("style:graphic-properties"), {
+                _tag("style:horizontal-pos"): "from-left",
+                _tag("style:horizontal-rel"): "page",
+                _tag("style:vertical-pos"): "from-top",
+                _tag("style:vertical-rel"): "page",
+                _tag("style:wrap"): "run-through",
+            })
+            layouts = styles.find(_tag("office:automatic-styles"))
+            page_layout = ET.SubElement(layouts, _tag("style:page-layout"), {
+                _tag("style:name"): "ESSDrawingLayout",
+            })
+            ET.SubElement(page_layout, _tag("style:page-layout-properties"), {
+                _tag("fo:page-width"): width, _tag("fo:page-height"): height,
+                _tag("fo:margin"): "0cm",
+                _tag("style:print-orientation"): "portrait" if paper == "A4" else "landscape",
+            })
+            masters = styles.find(_tag("office:master-styles"))
+            ET.SubElement(masters, _tag("style:master-page"), {
+                _tag("style:name"): "ESSDrawingPage",
+                _tag("style:page-layout-name"): "ESSDrawingLayout",
+            })
+            image_names = []
+            existing_names = set(source.namelist())
+            for index, _image in enumerate(drawings, 1):
+                name = f"Pictures/ESSDrawing{index}.png"
+                if name in existing_names:
+                    raise ValueError(f"El ODT ya contiene el recurso de plano {name}.")
+                image_names.append(name)
+                paragraph = ET.SubElement(body, _tag("text:p"), {
+                    _tag("text:style-name"): "ESSDrawingParagraph",
+                })
+                frame = ET.SubElement(paragraph, _tag("draw:frame"), {
+                    _tag("draw:name"): f"ESSDrawing{index}",
+                    _tag("draw:style-name"): "ESSDrawingGraphic",
+                    _tag("text:anchor-type"): "paragraph",
+                    _tag("svg:x"): "0cm", _tag("svg:y"): "0cm",
+                    _tag("svg:width"): width, _tag("svg:height"): height,
+                })
+                ET.SubElement(frame, _tag("draw:image"), {
+                    _tag("xlink:href"): name, _tag("xlink:type"): "simple",
+                    _tag("xlink:show"): "embed", _tag("xlink:actuate"): "onLoad",
+                })
+                ET.SubElement(manifest, _tag("manifest:file-entry"), {
+                    _tag("manifest:full-path"): name, _tag("manifest:media-type"): "image/png",
+                })
+            with tempfile.NamedTemporaryFile(dir=target.parent, suffix=".odt", delete=False) as handle:
+                temporary = Path(handle.name)
+            replacements = {
+                "content.xml": ET.tostring(content, encoding="utf-8", xml_declaration=True),
+                "styles.xml": ET.tostring(styles, encoding="utf-8", xml_declaration=True),
+                "META-INF/manifest.xml": ET.tostring(manifest, encoding="utf-8", xml_declaration=True),
+            }
+            with ZipFile(temporary, "w") as output:
+                for info in source.infolist():
+                    output.writestr(info, replacements.get(info.filename, source.read(info.filename)))
+                for name, image in zip(image_names, drawings):
+                    output.writestr(name, image)
+        temporary.replace(target)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
 
 
 def write_study_report(app, target) -> tuple[str, ...]:
@@ -1711,6 +1825,9 @@ def write_study_report(app, target) -> tuple[str, ...]:
     output_format = report_output_format(
         target, app.report_settings.output_format,
     )
+    drawing_state = restore_drawings(app.safety_health_state.get("drawings"))
+    drawings = render_drawings(app, drawing_state) if drawing_state else []
+    paper = drawing_state["paper"] if drawing_state else "A4"
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -1718,9 +1835,9 @@ def write_study_report(app, target) -> tuple[str, ...]:
         ) as handle:
             temporary = Path(handle.name)
         if output_format == "pdf":
-            _write_pdf(app, temporary, content)
+            _write_pdf(app, temporary, content, drawings, paper)
         else:
-            _write_odt(app, temporary, content)
+            _write_odt(app, temporary, content, drawings, paper)
         temporary.replace(target)
     except (OSError, BadZipFile) as exc:
         raise ValueError(f"No se pudo guardar el Estudio de Seguridad y Salud: {exc}") from exc

@@ -5,8 +5,9 @@ from decimal import Decimal
 from pathlib import Path, PurePosixPath
 import webbrowser
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QByteArray, QSignalBlocker, Qt
 from PySide6.QtGui import QCloseEvent, QGuiApplication
+from PySide6.QtSvgWidgets import QSvgWidget
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -24,6 +25,8 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QSplitter,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -55,6 +58,7 @@ from . import (
 from .care_centers import FIELDS, format_centers, restore_centers
 from .chapter_selection import restore_chapter_selection, study_chapters, study_items
 from .external_conditions import APPLICABILITY, EXTERNAL_CONDITIONS, restore_external_conditions
+from .drawings import add_user_sheet, available_sheets, read_sheet, restore_drawings
 from .regulations import (
     REGULATIONS,
     initially_selected,
@@ -288,6 +292,11 @@ class SafetyHealthWindowQt(QDialog):
         self.resize(1120, 800)
         layout = QVBoxLayout(self)
         add_reference_pill(layout, "safety_health")
+        self.pages = QTabWidget()
+        layout.addWidget(self.pages, 1)
+        basic_page = QWidget()
+        basic_layout = QVBoxLayout(basic_page)
+        self.pages.addTab(basic_page, "Información y revisión")
         criteria = QGroupBox("Criterios del artículo 4.1 de la LPRL")
         criteria_layout = QVBoxLayout(criteria)
         values = saved or self.study_criteria.fulfilled
@@ -312,7 +321,7 @@ class SafetyHealthWindowQt(QDialog):
         self.study_result.setStyleSheet("font-weight: 600;")
         criteria_layout.addWidget(self.study_result)
         self._update_study_result()
-        layout.addWidget(criteria)
+        basic_layout.addWidget(criteria)
         basics = QGroupBox("Información básica del Estudio de Seguridad y Salud")
         basics_layout = QVBoxLayout(basics)
         basics_layout.addWidget(QLabel("Resumen de la actuación"))
@@ -327,7 +336,7 @@ class SafetyHealthWindowQt(QDialog):
         basics_layout.addWidget(register, alignment=Qt.AlignmentFlag.AlignLeft)
         self.centers_editor = CareCentersEditorQt(basics, app.safety_health_state)
         basics_layout.addWidget(self.centers_editor)
-        layout.addWidget(basics, 1)
+        basic_layout.addWidget(basics, 1)
         actions = QHBoxLayout()
         for text, slot in (
             ("Condicionantes externos…", self.open_external_conditions),
@@ -338,7 +347,148 @@ class SafetyHealthWindowQt(QDialog):
             button = QPushButton(text)
             button.clicked.connect(slot)
             actions.addWidget(button)
-        layout.addLayout(actions)
+        basic_layout.addLayout(actions)
+        self._create_drawings_page()
+
+    def _create_drawings_page(self) -> None:
+        """Presenta la selección manual, el visor y el formato de los planos."""
+        saved = restore_drawings(self.app.safety_health_state.get("drawings"))
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        note = QLabel(
+            "Selecciona las fichas que correspondan a la obra tras su revisión técnica. "
+            "A4 incluye una ficha por plano; A3 incluye dos. Se utiliza el cajetín "
+            "configurado para el proyecto. Se conservan los colores y la atribución originales; "
+            "revisa la legibilidad, especialmente de los textos amarillos."
+        )
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Formato de los planos:"))
+        self.drawings_format = QComboBox()
+        self.drawings_format.addItems(["A4", "A3"])
+        self.drawings_format.setCurrentText(saved["paper"] if saved else "A4")
+        row.addWidget(self.drawings_format)
+        row.addStretch()
+        add_button = QPushButton("Añadir ficha SVG…")
+        add_button.clicked.connect(self._add_drawing)
+        row.addWidget(add_button)
+        layout.addLayout(row)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.drawings_table = QTableWidget(0, 2)
+        self.drawings_table.setHorizontalHeaderLabels(("Incluir", "Ficha"))
+        self.drawings_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.drawings_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.drawings_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.drawings_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        splitter.addWidget(self.drawings_table)
+        preview = QWidget()
+        preview_layout = QVBoxLayout(preview)
+        preview_layout.addWidget(QLabel("Vista previa"))
+        self.drawings_preview = QStackedWidget()
+        self.drawings_preview_message = QLabel("Selecciona una ficha para verla.")
+        self.drawings_preview_message.setWordWrap(True)
+        self.drawings_preview_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.drawings_preview.addWidget(self.drawings_preview_message)
+        self.drawings_svg = QSvgWidget()
+        self.drawings_svg.setMinimumSize(200, 260)
+        self.drawings_svg.renderer().setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
+        self.drawings_preview.addWidget(self.drawings_svg)
+        preview_layout.addWidget(self.drawings_preview, 1)
+        splitter.addWidget(preview)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 1)
+        layout.addWidget(splitter, 1)
+        self._populate_drawings(saved)
+        self.pages.addTab(page, "Planos")
+        self.drawings_format.currentTextChanged.connect(self._save_drawings)
+        self.drawings_table.itemChanged.connect(self._save_drawings)
+        self.drawings_table.itemSelectionChanged.connect(self._preview_drawing)
+        self.pages.currentChanged.connect(self._drawings_page_changed)
+
+    def _populate_drawings(self, saved: dict | None) -> None:
+        """Añade también referencias guardadas a fichas que ya no están disponibles."""
+        self._drawing_sheets = {sheet.code: sheet for sheet in available_sheets()}
+        selected = saved["selected"] if saved else {}
+        rows = [(sheet.code, sheet.title) for sheet in self._drawing_sheets.values()]
+        rows.extend(
+            (code, f"Ficha no disponible: {code}")
+            for code in selected if code not in self._drawing_sheets
+        )
+        blocker = QSignalBlocker(self.drawings_table)
+        self.drawings_table.setRowCount(0)
+        for code, title in rows:
+            row_index = self.drawings_table.rowCount()
+            self.drawings_table.insertRow(row_index)
+            check = QTableWidgetItem()
+            check.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsSelectable)
+            check.setData(Qt.ItemDataRole.UserRole, code)
+            enabled = selected.get(code, False)
+            check.setCheckState(Qt.CheckState.Checked if enabled else Qt.CheckState.Unchecked)
+            self.drawings_table.setItem(row_index, 0, check)
+            self.drawings_table.setItem(row_index, 1, QTableWidgetItem(title))
+        del blocker
+
+    def _preview_drawing(self) -> None:
+        """Muestra la ficha seleccionada sin cambiar su inclusión en el estudio."""
+        row = self.drawings_table.currentRow()
+        check = self.drawings_table.item(row, 0) if row >= 0 else None
+        sheet = self._drawing_sheets.get(str(check.data(Qt.ItemDataRole.UserRole))) if check else None
+        if sheet is None:
+            self.drawings_preview_message.setText(
+                "La ficha seleccionada no está disponible en esta biblioteca."
+                if check else "Selecciona una ficha para verla."
+            )
+            self.drawings_preview.setCurrentIndex(0)
+            return
+        try:
+            data = read_sheet(sheet)
+            self.drawings_svg.load(QByteArray(data))
+            if not self.drawings_svg.renderer().isValid():
+                raise ValueError(f"No se puede representar la ficha {sheet.title}.")
+        except ValueError as exc:
+            self.drawings_preview_message.setText(str(exc))
+            self.drawings_preview.setCurrentIndex(0)
+            return
+        self.drawings_preview.setCurrentIndex(1)
+
+    def _add_drawing(self) -> None:
+        """Incorpora una copia del SVG a la biblioteca personal."""
+        path, _filter = QFileDialog.getOpenFileName(
+            self, "Añadir ficha de Seguridad y Salud", "", "Fichas SVG (*.svg)",
+        )
+        if not path:
+            return
+        try:
+            sheet = add_user_sheet(Path(path))
+            self._populate_drawings(restore_drawings(self.app.safety_health_state.get("drawings")))
+        except ValueError as exc:
+            QMessageBox.critical(self, "No se pudo añadir la ficha", str(exc))
+            return
+        for row in range(self.drawings_table.rowCount()):
+            if self.drawings_table.item(row, 0).data(Qt.ItemDataRole.UserRole) == sheet.code:
+                self.drawings_table.selectRow(row)
+                break
+
+    def _drawings_page_changed(self, index: int) -> None:
+        """Guarda el formato inicial sin modificar la selección de proyectos existentes."""
+        if index == 1 and "drawings" not in self.app.safety_health_state:
+            self._save_drawings()
+
+    def _save_drawings(self, *_args) -> None:
+        """Guarda el formato y todas las decisiones explícitas del usuario."""
+        self.commit_basic_state()
+        state = dict(self.app.safety_health_state)
+        state["drawings"] = restore_drawings({
+            "paper": self.drawings_format.currentText(),
+            "selected": {
+                str(self.drawings_table.item(row, 0).data(Qt.ItemDataRole.UserRole)):
+                self.drawings_table.item(row, 0).checkState() == Qt.CheckState.Checked
+                for row in range(self.drawings_table.rowCount())
+            },
+        })
+        self.app.safety_health_state = state
+        self.app._mark_dirty()
 
     @property
     def selected_study_criteria(self) -> tuple[bool, bool, bool, bool]:

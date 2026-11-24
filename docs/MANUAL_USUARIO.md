@@ -608,6 +608,33 @@ las fichas y el texto final del modo seleccionado en el proyecto. Guarda despué
 el proyecto JSON para recuperarlos en la siguiente sesión. Abrir la ventana o
 cambiar de pestaña no modifica las partidas del presupuesto.
 
+En la pestaña **Planos** puedes ver las fichas gráficas de Seguridad y Salud:
+selecciona una fila para ver su vista previa y marca las que quieras incluir.
+Los proyectos nuevos no preseleccionan fichas: corresponde al técnico revisar y
+elegir las adecuadas. Se respetan las selecciones de proyectos guardados con
+versiones anteriores. Las decisiones y el formato se guardan con el proyecto.
+
+Con **Añadir ficha SVG…** puedes incorporar una copia a tu biblioteca personal,
+disponible para otros proyectos. El título se toma del nombre del archivo. El
+SVG debe ser autónomo, sin recursos enlazados externos, y no superar 16 MB;
+no se modifica el original. En la versión instalada la biblioteca se guarda
+en la carpeta de datos de la aplicación del usuario, y en desarrollo en
+`tools/safety_health/fichas_planos`. Si trasladas el proyecto a otro equipo,
+copia también esa biblioteca: si falta una ficha seleccionada, el programa lo
+indicará y no generará un estudio incompleto.
+
+Al generar el estudio en PDF u ODT se añaden los planos como imágenes de página
+completa: una ficha en cada A4 vertical o hasta dos fichas en cada A3 horizontal.
+Configura previamente la carpeta de cajetines en los ajustes del proyecto. El
+cajetín A4 debe reservar la banda inferior y el A3 la banda derecha; los SVG
+se ajustan proporcionalmente al papel. Se rellenan los campos identificados
+del cajetín con los datos disponibles, la fecha de generación, el número y
+título del plano y la escala «S/E»; los campos que no existan en el SVG no se
+añaden. Los SVG originales no se modifican. Revisa la disposición, legibilidad
+y contenido preventivo antes de utilizar el estudio; algunas fichas originales
+contienen líneas o textos amarillos de bajo contraste. Se conserva la
+atribución de sus autores.
+
 En **Editar biblioteca de fichas...**, tanto en PPTP como en Seguridad y Salud,
 se resaltan en verde las fichas vinculadas al proyecto y todas las carpetas
 que las contienen. En PPTP se utilizan las asignaciones seleccionadas del

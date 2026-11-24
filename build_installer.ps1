@@ -75,6 +75,7 @@ foreach ($requiredResource in @(
     "pptp\docs\unes.csv",
     "safety_health\datos\seguridad_salud_relaciones_bcca2023.csv",
     "safety_health\BIBLIOTECA.zip",
+    "safety_health\PLANOS.zip",
     "pptp\BIBLIOTECA.zip",
     "price_justification\BIBLIOTECA.zip",
     "rcd\BIBLIOTECA.zip",
