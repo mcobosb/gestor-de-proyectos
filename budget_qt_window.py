@@ -152,6 +152,7 @@ class BudgetMainWindow(QMainWindow):
     def __init__(self) -> None:
         """Inicializa el estado, los menús y los dos paneles de presupuesto."""
         super().__init__()
+        self.setAcceptDrops(True)
         self.setWindowIcon(
             QIcon(str(application_directory(__file__) / "iconos" / "logo.ico"))
         )
@@ -221,6 +222,7 @@ class BudgetMainWindow(QMainWindow):
         apply_button_language(QApplication.instance())
         apply_theme(QApplication.instance(), self.theme)
         self._build_ui()
+        self._create_drop_overlay()
         self._collaboration_presence = QWidget()
         self._collaboration_presence.setObjectName("collaborationPresence")
         presence_layout = QHBoxLayout(self._collaboration_presence)
@@ -251,6 +253,11 @@ class BudgetMainWindow(QMainWindow):
         self.resize(1480, 860)
         self.setMinimumSize(1100, 650)
 
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        """Mantiene la indicación de arrastre ajustada al área central."""
+        super().resizeEvent(event)
+        self._position_drop_overlay()
+
     def _build_ui(self) -> None:
         """Crea menús, barra de acciones, paneles, árboles y detalles."""
         self.setWindowTitle(APPLICATION_NAME)
@@ -267,6 +274,69 @@ class BudgetMainWindow(QMainWindow):
         self.setCentralWidget(main)
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
+
+    def _create_drop_overlay(self) -> None:
+        """Crea una indicación central para soltar archivos compatibles."""
+        central = self.centralWidget()
+        if central is None:
+            return
+        overlay = QWidget(central)
+        overlay.setObjectName("projectDropOverlay")
+        overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        overlay.hide()
+        frame = QWidget(overlay)
+        frame.setObjectName("projectDropOverlayFrame")
+        frame_layout = QVBoxLayout(frame)
+        frame_layout.setContentsMargins(40, 30, 40, 30)
+        frame_layout.setSpacing(10)
+        icon = QLabel("＋", frame)
+        icon.setObjectName("projectDropOverlayIcon")
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title = QLabel("Soltar para cargar", frame)
+        title.setObjectName("projectDropOverlayTitle")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        formats = QLabel("Arrastra un archivo .bc3, .json o una carpeta de proyecto", frame)
+        formats.setObjectName("projectDropOverlayFormats")
+        formats.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        frame_layout.addWidget(icon)
+        frame_layout.addWidget(title)
+        frame_layout.addWidget(formats)
+        overlay_layout = QVBoxLayout(overlay)
+        overlay_layout.setContentsMargins(24, 24, 24, 24)
+        overlay_layout.addWidget(frame)
+        overlay_layout.setAlignment(frame, Qt.AlignmentFlag.AlignCenter)
+        overlay.setStyleSheet(
+            "QWidget#projectDropOverlay {"
+            "background: rgba(20, 20, 20, 45);"
+            "}"
+            "QWidget#projectDropOverlayFrame {"
+            "background: palette(base);"
+            "border: 3px dashed palette(highlight);"
+            "border-radius: 14px;"
+            "}"
+            "QLabel#projectDropOverlayIcon {"
+            "font-size: 54px;"
+            "font-weight: 700;"
+            "color: palette(highlight);"
+            "}"
+            "QLabel#projectDropOverlayTitle {"
+            "font-size: 22px;"
+            "font-weight: 700;"
+            "}"
+            "QLabel#projectDropOverlayFormats {"
+            "font-size: 13px;"
+            "}"
+        )
+        self._project_drop_overlay = overlay
+        self._position_drop_overlay()
+
+    def _position_drop_overlay(self) -> None:
+        """Ajusta la superposición a toda el área central visible."""
+        overlay = getattr(self, "_project_drop_overlay", None)
+        central = self.centralWidget()
+        if overlay is not None and central is not None:
+            overlay.setGeometry(central.rect())
+            overlay.raise_()
 
     def _build_menus(self) -> None:
         """Configura los menús de archivo, exportación, informes e información."""
@@ -771,6 +841,70 @@ class BudgetMainWindow(QMainWindow):
         )
         if path and self._confirm_project_change():
             self._load_budget_file(Path(path))
+
+    def dragEnterEvent(self, event) -> None:
+        """Acepta arrastres solo cuando contienen una ruta compatible."""
+        mime = event.mimeData()
+        if mime.hasUrls():
+            urls = mime.urls()
+            if len(urls) == 1:
+                path = Path(urls[0].toLocalFile())
+                if path.is_dir() or path.suffix.casefold() in {".bc3", ".json"}:
+                    event.acceptProposedAction()
+                    overlay = getattr(self, "_project_drop_overlay", None)
+                    if overlay is not None:
+                        self._position_drop_overlay()
+                        overlay.show()
+                    return
+        event.ignore()
+
+    def dragLeaveEvent(self, event) -> None:
+        """Oculta la indicación al salir de la ventana con el arrastre."""
+        overlay = getattr(self, "_project_drop_overlay", None)
+        if overlay is not None:
+            overlay.hide()
+        event.accept()
+
+    def dropEvent(self, event) -> None:
+        """Carga por arrastre el BC3, JSON o carpeta colaborativa soltada."""
+        overlay = getattr(self, "_project_drop_overlay", None)
+        if overlay is not None:
+            overlay.hide()
+        mime = event.mimeData()
+        if not mime.hasUrls() or len(mime.urls()) != 1:
+            event.ignore()
+            return
+        path = Path(mime.urls()[0].toLocalFile())
+        if not path.is_file() and not path.is_dir():
+            QMessageBox.warning(self, "Archivo no encontrado", "La ruta arrastrada no existe.")
+            event.ignore()
+            return
+        suffix = path.suffix.casefold()
+        if path.is_dir():
+            if not self._confirm_project_change():
+                event.ignore()
+                return
+            loaded = self._load_collaborative_project(path)
+        elif suffix == ".bc3":
+            if not self._confirm_project_change():
+                event.ignore()
+                return
+            loaded = True
+            self._load_budget_file(path)
+        elif suffix == ".json":
+            if not self._confirm_project_change():
+                event.ignore()
+                return
+            loaded = self._load_project_file(path)
+        else:
+            QMessageBox.warning(
+                self,
+                "Formato no compatible",
+                "Arrastra un presupuesto .bc3, un proyecto .json o una carpeta colaborativa.",
+            )
+            event.ignore()
+            return
+        event.acceptProposedAction() if loaded else event.ignore()
 
     def _load_budget_file(self, path: Path) -> None:
         """Carga un BC3 o reabre el JSON asociado si ya existe."""

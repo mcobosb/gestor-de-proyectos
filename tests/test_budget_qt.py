@@ -200,6 +200,71 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertEqual(window.reference_heading.text(), "Sin cargar")
             self.assertEqual(window.reference_heading.toolTip(), "")
 
+    def test_drag_drop_loads_bc3_json_and_collaborative_folder(self) -> None:
+        """Acepta arrastre de los tres formatos compatibles y rechaza otros."""
+        from PySide6.QtCore import QMimeData, QUrl
+        from types import SimpleNamespace
+
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            bc3 = folder / "presupuesto.bc3"
+            bc3.touch()
+            json_path = folder / "proyecto.json"
+            json_path.touch()
+            collaborative = folder / "obra"
+            collaborative.mkdir()
+            other = folder / "imagen.png"
+            other.touch()
+
+            window = BudgetMainWindow()
+            self.addCleanup(window.close)
+            window.setAcceptDrops(True)
+            window.show()
+            self.application.processEvents()
+            self.assertTrue(hasattr(window, "_project_drop_overlay"))
+            mime = QMimeData()
+            mime.setUrls([QUrl.fromLocalFile(str(bc3))])
+            enter_event = SimpleNamespace(
+                mimeData=lambda mime=mime: mime,
+                acceptProposedAction=lambda: None,
+                ignore=lambda: None,
+            )
+            window.dragEnterEvent(enter_event)
+            self.assertTrue(window._project_drop_overlay.isVisible())
+            leave_event = SimpleNamespace(accept=lambda: None)
+            window.dragLeaveEvent(leave_event)
+            self.assertFalse(window._project_drop_overlay.isVisible())
+            for path, method in (
+                (bc3, "_load_budget_file"),
+                (json_path, "_load_project_file"),
+                (collaborative, "_load_collaborative_project"),
+            ):
+                mime = QMimeData()
+                mime.setUrls([QUrl.fromLocalFile(str(path))])
+                event = SimpleNamespace(
+                    mimeData=lambda mime=mime: mime,
+                    acceptProposedAction=lambda: None,
+                    ignore=lambda: None,
+                )
+                with (
+                    patch.object(window, "_confirm_project_change", return_value=True),
+                    patch.object(window, method, return_value=True) as loader,
+                ):
+                    window.dropEvent(event)
+                loader.assert_called_once()
+
+            mime = QMimeData()
+            mime.setUrls([QUrl.fromLocalFile(str(other))])
+            event = SimpleNamespace(
+                mimeData=lambda mime=mime: mime,
+                acceptProposedAction=lambda: None,
+                ignore=lambda: None,
+            )
+            with patch.object(QMessageBox, "warning") as warning:
+                window.dropEvent(event)
+            warning.assert_called_once()
+            window.close()
+
     def test_import_and_reopen_project_uses_core_model_without_gui(self) -> None:
         """Importa un BC3, guarda el JSON y lo reabre con el mismo modelo."""
         with tempfile.TemporaryDirectory() as directory:
