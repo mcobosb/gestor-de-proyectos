@@ -180,6 +180,10 @@ def _filled_title_block(path: Path, fields: dict[str, str]) -> bytes:
     except ET.ParseError as exc:
         raise ValueError(f"El cajetín SVG no es válido: {path}.") from exc
     for element in root.iter():
+        if element.tag == "{http://www.w3.org/2000/svg}image":
+            xlink_href = "{http://www.w3.org/1999/xlink}href"
+            if element.get("href") is None and element.get(xlink_href) is not None:
+                element.set("href", element.attrib.pop(xlink_href))
         if element.tag == "{http://www.w3.org/2000/svg}text" and not element.get("x"):
             positioned = next(
                 (child for child in element.iter() if child is not element and child.get("x") and child.get("y")),
@@ -203,7 +207,36 @@ def _filled_title_block(path: Path, fields: dict[str, str]) -> bytes:
                 leaf.text = ""
         else:
             element.text = fields[identifier]
+    _flatten_simple_text_spans(root)
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
+def _flatten_simple_text_spans(root: ET.Element) -> None:
+    """Conserva posición y estilo de tspan anidados simples no admitidos por Qt SVG."""
+    namespace = "{http://www.w3.org/2000/svg}"
+    if next(root.iter(namespace + "style"), None) is not None:
+        return
+    serialized = ET.tostring(root, encoding="unicode")
+    for text in root.iter(namespace + "text"):
+        for span in text:
+            if span.tag != namespace + "tspan" or len(span) != 1:
+                continue
+            child = span[0]
+            if (
+                child.tag != namespace + "tspan" or len(child)
+                or (span.text or "").strip() or (child.tail or "").strip()
+                or set(span.attrib) - {"id", "x", "y"}
+                or set(child.attrib) & {"x", "y", "dx", "dy", "rotate", "transform"}
+            ):
+                continue
+            identifier = child.get("id")
+            if identifier and serialized.count(identifier) != 1:
+                continue
+            for name, value in child.attrib.items():
+                if name != "id":
+                    span.set(name, value)
+            span.text = child.text
+            span.remove(child)
 
 
 def render_drawings(app, state: dict) -> list[bytes]:

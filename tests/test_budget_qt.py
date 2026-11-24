@@ -2426,6 +2426,20 @@ class BudgetQtWindowTests(unittest.TestCase):
                     self.assertFalse(image.isNull())
                     self.assertNotEqual(image, save)
 
+    def test_theme_ignores_destroyed_widget_in_deferred_decoration(self) -> None:
+        """No accede al objeto Qt si desaparece antes de ejecutar el temporizador."""
+        import shiboken6
+        from PySide6.QtWidgets import QToolButton
+        from budget_qt_theme import _QtDecorationFilter
+
+        widget = QToolButton()
+        decoration = _QtDecorationFilter()
+        with patch("budget_qt_theme.QTimer.singleShot") as timer:
+            decoration.eventFilter(widget, QEvent(QEvent.Type.Show))
+        callback = timer.call_args.args[2]
+        shiboken6.delete(widget)
+        callback()
+
     def test_modern_theme_applies_icons_to_actions_buttons_and_dialogs(self) -> None:
         """El tema moderno echa raíces globales en botones y acciones."""
         with tempfile.TemporaryDirectory() as directory, patch(

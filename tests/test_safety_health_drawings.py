@@ -1,7 +1,9 @@
 """Comprobaciones de los planos de Seguridad y Salud."""
 from __future__ import annotations
 
+from base64 import b64encode
 from decimal import Decimal
+from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -10,6 +12,10 @@ from unittest.mock import patch
 from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
+from PIL import Image
+from PySide6.QtCore import QByteArray, qInstallMessageHandler
+from PySide6.QtGui import QImage, QPainter
+from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QApplication
 from pypdf import PdfReader
 
@@ -132,6 +138,63 @@ class SafetyDrawingsTests(unittest.TestCase):
             self.assertEqual(fields["titulo_plano"].get("x"), "10")
             self.assertEqual("".join(fields["titulo_proyecto"].itertext()), "Proyecto nuevo")
             self.assertEqual(path.read_bytes(), original)
+
+    def test_title_block_renders_nested_text_and_embedded_image_without_qt_warnings(self):
+        image = BytesIO()
+        Image.new("RGB", (2, 2), "red").save(image, format="PNG")
+        encoded = b64encode(image.getvalue()).decode("ascii")
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "cajetin.svg"
+            path.write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" '
+                'xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 100 100">'
+                f'<image x="0" y="0" width="20" height="20" xlink:href="data:image/png;base64,{encoded}"/>'
+                '<text id="titulo_proyecto"><tspan id="outer" x="30" y="40">'
+                '<tspan id="inner" style="font-size:12px;fill:blue">Anterior</tspan>'
+                '</tspan></text></svg>', encoding="utf-8",
+            )
+            result = _filled_title_block(path, {"titulo_proyecto": "Proyecto"})
+            root = ET.fromstring(result)
+            span = next(node for node in root.iter() if node.get("id") == "outer")
+            self.assertEqual(span.get("x"), "30")
+            self.assertEqual(span.get("y"), "40")
+            self.assertEqual(span.get("style"), "font-size:12px;fill:blue")
+            self.assertEqual(span.text, "Proyecto")
+            messages = []
+            previous = qInstallMessageHandler(
+                lambda _kind, context, message: messages.append(message)
+                if context.category == "qt.svg" else None
+            )
+            try:
+                renderer = QSvgRenderer(QByteArray(result))
+                canvas = QImage(100, 100, QImage.Format.Format_RGB32)
+                canvas.fill(0xFFFFFFFF)
+                painter = QPainter(canvas)
+                renderer.render(painter)
+                painter.end()
+            finally:
+                qInstallMessageHandler(previous)
+            self.assertTrue(renderer.isValid())
+            self.assertEqual(messages, [])
+            self.assertEqual(canvas.pixelColor(5, 5).red(), 255)
+            self.assertLess(canvas.pixelColor(5, 5).green(), 10)
+
+    def test_title_block_preserves_referenced_or_styled_nested_spans(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "cajetin.svg"
+            for extra in (
+                '<use href="#inner"/>',
+                '<style>text tspan tspan { fill: blue; }</style>',
+            ):
+                path.write_text(
+                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+                    + extra + '<text id="titulo_proyecto"><tspan x="30" y="40">'
+                    '<tspan id="inner">Anterior</tspan></tspan></text></svg>',
+                    encoding="utf-8",
+                )
+                root = ET.fromstring(_filled_title_block(path, {"titulo_proyecto": "Proyecto"}))
+                inner = next(node for node in root.iter() if node.get("id") == "inner")
+                self.assertEqual(inner.text, "Proyecto")
 
     def test_pdf_and_odt_embed_one_a4_or_two_a3_sheets_per_page(self):
         with TemporaryDirectory() as directory:

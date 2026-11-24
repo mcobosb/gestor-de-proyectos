@@ -6,6 +6,7 @@ import unicodedata
 from PySide6.QtCore import QEvent, QLineF, QObject, QRectF, QTimer, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPalette, QPen, QPixmap
 from PySide6.QtWidgets import QApplication, QPushButton, QStyle, QToolButton, QWidget
+from shiboken6 import isValid
 from localization import translate
 
 
@@ -283,6 +284,8 @@ def tool_icon(widget: QWidget, name: str) -> QIcon:
 
 def decorate_widget(widget: QWidget) -> None:
     """Asigna iconos a botones y barras operativas y respeta excepciones de menú."""
+    if not isValid(widget):
+        return
     app = QApplication.instance()
     if app is None:
         return
