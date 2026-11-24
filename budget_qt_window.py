@@ -158,6 +158,7 @@ class BudgetMainWindow(QMainWindow):
         )
         self.reference_bases: list[Bc3Dataset] = []
         self.budget_dataset: Bc3Dataset | None = None
+        self.certification_read_only = False
         self.budget_items: list[ProjectItem] = []
         self.selected_budget_index: int | None = None
         self.selected_chapter: str | None = None
@@ -368,10 +369,12 @@ class BudgetMainWindow(QMainWindow):
         file_menu.addAction(
             self._action("Importar proyecto JSON…", self.open_project)
         )
-        file_menu.addAction(self._action("Guardar", self.save_project, "Ctrl+S"))
-        file_menu.addAction(
-            self._action("Guardar como proyecto colaborativo…", self.save_project_as)
+        self._file_save_action = self._action("Guardar", self.save_project, "Ctrl+S")
+        self._file_save_as_action = self._action(
+            "Guardar como proyecto colaborativo…", self.save_project_as
         )
+        file_menu.addAction(self._file_save_action)
+        file_menu.addAction(self._file_save_as_action)
         self._export_menu = export_menu = QMenu("Exportar", file_menu)
         file_menu.addMenu(export_menu)
         export_menu.addAction("Exportar presupuesto a ODS…", self.export_budget_ods)
@@ -385,9 +388,11 @@ class BudgetMainWindow(QMainWindow):
             lambda: self.export_resource_report("Descompuestos"),
         )
         file_menu.addSeparator()
-        file_menu.addAction(self._action("Configuración…", self.open_report_settings))
+        self._file_settings_action = self._action("Configuración…", self.open_report_settings)
+        file_menu.addAction(self._file_settings_action)
 
-        reports_menu = menu.addMenu("Informes")
+        self._reports_menu = reports_menu = QMenu("Informes", menu)
+        menu.addMenu(reports_menu)
         for report in REPORT_NAMES:
             reports_menu.addAction(report, lambda checked=False, name=report: self.generate_report(name))
 
@@ -426,7 +431,8 @@ class BudgetMainWindow(QMainWindow):
         sira.setIconVisibleInMenu(True)
         self._references_menu.addAction(sira)
 
-        collaboration_menu = menu.addMenu("Colaboración")
+        self._collaboration_menu = collaboration_menu = QMenu("Colaboración", menu)
+        menu.addMenu(collaboration_menu)
         collaboration_menu.addAction(
             "Abrir proyecto compartido…", self.open_collaborative_project
         )
@@ -445,7 +451,8 @@ class BudgetMainWindow(QMainWindow):
 
         bim = self.tools_by_name.get("bim")
         if bim is not None:
-            bim_menu = menu.addMenu(bim.label)
+            self._bim_menu = bim_menu = QMenu(bim.label, menu)
+            menu.addMenu(bim_menu)
             bim_menu.addAction("Abrir archivo IFC…", lambda: self._open_tool("bim"))
 
         info_menu = menu.addMenu("Información")
@@ -496,6 +503,7 @@ class BudgetMainWindow(QMainWindow):
     def _build_toolbar(self) -> None:
         """Añade las acciones rápidas del presupuesto."""
         toolbar = QToolBar("Presupuesto")
+        self._budget_toolbar = toolbar
         self.addToolBar(toolbar)
         self.save_action = self._action("Guardar", self.save_project)
         self.save_action.setShortcut(QKeySequence.StandardKey.Save)
@@ -593,9 +601,13 @@ class BudgetMainWindow(QMainWindow):
         self.measurement_table.doubleClicked.connect(self.edit_measurement)
         layout.addWidget(self.measurement_table)
         actions = QHBoxLayout()
-        actions.addWidget(QPushButton("Añadir", clicked=self.add_measurement))
-        actions.addWidget(QPushButton("Editar", clicked=self.edit_measurement))
-        actions.addWidget(QPushButton("Eliminar", clicked=self.delete_measurement))
+        self._measurement_edit_buttons = [
+            QPushButton("Añadir", clicked=self.add_measurement),
+            QPushButton("Editar", clicked=self.edit_measurement),
+            QPushButton("Eliminar", clicked=self.delete_measurement),
+        ]
+        for button in self._measurement_edit_buttons:
+            actions.addWidget(button)
         self.measurement_total = QLabel("Sin partida seleccionada.")
         actions.addStretch()
         actions.addWidget(self.measurement_total)
@@ -774,6 +786,8 @@ class BudgetMainWindow(QMainWindow):
         if hasattr(self, "undo_action"):
             self.undo_action.setEnabled(bool(self._undo_history))
         title = f"{self._project_title()} *" if self.is_dirty else self._project_title()
+        if self.certification_read_only:
+            title += " — Certificación (solo lectura)"
         self.project_heading.set_title(title)
         self.setWindowTitle(f"{title} — {APPLICATION_NAME}")
 
@@ -816,6 +830,7 @@ class BudgetMainWindow(QMainWindow):
             return
         if not self._dismiss_project_windows():
             return
+        self._set_certification_read_only(False)
         self.budget_dataset = None
         self.budget_items = []
         self.chapter_order = []
@@ -910,6 +925,9 @@ class BudgetMainWindow(QMainWindow):
         """Carga un BC3 o reabre el JSON asociado si ya existe."""
         try:
             dataset = Bc3Dataset(path)
+            if dataset.information_type == "3":
+                self._open_certification_view(dataset)
+                return
             legacy_path = path.with_suffix(".json")
             collaborative_path = path.with_suffix("")
             if project_directory(collaborative_path):
@@ -920,6 +938,7 @@ class BudgetMainWindow(QMainWindow):
                     return
             if not self._dismiss_project_windows():
                 return
+            self._set_certification_read_only(False)
             self.budget_dataset = dataset
             self.source_budget_path = path
             self.budget_items = dataset.to_project_items()
@@ -943,6 +962,56 @@ class BudgetMainWindow(QMainWindow):
             self._set_status(f"Presupuesto cargado: {path.name}")
         except (OSError, UnicodeError, ValueError, TypeError) as exc:
             QMessageBox.critical(self, "No se pudo cargar el presupuesto", str(exc))
+
+    def _set_certification_read_only(self, enabled: bool) -> None:
+        """Activa una vista sin controles capaces de modificar el proyecto."""
+        self.certification_read_only = enabled
+        self._budget_toolbar.setEnabled(not enabled)
+        self._tools_menu.setEnabled(not enabled)
+        self._reports_menu.setEnabled(not enabled)
+        self._collaboration_menu.setEnabled(not enabled)
+        if hasattr(self, "_bim_menu"):
+            self._bim_menu.setEnabled(not enabled)
+        for action in (self._file_save_action, self._file_save_as_action, self._file_settings_action):
+            action.setEnabled(not enabled)
+        self._export_menu.setEnabled(not enabled)
+        self.description.setReadOnly(enabled)
+        for button in self._measurement_edit_buttons:
+            button.setEnabled(not enabled)
+
+    def _open_certification_view(self, dataset: Bc3Dataset) -> bool:
+        """Muestra un BC3 de certificación sin crear un proyecto editable."""
+        items = dataset.to_project_items()
+        for item in items:
+            item.round_import_total = True
+        if not self._dismiss_project_windows():
+            return False
+        self._stop_collaboration()
+        self._set_certification_read_only(True)
+        self.budget_dataset = dataset
+        self.budget_items = items
+        self.chapter_order = list(dict.fromkeys(item.chapter for item in items))
+        self.chapter_titles = {
+            code: concept.summary for code, concept in dataset.concepts.items()
+            if is_chapter_code(code) and not code.endswith("##")
+        }
+        self.chapter_ids = {}
+        self.project_path = None
+        self.source_budget_path = None
+        details = f"n.º {dataset.certification_number or '?'}"
+        if dataset.certification_date:
+            details += f" · fecha {dataset.certification_date}"
+        self.project_title = f"{dataset.path.stem} — Certificación {details}"
+        self.planning_state = self.invoicing_state = self.rcd_state = {}
+        self.safety_health_state = self.pptp_state = self.price_justification_state = {}
+        self.quality_assurance_state = {}
+        self.selected_budget_index = None
+        self.selected_chapter = None
+        self.refresh_budget_tree()
+        self._show_item_details(None)
+        self._reset_history()
+        self._set_status("Certificación a origen en solo lectura; no es un presupuesto.")
+        return True
 
     def load_references(self) -> None:
         """Selecciona y carga una o varias bases BC3 de referencia."""
@@ -1201,6 +1270,8 @@ class BudgetMainWindow(QMainWindow):
 
     def add_selected_reference(self, _item=None, _column=None) -> None:
         """Añade al presupuesto la partida o capítulo de referencia seleccionado."""
+        if self.certification_read_only:
+            return
         if self.selected_reference is None:
             QMessageBox.information(self, "Sin selección", "Selecciona una partida o capítulo.")
             return
@@ -1373,11 +1444,13 @@ class BudgetMainWindow(QMainWindow):
                 branch = chapter_items.get(chapter)
                 if branch is not None:
                     branch.setHidden(branch.childCount() == 0)
+            label = "Total certificación a origen" if self.certification_read_only else "Total presupuesto"
             self.summary_label.setText(
-                f"Total presupuesto: {self._format_currency(sum(i.import_total for i in self.budget_items))}"
+                f"{label}: {self._format_currency(sum(i.import_total for i in self.budget_items))}"
             )
         else:
-            self.summary_label.setText(f"Total presupuesto: {self._format_currency(total)}")
+            label = "Total certificación a origen" if self.certification_read_only else "Total presupuesto"
+            self.summary_label.setText(f"{label}: {self._format_currency(total)}")
         self._refresh_item_lock_icons()
         self._update_actions()
         self.budget_refreshed.emit()
@@ -1431,9 +1504,10 @@ class BudgetMainWindow(QMainWindow):
                     break
             if count >= 500:
                 break
+        label = "Total certificación a origen" if self.certification_read_only else "Total presupuesto"
         self.summary_label.setText(
             f"Recursos de {CONCEPT_TYPES[kind]}: {count} · "
-            f"Total presupuesto: "
+            f"{label}: "
             f"{self._format_currency(sum(i.import_total for i in self.budget_items))}"
         )
         self._update_actions()
@@ -1588,6 +1662,8 @@ class BudgetMainWindow(QMainWindow):
 
     def edit_selection(self, *_args) -> None:
         """Edita el nombre del capítulo o los datos de la partida."""
+        if self.certification_read_only:
+            return
         if self.selected_chapter is not None:
             self.rename_chapter()
             return
@@ -1703,6 +1779,7 @@ class BudgetMainWindow(QMainWindow):
         duplicate.certifications = {}
         duplicate.certification_plans = {}
         duplicate.certification_justifications = {}
+        duplicate.certification_bc3 = {}
         self._insert_item(duplicate, self.selected_budget_index + 1)
         self._mark_dirty()
         QMessageBox.warning(
@@ -1767,6 +1844,8 @@ class BudgetMainWindow(QMainWindow):
 
     def edit_measurement(self, *_args) -> None:
         """Edita la línea de medición activa."""
+        if self.certification_read_only:
+            return
         row = self.measurement_table.currentRow()
         if row < 0:
             QMessageBox.information(self, "Sin selección", "Selecciona una medición.")
@@ -1873,8 +1952,11 @@ class BudgetMainWindow(QMainWindow):
                 self, "No se pudo abrir el proyecto", f"El archivo no es válido:\n{exc}"
             )
             return False
+        if document.budget_dataset and document.budget_dataset.information_type == "3":
+            return self._open_certification_view(document.budget_dataset)
         if not self._dismiss_project_windows():
             return False
+        self._set_certification_read_only(False)
         self.budget_dataset = document.budget_dataset
         self.budget_items = document.items
         self.chapter_order = document.chapter_order
@@ -1945,6 +2027,9 @@ class BudgetMainWindow(QMainWindow):
                 self, "No se pudo abrir el proyecto", str(exc)
             )
             return False
+        if document.budget_dataset and document.budget_dataset.information_type == "3":
+            return self._open_certification_view(document.budget_dataset)
+        self._set_certification_read_only(False)
         self.project_session += 1
         self._stop_collaboration()
         self.project_store = store
@@ -1976,6 +2061,8 @@ class BudgetMainWindow(QMainWindow):
 
     def save_project(self) -> bool:
         """Guarda en la ruta actual o solicita una nueva."""
+        if self.certification_read_only:
+            return False
         if self.project_path is None:
             return self.save_project_as()
         if self.project_store is not None or project_directory(self.project_path):
@@ -1986,6 +2073,8 @@ class BudgetMainWindow(QMainWindow):
 
     def save_project_as(self) -> bool:
         """Selecciona una carpeta para crear el formato colaborativo."""
+        if self.certification_read_only:
+            return False
         path = QFileDialog.getExistingDirectory(
             self,
             translate("Selecciona una carpeta para el proyecto colaborativo", source_language="es"),

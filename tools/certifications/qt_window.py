@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import os
+from datetime import date
 from pathlib import Path
 import tempfile
 
@@ -11,6 +12,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QDialog,
+    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QInputDialog,
@@ -23,13 +25,14 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from budget_core import format_chapter_code, format_currency, parse_float
+from budget_core import Bc3Dataset, format_chapter_code, format_currency, parse_float
 from budget_reports import CERTIFICATION_REPORT_NAMES, DEVIATION_REPORT_NAME, write_certification_pdf
 from odt_reports import write_certification_odt
 from qt_localization import get_document_save_path
 from tools._shared.reference_pill import add_reference_pill
 from tools._shared.scheduling import PlanParams, apply_saved_plan_state, build_activities
-from . import economic_months, planned_monthly_amounts, reconcile_certification
+from . import EconomicMonth, economic_months, planned_monthly_amounts, reconcile_certification
+from .bc3_import import prepare_import
 
 
 class CertificationWindowQt(QDialog):
@@ -52,7 +55,7 @@ class CertificationWindowQt(QDialog):
                 "Planificación guardada no válida",
                 f"No se ha podido aplicar la planificación guardada:\n{exc}",
             )
-        self.months = economic_months(self.params.start)
+        self.months = self._economic_months()
         self.plan = planned_monthly_amounts(
             self.activities, self.params, self.months
         )
@@ -66,6 +69,9 @@ class CertificationWindowQt(QDialog):
         layout = QVBoxLayout(self)
         add_reference_pill(layout, "certifications")
         toolbar = QHBoxLayout()
+        import_button = QPushButton("Importar certificación BC3…")
+        import_button.clicked.connect(self.import_bc3)
+        toolbar.addWidget(import_button)
         self.copy_button = QPushButton("Copiar plan seleccionado a su certificación")
         self.copy_button.clicked.connect(self.copy_selected_plan)
         toolbar.addWidget(self.copy_button)
@@ -93,10 +99,7 @@ class CertificationWindowQt(QDialog):
         toolbar.addWidget(self.save_button)
         layout.addLayout(toolbar)
         self.table = QTableWidget(0, 4 + 2 * len(self.months))
-        headers = ["Capítulo", "Código", "Actividad", "Importe"]
-        for index, month in enumerate(self.months):
-            headers.extend((f"Plan {month.label}", f"Certificación {index + 1}"))
-        self.table.setHorizontalHeaderLabels(headers)
+        self._set_month_headers()
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
         self.table.horizontalHeader().setSectionResizeMode(
@@ -120,6 +123,106 @@ class CertificationWindowQt(QDialog):
         detail.addWidget(self.justification)
         layout.addLayout(detail)
         self.refresh_table()
+
+    def _economic_months(
+        self, extra: date | None = None, start: date | None = None,
+    ) -> list[EconomicMonth]:
+        """Incluye los meses importados sin desplazar el inicio de la planificación."""
+        start = start or self.params.start
+        first = start.replace(day=1)
+        last_index = 23
+        dates = [date.fromisoformat(key) for item in self.items for key in item.certification_bc3]
+        if extra is not None:
+            dates.append(extra)
+        if dates:
+            first = min(first, *dates).replace(day=1)
+            for value in [start, *dates]:
+                last_index = max(
+                    last_index,
+                    (value.year - first.year) * 12 + value.month - first.month
+                    + (23 if value == start else 0),
+                )
+        if last_index >= 1200:
+            raise ValueError("El intervalo entre certificaciones y planificación supera 100 años.")
+        return economic_months(first, last_index + 1)
+
+    def _certification_number(self, index: int) -> int:
+        """Usa el número del BC3 cuando está disponible para este mes."""
+        key = self.months[index].key
+        for item in self.items:
+            if key in item.certification_bc3:
+                return item.certification_bc3[key]["number"]
+        return index + 1
+
+    def _set_month_headers(self) -> None:
+        """Actualiza las cabeceras con el mes y número de certificación."""
+        headers = ["Capítulo", "Código", "Actividad", "Importe"]
+        for index, month in enumerate(self.months):
+            headers.extend((
+                f"Plan {month.label}",
+                f"Certificación {self._certification_number(index)}",
+            ))
+        self.table.setHorizontalHeaderLabels(headers)
+
+    def import_bc3(self) -> None:
+        """Importa una certificación acumulada en el proyecto abierto."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Importar certificación BC3", "", "BC3 (*.bc3)"
+        )
+        if not path:
+            return
+        try:
+            if self.items is not self.app.budget_items:
+                raise ValueError("El presupuesto ha cambiado. Cierra y vuelve a abrir Certificaciones.")
+            dataset = Bc3Dataset(Path(path))
+            number, month, values = prepare_import(dataset, self.items)
+            params = PlanParams()
+            activities = build_activities(self.items, self.chapter_title)
+            apply_saved_plan_state(params, activities, self.app.planning_state)
+            months = self._economic_months(month, params.start)
+            plan = planned_monthly_amounts(activities, params, months)
+        except (OSError, UnicodeError, ValueError, TypeError) as exc:
+            QMessageBox.critical(self, "Certificación BC3", str(exc))
+            return
+        answer = QMessageBox.question(
+            self, "Importar certificación BC3",
+            f"Certificación {number} a origen · {month:%m/%Y}.\n"
+            "Se calculará el importe de este mes y se ajustará el plan. "
+            "El presupuesto y sus mediciones no cambiarán.\n\n¿Continuar?",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self.params = params
+        self.activities = activities
+        self.months = months
+        self.plan = plan
+        self._load_saved_plan()
+        index = next(i for i, entry in enumerate(months) if entry.start == month)
+        remainder = 0.0
+        for row, (item, (quantity, amount)) in enumerate(zip(self.items, values)):
+            item.certification_plans[month.isoformat()] = self.plan[row][index]
+            remainder += reconcile_certification(self.plan[row], index, amount)
+            item.certifications[month.isoformat()] = amount
+            item.certification_bc3[month.isoformat()] = {
+                "number": number, "quantity": quantity, "amount": amount,
+                "price": item.unit_price,
+            }
+            item.planned_amounts = {
+                entry.key: self.plan[row][i] for i, entry in enumerate(months)
+            }
+        self.selected_cell = None
+        self.selected_plan_month = None
+        self.selected_certification_month = None
+        self.table.clearSelection()
+        self.table.setColumnCount(4 + 2 * len(months))
+        self._set_month_headers()
+        self.refresh_table()
+        self._set_dirty(True)
+        if remainder:
+            QMessageBox.warning(
+                self, "Certificación BC3",
+                f"Queda sin compensar en el plan: {self._format_currency(remainder)}.",
+            )
 
     def _format_currency(self, value: float) -> str:
         """Formatea con la divisa vigente del proyecto."""
@@ -190,7 +293,7 @@ class CertificationWindowQt(QDialog):
             self.selected_plan_month = None
             self.selected_certification_month = month_index
             self.selection_label.setText(
-                f"Certificación {month_index + 1} "
+                f"Certificación {self._certification_number(month_index)} "
                 f"({self.months[month_index].label}) seleccionada."
             )
         self.table.selectColumn(column)
@@ -339,6 +442,7 @@ class CertificationWindowQt(QDialog):
             return
         index = self.selected_certification_month
         month = self.months[index]
+        number = self._certification_number(index)
         if any(
             not math.isfinite(item.certifications.get(month.key, 0.0))
             for item in self.items
@@ -354,14 +458,14 @@ class CertificationWindowQt(QDialog):
             QMessageBox.information(
                 self,
                 "Informe de certificación",
-                f"No hay importes certificados en Certificación {index + 1}.",
+                f"No hay importes certificados en Certificación {number}.",
             )
             return
         settings = self.app.report_settings
         selection = get_document_save_path(
             self,
             f"Generar {report}",
-            f"{report} {index + 1} {month.key}.pdf",
+            f"{report} {number} {month.key}.pdf",
             document_section="DOC04",
         )
         if selection is None:
@@ -387,7 +491,7 @@ class CertificationWindowQt(QDialog):
                 report,
                 temporary,
                 month.key,
-                index + 1,
+                number,
                 month.label,
                 planned_amounts=(
                     [row[index] for row in self.plan]

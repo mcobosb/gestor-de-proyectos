@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -12,6 +14,7 @@ from uuid import uuid4
 
 from budget_core import (
     Bc3Dataset,
+    Bc3Certification,
     Concept,
     MeasurementLine,
     ProjectItem,
@@ -63,6 +66,29 @@ def item_from_data(data: dict) -> ProjectItem:
     storage_id = str(data.get("storage_id") or data.get("id") or uuid4().hex)
     if not re.fullmatch(r"[0-9a-f]{32}", storage_id):
         raise ValueError("El UUID de la partida no es válido.")
+    raw_bc3 = data.get("certification_bc3", {})
+    if not isinstance(raw_bc3, dict):
+        raise ValueError("Las certificaciones BC3 guardadas no son válidas.")
+    certification_bc3: dict[str, Bc3Certification] = {}
+    for key, entry in raw_bc3.items():
+        try:
+            month = date.fromisoformat(key)
+            valid = (
+                month.day == 1 and month.isoformat() == key and isinstance(entry, dict)
+                and type(entry.get("number")) is int and entry["number"] > 0
+                and all(math.isfinite(float(entry[name])) and float(entry[name]) >= 0
+                        for name in ("quantity", "amount", "price"))
+            )
+        except (TypeError, ValueError, KeyError) as exc:
+            raise ValueError("Las certificaciones BC3 guardadas no son válidas.") from exc
+        if not valid:
+            raise ValueError("Las certificaciones BC3 guardadas no son válidas.")
+        certification_bc3[key] = {
+            "number": entry["number"],
+            "quantity": float(entry["quantity"]),
+            "amount": float(entry["amount"]),
+            "price": float(entry["price"]),
+        }
     return ProjectItem(
         storage_id=storage_id,
         code=str(data["code"]),
@@ -128,6 +154,7 @@ def item_from_data(data: dict) -> ProjectItem:
             str(month): str(text)
             for month, text in data.get("certification_justifications", {}).items()
         },
+        certification_bc3=certification_bc3,
     )
 
 
@@ -195,6 +222,7 @@ def _item_payload(item: ProjectItem) -> dict:
         "certifications": item.certifications,
         "certification_plans": item.certification_plans,
         "certification_justifications": item.certification_justifications,
+        "certification_bc3": item.certification_bc3,
         "measurement_lines": [
             {
                 "comment": line.comment,

@@ -25,6 +25,7 @@ from budget_qt_settings import SettingsDialog
 from budget_qt_window import BudgetMainWindow
 from budget_qt_theme import apply_theme
 from budget_reports import ReportSettings
+from collaborative_storage import CollaborativeProjectStore
 from localization import get_language, set_language
 from qt_localization import (
     apply_button_language, get_document_save_path, localize_button,
@@ -1482,6 +1483,139 @@ class BudgetQtWindowTests(unittest.TestCase):
             window.is_dirty = False
             window.close()
             self.application.processEvents()
+
+    def test_certification_bc3_view_and_import(self) -> None:
+        """Una certificación aislada es de solo lectura y puede importarse en su mes."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            path = Path(directory) / "cert.bc3"
+            path.write_text(
+                "~V|TEST|FIEBDC-3/2020|||ANSI||3|1|31052026|\n"
+                "~C|ROOT##||Obra|0||0|\n"
+                "~C|CAP#||Capítulo|0||0|\n"
+                "~C|P|m|Partida|10||0|\n"
+                "~D|ROOT##|CAP\\1\\1\\|\n"
+                "~D|CAP#|P\\1\\5\\|\n"
+                "~M|CAP\\P|1\\1\\|5||\n", encoding="cp1252",
+            )
+            window = BudgetMainWindow()
+            window._load_budget_file(path)
+            self.assertTrue(window.certification_read_only)
+            self.assertEqual(window.budget_items[0].measurement, 5)
+            self.assertIsNone(window.project_path)
+            self.assertFalse(path.with_suffix("").exists())
+            self.assertTrue(window.description.isReadOnly())
+            self.assertFalse(window._budget_toolbar.isEnabled())
+            self.assertFalse(window._tools_menu.isEnabled())
+            self.assertFalse(window.save_project())
+            window.budget_tree.setCurrentItem(window.budget_tree.topLevelItem(0))
+            with patch.object(window, "rename_chapter") as edit:
+                window.edit_selection()
+                edit.assert_not_called()
+            with patch("PySide6.QtWidgets.QInputDialog.getText", return_value=("Obra", True)):
+                window.new_project()
+            self.assertFalse(window.certification_read_only)
+            self.assertTrue(window._budget_toolbar.isEnabled())
+            window.budget_items = [ProjectItem("P", "CAP#", "m", "Partida", 100, 10)]
+            window.chapter_order = ["CAP#"]
+            window._open_tool("certifications")
+            tool = window._project_windows[-1]
+            with (
+                patch.object(QFileDialog, "getOpenFileName", return_value=(str(path), "")),
+                patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes),
+            ):
+                tool.import_bc3()
+            self.assertEqual(window.budget_items[0].measurement, 100)
+            self.assertEqual(window.budget_items[0].certifications["2026-05-01"], 50)
+            self.assertEqual(tool.months[0].key, "2026-05-01")
+            self.assertGreaterEqual(len(tool.months), 30)
+            self.assertTrue(tool.dirty)
+            store = CollaborativeProjectStore.create_from_payload(
+                Path(directory) / "collaborative", window, ReportSettings()
+            )
+            self.assertEqual(
+                store.load().items[0].certification_bc3["2026-05-01"]["quantity"], 5,
+            )
+            project = Path(directory) / "project.json"
+            window.project_path = project
+            tool.save_changes()
+            self.assertTrue(project.is_file())
+            tool.reject()
+            self.assertTrue(window._load_project_file(project))
+            self.assertEqual(window.budget_items[0].measurement, 100)
+            self.assertEqual(window.budget_items[0].certifications["2026-05-01"], 50)
+            window._open_tool("certifications")
+            restored = window._project_windows[-1]
+            self.assertEqual(restored.months[0].key, "2026-05-01")
+            self.assertEqual(restored.table.horizontalHeaderItem(5).text(), "Certificación 1")
+            second = Path(directory) / "cert2.bc3"
+            second.write_text(
+                path.read_text(encoding="cp1252")
+                .replace("|3|1|31052026|", "|3|2|30062026|")
+                .replace("\\1\\5\\|", "\\1\\8\\|")
+                .replace("|5||", "|8||"),
+                encoding="cp1252",
+            )
+            with (
+                patch.object(QFileDialog, "getOpenFileName", return_value=(str(second), "")),
+                patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes),
+            ):
+                restored.import_bc3()
+            self.assertEqual(window.budget_items[0].certifications["2026-06-01"], 30)
+            self.assertEqual(window.budget_items[0].measurement, 100)
+            restored.reject()
+            window.is_dirty = False
+            window.close()
+            window.deleteLater()
+            self.application.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            self.application.processEvents()
+
+    def test_recent_certification_keeps_menus_alive_after_show(self) -> None:
+        """Abre una certificación reciente después de mostrar y decorar la ventana."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            path = Path(directory) / "cert.bc3"
+            path.write_text(
+                "~V|TEST|FIEBDC-3/2020|||ANSI||3|1|31052026|\n"
+                "~C|ROOT##||Obra|0||0|\n"
+                "~C|CAP#||Capítulo|0||0|\n"
+                "~C|P|m|Partida|10||0|\n"
+                "~D|ROOT##|CAP\\1\\1\\|\n"
+                "~D|CAP#|P\\1\\5\\|\n",
+                encoding="cp1252",
+            )
+            window = BudgetMainWindow()
+            try:
+                window.budget_dataset = Bc3Dataset(path)
+                window.source_budget_path = path
+                window.budget_items = window.budget_dataset.to_project_items()
+                window.chapter_order = ["CAP#"]
+                root = Path(directory) / "proyecto"
+                CollaborativeProjectStore.create_from_payload(root, window, ReportSettings())
+                original = {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}
+                window.show()
+                self.application.processEvents()
+                with patch.object(window, "_confirm_project_change", return_value=True):
+                    window._open_recent_project(root)
+                self.assertTrue(window.certification_read_only)
+                self.assertEqual(window.budget_items[0].measurement, 5)
+                self.assertFalse(window._reports_menu.isEnabled())
+                self.assertFalse(window._collaboration_menu.isEnabled())
+                if hasattr(window, "_bim_menu"):
+                    self.assertFalse(window._bim_menu.isEnabled())
+                self.assertEqual(original, {p: p.read_bytes() for p in original})
+                with patch("PySide6.QtWidgets.QInputDialog.getText", return_value=("Obra", True)):
+                    window.new_project()
+                self.assertTrue(window._reports_menu.isEnabled())
+                self.assertTrue(window._collaboration_menu.isEnabled())
+            finally:
+                window.is_dirty = False
+                window.close()
+                window.deleteLater()
+                self.application.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                self.application.processEvents()
 
     def test_planning_qt_roundtrips_parameters_sequence_and_shared_state(self) -> None:
         """Migra calendario, edición de actividades y estado compartido."""

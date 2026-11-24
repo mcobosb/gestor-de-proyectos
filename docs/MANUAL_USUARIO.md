@@ -1192,7 +1192,25 @@ El botón del disquete guarda la planificación mediante el proyecto.
 ## 10. Registrar certificaciones
 
 Abre **Herramientas → Certificaciones**. La tabla muestra hasta 24 meses del
-plan económico, con columnas de previsión y certificación.
+plan económico, con columnas de previsión y certificación. Si importas una
+certificación BC3 fuera de ese intervalo, la tabla se amplía para incluirla.
+
+Un BC3 que declara una certificación se abre en la ventana principal en
+**solo lectura**: sus mediciones son certificadas, no el presupuesto original.
+No se crea un proyecto ni se modifica el archivo. Para incorporarlo a una obra,
+abre primero el presupuesto original y, en Certificaciones, pulsa
+**Importar certificación BC3…**.
+
+Los BC3 de certificación FIEBDC contienen mediciones **acumuladas a origen**.
+La importación utiliza el mes y número de su cabecera y obtiene el importe
+mensual restando el acumulado anterior. Importa las certificaciones desde la
+número 1 y en orden de fecha, en meses distintos. Para evitar asignaciones
+incorrectas, deben coincidir capítulo, subcapítulo, código, unidad y precio;
+se rechazan partidas ambiguas, certificaciones anteriores modificadas o
+manuales, disminuciones del acumulado y números anteriores ausentes. Si
+aparece alguna de estas situaciones, revísala y registra el importe manualmente.
+La importación no altera las mediciones del presupuesto y los cambios deben
+guardarse en el proyecto.
 
 1. Para usar una previsión como punto de partida, pulsa su cabecera **Plan** y
    después **Copiar plan seleccionado a su certificación**.

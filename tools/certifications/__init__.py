@@ -48,7 +48,11 @@ def open_tool_qt(app) -> None:
             window.raise_()
             window.activateWindow()
             return
-    window = CertificationWindowQt(app)
+    try:
+        window = CertificationWindowQt(app)
+    except ValueError as exc:
+        QMessageBox.critical(app, TOOL_LABEL, str(exc))
+        return
     app._project_windows.append(window)
     window.show()
 

@@ -6,6 +6,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from math import isfinite
 from pathlib import Path
 import re
+from typing import TypedDict
 from uuid import uuid4
 
 CURRENCY_SYMBOLS = {
@@ -13,7 +14,7 @@ CURRENCY_SYMBOLS = {
     "CAD": "CA$", "AUD": "A$",
 }
 
-def round_half_up(value: float, digits: int = 2) -> float:
+def round_half_up(value: float | Decimal, digits: int = 2) -> float:
     """Redondeo comercial usado por FIEBDC/Presto (0,005 sube a 0,01)."""
     quantum = Decimal(1).scaleb(-digits)
     return float(Decimal(str(value)).quantize(quantum, rounding=ROUND_HALF_UP))
@@ -224,6 +225,15 @@ def find_reference_files(folder: Path) -> list[Path]:
     )
 
 
+class Bc3Certification(TypedDict):
+    """Acumulado y valor mensual importados de una certificación BC3."""
+
+    number: int
+    quantity: float
+    amount: float
+    price: float
+
+
 @dataclass
 class ProjectItem:
     code: str
@@ -252,6 +262,7 @@ class ProjectItem:
     round_import_total: bool = False
     storage_id: str = field(default_factory=lambda: uuid4().hex)
     subchapter: str = ""
+    certification_bc3: dict[str, Bc3Certification] = field(default_factory=dict)
 
     def set_indirect_costs(self, percentage: float, direct_price: float | None = None) -> None:
         """Aplica el recargo sin perder el precio directo ni acumular porcentajes."""
@@ -352,6 +363,9 @@ class Bc3Dataset:
         self.measurements: dict[tuple[str, str], Measurement] = {}
         self.root_codes: list[str] = []
         self.chapter_children: dict[str, list[str]] = {}
+        self.information_type = ""
+        self.certification_number = ""
+        self.certification_date = ""
         self.load()
 
     def load(self) -> None:
@@ -373,7 +387,12 @@ class Bc3Dataset:
             fields = record.rstrip("\r\n").split("|")
             kind = fields[0].strip().upper()
 
-            if kind == "C" and len(fields) > 1:
+            if kind == "V":
+                self.information_type = fields[7].strip() if len(fields) > 7 else ""
+                self.certification_number = fields[8].strip() if len(fields) > 8 else ""
+                self.certification_date = fields[9].strip() if len(fields) > 9 else ""
+
+            elif kind == "C" and len(fields) > 1:
                 code = fields[1].strip()
                 if not code:
                     continue
