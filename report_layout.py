@@ -289,29 +289,182 @@ def _template_logo_placeholder_frame(section, namespaces, paragraph=None):
 
 
 def _template_logo_frame_size(
-    section, namespaces, paragraph=None,
+    section, namespaces, paragraph=None, *, style_definitions=None,
 ) -> tuple[float, float] | None:
-    """Obtiene el ancho y alto del marco ODT dedicado a {{logo}}, si existe."""
+    """Obtiene las dimensiones del marco o celda ODT que contiene {{logo}}."""
     frame = _template_logo_placeholder_frame(section, namespaces, paragraph)
-    if frame is None:
+    if frame is not None:
+        return (
+            _template_length_to_points(frame.get(f"{{{namespaces['svg']}}}width", "")),
+            _template_length_to_points(frame.get(f"{{{namespaces['svg']}}}height", "")),
+        )
+    if section is None or not style_definitions:
         return None
-    return (
-        _template_length_to_points(frame.get(f"{{{namespaces['svg']}}}width", "")),
-        _template_length_to_points(frame.get(f"{{{namespaces['svg']}}}height", "")),
+
+    tags = {
+        "cell": f"{{{namespaces['table']}}}table-cell",
+        "covered_cell": f"{{{namespaces['table']}}}covered-table-cell",
+        "row": f"{{{namespaces['table']}}}table-row",
+        "table": f"{{{namespaces['table']}}}table",
+    }
+    parents = {child: parent for parent in section.iter() for child in parent}
+    paragraphs = (
+        (paragraph,) if paragraph is not None
+        else section.findall(".//text:p", namespaces)
     )
+    for candidate in paragraphs:
+        if "{{logo}}" not in "".join(candidate.itertext()):
+            continue
+        cell = row = table = None
+        ancestor = parents.get(candidate)
+        while ancestor is not None:
+            if ancestor.tag == tags["cell"] and cell is None:
+                cell = ancestor
+            elif ancestor.tag == tags["row"] and row is None:
+                row = ancestor
+            elif ancestor.tag == tags["table"] and table is None:
+                table = ancestor
+                break
+            ancestor = parents.get(ancestor)
+        if cell is None or row is None or table is None:
+            continue
+
+        column_widths = []
+        for column in table.findall("table:table-column", namespaces):
+            column_style = style_definitions.get(
+                column.get(f"{{{namespaces['table']}}}style-name", ""),
+            )
+            properties = column_style.find(
+                "style:table-column-properties", namespaces,
+            ) if column_style is not None else None
+            width_value = properties.get(
+                f"{{{namespaces['style']}}}column-width", "",
+            ) if properties is not None else ""
+            try:
+                width = _template_length_to_points(width_value) if width_value else 0
+            except ValueError:
+                width = 0
+            repeat = int(column.get(f"{{{namespaces['table']}}}number-columns-repeated", "1"))
+            column_widths.extend([width] * repeat)
+
+        row_cells = [
+            item for item in list(row)
+            if item.tag in {tags["cell"], tags["covered_cell"]}
+        ]
+        column_index = 0
+        cell_column = None
+        for row_cell in row_cells:
+            if row_cell is cell:
+                cell_column = column_index
+                break
+            column_index += int(
+                row_cell.get(f"{{{namespaces['table']}}}number-columns-repeated", "1")
+            )
+        if cell_column is None:
+            continue
+        span = int(cell.get(f"{{{namespaces['table']}}}number-columns-spanned", "1"))
+        width = sum(column_widths[cell_column:cell_column + span])
+        if width <= 0:
+            table_style = style_definitions.get(
+                table.get(f"{{{namespaces['table']}}}style-name", ""),
+            )
+            table_properties = table_style.find(
+                "style:table-properties", namespaces,
+            ) if table_style is not None else None
+            table_width_value = table_properties.get(
+                f"{{{namespaces['style']}}}width", "",
+            ) if table_properties is not None else ""
+            try:
+                table_width = (
+                    _template_length_to_points(table_width_value)
+                    if table_width_value else 0
+                )
+            except ValueError:
+                table_width = 0
+            column_count = len(column_widths) or sum(
+                int(item.get(f"{{{namespaces['table']}}}number-columns-repeated", "1"))
+                for item in row_cells
+            )
+            if table_width > 0 and column_count > 0:
+                width = table_width * span / column_count
+
+        row_style = style_definitions.get(
+            row.get(f"{{{namespaces['table']}}}style-name", ""),
+        )
+        row_properties = row_style.find(
+            "style:table-row-properties", namespaces,
+        ) if row_style is not None else None
+        height_value = ""
+        if row_properties is not None:
+            height_value = row_properties.get(
+                f"{{{namespaces['style']}}}row-height",
+                row_properties.get(f"{{{namespaces['style']}}}min-row-height", ""),
+            )
+        try:
+            height = _template_length_to_points(height_value) if height_value else 0
+        except ValueError:
+            height = 0
+
+        cell_style = style_definitions.get(
+            cell.get(f"{{{namespaces['table']}}}style-name", ""),
+        )
+        cell_properties = cell_style.find(
+            "style:table-cell-properties", namespaces,
+        ) if cell_style is not None else None
+        if cell_properties is not None:
+            default_padding = cell_properties.get(f"{{{namespaces['fo']}}}padding", "0pt")
+            padding = {}
+            borders = {}
+            for edge in ("top", "right", "bottom", "left"):
+                value = cell_properties.get(
+                    f"{{{namespaces['fo']}}}padding-{edge}", default_padding,
+                )
+                try:
+                    padding[edge] = _template_length_to_points(value)
+                except ValueError:
+                    padding[edge] = 0
+                border = cell_properties.get(
+                    f"{{{namespaces['fo']}}}border-{edge}",
+                    cell_properties.get(f"{{{namespaces['fo']}}}border", "none"),
+                )
+                try:
+                    borders[edge] = _template_length_to_points(border.split()[0])
+                except (IndexError, ValueError):
+                    borders[edge] = 0
+            width -= padding["left"] + padding["right"] + borders["left"] + borders["right"]
+            height -= padding["top"] + padding["bottom"] + borders["top"] + borders["bottom"]
+        if width > 0 and height > 0:
+            return width, height
+    return None
 
 
 def _insert_template_logo(section, image_path: str, width: float, height: float, namespaces) -> None:
     """Reutiliza el marco de {{logo}} o crea uno cuando la plantilla no lo define."""
+    parents = {child: parent for parent in section.iter() for child in parent}
+    cell_tag = f"{{{namespaces['table']}}}table-cell"
+    anchor_tag = f"{{{namespaces['text']}}}anchor-type"
+    x_tag = f"{{{namespaces['svg']}}}x"
+    y_tag = f"{{{namespaces['svg']}}}y"
     for paragraph in section.findall(".//text:p", namespaces):
         if "{{logo}}" not in "".join(paragraph.itertext()):
             continue
         if "".join(paragraph.itertext()).strip() != "{{logo}}":
             raise ValueError("El marcador {{logo}} debe ocupar su propio párrafo.")
+        ancestor = parents.get(paragraph)
+        in_table_cell = False
+        while ancestor is not None:
+            if ancestor.tag == cell_tag:
+                in_table_cell = True
+                break
+            ancestor = parents.get(ancestor)
         placeholder_frame = _template_logo_placeholder_frame(section, namespaces, paragraph)
         if placeholder_frame is not None:
             for child in list(placeholder_frame):
                 placeholder_frame.remove(child)
+            if in_table_cell:
+                placeholder_frame.set(anchor_tag, "as-char")
+                placeholder_frame.attrib.pop(x_tag, None)
+                placeholder_frame.attrib.pop(y_tag, None)
             ElementTree.SubElement(placeholder_frame, f"{{{namespaces['draw']}}}image", {
                 f"{{{namespaces['xlink']}}}href": image_path,
                 f"{{{namespaces['xlink']}}}type": "simple",
@@ -322,15 +475,17 @@ def _insert_template_logo(section, image_path: str, width: float, height: float,
         paragraph.text = None
         for child in list(paragraph):
             paragraph.remove(child)
-        frame = ElementTree.SubElement(paragraph, f"{{{namespaces['draw']}}}frame", {
+        attributes = {
             f"{{{namespaces['draw']}}}name": "ReportHeaderLogo",
             f"{{{namespaces['draw']}}}style-name": "HeaderLogo",
-            f"{{{namespaces['text']}}}anchor-type": "paragraph",
-            f"{{{namespaces['svg']}}}x": "0pt",
-            f"{{{namespaces['svg']}}}y": "0pt",
+            anchor_tag: "as-char" if in_table_cell else "paragraph",
             f"{{{namespaces['svg']}}}width": f"{width:.3f}pt",
             f"{{{namespaces['svg']}}}height": f"{height:.3f}pt",
-        })
+        }
+        if not in_table_cell:
+            attributes[x_tag] = "0pt"
+            attributes[y_tag] = "0pt"
+        frame = ElementTree.SubElement(paragraph, f"{{{namespaces['draw']}}}frame", attributes)
         ElementTree.SubElement(frame, f"{{{namespaces['draw']}}}image", {
             f"{{{namespaces['xlink']}}}href": image_path,
             f"{{{namespaces['xlink']}}}type": "simple",
@@ -356,6 +511,8 @@ def _read_report_template(template_path: str = "", logo_path: str = ""):
     namespaces = {
         "style": "urn:oasis:names:tc:opendocument:xmlns:style:1.0",
         "draw": "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0",
+        "table": "urn:oasis:names:tc:opendocument:xmlns:table:1.0",
+        "fo": "urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0",
         "svg": "urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0",
         "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
         "xlink": "http://www.w3.org/1999/xlink",
@@ -369,12 +526,19 @@ def _read_report_template(template_path: str = "", logo_path: str = ""):
             master_page = styles.find(".//style:master-page", namespaces)
             if master_page is None:
                 raise ValueError("La plantilla ODT no contiene una página maestra.")
+            style_definitions = {
+                element.get(f"{{{namespaces['style']}}}name"): element
+                for element in styles.findall(".//style:style", namespaces)
+                if element.get(f"{{{namespaces['style']}}}name")
+            }
             header = master_page.find("style:header", namespaces)
             frame = header.find(".//draw:frame", namespaces) if header is not None else None
             image = frame.find(".//draw:image", namespaces) if frame is not None else None
             if _has_template_logo_marker(header, namespaces):
                 logo = _read_default_report_logo(
-                    logo_path, _template_logo_frame_size(header, namespaces),
+                    logo_path, _template_logo_frame_size(
+                        header, namespaces, style_definitions=style_definitions,
+                    ),
                 )
                 if logo is None:
                     image_data, image_path, image_width, image_height = None, "", 0, 0
@@ -681,7 +845,9 @@ def _read_report_template_header(template_path: str = "", logo_path: str = ""):
             dynamic_resources = {}
             if _has_template_logo_marker(header, namespaces):
                 logo = _read_default_report_logo(
-                    logo_path, _template_logo_frame_size(header, namespaces),
+                    logo_path, _template_logo_frame_size(
+                        header, namespaces, style_definitions=style_definitions,
+                    ),
                 )
                 if logo is None:
                     _remove_template_logo_marker(header, namespaces)

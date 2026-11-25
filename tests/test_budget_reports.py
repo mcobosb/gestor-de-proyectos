@@ -239,6 +239,112 @@ class ReportCalculationsTests(unittest.TestCase):
             self.assertAlmostEqual(fitted_logo.width / fitted_logo.height, 3, delta=0.02)
             self.assertEqual(fitted_logo.getpixel((0, 0)), (255, 0, 0))
 
+    def test_logo_uses_bordered_table_cell_dimensions(self):
+        """Use a bordered header cell's actual width and height for {{logo}}."""
+        from odt_reports import _new_report, _tag
+        from report_layout import _read_report_template, _template_length_to_points
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            logo_path = root / "logo.jpg"
+            Image.new("RGB", (600, 300), (220, 10, 10)).save(logo_path, format="JPEG")
+            base_template = root / "base.odt"
+            template = root / "cell-logo.odt"
+            with patch(
+                "report_layout.DEFAULT_TEMPLATE_PATH", root / "missing-template.odt",
+            ):
+                _new_report("Base", "Proyecto", ReportSettings()).write(base_template)
+
+            with ZipFile(base_template) as source, ZipFile(template, "w") as target:
+                for entry in source.infolist():
+                    data = source.read(entry.filename)
+                    if entry.filename == "styles.xml":
+                        styles = ElementTree.fromstring(data)
+                        automatic = styles.find(_tag("office:automatic-styles"))
+                        table_style = ElementTree.SubElement(automatic, _tag("style:style"), {
+                            _tag("style:name"): "LogoTable",
+                            _tag("style:family"): "table",
+                        })
+                        ElementTree.SubElement(
+                            table_style, _tag("style:table-properties"),
+                            {_tag("style:width"): "6cm"},
+                        )
+                        column_style = ElementTree.SubElement(automatic, _tag("style:style"), {
+                            _tag("style:name"): "LogoColumn",
+                            _tag("style:family"): "table-column",
+                        })
+                        ElementTree.SubElement(
+                            column_style, _tag("style:table-column-properties"),
+                            {_tag("style:column-width"): "6cm"},
+                        )
+                        row_style = ElementTree.SubElement(automatic, _tag("style:style"), {
+                            _tag("style:name"): "LogoRow",
+                            _tag("style:family"): "table-row",
+                        })
+                        ElementTree.SubElement(
+                            row_style, _tag("style:table-row-properties"),
+                            {_tag("style:row-height"): "2cm"},
+                        )
+                        cell_style = ElementTree.SubElement(automatic, _tag("style:style"), {
+                            _tag("style:name"): "LogoCell",
+                            _tag("style:family"): "table-cell",
+                        })
+                        ElementTree.SubElement(
+                            cell_style, _tag("style:table-cell-properties"),
+                            {
+                                _tag("fo:border"): "0.05cm solid #000000",
+                                _tag("fo:padding"): "0.1cm",
+                            },
+                        )
+                        header = styles.find(f".//{_tag('style:header')}")
+                        for child in list(header):
+                            header.remove(child)
+                        table = ElementTree.SubElement(header, _tag("table:table"), {
+                            _tag("table:style-name"): "LogoTable",
+                        })
+                        ElementTree.SubElement(table, _tag("table:table-column"), {
+                            _tag("table:style-name"): "LogoColumn",
+                        })
+                        row = ElementTree.SubElement(table, _tag("table:table-row"), {
+                            _tag("table:style-name"): "LogoRow",
+                        })
+                        cell = ElementTree.SubElement(row, _tag("table:table-cell"), {
+                            _tag("table:style-name"): "LogoCell",
+                        })
+                        ElementTree.SubElement(cell, _tag("text:p")).text = "{{logo}}"
+                        data = ElementTree.tostring(styles, encoding="utf-8")
+                    target.writestr(entry, data)
+
+            settings = ReportSettings(
+                template_path=str(template), master_logo_path=str(logo_path),
+            )
+            _, _, width, height, _ = _read_report_template(
+                str(template), str(logo_path),
+            )
+            self.assertAlmostEqual(
+                width, _template_length_to_points("5.7cm"), places=2,
+            )
+            self.assertAlmostEqual(
+                height, _template_length_to_points("1.7cm"), places=2,
+            )
+            output = root / "cell-logo-output.odt"
+            _new_report("Documento", "Proyecto", settings).write(output)
+            with ZipFile(output) as archive:
+                styles = ElementTree.fromstring(archive.read("styles.xml"))
+                frame = styles.find(f".//{_tag('style:header')}//{_tag('draw:frame')}")
+                self.assertAlmostEqual(
+                    _template_length_to_points(frame.get(_tag("svg:width"))),
+                    _template_length_to_points("5.7cm"),
+                    places=2,
+                )
+                self.assertAlmostEqual(
+                    _template_length_to_points(frame.get(_tag("svg:height"))),
+                    _template_length_to_points("1.7cm"),
+                    places=2,
+                )
+                self.assertEqual(frame.get(_tag("text:anchor-type")), "as-char")
+
     def test_section_contents_in_budget_and_certification_exports(self):
         """Indexa capitulos independientes, pero no resumenes ni listados incrustados."""
         from bc3_gui import ProjectItem
