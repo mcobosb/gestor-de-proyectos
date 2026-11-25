@@ -186,6 +186,53 @@ def restore_drawings(value: object) -> dict | None:
     return {"paper": value["paper"], "selected": dict(selected)}
 
 
+def selected_sheets(state: object) -> list[DrawingSheet]:
+    """Devuelve las fichas seleccionadas en el orden de la biblioteca."""
+    selection = restore_drawings(state)
+    if selection is None:
+        raise ValueError("Falta la selección de los planos de Seguridad y Salud.")
+    catalog = available_sheets()
+    available_codes = {sheet.code for sheet in catalog}
+    missing = [
+        code for code, selected in selection["selected"].items()
+        if selected and code not in available_codes
+    ]
+    if missing:
+        raise ValueError(
+            "Faltan fichas seleccionadas en la biblioteca personal: " + ", ".join(missing)
+        )
+    return [
+        sheet for sheet in catalog
+        if selection["selected"].get(sheet.code, False)
+        and (sheet.paper == selection["paper"] or sheet.path is not None)
+    ]
+
+
+def group_sheets_by_page(
+    sheets: list[DrawingSheet], paper: str,
+) -> list[list[DrawingSheet]]:
+    """Agrupa las fichas tal como se imponen en las páginas seleccionadas."""
+    if paper not in ("A4", "A3"):
+        raise ValueError("El formato de los planos de Seguridad y Salud no es válido.")
+    capacity = 1 if paper == "A4" else 2
+    groups = []
+    pending = []
+    for sheet in sheets:
+        if sheet.paper == "A3":
+            if pending:
+                groups.append(pending)
+                pending = []
+            groups.append([sheet])
+        else:
+            pending.append(sheet)
+            if len(pending) == capacity:
+                groups.append(pending)
+                pending = []
+    if pending:
+        groups.append(pending)
+    return groups
+
+
 def _filled_title_block(path: Path, fields: dict[str, str]) -> bytes:
     """Sustituye los textos identificados respetando sus posiciones y estilos."""
     try:
@@ -417,21 +464,7 @@ def render_drawings(app, state: dict) -> list[bytes]:
     selection = restore_drawings(state)
     if selection is None:
         raise ValueError("Falta la selección de los planos de Seguridad y Salud.")
-    catalog = available_sheets()
-    available_codes = {sheet.code for sheet in catalog}
-    missing = [
-        code for code, selected in selection["selected"].items()
-        if selected and code not in available_codes
-    ]
-    if missing:
-        raise ValueError(
-            "Faltan fichas seleccionadas en la biblioteca personal: " + ", ".join(missing)
-        )
-    sheets = [
-        sheet for sheet in catalog
-        if selection["selected"].get(sheet.code, False)
-        and (sheet.paper == selection["paper"] or sheet.path is not None)
-    ]
+    sheets = selected_sheets(selection)
     if not sheets:
         return []
     directory = app.report_settings.drawing_title_block_path.strip()
@@ -450,21 +483,7 @@ def render_drawings(app, state: dict) -> list[bytes]:
     authors = app.report_settings.document_author.splitlines()
     roles = app.report_settings.role.splitlines()
     pages = []
-    groups = []
-    pending = []
-    for sheet in sheets:
-        if sheet.paper == "A3":
-            if pending:
-                groups.append(pending)
-                pending = []
-            groups.append([sheet])
-        else:
-            pending.append(sheet)
-            if len(pending) == (1 if paper == "A4" else 2):
-                groups.append(pending)
-                pending = []
-    if pending:
-        groups.append(pending)
+    groups = group_sheets_by_page(sheets, paper)
     for group in groups:
         fields = {
             "titulo_proyecto": app._project_title(),

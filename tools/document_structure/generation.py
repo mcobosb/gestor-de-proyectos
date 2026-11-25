@@ -497,11 +497,38 @@ def generate_project_package(
                         f"DOC01-A{annex_number:02}", title, "", author, "", "",
                     ))
 
-                entries.append({"text": "DOCUMENTO Nº 2. PLANOS.", "style": "P21"})
-                for index, plan in enumerate(plans, 1):
-                    title = str(plan.get("title", "")).strip()
+                plan_titles = [str(plan.get("title", "")).strip() for plan in plans]
+                for index, title in enumerate(plan_titles, 1):
                     if not title:
                         raise ValueError(f"Indica el nombre del plano seleccionado número {index}.")
+
+                plans_document_relative = None
+                if plan_titles:
+                    plans_document_relative = (
+                        Path(TECHNICAL_DOCUMENTS_FOLDER)
+                        / DOCUMENT_FOLDERS[1] / "Planos.odt"
+                    )
+                    _write_catalog_document(
+                        app,
+                        stage / plans_document_relative,
+                        "DOCUMENTO Nº 2: Planos",
+                        [
+                            f"PLANO Nº {index:02}. {title}"
+                            for index, title in enumerate(plan_titles, 1)
+                        ],
+                        settings,
+                    )
+                    linked_documents.append(plans_document_relative)
+
+                entries.append({
+                    "text": "DOCUMENTO Nº 2. PLANOS.",
+                    "style": "P21",
+                    **(
+                        {"href": _master_href(plans_document_relative)}
+                        if plans_document_relative else {}
+                    ),
+                })
+                for index, (plan, title) in enumerate(zip(plans, plan_titles), 1):
                     folder_name = _safe_component(f"PLANO {index:02} - {title}")
                     relative_dir = (
                         Path(TECHNICAL_DOCUMENTS_FOLDER) / DOCUMENT_FOLDERS[1] / folder_name

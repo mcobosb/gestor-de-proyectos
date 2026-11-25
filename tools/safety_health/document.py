@@ -19,7 +19,9 @@ from cpv_catalog import resolve_cpv_codes
 from .care_centers import format_centers, restore_centers
 from .chapter_selection import study_chapters, study_items
 from .external_conditions import APPLICABILITY, EXTERNAL_CONDITIONS, restore_external_conditions
-from .drawings import render_drawings, restore_drawings
+from .drawings import (
+    group_sheets_by_page, render_drawings, restore_drawings, selected_sheets,
+)
 from .regulations import (
     REGULATIONS, WorkUnit, general_une_references, load_ntps, restore_review, review_context,
 )
@@ -53,6 +55,7 @@ _TEMPLATE_MEMBERS = {
     "index": "UNI/INDICE_FICHAS_ESS.md",
     "general_conditions": "UNI/CONDICIONES_GENERALES_ESS.md",
 }
+_PLIEGO_DOCUMENT_TITLE = "DOCUMENTO III. PLIEGO DE CONDICIONES"
 _REFERENCE_RE = re.compile(
     r"\b(?:R|MP|PC|EPI|EQ)-[^\W_]+(?:-[^\W_]+)*\b", re.IGNORECASE,
 )
@@ -886,7 +889,7 @@ def _build_study_content(app) -> _StudyContent:
     _add_heading(blocks, "Seguimiento, control, coordinación, formación y documentación", 1)
     _add_markdown(blocks, templates["monitoring"], replacements)
 
-    blocks.append(_Block("document", "DOCUMENTO II. PLIEGO DE CONDICIONES"))
+    blocks.append(_Block("document", _PLIEGO_DOCUMENT_TITLE))
     _add_normative_chapter(
         blocks, templates["normative"], _work_units(app, item_fiches, fiche_references), state, pending,
         [(chapter.code, _chapter_label(app, chapter.code))
@@ -1413,18 +1416,84 @@ def _link_odt_references(document, targets: dict[str, str]) -> None:
         paragraph.insert(0, bookmark)
 
 
-def _write_pdf(app, target, content: _StudyContent, drawings: list[bytes], paper: str) -> None:
+def _validate_drawing_title_groups(
+    drawings: list[bytes], title_groups: list[list[str]],
+) -> None:
+    """Comprueba que cada página de planos tenga sus entradas de índice."""
+    if (
+        len(drawings) != len(title_groups)
+        or any(
+            not group or any(not isinstance(title, str) or not title.strip() for title in group)
+            for group in title_groups
+        )
+    ):
+        raise ValueError("El índice de planos no coincide con las páginas seleccionadas.")
+
+
+def _append_odt_plans_index(document, title_groups: list[list[str]], bookmark_offset: int) -> int:
+    """Inserta el índice del Documento II con enlaces a las páginas de planos."""
+    from xml.etree import ElementTree as ET
+    from odt_reports import _tag
+
+    plan_title_style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+        _tag("style:name"): "ESSPlansTitle", _tag("style:family"): "paragraph",
+        _tag("style:parent-style-name"): "ESSHeading1",
+    })
+    ET.SubElement(plan_title_style, _tag("style:paragraph-properties"), {
+        _tag("fo:break-before"): "page",
+    })
+    for name, break_before in (
+        ("ESSPlanAnchorStart", True),
+        ("ESSPlanAnchorNext", True),
+        ("ESSPlanAnchor", False),
+    ):
+        style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+            _tag("style:name"): name, _tag("style:family"): "paragraph",
+            _tag("style:parent-style-name"): "ESSBody",
+            _tag("style:master-page-name"): "ESSDrawingPage",
+        })
+        properties = ET.SubElement(style, _tag("style:paragraph-properties"), {
+            _tag("fo:margin"): "0cm", _tag("fo:line-height"): "1pt",
+        })
+        if break_before:
+            properties.set(_tag("fo:break-before"), "page")
+        ET.SubElement(style, _tag("style:text-properties"), {
+            _tag("fo:font-size"): "1pt", _tag("fo:color"): "#FFFFFF",
+        })
+
+    document.paragraph("DOCUMENTO Nº 2: PLANOS", "ESSPlansTitle")
+    headings = [
+        (1, f"PLANO Nº {index:02}. {title}")
+        for index, title in enumerate(
+            (title for group in title_groups for title in group), 1,
+        )
+    ]
+    document.table_of_contents(
+        headings, max_level=1, name="ESSPlansContents",
+        bookmark_offset=bookmark_offset,
+        source_styles={
+            1: ("ESSPlanAnchorStart", "ESSPlanAnchorNext", "ESSPlanAnchor"),
+        },
+    )
+    return len(headings)
+
+
+def _write_pdf(
+    app, target, content: _StudyContent, drawings: list[bytes],
+    title_groups: list[list[str]], paper: str,
+) -> None:
     """Maqueta el estudio con indice enlazado y paginas reales, como el PPTP."""
     from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
     from reportlab.lib.styles import ParagraphStyle
     from io import BytesIO
     from reportlab.lib.pagesizes import A3, A4, landscape
     from reportlab.platypus import (
-        BaseDocTemplate, Frame, Image, NextPageTemplate, PageBreak, PageTemplate,
+        BaseDocTemplate, Frame, Image, NextPageTemplate, PageBreak, PageTemplate, Spacer,
     )
     from reportlab.platypus.doctemplate import LayoutError
     from reportlab.platypus.tableofcontents import TableOfContents
 
+    _validate_drawing_title_groups(drawings, title_groups)
     settings = app.report_settings
     project = report_project_label(content.project_title, content.currency_label)
     targets = _catalogue_targets(content)
@@ -1480,20 +1549,66 @@ def _write_pdf(app, target, content: _StudyContent, drawings: list[bytes], paper
             if kind == f"ESSContents{self.document_index}":
                 super().notify("TOCEntry", stuff)
 
+    plan_size = A4 if paper == "A4" else landscape(A3)
     story = []
+    documents = _study_documents(content.blocks)
+    plan_insert_at = min(1, len(documents))
+
+    def append_plans_section(following_document: bool) -> None:
+        """Inserta el Documento II y sus páginas entre la memoria y el pliego."""
+        plan_contents = StudyContents()
+        plan_contents.document_index = plan_insert_at
+        plan_contents.levelStyles = contents_styles(layout, DEFAULT_TOC_DEPTH)
+        plan_contents.dotsMinLevel = 0
+        story.extend((
+            PageBreak(),
+            layout.text("DOCUMENTO Nº 2: PLANOS", layout.title_style),
+            contents_title(layout),
+            plan_contents,
+            NextPageTemplate("ESSDrawings"),
+            PageBreak(),
+        ))
+        plan_number = 0
+        for group_index, (drawing, titles) in enumerate(zip(drawings, title_groups)):
+            if group_index:
+                story.append(PageBreak())
+            for title in titles:
+                plan_number += 1
+                entry = f"PLANO Nº {plan_number:02}. {title}"
+                anchor = Spacer(0, 0.1)
+                anchor._ess_heading = (
+                    0, entry, f"ESSPlanHeading{plan_number}", plan_insert_at,
+                )
+                story.append(anchor)
+            story.append(Image(
+                BytesIO(drawing),
+                width=plan_size[0] - 0.1,
+                height=plan_size[1] - len(titles) * 0.1 - 0.1,
+            ))
+        story.append(NextPageTemplate("Later"))
+        if not following_document:
+            story.append(PageBreak())
 
     heading_index = 0
+    plans_inserted = False
     caption_style = ParagraphStyle(
         "ESSCaption", parent=body, fontSize=9, leading=12,
         keepWithNext=True, alignment=TA_LEFT,
     )
-    for document_index, (document_title, blocks) in enumerate(_study_documents(content.blocks)):
+    for document_index, (document_title, blocks) in enumerate(documents):
+        if drawings and document_index == plan_insert_at:
+            append_plans_section(following_document=True)
+            plans_inserted = True
         if document_index:
             story.append(PageBreak())
+        toc_document_index = (
+            document_index + 1
+            if drawings and document_index >= plan_insert_at else document_index
+        )
         if document_title:
             story.append(layout.text(document_title, layout.title_style))
         toc = StudyContents()
-        toc.document_index = document_index
+        toc.document_index = toc_document_index
         toc.levelStyles = contents_styles(layout, DEFAULT_TOC_DEPTH)
         toc.dotsMinLevel = 0
         story.extend((contents_title(layout), toc, PageBreak()))
@@ -1501,7 +1616,7 @@ def _write_pdf(app, target, content: _StudyContent, drawings: list[bytes], paper
             if block.kind == "heading":
                 paragraph = layout.text(block.text, heading_styles[block.level])
                 paragraph._ess_heading = (
-                    block.level - 1, block.text, f"ESSHeading{heading_index}", document_index,
+                    block.level - 1, block.text, f"ESSHeading{heading_index}", toc_document_index,
                 )
                 heading_index += 1
                 story.append(paragraph)
@@ -1526,13 +1641,9 @@ def _write_pdf(app, target, content: _StudyContent, drawings: list[bytes], paper
                     ratios = _column_ratios(block.headers)
                     story.append(layout.table(block.headers, block.rows, ratios))
 
+    if drawings and not plans_inserted:
+        append_plans_section(following_document=False)
     story.extend(layout.signature_block(settings))
-    plan_size = A4 if paper == "A4" else landscape(A3)
-    if drawings:
-        story.append(NextPageTemplate("ESSDrawings"))
-        for drawing in drawings:
-            story.append(PageBreak())
-            story.append(Image(BytesIO(drawing), width=plan_size[0] - 0.1, height=plan_size[1] - 0.1))
 
     class StudyDocTemplate(BaseDocTemplate):
         """Registra los destinos y las paginas del indice en cada pasada."""
@@ -1586,12 +1697,16 @@ def _write_pdf(app, target, content: _StudyContent, drawings: list[bytes], paper
         raise ValueError(f"No se pudo maquetar el Estudio de Seguridad y Salud: {exc}") from exc
 
 
-def _write_odt(app, target, content: _StudyContent, drawings: list[bytes], paper: str) -> None:
+def _write_odt(
+    app, target, content: _StudyContent, drawings: list[bytes],
+    title_groups: list[list[str]], paper: str,
+) -> None:
     """Escribe el mismo estudio como documento ODT editable basado en la plantilla."""
     from xml.etree import ElementTree as ET
     from budget_core import currency_label
     from odt_reports import _new_report, _tag
 
+    _validate_drawing_title_groups(drawings, title_groups)
     settings = app.report_settings
     project = report_project_label(
         content.project_title,
@@ -1640,18 +1755,24 @@ def _write_odt(app, target, content: _StudyContent, drawings: list[bytes], paper
     document_styles = {}
     if scoped_contents:
         for index, (_title, _blocks) in enumerate(documents):
+            document_number = 3 if _title == _PLIEGO_DOCUMENT_TITLE else index + 1
             for level in range(1, 5):
                 name = f"ESSDocument{index}Heading{level}"
                 ET.SubElement(document.automatic_styles, _tag("style:style"), {
                     _tag("style:name"): name, _tag("style:family"): "paragraph",
                     _tag("style:parent-style-name"): f"ESSHeading{level}",
                 })
-                document_styles[name] = f"ESS - Documento {index + 1} - Titulo {level}"
+                document_styles[name] = f"ESS - Documento {document_number} - Titulo {level}"
         for name in ("ESSDocumentTitle", "ESSDocumentNextTitle"):
-            style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+            properties = {
                 _tag("style:name"): name, _tag("style:family"): "paragraph",
                 _tag("style:parent-style-name"): "ESSHeading1",
-            })
+            }
+            if drawings and name == "ESSDocumentNextTitle":
+                properties[_tag("style:master-page-name")] = "Standard"
+            style = ET.SubElement(
+                document.automatic_styles, _tag("style:style"), properties,
+            )
             ET.SubElement(style, _tag("style:paragraph-properties"), {
                 _tag("fo:break-before"): "page" if name == "ESSDocumentNextTitle" else "auto",
             })
@@ -1665,7 +1786,16 @@ def _write_odt(app, target, content: _StudyContent, drawings: list[bytes], paper
         _tag("fo:color"): "#1F4E79", _tag("style:text-underline-style"): "solid",
     })
     bookmark_index = 0
+    plan_insert_at = min(1, len(documents))
+    plan_bookmark_offset = 0
+    plans_inserted = False
     for index, (document_title, blocks) in enumerate(documents):
+        if drawings and index == plan_insert_at:
+            plan_bookmark_offset = bookmark_index
+            bookmark_index += _append_odt_plans_index(
+                document, title_groups, plan_bookmark_offset,
+            )
+            plans_inserted = True
         if document_title:
             document.paragraph(
                 document_title,
@@ -1715,27 +1845,42 @@ def _write_odt(app, target, content: _StudyContent, drawings: list[bytes], paper
                     document.table(
                         block.headers, block.rows, ratios=_column_ratios(block.headers),
                     )
+    if drawings and not plans_inserted:
+        plan_bookmark_offset = bookmark_index
+        bookmark_index += _append_odt_plans_index(
+            document, title_groups, plan_bookmark_offset,
+        )
     _link_odt_references(document, _catalogue_targets(content))
+    document.append_signature(settings)
     document.name_text_styles({
         "ESSBody": "ESS - Cuerpo",
         "ESSCaption": "ESS - Leyenda de tabla",
         "ESSSummaryHeader": "ESS - Tablas - Cabecera",
         "ESSSummaryText": "ESS - Tablas - Texto",
         **document_styles,
+        "ESSPlansTitle": "ESS - Documento 2 - Título",
+        "ESSPlanAnchorStart": "ESS - Plano - Ancla inicial",
+        "ESSPlanAnchorNext": "ESS - Plano - Ancla siguiente",
+        "ESSPlanAnchor": "ESS - Plano - Ancla",
         **{f"ESSHeading{level}": f"ESS - Titulo {level}" for level in range(1, 5)},
         **{f"PPTPContents{level}": f"ESS - Indice {level}" for level in range(1, 3)},
     })
-    document.append_signature(settings)
     document.write(target)
     if drawings:
-        _append_odt_drawings(target, drawings, paper)
+        _append_odt_drawings(
+            target, drawings, title_groups, paper, plan_bookmark_offset,
+        )
 
 
-def _append_odt_drawings(target: Path, drawings: list[bytes], paper: str) -> None:
+def _append_odt_drawings(
+    target: Path, drawings: list[bytes], title_groups: list[list[str]],
+    paper: str, bookmark_offset: int,
+) -> None:
     """Añade páginas de plano con maestro propio e imágenes integradas en el ODT."""
     from xml.etree import ElementTree as ET
     from odt_reports import _tag
 
+    _validate_drawing_title_groups(drawings, title_groups)
     width, height = ("21cm", "29.7cm") if paper == "A4" else ("42cm", "29.7cm")
     temporary = None
     try:
@@ -1745,16 +1890,6 @@ def _append_odt_drawings(target: Path, drawings: list[bytes], paper: str) -> Non
             manifest = ET.fromstring(source.read("META-INF/manifest.xml"))
             automatic = content.find(_tag("office:automatic-styles"))
             body = content.find(f"{_tag('office:body')}/{_tag('office:text')}")
-            style = ET.SubElement(automatic, _tag("style:style"), {
-                _tag("style:name"): "ESSDrawingParagraph",
-                _tag("style:family"): "paragraph",
-                _tag("style:master-page-name"): "ESSDrawingPage",
-            })
-            ET.SubElement(style, _tag("style:paragraph-properties"), {
-                _tag("fo:break-before"): "page",
-                _tag("fo:margin"): "0cm",
-                _tag("fo:line-height"): "1pt",
-            })
             graphic = ET.SubElement(automatic, _tag("style:style"), {
                 _tag("style:name"): "ESSDrawingGraphic", _tag("style:family"): "graphic",
             })
@@ -1779,27 +1914,49 @@ def _append_odt_drawings(target: Path, drawings: list[bytes], paper: str) -> Non
                 _tag("style:name"): "ESSDrawingPage",
                 _tag("style:page-layout-name"): "ESSDrawingLayout",
             })
+            insertion_index = next((
+                index for index, node in enumerate(body)
+                if node.tag in (_tag("text:p"), _tag("text:h"))
+                and _PLIEGO_DOCUMENT_TITLE in "".join(node.itertext())
+            ), len(body))
             image_names = []
             existing_names = set(source.namelist())
-            for index, _image in enumerate(drawings, 1):
+            title_index = 0
+            for index, (_image, titles) in enumerate(zip(drawings, title_groups), 1):
                 name = f"Pictures/ESSDrawing{index}.png"
                 if name in existing_names:
                     raise ValueError(f"El ODT ya contiene el recurso de plano {name}.")
                 image_names.append(name)
-                paragraph = ET.SubElement(body, _tag("text:p"), {
-                    _tag("text:style-name"): "ESSDrawingParagraph",
-                })
-                frame = ET.SubElement(paragraph, _tag("draw:frame"), {
-                    _tag("draw:name"): f"ESSDrawing{index}",
-                    _tag("draw:style-name"): "ESSDrawingGraphic",
-                    _tag("text:anchor-type"): "paragraph",
-                    _tag("svg:x"): "0cm", _tag("svg:y"): "0cm",
-                    _tag("svg:width"): width, _tag("svg:height"): height,
-                })
-                ET.SubElement(frame, _tag("draw:image"), {
-                    _tag("xlink:href"): name, _tag("xlink:type"): "simple",
-                    _tag("xlink:show"): "embed", _tag("xlink:actuate"): "onLoad",
-                })
+                for anchor_index, title in enumerate(titles):
+                    style_name = (
+                        "ESSPlanAnchorStart" if index == 1 and anchor_index == 0 else
+                        "ESSPlanAnchorNext" if anchor_index == 0 else
+                        "ESSPlanAnchor"
+                    )
+                    anchor = ET.Element(_tag("text:p"), {
+                        _tag("text:style-name"): (
+                            style_name
+                        ),
+                    })
+                    anchor.text = f"PLANO Nº {title_index + 1:02}. {title}"
+                    ET.SubElement(anchor, _tag("text:bookmark"), {
+                        _tag("text:name"): f"PPTPHeading{bookmark_offset + title_index}",
+                    })
+                    title_index += 1
+                    if anchor_index == len(titles) - 1:
+                        frame = ET.SubElement(anchor, _tag("draw:frame"), {
+                            _tag("draw:name"): f"ESSDrawing{index}",
+                            _tag("draw:style-name"): "ESSDrawingGraphic",
+                            _tag("text:anchor-type"): "paragraph",
+                            _tag("svg:x"): "0cm", _tag("svg:y"): "0cm",
+                            _tag("svg:width"): width, _tag("svg:height"): height,
+                        })
+                        ET.SubElement(frame, _tag("draw:image"), {
+                            _tag("xlink:href"): name, _tag("xlink:type"): "simple",
+                            _tag("xlink:show"): "embed", _tag("xlink:actuate"): "onLoad",
+                        })
+                    body.insert(insertion_index, anchor)
+                    insertion_index += 1
                 ET.SubElement(manifest, _tag("manifest:file-entry"), {
                     _tag("manifest:full-path"): name, _tag("manifest:media-type"): "image/png",
                 })
@@ -1830,8 +1987,13 @@ def write_study_report(app, target) -> tuple[str, ...]:
         target, app.report_settings.output_format,
     )
     drawing_state = restore_drawings(app.safety_health_state.get("drawings"))
-    drawings = render_drawings(app, drawing_state) if drawing_state else []
+    selected = selected_sheets(drawing_state) if drawing_state else []
     paper = drawing_state["paper"] if drawing_state else "A4"
+    title_groups = [
+        [sheet.title for sheet in group]
+        for group in group_sheets_by_page(selected, paper)
+    ]
+    drawings = render_drawings(app, drawing_state) if drawing_state else []
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -1839,9 +2001,9 @@ def write_study_report(app, target) -> tuple[str, ...]:
         ) as handle:
             temporary = Path(handle.name)
         if output_format == "pdf":
-            _write_pdf(app, temporary, content, drawings, paper)
+            _write_pdf(app, temporary, content, drawings, title_groups, paper)
         else:
-            _write_odt(app, temporary, content, drawings, paper)
+            _write_odt(app, temporary, content, drawings, title_groups, paper)
         temporary.replace(target)
     except (OSError, BadZipFile) as exc:
         raise ValueError(f"No se pudo guardar el Estudio de Seguridad y Salud: {exc}") from exc

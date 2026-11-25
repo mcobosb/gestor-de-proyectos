@@ -186,7 +186,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
                         "3.1.3.2 EQUIPOS DE PROTECCIÓN INDIVIDUAL",
                         "3.1.3.3 EQUIPOS DE TRABAJO", "3.1.4 VALIDACIÓN",
                         "4 SEGUIMIENTO, CONTROL, COORDINACIÓN, FORMACIÓN Y DOCUMENTACIÓN",
-                        "DOCUMENTO I. MEMORIA", "DOCUMENTO II. PLIEGO DE CONDICIONES",
+                        "DOCUMENTO I. MEMORIA", "DOCUMENTO III. PLIEGO DE CONDICIONES",
                         "1 OBJETO DEL PRESENTE PLIEGO",
                         "2 CONDICIONES DE NATURALEZA LEGAL",
                         "2.4 NORMAS UNE DE APLICACIÓN",
@@ -921,7 +921,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
         blocks = _numbered_blocks(_build_study_content(app).blocks)
         document_starts = [index for index, block in enumerate(blocks) if block.kind == "document"]
         self.assertEqual([blocks[index].text for index in document_starts], [
-            "DOCUMENTO I. MEMORIA", "DOCUMENTO II. PLIEGO DE CONDICIONES",
+            "DOCUMENTO I. MEMORIA", "DOCUMENTO III. PLIEGO DE CONDICIONES",
         ])
         specification = blocks[document_starts[1] + 1:]
         self.assertEqual(
@@ -2500,7 +2500,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
                 rows=(("Riesgos", "R-RUIDO", "Definición acústica de referencia."),),
                 blue_table=True,
             ),
-            _Block("document", "DOCUMENTO II. PLIEGO DE CONDICIONES"),
+            _Block("document", "DOCUMENTO III. PLIEGO DE CONDICIONES"),
             _Block("heading", "Obligaciones", 1),
             _Block("paragraph", "CUERPO PLIEGO. Consulta preventiva: R-RUIDO."),
             _Block("heading", "Contratista", 2),
@@ -2578,7 +2578,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
                     first_body = next(index for index, text in enumerate(texts) if "CUERPO MEMORIA." in text)
                     second_index = next(
                         index for index, text in enumerate(texts)
-                        if "DOCUMENTO II. PLIEGO DE CONDICIONES" in text
+                        if "DOCUMENTO III. PLIEGO DE CONDICIONES" in text
                     )
                     second_body = next(index for index, text in enumerate(texts) if "CUERPO PLIEGO." in text)
                     self.assertGreater(first_body, 1)

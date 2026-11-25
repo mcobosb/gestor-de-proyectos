@@ -35,6 +35,36 @@ DEVIATION_HEADERS = ("CAPÍTULO", "CÓDIGO", "RESUMEN", "PLAN", "CERTIFICADO", "
 MEASUREMENT_COLUMN_RATIOS = (4, 1, 1, 1, 1, 0.8, 1.2, 0.5)
 
 
+def _report_template_path(template_path: str) -> Path | None:
+    """Resuelve la plantilla y permite continuar si falta el recurso predeterminado."""
+    configured = template_path.strip()
+    path = Path(configured).expanduser() if configured else DEFAULT_TEMPLATE_PATH
+    if path.suffix.lower() != ".odt":
+        raise ValueError(f"La plantilla de informes debe ser un archivo ODT: {path}.")
+    if not configured and not path.is_file():
+        return None
+    return path
+
+
+def _empty_report_template_header():
+    """Devuelve la estructura de cabecera vacía usada cuando no hay plantilla."""
+    return {
+        "header": None,
+        "styles": [],
+        "default_styles": [],
+        "automatic_styles": [],
+        "font_faces": [],
+        "resources": [],
+        "graphics": [],
+        "tables": {"header": [], "footer": []},
+        "footer": None,
+        "text": "",
+        "footer_text": "",
+        "frame_x": 0,
+        "frame_y": 0,
+    }
+
+
 def report_project_label(title: str, currency: str = "") -> str:
     """Identifica el proyecto con la fecha de emisión y la divisa cuando corresponde."""
     label = f"{title} · {date.today():%d/%m/%Y}"
@@ -76,6 +106,94 @@ def _template_length_to_points(value: str) -> float:
     ]
 
 
+def _read_default_report_logo():
+    """Carga el logo institucional de la plantilla incluida o del recurso empaquetado."""
+    namespaces = {
+        "style": "urn:oasis:names:tc:opendocument:xmlns:style:1.0",
+        "draw": "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0",
+        "svg": "urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0",
+        "xlink": "http://www.w3.org/1999/xlink",
+    }
+    if DEFAULT_TEMPLATE_PATH.is_file():
+        try:
+            with ZipFile(DEFAULT_TEMPLATE_PATH) as archive:
+                styles = ElementTree.fromstring(archive.read("styles.xml"))
+                master_page = styles.find(".//style:master-page", namespaces)
+                header = master_page.find("style:header", namespaces) if master_page is not None else None
+                frame = header.find(".//draw:frame", namespaces) if header is not None else None
+                image = frame.find(".//draw:image", namespaces) if frame is not None else None
+                if image is not None:
+                    image_path = image.get(f"{{{namespaces['xlink']}}}href", "")
+                    if not image_path or image_path.startswith("/") or ".." in Path(image_path).parts:
+                        raise ValueError("La ruta del logo de la plantilla incluida no es válida.")
+                    image_data = archive.read(image_path)
+                    image_width = _template_length_to_points(
+                        frame.get(f"{{{namespaces['svg']}}}width", "")
+                    )
+                    image_height = _template_length_to_points(
+                        frame.get(f"{{{namespaces['svg']}}}height", "")
+                    )
+                    if image_width <= 0 or image_height <= 0:
+                        raise ValueError("El logo de la plantilla incluida debe tener dimensiones positivas.")
+                    return image_data, image_path, image_width, image_height
+        except (OSError, KeyError, BadZipFile, ElementTree.ParseError) as exc:
+            raise ValueError(
+                f"No se pudo leer el logo de la plantilla incluida {DEFAULT_TEMPLATE_PATH}: {exc}"
+            ) from exc
+
+    logo_path = application_directory(__file__) / "iconos" / "Arranque.jpg"
+    try:
+        image_data = logo_path.read_bytes()
+        from PIL import Image
+
+        with Image.open(BytesIO(image_data)) as logo:
+            pixel_width, pixel_height = logo.size
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"No se pudo leer el logo institucional {logo_path}: {exc}") from exc
+    if pixel_width <= 0 or pixel_height <= 0:
+        raise ValueError(f"El logo institucional no tiene dimensiones válidas: {logo_path}.")
+    image_width = _template_length_to_points("2.314cm")
+    image_height = image_width * pixel_height / pixel_width
+    return image_data, str(logo_path), image_width, image_height
+
+
+def _has_template_logo_marker(section, namespaces) -> bool:
+    """Indica si una cabecera contiene el marcador de inserción del logo."""
+    if section is None:
+        return False
+    return any(
+        "{{logo}}" in "".join(paragraph.itertext())
+        for paragraph in section.findall(".//text:p", namespaces)
+    )
+
+
+def _insert_template_logo(section, image_path: str, width: float, height: float, namespaces) -> None:
+    """Sustituye cada párrafo {{logo}} por un marco de imagen anclado a la cabecera."""
+    for paragraph in section.findall(".//text:p", namespaces):
+        if "{{logo}}" not in "".join(paragraph.itertext()):
+            continue
+        if "".join(paragraph.itertext()).strip() != "{{logo}}":
+            raise ValueError("El marcador {{logo}} debe ocupar su propio párrafo.")
+        paragraph.text = None
+        for child in list(paragraph):
+            paragraph.remove(child)
+        frame = ElementTree.SubElement(paragraph, f"{{{namespaces['draw']}}}frame", {
+            f"{{{namespaces['draw']}}}name": "ReportHeaderLogo",
+            f"{{{namespaces['draw']}}}style-name": "HeaderLogo",
+            f"{{{namespaces['text']}}}anchor-type": "paragraph",
+            f"{{{namespaces['svg']}}}x": "0pt",
+            f"{{{namespaces['svg']}}}y": "0pt",
+            f"{{{namespaces['svg']}}}width": f"{width:.3f}pt",
+            f"{{{namespaces['svg']}}}height": f"{height:.3f}pt",
+        })
+        ElementTree.SubElement(frame, f"{{{namespaces['draw']}}}image", {
+            f"{{{namespaces['xlink']}}}href": image_path,
+            f"{{{namespaces['xlink']}}}type": "simple",
+            f"{{{namespaces['xlink']}}}show": "embed",
+            f"{{{namespaces['xlink']}}}actuate": "onLoad",
+        })
+
+
 def _read_report_template(template_path: str = ""):
     """Carga la imagen de cabecera y el texto del pie de la plantilla ODT indicada."""
     namespaces = {
@@ -85,9 +203,9 @@ def _read_report_template(template_path: str = ""):
         "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
         "xlink": "http://www.w3.org/1999/xlink",
     }
-    path = Path(template_path).expanduser() if template_path.strip() else DEFAULT_TEMPLATE_PATH
-    if path.suffix.lower() != ".odt":
-        raise ValueError(f"La plantilla de informes debe ser un archivo ODT: {path}.")
+    path = _report_template_path(template_path)
+    if path is None:
+        return None, "", 0, 0, ""
     try:
         with ZipFile(path) as archive:
             styles = ElementTree.fromstring(archive.read("styles.xml"))
@@ -97,27 +215,28 @@ def _read_report_template(template_path: str = ""):
             header = master_page.find("style:header", namespaces)
             frame = header.find(".//draw:frame", namespaces) if header is not None else None
             image = frame.find(".//draw:image", namespaces) if frame is not None else None
-            if image is None:
-                raise ValueError("La plantilla ODT no contiene una imagen en la cabecera.")
-            image_path = image.get(f"{{{namespaces['xlink']}}}href", "")
-            if not image_path or image_path.startswith("/") or ".." in Path(image_path).parts:
-                raise ValueError("La ruta de la imagen de cabecera ODT no es válida.")
-            image_data = archive.read(image_path)
-            image_width = _template_length_to_points(
-                frame.get(f"{{{namespaces['svg']}}}width", "")
-            )
-            image_height = _template_length_to_points(
-                frame.get(f"{{{namespaces['svg']}}}height", "")
-            )
-            if image_width <= 0 or image_height <= 0:
-                raise ValueError("La imagen de cabecera debe tener dimensiones positivas.")
+            if _has_template_logo_marker(header, namespaces):
+                image_data, image_path, image_width, image_height = _read_default_report_logo()
+            elif image is None:
+                image_data, image_path, image_width, image_height = None, "", 0, 0
+            else:
+                image_path = image.get(f"{{{namespaces['xlink']}}}href", "")
+                if not image_path or image_path.startswith("/") or ".." in Path(image_path).parts:
+                    raise ValueError("La ruta de la imagen de cabecera ODT no es válida.")
+                image_data = archive.read(image_path)
+                image_width = _template_length_to_points(
+                    frame.get(f"{{{namespaces['svg']}}}width", "")
+                )
+                image_height = _template_length_to_points(
+                    frame.get(f"{{{namespaces['svg']}}}height", "")
+                )
+                if image_width <= 0 or image_height <= 0:
+                    raise ValueError("La imagen de cabecera debe tener dimensiones positivas.")
             footer = master_page.find("style:footer", namespaces)
             footer_text = " ".join(
                 " ".join("".join(paragraph.itertext()).split())
                 for paragraph in footer.findall(".//text:p", namespaces)
             ) if footer is not None else ""
-            if not footer_text:
-                raise ValueError("La plantilla ODT no contiene texto en el pie de página.")
     except (OSError, KeyError, BadZipFile, ElementTree.ParseError) as exc:
         raise ValueError(
             f"No se pudo leer la plantilla de informes {path}: {exc}"
@@ -229,20 +348,20 @@ def _read_report_template_header(template_path: str = ""):
         "fo": "urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0",
         "xlink": "http://www.w3.org/1999/xlink",
     }
-    path = Path(template_path).expanduser() if template_path.strip() else DEFAULT_TEMPLATE_PATH
+    path = _report_template_path(template_path)
+    if path is None:
+        return _empty_report_template_header()
     style_name = f"{{{namespaces['style']}}}name"
     try:
         with ZipFile(path) as archive:
             root = ElementTree.fromstring(archive.read("styles.xml"))
             master_page = root.find(".//style:master-page", namespaces)
-            header = master_page.find("style:header", namespaces) if master_page is not None else None
-            if header is None:
-                raise ValueError("La plantilla ODT no contiene una cabecera.")
-            header = deepcopy(header)
-            footer = master_page.find("style:footer", namespaces)
-            if footer is None:
-                raise ValueError("La plantilla ODT no contiene un pie de página.")
-            footer = deepcopy(footer)
+            if master_page is None:
+                raise ValueError("La plantilla ODT no contiene una página maestra.")
+            source_header = master_page.find("style:header", namespaces)
+            header = deepcopy(source_header) if source_header is not None else None
+            source_footer = master_page.find("style:footer", namespaces)
+            footer = deepcopy(source_footer) if source_footer is not None else None
             styles_section = root.find("office:styles", namespaces)
             automatic_section = root.find("office:automatic-styles", namespaces)
             source_styles = [
@@ -274,8 +393,11 @@ def _read_report_template_header(template_path: str = ""):
                 for child in element:
                     remap_style_references(child)
 
-            for element in (*source_styles, *source_automatic_styles, header, footer):
+            for element in (*source_styles, *source_automatic_styles):
                 remap_style_references(element)
+            for element in (header, footer):
+                if element is not None:
+                    remap_style_references(element)
 
             style_definitions = {
                 element.get(style_name): element
@@ -284,7 +406,9 @@ def _read_report_template_header(template_path: str = ""):
             }
             table_sections = {"header": [], "footer": []}
             section_tables = {
-                section_name: section.findall(".//table:table", namespaces)
+                section_name: (
+                    section.findall(".//table:table", namespaces) if section is not None else []
+                )
                 for section_name, section in (("header", header), ("footer", footer))
             }
             for section_name, tables in section_tables.items():
@@ -391,22 +515,35 @@ def _read_report_template_header(template_path: str = ""):
                 section_tables, table_sections, style_definitions,
                 source_automatic_styles, namespaces,
             )
+            dynamic_resources = {}
+            if _has_template_logo_marker(header, namespaces):
+                image_data, image_path, image_width, image_height = _read_default_report_logo()
+                extension = Path(image_path).suffix.lower() or ".jpg"
+                dynamic_path = f"Pictures/dynamic-report-logo{extension}"
+                _insert_template_logo(
+                    header, dynamic_path, image_width, image_height, namespaces,
+                )
+                dynamic_resources[dynamic_path] = image_data
             resources = []
             first_frame = None
             graphics = []
-            sections = (header, footer)
+            sections = tuple(section for section in (header, footer) if section is not None)
             images = [image for section in sections for image in section.findall(".//draw:image", namespaces)]
             for index, image in enumerate(images):
                 image_path = image.get(f"{{{namespaces['xlink']}}}href", "")
-                if not image_path or image_path.startswith("/") or ".." in Path(image_path).parts:
-                    raise ValueError("La ruta de una imagen de cabecera ODT no es válida.")
-                extension = Path(image_path).suffix.lower() or ".png"
+                if image_path in dynamic_resources:
+                    image_data = dynamic_resources[image_path]
+                    extension = Path(image_path).suffix.lower() or ".jpg"
+                else:
+                    if not image_path or image_path.startswith("/") or ".." in Path(image_path).parts:
+                        raise ValueError("La ruta de una imagen de cabecera ODT no es válida.")
+                    image_data = archive.read(image_path)
+                    extension = Path(image_path).suffix.lower() or ".png"
                 output_path = (
                     f"Pictures/report-template{extension}" if index == 0 else
                     f"Pictures/report-template-{index}{extension}"
                 )
                 image.set(f"{{{namespaces['xlink']}}}href", output_path)
-                image_data = archive.read(image_path)
                 media_type = "image/jpeg" if extension in {".jpg", ".jpeg"} else "image/png"
                 resources.append((output_path, media_type, image_data))
                 section = next(section for section in sections if image in list(section.iter()))
@@ -452,8 +589,6 @@ def _read_report_template_header(template_path: str = ""):
                 })
                 if section is header and first_frame is None:
                     first_frame = frame
-            if first_frame is None:
-                raise ValueError("La plantilla ODT no contiene una imagen en la cabecera.")
             header_table_paragraphs = {
                 paragraph for table in section_tables["header"]
                 for paragraph in table.findall(".//text:p", namespaces)
@@ -464,20 +599,24 @@ def _read_report_template_header(template_path: str = ""):
             }
             header_text = "\n".join(
                 "".join(paragraph.itertext()).strip()
-                for paragraph in header.findall(".//text:p", namespaces)
+                for paragraph in (
+                    header.findall(".//text:p", namespaces) if header is not None else []
+                )
                 if paragraph not in header_table_paragraphs and "".join(paragraph.itertext()).strip()
             )
             footer_text = " ".join(
                 " ".join("".join(paragraph.itertext()).split())
-                for paragraph in footer.findall(".//text:p", namespaces)
+                for paragraph in (
+                    footer.findall(".//text:p", namespaces) if footer is not None else []
+                )
                 if paragraph not in footer_table_paragraphs
             )
             frame_x = _template_length_to_points(
                 first_frame.get(f"{{{namespaces['svg']}}}x", "0pt")
-            )
+            ) if first_frame is not None else 0
             frame_y = _template_length_to_points(
                 first_frame.get(f"{{{namespaces['svg']}}}y", "0pt")
-            )
+            ) if first_frame is not None else 0
             font_decls = root.find("office:font-face-decls", namespaces)
             font_faces = [deepcopy(element) for element in font_decls] if font_decls is not None else []
     except (OSError, KeyError, BadZipFile, ElementTree.ParseError) as exc:
@@ -506,7 +645,9 @@ def _read_report_template_borders(template_path: str = "") -> dict[str, dict[str
         "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
         "fo": "urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0",
     }
-    path = Path(template_path).expanduser() if template_path.strip() else DEFAULT_TEMPLATE_PATH
+    path = _report_template_path(template_path)
+    if path is None:
+        return {"header": {}, "footer": {}}
     try:
         with ZipFile(path) as archive:
             root = ElementTree.fromstring(archive.read("styles.xml"))
@@ -762,7 +903,7 @@ class ReportLayout:
         self.template_frame_x = template_header["frame_x"]
         self.template_frame_y = template_header["frame_y"]
         self.template_borders = _read_report_template_borders(template_path)
-        self.logo = ImageReader(BytesIO(image_data))
+        self.logo = ImageReader(BytesIO(image_data)) if image_data is not None else None
 
     def paragraph(self, markup, style=None, *, role="", bulletText=None, paragraph_class=None):
         """Crea un párrafo con la tipografía del proyecto y conserva su marcado."""

@@ -704,7 +704,7 @@ class _OdtReport:
             _tag("style:name"): name,
             _tag("style:page-layout-name"): "PageLayout",
         })
-        if self.template_header is not None:
+        if self.template_header is not None and self.template_header["header"] is not None:
             template_fields = self.layout.template_fields if self.layout is not None else {}
             master_page.append(replace_template_fields(
                 self.template_header["header"], template_fields,

@@ -16,6 +16,97 @@ from odt_reports import write_certification_odt, write_report_odt
 
 
 class ReportCalculationsTests(unittest.TestCase):
+    def test_reports_generate_without_template_or_unrequested_logo_and_expediente(self):
+        """Generate PDF and ODT content without a template, logo or expediente marker."""
+        from bc3_gui import ProjectItem
+        from odt_reports import _tag
+        from pypdf import PdfReader
+        from report_layout import DEFAULT_TEMPLATE_PATH, ReportLayout
+
+        items = [ProjectItem(
+            "P1", "01#", "ud", "Partida sin plantilla", 3, 10,
+        )]
+        app = SimpleNamespace(
+            budget_items=items, chapter_order=["01#"],
+            report_settings=ReportSettings(expediente="GEX 2026/01"),
+            _project_title=lambda: "Proyecto sin plantilla",
+            _chapter_title=lambda code: "Preparación",
+        )
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            with patch("report_layout.DEFAULT_TEMPLATE_PATH", root / "missing.odt"):
+                layout = ReportLayout(expediente="GEX 2026/01")
+                self.assertIsNone(layout.logo)
+                self.assertEqual(layout.template_graphics, [])
+                pdf_path = root / "report.pdf"
+                odt_path = root / "report.odt"
+                write_pdf(app, "Presupuesto mediciones", pdf_path)
+                write_report_odt(app, "Presupuesto mediciones", odt_path)
+
+            pdf_text = "\n".join(page.extract_text() or "" for page in PdfReader(pdf_path).pages)
+            self.assertIn("Partida sin plantilla", pdf_text)
+            self.assertNotIn("GEX 2026/01", pdf_text)
+            with ZipFile(odt_path) as archive:
+                styles = ElementTree.fromstring(archive.read("styles.xml"))
+                content = ElementTree.fromstring(archive.read("content.xml"))
+            self.assertIsNone(styles.find(f".//{_tag('draw:image')}"))
+            self.assertNotIn("GEX 2026/01", " ".join(content.itertext()))
+            self.assertIn("Partida sin plantilla", " ".join(content.itertext()))
+
+    def test_odt_template_inserts_logo_and_replaces_project_fields(self):
+        """Insert the bundled logo at {{logo}} and resolve title and expediente fields."""
+        from odt_reports import _new_report, _tag
+        from report_layout import DEFAULT_TEMPLATE_PATH
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            template = root / "dynamic-logo-template.odt"
+            with ZipFile(DEFAULT_TEMPLATE_PATH) as source, ZipFile(template, "w") as target:
+                for entry in source.infolist():
+                    data = source.read(entry.filename)
+                    if entry.filename == "styles.xml":
+                        styles = ElementTree.fromstring(data)
+                        header = styles.find(f".//{_tag('style:header')}")
+                        frame = header.find(f".//{_tag('draw:frame')}")
+                        parents = {child: parent for parent in header.iter() for child in parent}
+                        paragraph = next(
+                            parent for parent in parents
+                            if parent.tag == _tag("text:p") and frame in list(parent.iter())
+                        )
+                        parents[frame].remove(frame)
+                        for child in list(paragraph):
+                            paragraph.remove(child)
+                        paragraph.text = "{{logo}}"
+                        fields = ElementTree.SubElement(header, _tag("text:p"), {
+                            _tag("text:style-name"): paragraph.get(_tag("text:style-name"), ""),
+                        })
+                        ElementTree.SubElement(fields, _tag("text:span")).text = (
+                            "{{titulo}} · {{expediente}}"
+                        )
+                        data = ElementTree.tostring(styles, encoding="utf-8")
+                    target.writestr(entry, data)
+
+            settings = ReportSettings(
+                template_path=str(template), expediente="GEX 2026/01",
+            )
+            target = root / "dynamic-logo-output.odt"
+            _new_report("Documento", "Proyecto singular", settings).write(target)
+
+            with ZipFile(target) as archive:
+                styles = ElementTree.fromstring(archive.read("styles.xml"))
+                header = styles.find(f".//{_tag('style:header')}")
+                header_text = " ".join(header.itertext())
+                self.assertNotIn("{{logo}}", header_text)
+                self.assertNotIn("{{titulo}}", header_text)
+                self.assertNotIn("{{expediente}}", header_text)
+                self.assertIn("Proyecto singular", header_text)
+                self.assertIn("GEX 2026/01", header_text)
+                image = header.find(f".//{_tag('draw:image')}")
+                self.assertIsNotNone(image)
+                image_path = image.get(_tag("xlink:href"))
+                self.assertIn(image_path, archive.namelist())
+                self.assertTrue(archive.read(image_path))
+
     def test_section_contents_in_budget_and_certification_exports(self):
         """Indexa capitulos independientes, pero no resumenes ni listados incrustados."""
         from bc3_gui import ProjectItem
@@ -445,12 +536,12 @@ class ReportLayoutTests(unittest.TestCase):
         self.assertGreater(len(title_lines), 1)
         self.assertGreater(min(span[2] for span in title_lines), chapter[2] + 8)
 
-    def test_missing_report_template_raises_instead_of_generating_an_unbranded_pdf(self):
-        """Verify a missing report template does not generate an unbranded PDF."""
+    def test_missing_default_report_template_generates_pdf_content(self):
+        """Verify a missing default template still allows the PDF body to be generated."""
         target = self.folder / "missing-template.pdf"
-        with patch("report_layout.DEFAULT_TEMPLATE_PATH", self.folder / "absent.odt"), self.assertRaises(ValueError):
+        with patch("report_layout.DEFAULT_TEMPLATE_PATH", self.folder / "absent.odt"):
             write_pdf(self.app, "Presupuesto resumen", target)
-        self.assertFalse(target.exists())
+        self.assertTrue(target.is_file())
 
     def test_price_list_two_identifies_configured_indirect_costs_separately(self):
         """Verify project overhead is named and quantified instead of hidden in grouped costs."""

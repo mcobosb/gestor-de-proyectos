@@ -278,9 +278,30 @@ class DocumentStructureTests(unittest.TestCase):
                     {"kind": "template", "number": "20", "title": "Conservación y mantenimiento",
                      "outline": ["Operaciones", "Periodicidad"]},
                 ],
-                [{"title": "Situación", "file": str(plan)}], include_pptp=True,
+                [
+                    {"title": "Situación", "file": str(plan)},
+                    {"title": "Planta general"},
+                ],
+                include_pptp=True,
                 memory_documents=[{"title": "Objeto", "outline": ["Alcance"]}],
             )
+            plans_document = master.parent / DOCUMENT_FOLDERS[1] / "Planos.odt"
+            self.assertTrue(plans_document.is_file())
+            with ZipFile(plans_document) as archive:
+                plans_content = ET.fromstring(archive.read("content.xml"))
+                self.assertEqual(
+                    [heading.text for heading in plans_content.iter(_tag("text:h"))],
+                    ["PLANO Nº 01. Situación", "PLANO Nº 02. Planta general"],
+                )
+                plans_toc = plans_content.find(".//" + _tag("text:table-of-content"))
+                self.assertIsNotNone(plans_toc)
+                self.assertEqual(
+                    [
+                        link.text for link in plans_toc.iter(_tag("text:a"))
+                        if link.text and link.text.startswith("PLANO Nº")
+                    ],
+                    ["PLANO Nº 01. Situación", "PLANO Nº 02. Planta general"],
+                )
             with ZipFile(master) as archive:
                 content = ET.fromstring(archive.read("content.xml"))
                 styles = ET.fromstring(archive.read("styles.xml"))
@@ -310,12 +331,22 @@ class DocumentStructureTests(unittest.TestCase):
             ]
             self.assertEqual(sum(
                 len(list(entry.iter(_tag("text:bookmark-ref")))) for entry in index_entries
-            ), 4)
+            ), 5)
             plan_entry = next(
                 node for node in index_entries if "PLANO Nº 01" in "".join(node.itertext())
             )
             self.assertIsNotNone(plan_entry.find(_tag("text:a")))
             self.assertIsNone(plan_entry.find(".//" + _tag("text:bookmark-ref")))
+            plans_document_entry = next(
+                node for node in index_entries
+                if "DOCUMENTO Nº 2. PLANOS." in "".join(node.itertext())
+            )
+            self.assertIsNotNone(plans_document_entry.find(_tag("text:a")))
+            self.assertTrue(any(
+                "DOCUMENTO Nº 3. PLIEGO DE PRESCRIPCIONES TÉCNICAS PARTICULARES."
+                in "".join(entry.itertext())
+                for entry in index_entries
+            ))
             self.assertEqual(["".join(node.itertext()) for node in covers], ["ANEJO Nº 1", "ANEJO Nº 2"])
             for index, cover in enumerate(covers, 1):
                 document_index = index + 1

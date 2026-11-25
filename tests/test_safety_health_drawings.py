@@ -22,11 +22,14 @@ from pypdf import PdfReader
 
 from budget_core import ProjectItem
 from budget_reports import ReportSettings
+from odt_reports import _tag
 from tools.safety_health import restore_project_state, serialize_state
-from tools.safety_health.document import _Block, _StudyContent, _write_odt, _write_pdf
+from tools.safety_health.document import (
+    _Block, _StudyContent, _write_odt, _write_pdf, write_study_report,
+)
 from tools.safety_health.drawings import (
     LIBRARY, SHEETS, DrawingSheet, _filled_title_block, add_user_sheet, available_sheets, read_sheet,
-    render_drawings, restore_drawings,
+    group_sheets_by_page, render_drawings, restore_drawings, selected_sheets,
 )
 
 
@@ -130,15 +133,40 @@ class SafetyDrawingsTests(unittest.TestCase):
 
     def test_packaged_a3_sheets_have_no_outer_frame(self):
         """Conserva las fichas A3 sin su contorno rectangular exterior."""
-        outer_frame = "M 386.676,650.105 V 3052.91 H 1976.99 V 650.105 H 386.676"
+        outer_frames = {
+            "FSS_AUX_09_20261124.svg":
+                "M 93.996314,348.49227 V 145.05478 H 228.6429 V 348.49227 H 93.996314",
+            "FSS_AUX_10_20261124.svg":
+                "M 88.440445,375.2148 V 171.77731 H 223.08704 V 375.2148 H 88.440445",
+            "FSS_CER_11_20261124.svg":
+                "M 93.203275,376.00817 V 172.57068 H 227.84987 V 376.00817 H 93.203275",
+            "FSS_COD_05_20261124.svg":
+                "M 36.315702,200.85634 V -2.5811535 H 170.96229 V 200.85634 H 36.315702",
+            "FSS_ELE_08_20261124.svg":
+                "M 78.650083,267.00099 V 63.563496 H 213.29667 V 267.00099 H 78.650083",
+            "FSS_EME_06_20261124.svg":
+                "M -15.542278,170.95803 V -32.479464 H 119.10431 V 170.95803 H -15.542278",
+            "FSS_EPI_07_20261124.svg":
+                "M 21.764353,194.50555 V -8.9319435 H 156.41094 V 194.50555 H 21.764353",
+            "FSS_SEÑ_01_20261124.svg":
+                "M 68.06417,203.23915 V -0.19834351 H 202.71076 V 203.23915 H 68.06417",
+            "FSS_SEÑ_02_20261124.svg":
+                "M 110.66247,216.20334 V 12.765846 H 245.30906 V 216.20334 H 110.66247",
+            "FSS_SEÑ_03_20261124.svg":
+                "M 119.12953,223.3467 V 19.909206 H 253.77612 V 223.3467 H 119.12953",
+            "FSS_SEÑ_04_20261124.svg":
+                "M 149.29241,212.23381 V 8.7963165 H 283.939 V 212.23381 H 149.29241",
+        }
         with ZipFile(LIBRARY) as archive:
             a3_sheets = [sheet for sheet in SHEETS if sheet.paper == "A3"]
             self.assertEqual(len(a3_sheets), 11)
+            self.assertEqual({sheet.filename for sheet in a3_sheets}, set(outer_frames))
             for sheet in a3_sheets:
                 root = ET.fromstring(archive.read(f"A3/{sheet.filename}"))
                 self.assertFalse(
                     any(
-                        element.tag.endswith("}path") and element.get("d") == outer_frame
+                        element.tag.endswith("}path")
+                        and element.get("d") == outer_frames[sheet.filename]
                         for element in root.iter()
                     ),
                     sheet.filename,
@@ -397,24 +425,275 @@ class SafetyDrawingsTests(unittest.TestCase):
                             for index, sheet in enumerate(catalog)
                         },
                     }
+                    selected = selected_sheets(state)
+                    title_groups = [
+                        [sheet.title for sheet in group]
+                        for group in group_sheets_by_page(selected, paper)
+                    ]
                     images = render_drawings(app, state)
                     self.assertEqual(len(images), count)
                     self.assertTrue(all(image.startswith(b"\x89PNG\r\n\x1a\n") for image in images))
                     pdf, odt = Path(directory) / f"planos-{paper}.pdf", Path(directory) / f"planos-{paper}.odt"
-                    _write_pdf(app, pdf, content, images, paper)
-                    _write_odt(app, odt, content, images, paper)
-                    pages = PdfReader(pdf).pages
-                    for page in pages[-count:]:
+                    _write_pdf(app, pdf, content, images, title_groups, paper)
+                    _write_odt(app, odt, content, images, title_groups, paper)
+                    reader = PdfReader(pdf)
+                    pages = reader.pages
+                    plan_toc_page = next(
+                        page for page in pages
+                        if "DOCUMENTO Nº 2: PLANOS" in " ".join(page.extract_text().split())
+                    )
+                    plan_destinations = [
+                        annotation.get_object()["/Dest"][0]
+                        for annotation in plan_toc_page.get("/Annots", [])
+                        if "/Dest" in annotation.get_object()
+                    ]
+                    drawing_pages = [
+                        page for page in pages
+                        if page.indirect_reference in plan_destinations
+                    ]
+                    self.assertEqual(len(drawing_pages), count)
+                    drawing_page_indices = [
+                        index for index, page in enumerate(pages)
+                        if page.indirect_reference in plan_destinations
+                    ]
+                    self.assertEqual(
+                        drawing_page_indices,
+                        list(range(drawing_page_indices[0], drawing_page_indices[0] + count)),
+                    )
+                    for page in drawing_pages:
                         self.assertAlmostEqual(float(page.mediabox.height), 842, delta=1)
                         self.assertAlmostEqual(
                             float(page.mediabox.width), 595 if paper == "A4" else 1191, delta=1,
                         )
+                    if paper == "A3":
+                        following_page = pages[drawing_page_indices[-1] + 1]
+                        self.assertAlmostEqual(float(following_page.mediabox.width), 595, delta=1)
+                        self.assertAlmostEqual(float(following_page.mediabox.height), 842, delta=1)
                     with ZipFile(odt) as archive:
                         names = {name for name in archive.namelist() if name.startswith("Pictures/ESSDrawing")}
                         self.assertEqual(len(names), count)
                         styles = archive.read("styles.xml")
                         self.assertIn(b"ESSDrawingLayout", styles)
                         self.assertIn(b"42cm" if paper == "A3" else b"21cm", styles)
+                        document_content = ET.fromstring(archive.read("content.xml"))
+                        plans_toc = next(
+                            node for node in document_content.iter(_tag("text:table-of-content"))
+                            if node.get(_tag("text:name")) == "ESSPlansContents"
+                        )
+                        plan_entries = [
+                            link.text for link in plans_toc.iter(_tag("text:a"))
+                            if link.text and link.text.startswith("PLANO Nº")
+                        ]
+                        self.assertEqual(
+                            plan_entries,
+                            [
+                                f"PLANO Nº {index:02}. {title}"
+                                for index, title in enumerate(
+                                    (title for group in title_groups for title in group), 1,
+                                )
+                            ],
+                        )
+
+    def test_study_report_indexes_selected_safety_drawings_as_document_two(self):
+        with TemporaryDirectory() as directory:
+            app = self.make_app(directory)
+            app.safety_health_state["drawings"] = {
+                "paper": "A3",
+                "selected": {"A3-CER11": True, "A3-ELE08": True},
+            }
+            expected = [
+                "PLANO Nº 01. Cerramiento perimetral",
+                "PLANO Nº 02. Instalación eléctrica provisional",
+            ]
+            for output_format in ("pdf", "odt"):
+                with self.subTest(output_format=output_format):
+                    app.report_settings.output_format = output_format
+                    target = Path(directory) / f"estudio.{output_format}"
+                    content = _StudyContent(
+                        "Estudio", "Proyecto de prueba", "Seguridad", "EUR",
+                        [
+                            _Block("document", "DOCUMENTO I. MEMORIA"),
+                            _Block("heading", "Memoria", 1),
+                            _Block("paragraph", "Texto"),
+                            _Block("document", "DOCUMENTO III. PLIEGO DE CONDICIONES"),
+                            _Block("heading", "Condiciones", 1),
+                        ],
+                    )
+                    with patch(
+                        "tools.safety_health.document._build_study_content",
+                        return_value=content,
+                    ):
+                        write_study_report(app, target)
+                    if output_format == "pdf":
+                        reader = PdfReader(target)
+                        pages = reader.pages
+                        text = [" ".join(page.extract_text().split()) for page in pages]
+                        plans_page_index = next(
+                            index for index, page in enumerate(text)
+                            if "DOCUMENTO Nº 2: PLANOS" in page and "ÍNDICE" in page
+                        )
+                        index_page = text[plans_page_index]
+                        pliego_page_index = next(
+                            index for index, page in enumerate(text)
+                            if "DOCUMENTO III. PLIEGO DE CONDICIONES" in page
+                        )
+                        self.assertLess(plans_page_index, pliego_page_index)
+                        self.assertTrue(all(entry in index_page for entry in expected))
+                        destinations = [
+                            annotation.get_object()["/Dest"][0]
+                            for page in [pages[plans_page_index]]
+                            for annotation in page.get("/Annots", [])
+                            if "/Dest" in annotation.get_object()
+                        ]
+                        plan_page_indices = [
+                            index for index, page in enumerate(pages)
+                            if page.indirect_reference in destinations
+                        ]
+                        self.assertEqual(len(plan_page_indices), 2)
+                        self.assertEqual(
+                            plan_page_indices,
+                            list(range(plan_page_indices[0], plan_page_indices[0] + 2)),
+                        )
+                        self.assertTrue(pages[plan_page_indices[0] - 1].extract_text().strip())
+                        for plan_index in plan_page_indices:
+                            self.assertAlmostEqual(
+                                float(pages[plan_index].mediabox.width), 1191, delta=1,
+                            )
+                            self.assertAlmostEqual(
+                                float(pages[plan_index].mediabox.height), 842, delta=1,
+                            )
+                        self.assertLess(plan_page_indices[-1], pliego_page_index)
+                        self.assertEqual(pliego_page_index, plan_page_indices[-1] + 1)
+                        self.assertAlmostEqual(
+                            float(pages[pliego_page_index].mediabox.width), 595, delta=1,
+                        )
+                        self.assertAlmostEqual(
+                            float(pages[pliego_page_index].mediabox.height), 842, delta=1,
+                        )
+                    else:
+                        with ZipFile(target) as archive:
+                            content = ET.fromstring(archive.read("content.xml"))
+                            styles = ET.fromstring(archive.read("styles.xml"))
+                            plans_toc = next(
+                                node for node in content.iter(_tag("text:table-of-content"))
+                                if node.get(_tag("text:name")) == "ESSPlansContents"
+                            )
+                            self.assertEqual(
+                                [
+                                    link.text for link in plans_toc.iter(_tag("text:a"))
+                                    if link.text and link.text.startswith("PLANO Nº")
+                                ],
+                                expected,
+                            )
+                            anchors = [
+                                node
+                                for node in content.iter(_tag("text:p"))
+                                if node.get(_tag("text:style-name")) in {
+                                    "ESSPlanAnchorStart", "ESSPlanAnchor",
+                                    "ESSPlanAnchorNext",
+                                }
+                            ]
+                            self.assertEqual(
+                                ["".join(node.itertext()) for node in anchors], expected,
+                            )
+                            bookmark_names = {
+                                bookmark.get(_tag("text:name"))
+                                for bookmark in content.iter(_tag("text:bookmark"))
+                            }
+                            self.assertTrue(all(
+                                link.get(_tag("xlink:href"), "").lstrip("#") in bookmark_names
+                                for link in plans_toc.iter(_tag("text:a"))
+                                if link.text and link.text.startswith("PLANO Nº")
+                            ))
+                            body = content.find(
+                                f"{_tag('office:body')}/{_tag('office:text')}",
+                            )
+                            positions = {
+                                label: next(
+                                    index for index, node in enumerate(body)
+                                    if label in "".join(node.itertext())
+                                )
+                                for label in (
+                                    "DOCUMENTO I. MEMORIA",
+                                    "DOCUMENTO Nº 2: PLANOS",
+                                    "DOCUMENTO III. PLIEGO DE CONDICIONES",
+                                )
+                            }
+                            self.assertLess(
+                                positions["DOCUMENTO I. MEMORIA"],
+                                positions["DOCUMENTO Nº 2: PLANOS"],
+                            )
+                            self.assertLess(
+                                positions["DOCUMENTO Nº 2: PLANOS"],
+                                positions["DOCUMENTO III. PLIEGO DE CONDICIONES"],
+                            )
+                            named_styles = {
+                                style.get(_tag("style:name")): style
+                                for root in (styles, content)
+                                for style in root.iter(_tag("style:style"))
+                            }
+                            self.assertEqual(
+                                named_styles["ESSPlanAnchorStart"].find(
+                                    _tag("style:paragraph-properties"),
+                                ).get(_tag("fo:break-before")),
+                                "page",
+                            )
+                            self.assertEqual(
+                                named_styles["ESSPlanAnchorNext"].find(
+                                    _tag("style:paragraph-properties"),
+                                ).get(_tag("fo:break-before")),
+                                "page",
+                            )
+                            self.assertEqual(
+                                named_styles["ESSDocumentNextTitle"].get(
+                                    _tag("style:master-page-name"),
+                                ),
+                                "Standard",
+                            )
+                            master_pages = {
+                                master.get(_tag("style:name")): master
+                                for master in styles.iter(_tag("style:master-page"))
+                            }
+                            page_layouts = {
+                                layout.get(_tag("style:name")): layout
+                                for layout in styles.iter(_tag("style:page-layout"))
+                            }
+                            a3_layout = page_layouts[
+                                master_pages["ESSDrawingPage"].get(
+                                    _tag("style:page-layout-name"),
+                                )
+                            ].find(_tag("style:page-layout-properties"))
+                            standard_layout = page_layouts[
+                                master_pages["Standard"].get(
+                                    _tag("style:page-layout-name"),
+                                )
+                            ].find(_tag("style:page-layout-properties"))
+                            self.assertEqual(a3_layout.get(_tag("fo:page-width")), "42cm")
+                            self.assertEqual(a3_layout.get(_tag("fo:page-height")), "29.7cm")
+                            self.assertEqual(standard_layout.get(_tag("fo:page-width")), "21cm")
+                            self.assertEqual(standard_layout.get(_tag("fo:page-height")), "29.7cm")
+                            self.assertEqual(
+                                standard_layout.get(_tag("style:print-orientation")),
+                                "portrait",
+                            )
+                            anchor_positions = [
+                                index for index, node in enumerate(body)
+                                if node.get(_tag("text:style-name")) in {
+                                    "ESSPlanAnchorStart", "ESSPlanAnchor",
+                                    "ESSPlanAnchorNext",
+                                }
+                            ]
+                            image_positions = [
+                                index for index, node in enumerate(body)
+                                if node.find(".//" + _tag("draw:frame")) is not None
+                            ]
+                            self.assertEqual(len(image_positions), 2)
+                            self.assertEqual(
+                                len(image_positions),
+                                sum(index in anchor_positions for index in image_positions),
+                            )
+                            self.assertGreater(min(anchor_positions), positions["DOCUMENTO Nº 2: PLANOS"])
+                            self.assertLess(max(image_positions), positions["DOCUMENTO III. PLIEGO DE CONDICIONES"])
 
     def test_selected_drawings_require_a_configured_cajetin(self):
         with TemporaryDirectory() as directory:
