@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.2.0 — 2026-11-25
+
+- **Seguridad y Salud.** Añadido el catálogo de planos A3 y mejorada la
+  generación cuando faltan plantillas. El presupuesto preventivo usa el
+  porcentaje del PEM indicado en la configuración; revisadas las vinculaciones
+  de riesgos y agrupadas como alternativas las variantes del mismo tipo.
+- **Plantillas.** Los informes usan el logo institucional configurado por el
+  usuario y lo ajustan al marco de la plantilla. Añadida ayuda contextual sobre
+  las opciones disponibles y los marcadores.
+- **Estructura documental.** Se conservan las rutas y los nombres asignados a
+  los anejos para sugerirlos al generarlos con otras herramientas; se distingue
+  el formato del número y el título del anejo en el documento maestro.
+- **Presupuesto.** Ahora se puede ajustar horizontalmente el ancho de las
+  columnas de la tabla principal.
+- Corregidos avisos de fuentes al visualizar y exportar fichas SVG de Seguridad
+  y Salud.
+
 ## 2.1.0 — 2026-11-23
 
 - **RCDs.** Previsiones de segregación, reutilización y valorización, destinos por

@@ -4,11 +4,13 @@ Aplicación de escritorio para Windows que reúne el presupuesto, la documentaci
 
 [Descargas](https://github.com/mcobosb/gestor-de-proyectos/releases) · [Manual de usuario](docs/MANUAL_USUARIO.md) · [Guía detallada](docs/GUIA_DETALLADA.md) · [Historial de cambios](CHANGELOG.md)
 
-## Release v2.1.0
+## Release v2.2.0
 
-- **RCDs:** previsiones de gestión, medidas preventivas y destinos por LER, con un catálogo local ampliable de centros de gestión e incorporación al estudio PDF/ODT.
-- **Documentación:** mejoras de trazabilidad, estilos e índices propios de cada anejo dentro del documento maestro.
-- **Cajetines de planos:** vinculación de la plantilla y guía de identificadores estándar para sus campos SVG.
+- **Seguridad y Salud:** catálogo de planos A3, vínculos revisados entre riesgos y partidas, y alternativas de protección agrupadas en la propuesta.
+- **Plantillas:** logo institucional configurable y ajustado al marco, con ayuda contextual sobre marcadores y opciones.
+- **Estructura documental:** rutas y nombres de anejos reutilizados al generarlos desde otras herramientas.
+- **Presupuesto:** ancho de las columnas de la tabla principal ajustable horizontalmente.
+- Corregidos avisos de fuentes al visualizar y exportar fichas SVG.
 
 ## Otras funciones principales
 
