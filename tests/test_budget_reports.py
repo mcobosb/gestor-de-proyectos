@@ -43,9 +43,17 @@ class ReportCalculationsTests(unittest.TestCase):
                 write_pdf(app, "Presupuesto mediciones", pdf_path)
                 write_report_odt(app, "Presupuesto mediciones", odt_path)
 
-            pdf_text = "\n".join(page.extract_text() or "" for page in PdfReader(pdf_path).pages)
+            pdf_pages = PdfReader(pdf_path).pages
+            pdf_text = "\n".join(page.extract_text() or "" for page in pdf_pages)
+            image_count = sum(
+                1
+                for page in pdf_pages
+                for image in page.get("/Resources", {}).get("/XObject", {}).values()
+                if image.get_object().get("/Subtype") == "/Image"
+            )
             self.assertIn("Partida sin plantilla", pdf_text)
             self.assertNotIn("GEX 2026/01", pdf_text)
+            self.assertEqual(image_count, 0)
             with ZipFile(odt_path) as archive:
                 styles = ElementTree.fromstring(archive.read("styles.xml"))
                 content = ElementTree.fromstring(archive.read("content.xml"))

@@ -29,7 +29,7 @@ from tools.document_structure.generation import (
     DOCUMENT_FOLDERS, MEMORY_DOCUMENT_TITLE,
     TECHNICAL_DOCUMENTS_FOLDER, default_master_name,
     generate_project_package, generated_at, receipt_path,
-    suggested_document_directory,
+    suggested_document_directory, suggested_tool_annex_path,
 )
 from tools.document_structure.office import MASTER_LOGO, MASTER_TEMPLATE, write_project_master
 from tools.document_structure.qt_window import DocumentStructureWindow
@@ -494,6 +494,58 @@ class DocumentStructureTests(unittest.TestCase):
                 self.assertTrue((second / TECHNICAL_DOCUMENTS_FOLDER / "Maestro.odm").is_file())
                 self.assertFalse((project_folder / TECHNICAL_DOCUMENTS_FOLDER).exists())
                 self.assertTrue(receipt["documentos"])
+            finally:
+                window.deleteLater()
+                QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+    def test_generated_tool_annex_suggests_its_assigned_path_and_name(self) -> None:
+        """Las herramientas reutilizan el nombre y la ruta asignados al generar la estructura."""
+        QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            root = Path(directory)
+            project_folder = root / "proyecto"
+            destination = root / "entrega"
+            project_folder.mkdir()
+            destination.mkdir()
+            window = BudgetMainWindow()
+            try:
+                project = project_folder / "proyecto.json"
+                self.assertTrue(window._write_project_file(project))
+
+                def write_master(_source, output, **_kwargs):
+                    output.write_bytes(b"master")
+
+                with patch(
+                    "tools.document_structure.generation.write_project_master",
+                    side_effect=write_master,
+                ):
+                    generate_project_package(
+                        project, window, "Maestro.odm",
+                        [{
+                            "kind": "tool", "number": "19", "tool": "safety",
+                            "title": "ESS asignado por la estructura", "outline": [],
+                        }],
+                        [], destination=destination,
+                    )
+
+                receipt = json.loads(receipt_path(project).read_text(encoding="utf-8"))
+                assignment = receipt["anejos_generables"]["safety"]
+                assigned_path = destination / assignment["directorio"] / assignment["nombre"]
+                self.assertEqual(
+                    suggested_tool_annex_path(project, "safety"), assigned_path,
+                )
+                with patch(
+                    "qt_localization.QFileDialog.getSaveFileName",
+                    return_value=("", ""),
+                ) as picker:
+                    self.assertIsNone(get_document_save_path(
+                        window, "Generar Estudio de Seguridad y Salud",
+                        "Estudio de Seguridad y Salud.pdf",
+                        document_section="DOC01", annex_tool="safety",
+                    ))
+                self.assertEqual(picker.call_args.args[2], str(assigned_path))
             finally:
                 window.deleteLater()
                 QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)

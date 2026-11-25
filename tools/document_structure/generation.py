@@ -124,6 +124,52 @@ def suggested_document_directory(project: Path, section: str) -> Path | None:
     return directory if directory.is_dir() else None
 
 
+def suggested_tool_annex_path(project: Path, annex_tool: str) -> Path | None:
+    """Recupera la ruta y el nombre asignados al anejo de una herramienta."""
+    if not isinstance(annex_tool, str) or not annex_tool:
+        raise ValueError("Indica la herramienta propietaria del anejo.")
+    data = _read_receipt(project)
+    records = _delivery_records(project, data)
+    for record in reversed(records):
+        assignments = record.get("anejos_generables", {})
+        if not isinstance(assignments, dict):
+            raise ValueError("El registro de generación contiene anejos no válidos.")
+        assignment = assignments.get(annex_tool)
+        if assignment is None:
+            continue
+        if not isinstance(assignment, dict):
+            raise ValueError("El registro de generación contiene un anejo no válido.")
+        directory_value = assignment.get("directorio")
+        filename = assignment.get("nombre")
+        if not isinstance(directory_value, str) or not isinstance(filename, str):
+            raise ValueError("El registro de generación contiene una ruta de anejo no válida.")
+        directory = Path(directory_value)
+        if (
+            directory.is_absolute()
+            or ".." in directory.parts
+            or directory != Path(TECHNICAL_DOCUMENTS_FOLDER) / DOCUMENT_FOLDERS[0]
+            or not filename
+            or Path(filename).name != filename
+            or Path(filename).suffix.casefold() != ".odt"
+        ):
+            raise ValueError("El registro de generación contiene una ruta de anejo no válida.")
+        root = _delivery_root(project, record["raiz"])
+        if not root.is_dir():
+            continue
+        target = root / directory / filename
+        if not target.parent.resolve(strict=False).is_relative_to(root.resolve(strict=True)):
+            raise ValueError("La ruta del anejo queda fuera de la entrega documental.")
+        if (
+            target.is_symlink()
+            or (target.exists() and not target.is_file())
+            or not target.resolve(strict=False).is_relative_to(root.resolve(strict=True))
+        ):
+            raise ValueError("La ruta asignada al anejo no apunta a un archivo válido.")
+        if target.parent.is_dir():
+            return target
+    return None
+
+
 def generated_at(project: Path, *, destination: Path | None = None) -> str | None:
     """Devuelve la fecha de la última generación, opcionalmente de una carpeta."""
     data = _read_receipt(project)
@@ -428,6 +474,7 @@ def generate_project_package(
             ("MAESTRO", master_name, "", author, "", ""),
         ]
         linked_documents: list[Path] = []
+        tool_annexes: dict[str, dict[str, str]] = {}
         plan_directories: list[Path] = []
         plan_files: list[Path] = []
 
@@ -475,6 +522,16 @@ def generate_project_package(
                     kind = annex.get("kind", "tool")
                     if kind not in {"template", "tool", "documentation"}:
                         raise ValueError(f"Tipo de anejo desconocido: {annex.get('kind')}")
+                    if kind == "tool":
+                        tool_key = annex.get("tool")
+                        if not isinstance(tool_key, str) or not tool_key:
+                            raise ValueError("Un anejo de herramienta no tiene una clave válida.")
+                        if tool_key in tool_annexes:
+                            raise ValueError(f"El anejo de herramienta está duplicado: {tool_key}.")
+                        tool_annexes[tool_key] = {
+                            "directorio": relative.parent.as_posix(),
+                            "nombre": filename,
+                        }
                     if kind == "documentation":
                         _write_documentation_annex(
                             app, target, title, settings, annex_number=previous,
@@ -665,6 +722,7 @@ def generate_project_package(
                     "destino": str(output_folder.resolve()),
                     "maestro": master_relative.as_posix(),
                     "documentos": [path.as_posix() for path in linked_documents],
+                    "anejos_generables": tool_annexes,
                     "planos": [path.as_posix() for path in plan_directories],
                     "archivos_plano": [path.as_posix() for path in plan_files],
                 }

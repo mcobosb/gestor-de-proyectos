@@ -629,6 +629,7 @@ class PlanningWindowQt(QDialog):
             "Guardar planificación",
             "Plan de trabajo.pdf",
             document_section="DOC02",
+            annex_tool="planning",
         )
         if selection is None:
             return
