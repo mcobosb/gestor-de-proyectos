@@ -922,6 +922,30 @@ class DocumentStructureTests(unittest.TestCase):
                     )
                     self.assertEqual(annex_index.get(_tag("text:style-name")), "PPTPContents2")
                     self.assertIsNotNone(annex_index.find(_tag("text:tab")))
+                    annex_link = annex_index.find(_tag("text:a"))
+                    annex_spans = annex_link.findall(_tag("text:span"))
+                    self.assertEqual(
+                        [span.text for span in annex_spans],
+                        ["ANEJO Nº 1. ", "Gestión de residuos"],
+                    )
+                    generated_styles = {
+                        style.get(_tag("style:name")): style
+                        for style in ET.fromstring(document.read("styles.xml")).iter(
+                            _tag("style:style")
+                        )
+                    }
+                    self.assertEqual(
+                        generated_styles[annex_spans[0].get(_tag("text:style-name"))]
+                        .find(_tag("style:text-properties"))
+                        .get(_tag("fo:font-weight")),
+                        "normal",
+                    )
+                    self.assertEqual(
+                        generated_styles[annex_spans[1].get(_tag("text:style-name"))]
+                        .find(_tag("style:text-properties"))
+                        .get(_tag("fo:font-weight")),
+                        "bold",
+                    )
                     self.assertNotIn("{{", content_xml.decode("utf-8"))
                     styles_xml = document.read("styles.xml")
                     self.assertNotIn("{{", styles_xml.decode("utf-8"))
@@ -1087,6 +1111,61 @@ class DocumentStructureTests(unittest.TestCase):
             finally:
                 window.deleteLater()
                 QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+    def test_master_annex_index_formats_number_regular_and_title_bold(self) -> None:
+        """El índice del maestro muestra el número normal y el nombre en negrita."""
+        from tools.document_structure.office import _append_index_and_sections, _master_link
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            linked = Path("Documentos tecnicos") / DOCUMENT_FOLDERS[0] / "ANEJO 02 - Título.odt"
+            target = root / linked
+            target.parent.mkdir(parents=True)
+            document = _new_report("Anejo", "Proyecto", ReportSettings())
+            document.paragraph("Contenido")
+            document.write(target)
+
+            content = ET.Element(_tag("office:document-content"))
+            automatic = ET.SubElement(content, _tag("office:automatic-styles"))
+            body = ET.SubElement(content, _tag("office:body"))
+            text = ET.SubElement(body, _tag("office:text"))
+            ET.SubElement(text, _tag("text:p"), {
+                _tag("text:style-name"): "ProjectIndexHeading",
+            }).text = "ÍNDICE"
+            _append_index_and_sections(
+                content,
+                [{
+                    "text": "ANEJO Nº 2. Título",
+                    "style": "P19",
+                    "href": _master_link(linked),
+                    "annex_number": "2",
+                    "annex_title": "Título",
+                }],
+                [linked],
+                root,
+            )
+
+            paragraph = next(
+                node for node in text.findall(_tag("text:p"))
+                if "ANEJO Nº" in "".join(node.itertext())
+            )
+            annex_link = paragraph.find(_tag("text:a"))
+            self.assertIsNotNone(annex_link)
+            if annex_link is None:
+                self.fail("El enlace al anejo no se creó.")
+            spans = annex_link.findall(_tag("text:span"))
+            self.assertEqual([span.text for span in spans], ["ANEJO Nº 2. ", "Título"])
+            styles = {
+                style.get(_tag("style:name")): style
+                for style in automatic.findall(_tag("style:style"))
+            }
+            weights = [
+                styles[span.get(_tag("text:style-name"))]
+                .find(_tag("style:text-properties"))
+                .get(_tag("fo:font-weight"))
+                for span in spans
+            ]
+            self.assertEqual(weights, ["normal", "bold"])
 
     def test_documentation_procedure_annex_contains_all_fields_in_a_blue_table(self) -> None:
         """Genera un anejo con una fila rellenable por documento o trámite."""

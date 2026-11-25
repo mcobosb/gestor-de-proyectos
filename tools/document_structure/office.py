@@ -220,6 +220,27 @@ def _set_paragraph_text(
         paragraph.text = value
 
 
+def _set_annex_index_text(
+    paragraph, number: str, title: str, href: str,
+    number_style: str, title_style: str,
+) -> None:
+    """Escribe el identificador sin negrita y el título del anejo en negrita."""
+    prefix = f"ANEJO Nº {number}. "
+    _set_paragraph_text(paragraph, prefix + title, href)
+    target = paragraph.find(_tag("text:a")) if href else paragraph
+    if target is None:
+        raise ValueError("No se pudo crear el vínculo del anejo en el índice.")
+    for child in list(target):
+        target.remove(child)
+    target.text = None
+    ET.SubElement(target, _tag("text:span"), {
+        _tag("text:style-name"): number_style,
+    }).text = prefix
+    ET.SubElement(target, _tag("text:span"), {
+        _tag("text:style-name"): title_style,
+    }).text = title
+
+
 def _add_page_number_fields(section, page_paragraphs: set[int]) -> None:
     """Convierte los marcadores de página de la plantilla en campos ODF dinámicos."""
     paragraphs = list(section.iter(_tag("text:p")))
@@ -748,6 +769,30 @@ def _append_index_and_sections(
     for child in children[heading_index + 1:]:
         body.remove(child)
 
+    annex_styles = {}
+    if any("annex_number" in entry for entry in entries):
+        known_styles = {
+            style.get(_tag("style:name")) for style in automatic
+        }
+        for role, base_name, weight in (
+            ("number", "ProjectAnnexIndexNumber", "normal"),
+            ("title", "ProjectAnnexIndexTitle", "bold"),
+        ):
+            style_name = base_name
+            suffix = 2
+            while style_name in known_styles:
+                style_name = f"{base_name}{suffix}"
+                suffix += 1
+            known_styles.add(style_name)
+            style = ET.SubElement(automatic, _tag("style:style"), {
+                _tag("style:name"): style_name,
+                _tag("style:family"): "text",
+            })
+            ET.SubElement(style, _tag("style:text-properties"), {
+                _tag("fo:font-weight"): weight,
+            })
+            annex_styles[role] = style_name
+
     insertion = heading_index + 1
     targets = {
         _master_link(path): f"ProjectDocumentStart{index}"
@@ -758,9 +803,17 @@ def _append_index_and_sections(
         paragraph = ET.Element(_tag("text:p"), {
             _tag("text:style-name"): f"PPTPContents{level}",
         })
-        _set_paragraph_text(
-            paragraph, entry["text"], entry.get("href", ""),
-        )
+        if "annex_number" in entry:
+            number = entry["annex_number"]
+            title = entry.get("annex_title", "").strip()
+            if not number.isdecimal() or int(number) < 1 or not title:
+                raise ValueError("La entrada del índice no tiene un número o título de anejo válido.")
+            _set_annex_index_text(
+                paragraph, number, title, entry.get("href", ""),
+                annex_styles["number"], annex_styles["title"],
+            )
+        else:
+            _set_paragraph_text(paragraph, entry["text"], entry.get("href", ""))
         target = targets.get(entry.get("href"))
         if target is not None:
             ET.SubElement(paragraph, _tag("text:tab"))
