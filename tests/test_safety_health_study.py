@@ -17,11 +17,12 @@ from pypdf import PdfReader
 from pypdf.generic import ContentStream
 
 from bc3_gui import BudgetApp, Concept, ProjectItem
-from budget_reports import ReportSettings
+from budget_reports import ReportSettings, budget_totals
 from report_layout import DEFAULT_TEMPLATE_PATH, ReportLayout
 from reference_search import load_reference_entries
 from tools.safety_health import (
-    SafetyLine, SafetyProposalWindow, restore_project_state, synchronize_budget, write_study_report,
+    SAFETY_BUDGET_SOURCE, SafetyLine, SafetyProposalWindow, restore_project_state,
+    synchronize_budget, write_study_report,
 )
 from tools.safety_health.document import (
     _Block, _StudyContent, _build_study_content, _markdown_blocks, _numbered_blocks,
@@ -237,6 +238,29 @@ class SafetyHealthStudyTests(unittest.TestCase):
                         "Por tanto, se define un ESTUDIO BÁSICO DE SEGURIDAD Y SALUD.", text,
                     )
 
+    def test_pdf_uses_the_configured_master_logo(self):
+        """Pasa el logo institucional de Configuración general a la maquetación PDF."""
+        from PIL import Image
+        import report_layout
+
+        app = self.make_app("pdf")
+        with tempfile.TemporaryDirectory() as folder:
+            logo = Path(folder) / "logo-institucional.jpg"
+            Image.new("RGB", (240, 120), (180, 30, 30)).save(logo, format="JPEG")
+            app.report_settings.master_logo_path = str(logo)
+            target = Path(folder) / "estudio.pdf"
+            with patch(
+                "report_layout._read_report_template",
+                wraps=report_layout._read_report_template,
+            ) as read_template:
+                write_study_report(app, target)
+
+            self.assertTrue(target.is_file())
+            self.assertTrue(any(
+                len(call.args) > 1 and call.args[1] == str(logo)
+                for call in read_template.call_args_list
+            ))
+
     def test_first_section_combines_scope_selected_criteria_and_summary(self):
         """Integra alcance, criterios manuales y magnitudes sin duplicados ni contratista."""
         app = self.make_app("odt")
@@ -246,6 +270,8 @@ class SafetyHealthStudyTests(unittest.TestCase):
         app.report_settings.general_expenses = 13
         app.report_settings.industrial_profit = 6
         app.report_settings.vat = 21
+        app.report_settings.service = "Servicio de obras"
+        app.safety_health_state["resumen_actuacion"] = "Actuación de prueba."
         app.safety_health_state["study_criteria"].update(
             criterion_1_met=True, criterion_4_met=True,
         )
@@ -261,7 +287,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
         self.assertEqual(introduction[0].kind, "document")
         self.assertEqual(introduction[1].text, "Objeto y alcance")
         self.assertIn("Su objeto es servir de base al Plan de Seguridad", text)
-        self.assertIn("La actuacion comprende", text)
+        self.assertIn("La actuación comprende", text)
         self.assertIn("PROYECTO DE PRUEBA", text)
         self.assertIn("AYUNTAMIENTO DE PRUEBA", text)
         self.assertIn("Se cumplen los siguientes criterios del artículo 4.1", text)
@@ -286,10 +312,16 @@ class SafetyHealthStudyTests(unittest.TestCase):
         self.assertNotIn("Importe sin IVA", rows)
         self.assertNotIn("Importe total o sin IVA, indicando criterio", rows)
         pem = sum(Decimal(str(item.import_total)) for item in app.budget_items)
-        pec = (pem * Decimal("1.19") * Decimal("1.21")).quantize(Decimal("0.01"))
+        pec = budget_totals(float(pem), app.report_settings)["total"]
         self.assertEqual(rows["PEM"], f"{pem:.2f} €".replace(".", ","))
         self.assertEqual(rows["PEC (con IVA)"], f"{pec:.2f} €".replace(".", ","))
         self.assertEqual(rows["Técnico/s redactor/es"], "TÉCNICO REDACTOR")
+        self.assertEqual(rows["Servicio promotor"], "SERVICIO DE OBRAS")
+        safety_total = sum(
+            Decimal(str(item.import_total)) for item in app.budget_items
+            if item.source.startswith(SAFETY_BUDGET_SOURCE)
+        )
+        self.assertAlmostEqual(float(safety_total / pem * 100), 2, delta=0.02)
         self.assertTrue(all(value.replace("m²", "M²") == value.upper() for value in rows.values()))
         self.assertNotIn(
             "Falta definir el contratista",

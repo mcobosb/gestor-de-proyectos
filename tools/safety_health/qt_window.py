@@ -1062,8 +1062,8 @@ class SafetyProposalDialogQt(QDialog):
         self.resize(1120, 720)
         layout = QVBoxLayout(self)
         header = QHBoxLayout()
-        self.percentage = QLineEdit(str(owner._stored_percentage))
-        header.addWidget(QLabel("Porcentaje orientativo:"))
+        self.percentage = QLineEdit(str(self.app.report_settings.safety_health_percentage))
+        header.addWidget(QLabel("Porcentaje del PEM total:"))
         header.addWidget(self.percentage)
         header.addWidget(QLabel("%"))
         header.addStretch()
@@ -1074,7 +1074,9 @@ class SafetyProposalDialogQt(QDialog):
         proposal_note = QLabel(
             "Las variantes del mismo tipo se muestran en desplegables y se preselecciona "
             "una opción; los tipos distintos permanecen separados. Las vinculadas se proponen "
-            "una sola vez, con cantidad 1 y precio de catálogo."
+            "una sola vez, con cantidad 1 y precio de catálogo. El capítulo se calcula para "
+            "aproximarse al porcentaje indicado del PEM total (las mediciones se redondean "
+            "a céntimos); las cantidades mínimas que superen ese objetivo deben ajustarse."
         )
         proposal_note.setWordWrap(True)
         layout.addWidget(proposal_note)

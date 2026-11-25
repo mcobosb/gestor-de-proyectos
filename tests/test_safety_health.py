@@ -208,7 +208,7 @@ class SafetyHealthTests(unittest.TestCase):
         """Materializa una unidad vinculada al precio de catálogo y cantidad mínima."""
         source = ProjectItem(
             "01AAB00001", "01#", "m2", "Demolición de bóveda",
-            measurement=10, unit_price=15.89,
+            measurement=1, unit_price=612.50,
         )
         linked = SafetyLine(
             "19SIC00001", "ud", "Barandilla", Decimal("12.50"), Decimal(),
@@ -234,6 +234,72 @@ class SafetyHealthTests(unittest.TestCase):
         )
         self.assertEqual(generated.measurement, 1)
         self.assertEqual(generated.unit_price, float(linked.price))
+
+    def test_percentage_uses_full_pem_and_indirect_costs(self):
+        """Calcula el objetivo sobre todo el PEM y distribuye el recargo indirecto."""
+        selected_source = ProjectItem(
+            "01AAB00001", "01#", "m2", "Demolición",
+            measurement=1, unit_price=1000,
+        )
+        other_source = ProjectItem(
+            "02AAB00001", "02#", "m2", "Reposición",
+            measurement=1, unit_price=5000,
+        )
+        line = SafetyLine(
+            "19SIC00001", "ud", "Protección", Decimal("10"), Decimal("1"),
+        )
+        app = SimpleNamespace(
+            budget_items=[selected_source, other_source],
+            chapter_order=["01#", "02#"],
+            chapter_titles={},
+            report_settings=ReportSettings(indirect_costs=10),
+            safety_health_state={"chapter_selection": {"01#": True}},
+            _ensure_chapter=lambda chapter: None,
+            refresh_budget_tree=lambda: None,
+            _mark_dirty=lambda: None,
+            _chapter_title=lambda chapter: "OBRA",
+        )
+
+        synchronize_budget(app, [line], Decimal("2"))
+
+        generated = next(
+            item for item in app.budget_items
+            if item.source == SAFETY_BUDGET_SOURCE + line.code
+        )
+        safety_total = Decimal(str(generated.import_total))
+        total_pem = sum(
+            (Decimal(str(item.import_total)) for item in app.budget_items),
+            Decimal(),
+        )
+        self.assertEqual(generated.unit_price, 11)
+        self.assertAlmostEqual(float(safety_total / total_pem * 100), 2, places=2)
+
+    def test_fixed_minimum_above_percentage_target_is_rejected_without_mutation(self):
+        """No conserva un capítulo que excede el porcentaje por cantidades mínimas."""
+        source = ProjectItem(
+            "01AAB00001", "01#", "m2", "Demolición",
+            measurement=1, unit_price=100,
+        )
+        line = SafetyLine(
+            "19SIC00001", "ud", "Protección", Decimal("12.50"), Decimal(),
+            quantity=Decimal("1"),
+        )
+        app = SimpleNamespace(
+            budget_items=[source],
+            chapter_order=["01#"],
+            chapter_titles={},
+            report_settings=ReportSettings(),
+            safety_health_state={"chapter_selection": {"01#": True}},
+            _ensure_chapter=lambda chapter: None,
+            refresh_budget_tree=lambda: None,
+            _mark_dirty=lambda: None,
+            _chapter_title=lambda chapter: "OBRA",
+        )
+
+        with self.assertRaisesRegex(ValueError, "cantidades mínimas"):
+            synchronize_budget(app, [line], Decimal("2"))
+
+        self.assertEqual(app.budget_items, [source])
 
     def test_proposal_and_generated_chapter_preserve_the_original_budget(self):
         source = ProjectItem(
@@ -276,10 +342,14 @@ class SafetyHealthTests(unittest.TestCase):
         self.assertTrue(generated)
         self.assertEqual({item.chapter for item in generated}, {"CAP.02#"})
         self.assertEqual(app.chapter_titles["CAP.02#"], "SEGURIDAD Y SALUD")
+        safety_total = sum(
+            Decimal(str(item.import_total)) for item in generated
+        )
+        total_pem = sum(
+            Decimal(str(item.import_total)) for item in app.budget_items
+        )
         self.assertAlmostEqual(
-            sum(item.measurement * item.unit_price for item in generated),
-            source.measurement * source.unit_price * 0.02,
-            delta=0.1,
+            float(safety_total / total_pem), 0.02, delta=0.001,
         )
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder) / "seguridad-salud.pdf"

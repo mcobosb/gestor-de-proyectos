@@ -447,9 +447,15 @@ def synchronize_budget(
 
     if not lines:
         raise ValueError("Selecciona al menos una partida de Seguridad y Salud.")
+    percentage = _decimal(percentage)
+    if not percentage.is_finite() or not Decimal() <= percentage < Decimal(100):
+        raise ValueError("El porcentaje de Seguridad y Salud debe ser mayor o igual que 0 y menor que 100.")
     base = sum(
-        (Decimal(str(item.measurement)) * Decimal(str(item.unit_price))
-         for item in study_items(app)),
+        (
+            Decimal(str(item.import_total))
+            for item in app.budget_items
+            if not item.source.startswith(SAFETY_BUDGET_SOURCE)
+        ),
         Decimal(),
     )
     if base <= 0:
@@ -459,9 +465,79 @@ def synchronize_budget(
         raise ValueError("Selecciona al menos una partida de Seguridad y Salud.")
     weighted = [line for line in selected if line.quantity is None]
     total_weight = sum((line.weight for line in weighted), Decimal())
-    target = (base * percentage / 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    target = (
+        base * percentage / (Decimal(100) - percentage)
+    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     if weighted and total_weight <= 0:
         raise ValueError("La propuesta no contiene pesos válidos.")
+    indirect_rate = _decimal(app.report_settings.indirect_costs)
+    if not indirect_rate.is_finite() or not Decimal() <= indirect_rate <= Decimal(100):
+        raise ValueError("El porcentaje de costes indirectos no es válido.")
+
+    def gross_unit_price(line: SafetyLine) -> Decimal:
+        """Calcula el precio unitario con el recargo que se aplicará al capítulo."""
+        indirect = (
+            line.price * indirect_rate / 100
+        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return line.price + indirect
+
+    fixed_total = sum(
+        (
+            line.quantity.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            * gross_unit_price(line)
+            for line in selected if line.quantity is not None
+        ),
+        Decimal(),
+    )
+    if fixed_total > target:
+        raise ValueError(
+            "Las cantidades mínimas seleccionadas superan el presupuesto objetivo "
+            f"de Seguridad y Salud ({target:.2f}). Ajusta la selección de partidas."
+        )
+    remaining = target - fixed_total
+    if not weighted and remaining:
+        raise ValueError(
+            "Las cantidades fijas seleccionadas no permiten alcanzar el porcentaje "
+            "indicado del PEM."
+        )
+    quantities = {}
+    if weighted:
+        for line in weighted:
+            amount = remaining * line.weight / total_weight
+            quantities[line.code] = (
+                amount / gross_unit_price(line)
+            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        weighted_total = sum(
+            (quantities[line.code] * gross_unit_price(line) for line in weighted),
+            Decimal(),
+        )
+        attempts_remaining = len(weighted) * 2
+        while attempts_remaining:
+            attempts_remaining -= 1
+            difference = target - fixed_total - weighted_total
+            if not difference:
+                break
+            best_adjustment = None
+            for line in weighted:
+                unit_price = gross_unit_price(line)
+                adjustment = (difference / unit_price).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP,
+                )
+                quantity = max(Decimal(), quantities[line.code] + adjustment)
+                adjusted_total = (
+                    weighted_total + (quantity - quantities[line.code]) * unit_price
+                )
+                error = abs(target - fixed_total - adjusted_total)
+                if error < abs(difference) and (
+                    best_adjustment is None or error < best_adjustment[0]
+                ):
+                    best_adjustment = (error, line.code, quantity, adjusted_total)
+            if best_adjustment is None:
+                break
+            quantities[best_adjustment[1]] = best_adjustment[2]
+            weighted_total = best_adjustment[3]
+            if best_adjustment[0] == 0:
+                break
     previous_items = [
         item for item in app.budget_items if item.source.startswith(SAFETY_BUDGET_SOURCE)
     ]
@@ -491,8 +567,7 @@ def synchronize_budget(
     for line in selected:
         quantity = line.quantity
         if quantity is None:
-            amount = target * line.weight / total_weight
-            quantity = (amount / line.price).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+            quantity = quantities[line.code]
         item = ProjectItem(
             f"SS-{line.code}", chapter, line.unit, line.summary.upper(),
             unit_price=float(line.price), source=SAFETY_BUDGET_SOURCE + line.code,

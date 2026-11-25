@@ -623,6 +623,7 @@ def _build_study_content(app) -> _StudyContent:
     settings = app.report_settings
     project_title = app._project_title().upper()
     currency = _currency_label(settings)
+    service = str(getattr(settings, "service", "")).strip()
 
     def missing(field_name: str) -> str:
         """Registra un dato no disponible y devuelve su aviso para la plantilla."""
@@ -793,6 +794,8 @@ def _build_study_content(app) -> _StudyContent:
         "municipio": data_values["Municipio"],
         "provincia": data_values["Provincia"],
         "comunidad_autonoma": data_values["Comunidad autonoma"],
+        "servicio": service,
+        "expediente": str(getattr(settings, "expediente", "")).strip(),
         "emplazamiento": data_values["Emplazamiento"],
         "autor_estudio": data_values["Tecnico redactor"],
         "fecha_documento": data_values["Fecha de emision"],
@@ -838,6 +841,7 @@ def _build_study_content(app) -> _StudyContent:
     replacements["justificacion_estudio"] = justification
     replacements = {name: _template_value(name, value) for name, value in replacements.items()}
     project_data_rows = []
+    project_data_fields = set()
     section_rows = []
     reference_summary_rows = {}
     summary_categories = {"riesgos_detectados": "R", "medidas_preventivas": "MP"}
@@ -856,12 +860,24 @@ def _build_study_content(app) -> _StudyContent:
             name = variable.group(1)
             if name not in replacements:
                 raise ValueError(f"No hay un valor preparado para la variable ESS {name}.")
+            project_data_fields.add(name)
             if name in summary_categories:
                 reference_summary_rows[len(project_data_rows)] = summary_categories[name]
             project_data_rows.append((
                 row[1],
                 _display_value(external_values[name]) if name in external_values else replacements[name],
             ))
+    if service and "servicio" not in project_data_fields:
+        service_index = next(
+            (
+                index + 1 for index, (label, _value) in enumerate(project_data_rows)
+                if label == "Promotor / entidad"
+            ),
+            len(project_data_rows),
+        )
+        project_data_rows.insert(
+            service_index, ("Servicio promotor", _template_value("servicio", service)),
+        )
 
     blocks: list[_Block] = []
     _add_heading(blocks, "Objeto y alcance", 1)
@@ -1555,6 +1571,7 @@ def _write_pdf(
     layout = StudyLayout(
         text_styles=settings.text_styles,
         template_path=settings.template_path,
+        logo_path=settings.master_logo_path,
         expediente=settings.expediente,
         template_title=content.project_title,
         repeat_titles=False,
