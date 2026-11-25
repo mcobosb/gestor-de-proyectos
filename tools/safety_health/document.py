@@ -25,6 +25,7 @@ from .drawings import (
 from .regulations import (
     REGULATIONS, WorkUnit, general_une_references, load_ntps, restore_review, review_context,
 )
+from .risk_links import FamilyRiskLink, family_risk_link_for_code, load_family_risk_links
 from .technical_conditions import selected_technical_template, technical_review_data
 from localization import translate
 from municipalities import resolve_municipalities
@@ -80,7 +81,11 @@ _GENERAL_RISK_HEADERS = (
 )
 _CATALOGUE_HEADERS = ("Tipo", "Referencia", "Descripción")
 _PPE_HEADERS = ("EPI", "USOS PREVISIBLES", "OBSERVACIONES")
-_WORK_UNIT_HEADERS = ("Unidad de obra / ficha BCCA", "Riesgos detectados", "Medidas preventivas")
+_WORK_UNIT_HEADERS = (
+    "Unidad de obra / ficha o familia BCCA",
+    "Riesgos propuestos",
+    "Medidas preventivas propuestas",
+)
 _NTP_HEADERS = ("Capítulo del presupuesto", "NTP confirmadas")
 
 
@@ -438,7 +443,10 @@ def _load_selected_fiches(
     return by_path, contents
 
 
-def _study_fiches(app, pending: list[str]):
+def _study_fiches(
+    app, pending: list[str],
+    family_risk_links: dict[str, FamilyRiskLink] | None = None,
+):
     """Comparte entre revision y exportacion la misma vinculacion BCCA de las fichas."""
     work_items = study_items(app)
     library_path = shared_library_path(app, "safety_health", LIBRARY_PATH)
@@ -464,9 +472,11 @@ def _study_fiches(app, pending: list[str]):
                     )
         else:
             paths = []
-            pending.append(
-                f"[VALIDAR] Partida sin ficha ESS BCCA: {item.code} - {item.summary}."
-            )
+            if family_risk_link_for_code(code, family_risk_links or {}) is None:
+                pending.append(
+                    f"[VALIDAR] Partida sin ficha ESS ni vínculo de riesgos BCCA: "
+                    f"{item.code} - {item.summary}."
+                )
         item_fiches.append((item, paths))
 
     fiche_paths.sort(key=lambda path: PurePosixPath(path).parts)
@@ -579,9 +589,24 @@ def _build_study_content(app) -> _StudyContent:
     if not work_items:
         raise ValueError("El presupuesto no contiene partidas de obra para clasificar en el ESS.")
     pending: list[str] = []
-    templates, item_fiches, fiche_references, fiche_contents = _study_fiches(app, pending)
+    family_risk_links = load_family_risk_links()
+    templates, item_fiches, fiche_references, fiche_contents = _study_fiches(
+        app, pending, family_risk_links,
+    )
+    family_only_items = [
+        item for item, paths in item_fiches
+        if not paths and family_risk_link_for_code(item.code, family_risk_links) is not None
+    ]
+    if family_only_items:
+        pending.append(
+            "[VALIDAR] Confirmar la propuesta de riesgos y medidas por familia BCCA "
+            "según el procedimiento, los equipos y las condiciones reales de cada tajo."
+        )
     catalogues = _parse_catalogues(templates["catalogues"])
-    matched_codes = [item.code for item, paths in item_fiches if paths]
+    matched_codes = [
+        item.code for item, paths in item_fiches
+        if paths or family_risk_link_for_code(item.code, family_risk_links) is not None
+    ]
     all_references = _merge_references(*fiche_references.values())
     assessment = evaluate_study_criteria(app)
     state = app.safety_health_state if isinstance(app.safety_health_state, dict) else {}
@@ -865,16 +890,38 @@ def _build_study_content(app) -> _StudyContent:
     work_unit_rows = []
     for item, paths in item_fiches:
         references = _merge_references(*(fiche_references[path] for path in paths))
+        family_link = family_risk_link_for_code(item.code, family_risk_links)
+        if family_link is not None and not paths:
+            family_references = {category: [] for category in _CATEGORY_ORDER}
+            family_references["R"] = list(family_link.risks)
+            family_references["MP"] = list(family_link.measures)
+            references = _merge_references(references, family_references)
         codes = ", ".join(PurePosixPath(path).stem.split("-", 1)[0] for path in paths)
+        normalized_code = re.sub(r"\s+", "", item.code).upper()
         work_unit_rows.append((
             f"{item.code} — {item.summary}\nFicha BCCA: {codes}" if paths else (
-                f"{item.code} — {item.summary}\n[VALIDAR] Ficha específica pendiente."
+                f"{item.code} — {item.summary}\nPropuesta por familia BCCA: "
+                f"{normalized_code[:5]}" if family_link is not None else
+                f"{item.code} — {item.summary}\n"
+                "[VALIDAR] Ficha y vínculo de riesgos específicos pendientes."
             ),
             ", ".join(references["R"]) or "[VALIDAR] Identificación de riesgos pendiente.",
             ", ".join(references["MP"]) or "[VALIDAR] Medidas preventivas pendientes.",
         ))
     blocks.extend((
-        _Block("caption", "Tabla 5. Unidades de obra, riesgos detectados y medidas preventivas."),
+        _Block(
+            "paragraph",
+            "Las partidas con ficha ESS incorporan sus referencias específicas. Para las demás, "
+            "se propone una vinculación inicial por familia BCCA (dos cifras y tres letras), "
+            "basada en las categorías preventivas disponibles; confirmar su aplicación según "
+            "el procedimiento, los equipos y las condiciones reales de cada tajo. La propuesta "
+            "actual cubre los capítulos disponibles entre el 01 y el 17; el capítulo 18 y "
+            "los códigos fuera de ese patrón quedan pendientes de una revisión específica.",
+        ),
+        _Block(
+            "caption",
+            "Tabla 5. Propuesta de vinculación por unidad de obra: riesgos y medidas preventivas.",
+        ),
         _Block("table", headers=_WORK_UNIT_HEADERS, rows=tuple(work_unit_rows), blue_table=True),
     ))
     for path, text in fiche_contents:

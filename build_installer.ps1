@@ -74,6 +74,7 @@ foreach ($requiredResource in @(
     "safety_health\datos\NTP_tematica_por_codigo_BCCA.csv",
     "pptp\docs\unes.csv",
     "safety_health\datos\seguridad_salud_relaciones_bcca2023.csv",
+    "safety_health\datos\riesgos_familia_bcca2023.csv",
     "safety_health\datos\vinculos_familia_bcca2023.csv",
     "safety_health\datos\catalogo_ss_vinculado_bcca2023.csv",
     "safety_health\BIBLIOTECA.zip",

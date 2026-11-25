@@ -43,6 +43,7 @@ plantillas/*
 !tools/pptp/docs/unes.csv
 !tools/pptp/docs/UNE_tematica_por_codigo_BCCA.csv
 !tools/safety_health/datos/ntps.csv
+!tools/safety_health/datos/riesgos_familia_bcca2023.csv
 !tools/safety_health/datos/NTP_tematica_por_codigo_BCCA.csv
 !tools/safety_health/datos/vinculos_familia_bcca2023.csv
 !tools/safety_health/datos/catalogo_ss_vinculado_bcca2023.csv

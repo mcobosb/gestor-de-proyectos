@@ -10,12 +10,36 @@ from bc3_gui import ProjectItem
 from budget_reports import ReportSettings
 from pypdf import PdfReader
 from tools.safety_health import (
-    SAFETY_BUDGET_SOURCE, SafetyLine, evaluate_study_criteria, proposed_lines, restore_state,
-    restore_project_state, serialize_state, synchronize_budget, write_study_report,
+    LIBRARY_PATH, SAFETY_BUDGET_SOURCE, SafetyLine, evaluate_study_criteria, proposed_lines,
+    restore_state, restore_project_state, serialize_state, synchronize_budget,
+    write_study_report,
 )
+from tools.safety_health.document import _parse_catalogues
+from tools.safety_health.risk_links import family_risk_link_for_code, load_family_risk_links
 
 
 class SafetyHealthTests(unittest.TestCase):
+    def test_bcca_family_risk_links_use_the_two_digit_three_letter_prefix(self):
+        """Asigna una propuesta estable por familia, incluso a variantes sin vínculo exacto."""
+        links = load_family_risk_links()
+
+        demolition = family_risk_link_for_code("01AAB00001", links)
+        self.assertIsNotNone(demolition)
+        self.assertIn("demolition", demolition.source_categories)
+        self.assertIn("R-DERRUMBE", demolition.risks)
+        self.assertIn("MP-HUMECTACION", demolition.measures)
+
+        self.assertIsNone(family_risk_link_for_code("18RPM000201", links))
+        self.assertIsNone(family_risk_link_for_code("99ZZZ00001", links))
+
+        with ZipFile(LIBRARY_PATH) as archive:
+            catalogue = _parse_catalogues(
+                archive.read("04_catalogos_preventivos.md").decode("utf-8-sig")
+            )
+        for family, link in links.items():
+            missing = set((*link.risks, *link.measures)) - catalogue.keys()
+            self.assertFalse(missing, (family, sorted(missing)))
+
     def test_study_preserves_summary_case_and_omits_table_references_in_both_formats(self):
         """Conserva el resumen revisado, las tildes y los títulos de las tablas."""
         app = SimpleNamespace(
@@ -266,7 +290,10 @@ class SafetyHealthTests(unittest.TestCase):
             self.assertIn("ESTUDIO BÁSICO DE SEGURIDAD Y SALUD", text)
             self.assertIn("ÍNDICE", text)
             self.assertIn("01AAB00001", text)
-            self.assertIn("Ficha específica pendiente.", text)
+            self.assertIn("Propuesta por familia BCCA", text)
+            self.assertIn("R-DERRUMBE", text)
+            self.assertIn("MP-LOCALIZAR-SERVICIOS", text)
+            self.assertNotIn("Ficha específica pendiente.", text)
             self.assertNotIn("UO-", text)
             self.assertNotIn("DATOS DEL PROYECTO", text)
             self.assertIn("Tabla 1.", text)
