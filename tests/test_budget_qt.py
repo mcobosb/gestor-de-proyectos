@@ -1511,7 +1511,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.addCleanup(setattr, window, "is_dirty", False)
             source = ProjectItem(
                 "01AAB00001", "01#", "m2", "Demolición de bóveda",
-                measurement=1, unit_price=15.89,
+                measurement=10000, unit_price=15.89,
             )
             window.budget_items = [source]
             window.chapter_order = ["01#"]

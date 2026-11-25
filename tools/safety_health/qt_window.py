@@ -1072,11 +1072,13 @@ class SafetyProposalDialogQt(QDialog):
         header.addWidget(library)
         layout.addLayout(header)
         proposal_note = QLabel(
-            "Las variantes del mismo tipo se muestran en desplegables y se preselecciona "
-            "una opción; los tipos distintos permanecen separados. Las vinculadas se proponen "
-            "una sola vez, con cantidad 1 y precio de catálogo. El capítulo se calcula para "
-            "aproximarse al porcentaje indicado del PEM total (las mediciones se redondean "
-            "a céntimos); las cantidades mínimas que superen ese objetivo deben ajustarse."
+            "Las alternativas del mismo tipo de EPI (guantes, calzado, gafas, cascos y "
+            "protecciones auditivas o respiratorias) se agrupan en desplegables y se "
+            "preselecciona una opción; las protecciones complementarias permanecen separadas. "
+            "Las unidades vinculadas se proponen una sola vez, con cantidad 1 y precio de "
+            "catálogo. El capítulo se calcula para aproximarse al porcentaje indicado del "
+            "PEM total (las mediciones se redondean a céntimos); las cantidades mínimas que "
+            "superen ese objetivo deben ajustarse."
         )
         proposal_note.setWordWrap(True)
         layout.addWidget(proposal_note)

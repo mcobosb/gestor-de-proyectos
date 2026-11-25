@@ -1,6 +1,7 @@
 """Pruebas de vínculos por familias BCCA para Seguridad y Salud."""
 import unittest
 from decimal import Decimal
+import unicodedata
 
 from tools.safety_health.related_units import (
     RelatedSafetyItem,
@@ -9,6 +10,12 @@ from tools.safety_health.related_units import (
     related_alternative_groups_for_work_families,
     related_items_for_work_families,
 )
+
+
+def _summary_key(value: str) -> str:
+    """Normaliza una descripcion para comparar palabras clave del catálogo."""
+    normalized = unicodedata.normalize("NFKD", value)
+    return normalized.encode("ascii", "ignore").decode().casefold()
 
 
 class SafetyHealthRelatedUnitsTests(unittest.TestCase):
@@ -40,6 +47,51 @@ class SafetyHealthRelatedUnitsTests(unittest.TestCase):
         )
 
         self.assertEqual(result, (unit,))
+
+    def test_real_catalog_groups_gloves_footwear_glasses_and_respirators(self):
+        """Comprueba que las variantes del catálogo real ofrecen una opción por tipo."""
+        family_links, catalog = load_related_safety_data()
+        groups = related_alternative_groups_for_work_families(
+            ["01AAB"], family_links, catalog,
+        )
+        group_by_code = {
+            item.code: frozenset(member.code for member in group)
+            for group in groups for item in group
+        }
+
+        for family, keywords in (
+            ("19SIM", ("guante",)),
+            ("19SIP", ("bota", "zapato")),
+            ("19SIC", ("gafa",)),
+        ):
+            matches = {
+                item.code for item in catalog[family]
+                if any(keyword in _summary_key(item.summary) for keyword in keywords)
+            }
+            self.assertTrue(matches)
+            self.assertEqual(
+                {group_by_code[code] for code in matches},
+                {frozenset(matches)},
+            )
+
+        masks = {
+            item.code for item in catalog["19SIC"]
+            if "mascarilla" in _summary_key(item.summary)
+            or _summary_key(item.summary).startswith("semimascara respir")
+        }
+        self.assertEqual(
+            {group_by_code[code] for code in masks},
+            {frozenset(masks)},
+        )
+        filters = {
+            item.code for item in catalog["19SIC"]
+            if _summary_key(item.summary).startswith("filtro semimascara")
+        }
+        self.assertEqual(
+            {group_by_code[code] for code in filters},
+            {frozenset(filters)},
+        )
+        self.assertNotEqual(group_by_code[next(iter(masks))], group_by_code[next(iter(filters))])
 
     def test_only_same_type_size_and_duration_variants_are_grouped(self):
         """Mantiene separados los productos distintos de una misma familia."""
@@ -149,6 +201,7 @@ class SafetyHealthRelatedUnitsTests(unittest.TestCase):
             grouped_codes,
             [
                 {"19SCB00001", "19SCB90002"},
+                {"19SIC90001", "19SIC90002"},
                 {"19SSS90101", "19SSS90202"},
             ],
         )
