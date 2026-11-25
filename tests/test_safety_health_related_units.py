@@ -6,6 +6,7 @@ from tools.safety_health.related_units import (
     RelatedSafetyItem,
     SafetyFamilyLink,
     load_related_safety_data,
+    related_alternative_groups_for_work_families,
     related_items_for_work_families,
 )
 
@@ -39,3 +40,115 @@ class SafetyHealthRelatedUnitsTests(unittest.TestCase):
         )
 
         self.assertEqual(result, (unit,))
+
+    def test_only_same_type_size_and_duration_variants_are_grouped(self):
+        """Mantiene separados los productos distintos de una misma familia."""
+        alternatives = (
+            RelatedSafetyItem(
+                "19LPA90010", "u", "Aseos", "Aseos",
+                "CASETA PREF. MOD. 20,50 m2 ASEOS DURACIÓN MENOR A 6 MESES",
+                Decimal("1263.75"),
+            ),
+            RelatedSafetyItem(
+                "19LPA90011", "u", "Aseos", "Aseos",
+                "CASETA PREF. MOD. 15 m2 ASEOS DURACIÓN DE 6 A 12 MESES",
+                Decimal("1090.78"),
+            ),
+        )
+        distinct = (
+            RelatedSafetyItem(
+                "19SIC10001", "u", "Cabeza", "Cabeza",
+                "PROTECTOR AUDITIVO CASQUETES", Decimal("23"),
+            ),
+            RelatedSafetyItem(
+                "19SIC20001", "u", "Cabeza", "Cabeza",
+                "GAFAS MONTURA ACETATO", Decimal("13.72"),
+            ),
+        )
+        links = {
+            "01AAA": (
+                SafetyFamilyLink("19LPA", "Aseos", "Criterio"),
+                SafetyFamilyLink("19SIC", "Cabeza", "Criterio"),
+            ),
+        }
+        catalog = {
+            "19LPA": alternatives,
+            "19SIC": distinct,
+        }
+
+        groups = related_alternative_groups_for_work_families(
+            ["01AAA"], links, catalog,
+        )
+
+        self.assertEqual([len(group) for group in groups], [2, 1, 1])
+        self.assertEqual(
+            {item.code for item in groups[0]},
+            {"19LPA90010", "19LPA90011"},
+        )
+
+    def test_groups_material_and_sign_variants_without_merging_protection_types(self):
+        """Agrupa alternativas de montaje y señal sin mezclar protecciones distintas."""
+        items = (
+            RelatedSafetyItem(
+                "19SCB00001", "m", "Protecciones", "Barandillas",
+                "BARANDILLA DE PROTECCIÓN, MADERA, SIST. MORDAZA, BORDE",
+                Decimal("10"),
+            ),
+            RelatedSafetyItem(
+                "19SCB90002", "m", "Protecciones", "Barandillas",
+                "BARANDILLA DE PROTECCIÓN, METÁLICA, SIST. MORDAZA, BORDE",
+                Decimal("12"),
+            ),
+            RelatedSafetyItem(
+                "19SSS90101", "u", "Señalización", "Señales",
+                'SEÑAL METÁLICA "OBLIG. PROH." 42 cm, CON SOPORTE METÁLICO',
+                Decimal("8"),
+            ),
+            RelatedSafetyItem(
+                "19SSS90202", "u", "Señalización", "Señales",
+                'SEÑAL PVC. "OBLIG. PROH." 30 cm SIN SOPORTE',
+                Decimal("4"),
+            ),
+            RelatedSafetyItem(
+                "19SSS90211", "u", "Señalización", "Señales",
+                'SEÑAL PVC. "ADVERTENCIA" 30 cm SOP. MET.',
+                Decimal("4"),
+            ),
+            RelatedSafetyItem(
+                "19SIC90001", "u", "Cabeza", "Cascos",
+                "CASCO SEG. CONTRA IMPACTOS POLIETILENO ALTA",
+                Decimal("10"),
+            ),
+            RelatedSafetyItem(
+                "19SIC90002", "u", "Cabeza", "Cascos",
+                "CASCO SEG. DIELÉCTRICO POLIETILENO ALTA",
+                Decimal("12"),
+            ),
+        )
+        links = {
+            "01AAA": tuple(
+                SafetyFamilyLink(family, "Protecciones", "Criterio")
+                for family in ("19SCB", "19SSS", "19SIC")
+            ),
+        }
+        catalog = {
+            family: tuple(item for item in items if item.code.startswith(family))
+            for family in ("19SCB", "19SSS", "19SIC")
+        }
+
+        groups = related_alternative_groups_for_work_families(
+            ["01AAA"], links, catalog,
+        )
+        grouped_codes = [
+            {item.code for item in group}
+            for group in groups
+            if len(group) > 1
+        ]
+
+        self.assertEqual(
+            grouped_codes,
+            [
+                {"19SCB00001", "19SCB90002"},
+                {"19SSS90101", "19SSS90202"},
+            ],
+        )

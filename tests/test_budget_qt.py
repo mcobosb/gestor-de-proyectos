@@ -1473,12 +1473,20 @@ class BudgetQtWindowTests(unittest.TestCase):
             proposal_codes = [line.code for line in proposal.lines]
             self.assertTrue(related_codes)
             self.assertEqual(len(proposal_codes), len(set(proposal_codes)))
-            self.assertTrue(set(related_codes).issubset(proposal_codes))
-            for unit in proposal.related_items:
-                line = next(line for line in proposal.lines if line.code == unit.code)
-                self.assertEqual(line.price, unit.price)
-                self.assertEqual(line.quantity, Decimal("1"))
-                self.assertTrue(line.selected)
+            self.assertEqual(
+                set(related_codes),
+                {unit.code for group in proposal.related_groups for unit in group},
+            )
+            for group in proposal.related_groups:
+                selected = [
+                    line for line in proposal.lines
+                    if line.code in {unit.code for unit in group}
+                ]
+                self.assertEqual(len(selected), 1)
+                self.assertEqual(selected[0].quantity, Decimal("1"))
+                unit = next(unit for unit in group if unit.code == selected[0].code)
+                self.assertEqual(selected[0].price, unit.price)
+                self.assertTrue(selected[0].selected)
             self.assertEqual(window.budget_items, [item])
 
     def test_safety_proposal_creates_linked_units_once_and_honors_unchecks(self) -> None:
@@ -1503,11 +1511,18 @@ class BudgetQtWindowTests(unittest.TestCase):
             proposal = tool.open_proposal()
             self.addCleanup(proposal.close)
 
-            excluded_code = proposal.related_items[0].code
-            row = next(
-                row for row in range(proposal.table.rowCount())
-                if proposal.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
-                == excluded_code
+            group_id, alternatives = next(
+                (group_id, group)
+                for group_id, group in proposal.alternative_groups.items()
+            )
+            combo = proposal.alternative_combos[group_id]
+            combo.setCurrentIndex(1)
+            excluded_code = str(combo.currentData())
+            row = proposal.alternative_rows[group_id]
+            self.assertGreaterEqual(proposal.table.rowHeight(row), 42)
+            self.assertEqual(
+                proposal.table.item(row, 0).data(Qt.ItemDataRole.UserRole),
+                excluded_code,
             )
             proposal.table.item(row, 0).setCheckState(Qt.CheckState.Unchecked)
 
@@ -1519,17 +1534,19 @@ class BudgetQtWindowTests(unittest.TestCase):
                 if item.source.startswith(SAFETY_BUDGET_SOURCE)
             ]
             self.assertEqual(len(generated_codes), len(set(generated_codes)))
-            self.assertNotIn(excluded_code, generated_codes)
-            for unit in proposal.related_items:
-                if unit.code == excluded_code:
+            self.assertFalse(set(item.code for item in alternatives).intersection(generated_codes))
+            for line in proposal.lines:
+                if line.quantity is None or line.code in {
+                    item.code for item in alternatives
+                }:
                     continue
-                generated = next(code for code in generated_codes if code == unit.code)
+                generated = next(code for code in generated_codes if code == line.code)
                 generated_item = next(
                     item for item in window.budget_items
                     if item.source == SAFETY_BUDGET_SOURCE + generated
                 )
                 self.assertEqual(generated_item.measurement, 1)
-                self.assertEqual(generated_item.unit_price, float(unit.price))
+                self.assertEqual(generated_item.unit_price, float(line.price))
 
     def test_safety_drawings_can_preview_add_and_restore_custom_svg(self) -> None:
         """La biblioteca personal se previsualiza y su selección se conserva."""

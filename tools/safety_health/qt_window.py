@@ -77,8 +77,9 @@ from .technical_conditions import (
     technical_review_confirmed,
 )
 from .related_units import (
+    RelatedSafetyItem,
     load_related_safety_data,
-    related_items_for_work_families,
+    related_alternative_groups_for_work_families,
 )
 
 
@@ -1017,26 +1018,42 @@ class SafetyProposalDialogQt(QDialog):
             family = work_item.code[:5].upper()
             if family in self.related_family_links:
                 self.work_families.setdefault(family, work_item.summary)
-        self.related_items = related_items_for_work_families(
+        self.related_groups = related_alternative_groups_for_work_families(
             self.work_families, self.related_family_links, self.related_catalog,
         )
-        self.lines = owner.lines
-        lines_by_code = {line.code: line for line in self.lines}
-        for unit in self.related_items:
-            line = lines_by_code.get(unit.code)
-            if line is None:
-                line = SafetyLine(
-                    unit.code, unit.unit, unit.summary, unit.price, Decimal(),
-                    quantity=Decimal("1"),
-                )
-                self.lines.append(line)
-                lines_by_code[unit.code] = line
-            else:
-                line.unit = unit.unit
-                line.summary = unit.summary
-                line.price = unit.price
-                line.weight = Decimal()
-                line.quantity = Decimal("1")
+        self.related_items = tuple(
+            item for group in self.related_groups for item in group
+        )
+        related_codes = {item.code for item in self.related_items}
+        previous_lines = owner.lines
+        self.lines = [
+            line for line in previous_lines if line.code not in related_codes
+        ]
+        self.alternative_groups: dict[str, tuple[RelatedSafetyItem, ...]] = {}
+        self.alternative_line_indices: dict[str, int] = {}
+        for group in self.related_groups:
+            group_codes = {item.code for item in group}
+            previous = [line for line in previous_lines if line.code in group_codes]
+            explicit = [line for line in previous if line.quantity is not None]
+            remembered = min(
+                explicit or previous,
+                key=lambda line: (not line.selected, line.code),
+                default=None,
+            )
+            chosen = next(
+                (item for item in group if remembered and item.code == remembered.code),
+                group[0],
+            )
+            line = SafetyLine(
+                chosen.code, chosen.unit, chosen.summary, chosen.price, Decimal(),
+                selected=True if remembered is None else remembered.selected,
+                quantity=Decimal("1"),
+            )
+            self.lines.append(line)
+            if len(group) > 1:
+                group_id = group[0].code
+                self.alternative_groups[group_id] = group
+                self.alternative_line_indices[group_id] = len(self.lines) - 1
         owner.lines = self.lines
         self.library_editor: LibraryEditorQt | None = None
         self.setWindowTitle("Propuesta de unidades de Seguridad y Salud")
@@ -1053,19 +1070,28 @@ class SafetyProposalDialogQt(QDialog):
         header.addWidget(library)
         layout.addLayout(header)
         proposal_note = QLabel(
-            "Las unidades vinculadas a partidas del presupuesto se incluyen una sola vez, "
-            "marcadas y con cantidad 1. Las demás conservan el reparto porcentual vigente."
+            "Las variantes del mismo tipo se muestran en desplegables y se preselecciona "
+            "una opción; los tipos distintos permanecen separados. Las vinculadas se proponen "
+            "una sola vez, con cantidad 1 y precio de catálogo."
         )
         proposal_note.setWordWrap(True)
         layout.addWidget(proposal_note)
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(
-            ("Incluir", "Código", "Partida", "Ud.", "Precio", "Cantidad")
+            ("Incluir", "Código / alternativa", "Partida", "Ud.", "Precio", "Cantidad")
         )
+        self.table.verticalHeader().setDefaultSectionSize(42)
         self.table.horizontalHeader().setSectionResizeMode(
             2, QHeaderView.ResizeMode.Stretch
         )
-        for line in self.lines:
+        self.table.setColumnWidth(1, 330)
+        self.alternative_rows: dict[str, int] = {}
+        self.alternative_combos: dict[str, QComboBox] = {}
+        group_by_line_index = {
+            line_index: group_id
+            for group_id, line_index in self.alternative_line_indices.items()
+        }
+        for line_index, line in enumerate(self.lines):
             row = self.table.rowCount()
             self.table.insertRow(row)
             check = QTableWidgetItem()
@@ -1075,13 +1101,30 @@ class SafetyProposalDialogQt(QDialog):
                 Qt.CheckState.Checked if line.selected else Qt.CheckState.Unchecked
             )
             self.table.setItem(row, 0, check)
+            group_id = group_by_line_index.get(line_index)
+            if group_id is not None:
+                combo = QComboBox()
+                combo.setMinimumHeight(36)
+                for option in self.alternative_groups[group_id]:
+                    combo.addItem(
+                        f"{option.code} — {option.summary}", option.code,
+                    )
+                combo.setCurrentIndex(combo.findData(line.code))
+                combo.currentIndexChanged.connect(
+                    lambda index, key=group_id: self._select_alternative(key, index)
+                )
+                self.table.setCellWidget(row, 1, combo)
+                self.alternative_rows[group_id] = row
+                self.alternative_combos[group_id] = combo
+            else:
+                self.table.setItem(row, 1, QTableWidgetItem(line.code))
             for column, value in enumerate(
                 (
-                    line.code, line.summary, line.unit, f"{line.price:.2f}",
+                    line.summary, line.unit, f"{line.price:.2f}",
                     _format_decimal(line.quantity) if line.quantity is not None
                     else "Según porcentaje",
                 ),
-                1,
+                2,
             ):
                 self.table.setItem(row, column, QTableWidgetItem(value))
         self.table.itemChanged.connect(self.changed)
@@ -1114,8 +1157,8 @@ class SafetyProposalDialogQt(QDialog):
         related_layout = QVBoxLayout(tab)
         note = QLabel(
             "Vínculos orientativos por familia BCCA de cinco caracteres. "
-            "Las unidades de las partidas seleccionadas aparecen en Propuesta una sola vez, "
-            "con cantidad 1; revisa técnicamente su inclusión."
+            "Las variantes de un mismo tipo se agrupan en Propuesta; los tipos distintos "
+            "se mantienen separados. Revisa técnicamente cada selección."
         )
         note.setWordWrap(True)
         related_layout.addWidget(note)
@@ -1181,6 +1224,32 @@ class SafetyProposalDialogQt(QDialog):
                 "No hay partidas seleccionadas con vínculos disponibles."
             )
         return tab
+
+    def _select_alternative(self, group_id: str, index: int) -> None:
+        """Actualiza la partida de propuesta al cambiar una alternativa del desplegable."""
+        combo = self.alternative_combos[group_id]
+        code = combo.itemData(index)
+        option = next(
+            item for item in self.alternative_groups[group_id] if item.code == code
+        )
+        line = self.lines[self.alternative_line_indices[group_id]]
+        line.code = option.code
+        line.unit = option.unit
+        line.summary = option.summary
+        line.price = option.price
+        line.weight = Decimal()
+        line.quantity = Decimal("1")
+        row = self.alternative_rows[group_id]
+        check = self.table.item(row, 0)
+        line.selected = check.checkState() == Qt.CheckState.Checked
+        check.setData(Qt.ItemDataRole.UserRole, line.code)
+        for column, value in (
+            (2, line.summary),
+            (3, line.unit),
+            (4, f"{line.price:.2f}"),
+            (5, _format_decimal(line.quantity)),
+        ):
+            self.table.item(row, column).setText(value)
 
     def _show_related_families(self) -> None:
         """Muestra las familias de Seguridad y Salud asociadas a la partida elegida."""
