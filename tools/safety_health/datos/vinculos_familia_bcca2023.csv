@@ -1,0 +1,2135 @@
+﻿familia_obra,familia_ss,categoria_ss,criterio
+01AAB,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01AAB,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01AAB,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01AAB,19SSA,Acotamiento,Demolicion o desmontaje
+01AAB,19SSS,Señalización,Demolicion o desmontaje
+01ADS,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01ADS,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01ADS,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01ADS,19SSA,Acotamiento,Demolicion o desmontaje
+01ADS,19SSS,Señalización,Demolicion o desmontaje
+01ADT,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01ADT,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01ADT,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01ADT,19SSA,Acotamiento,Demolicion o desmontaje
+01ADT,19SSS,Señalización,Demolicion o desmontaje
+01ALH,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01ALH,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01ALH,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01ALH,19SSA,Acotamiento,Demolicion o desmontaje
+01ALH,19SSS,Señalización,Demolicion o desmontaje
+01ALM,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01ALM,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01ALM,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01ALM,19SSA,Acotamiento,Demolicion o desmontaje
+01ALM,19SSS,Señalización,Demolicion o desmontaje
+01AWD,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01AWD,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01AWD,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01AWD,19SSA,Acotamiento,Demolicion o desmontaje
+01AWD,19SSS,Señalización,Demolicion o desmontaje
+01AWF,19SCB,Barandillas,Altura y caidas
+01AWF,19SCR,Redes,Altura y caidas
+01AWF,19SIC,Cabeza,Altura y caidas; Equipos y cargas; Demolicion o desmontaje
+01AWF,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01AWF,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01AWF,19SIT,"Tronco, piernas y brazos",Altura y caidas
+01AWF,19SSA,Acotamiento,Demolicion o desmontaje
+01AWF,19SSS,Señalización,Demolicion o desmontaje
+01AWP,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01AWP,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01AWP,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01AWP,19SSA,Acotamiento,Demolicion o desmontaje
+01AWP,19SSS,Señalización,Demolicion o desmontaje
+01AWW,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01AWW,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01AWW,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01AWW,19SSA,Acotamiento,Demolicion o desmontaje
+01AWW,19SSS,Señalización,Demolicion o desmontaje
+01CAA,19SCB,Barandillas,Excavaciones
+01CAA,19SIC,Cabeza,Excavaciones; Equipos y cargas; Demolicion o desmontaje
+01CAA,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01CAA,19SIP,Pies,Excavaciones; Equipos y cargas; Demolicion o desmontaje
+01CAA,19SSA,Acotamiento,Excavaciones; Demolicion o desmontaje
+01CAA,19SSS,Señalización,Excavaciones; Demolicion o desmontaje
+01CMM,19SCB,Barandillas,Excavaciones
+01CMM,19SIC,Cabeza,Excavaciones; Equipos y cargas; Demolicion o desmontaje
+01CMM,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01CMM,19SIP,Pies,Excavaciones; Equipos y cargas; Demolicion o desmontaje
+01CMM,19SSA,Acotamiento,Excavaciones; Demolicion o desmontaje
+01CMM,19SSS,Señalización,Excavaciones; Demolicion o desmontaje
+01CWW,19SCB,Barandillas,Excavaciones
+01CWW,19SIC,Cabeza,Excavaciones; Equipos y cargas; Demolicion o desmontaje
+01CWW,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01CWW,19SIP,Pies,Excavaciones; Equipos y cargas; Demolicion o desmontaje
+01CWW,19SSA,Acotamiento,Excavaciones; Demolicion o desmontaje
+01CWW,19SSS,Señalización,Excavaciones; Demolicion o desmontaje
+01EBB,19SCB,Barandillas,Altura y caidas
+01EBB,19SCR,Redes,Altura y caidas
+01EBB,19SIC,Cabeza,Altura y caidas; Demolicion o desmontaje
+01EBB,19SIM,Manos,Demolicion o desmontaje
+01EBB,19SIP,Pies,Demolicion o desmontaje
+01EBB,19SIT,"Tronco, piernas y brazos",Altura y caidas
+01EBB,19SSA,Acotamiento,Demolicion o desmontaje
+01EBB,19SSS,Señalización,Demolicion o desmontaje
+01EEE,19SIC,Cabeza,Riesgo electrico; Equipos y cargas; Demolicion o desmontaje
+01EEE,19SIM,Manos,Riesgo electrico; Equipos y cargas; Demolicion o desmontaje
+01EEE,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01EEE,19SSA,Acotamiento,Demolicion o desmontaje
+01EEE,19SSS,Señalización,Riesgo electrico; Demolicion o desmontaje
+01EMM,19SCB,Barandillas,Altura y caidas
+01EMM,19SCR,Redes,Altura y caidas
+01EMM,19SIC,Cabeza,Altura y caidas; Demolicion o desmontaje
+01EMM,19SIM,Manos,Demolicion o desmontaje
+01EMM,19SIP,Pies,Demolicion o desmontaje
+01EMM,19SIT,"Tronco, piernas y brazos",Altura y caidas
+01EMM,19SSA,Acotamiento,Demolicion o desmontaje
+01EMM,19SSS,Señalización,Demolicion o desmontaje
+01ICA,19SCB,Barandillas,Altura y caidas
+01ICA,19SCR,Redes,Altura y caidas
+01ICA,19SCV,Ventilaciones,Agentes quimicos o polvo
+01ICA,19SIC,Cabeza,Altura y caidas; Riesgo electrico; Equipos y cargas; Demolicion o desmontaje
+01ICA,19SIM,Manos,Riesgo electrico; Agentes quimicos o polvo; Equipos y cargas; Demolicion o desmontaje
+01ICA,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01ICA,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+01ICA,19SSA,Acotamiento,Demolicion o desmontaje
+01ICA,19SSS,Señalización,Riesgo electrico; Demolicion o desmontaje
+01IEC,19SIC,Cabeza,Riesgo electrico; Demolicion o desmontaje
+01IEC,19SIM,Manos,Riesgo electrico; Demolicion o desmontaje
+01IEC,19SIP,Pies,Demolicion o desmontaje
+01IEC,19SSA,Acotamiento,Demolicion o desmontaje
+01IEC,19SSS,Señalización,Riesgo electrico; Demolicion o desmontaje
+01IEE,19SIC,Cabeza,Demolicion o desmontaje
+01IEE,19SIM,Manos,Demolicion o desmontaje
+01IEE,19SIP,Pies,Demolicion o desmontaje
+01IEE,19SSA,Acotamiento,Demolicion o desmontaje
+01IEE,19SSS,Señalización,Demolicion o desmontaje
+01IEK,19SIC,Cabeza,Demolicion o desmontaje
+01IEK,19SIM,Manos,Demolicion o desmontaje
+01IEK,19SIP,Pies,Demolicion o desmontaje
+01IEK,19SSA,Acotamiento,Demolicion o desmontaje
+01IEK,19SSS,Señalización,Demolicion o desmontaje
+01IEL,19SIC,Cabeza,Demolicion o desmontaje
+01IEL,19SIM,Manos,Demolicion o desmontaje
+01IEL,19SIP,Pies,Demolicion o desmontaje
+01IEL,19SSA,Acotamiento,Demolicion o desmontaje
+01IEL,19SSS,Señalización,Demolicion o desmontaje
+01IER,19SIC,Cabeza,Demolicion o desmontaje
+01IER,19SIM,Manos,Demolicion o desmontaje
+01IER,19SIP,Pies,Demolicion o desmontaje
+01IER,19SSA,Acotamiento,Demolicion o desmontaje
+01IER,19SSS,Señalización,Demolicion o desmontaje
+01IEW,19SIC,Cabeza,Riesgo electrico; Demolicion o desmontaje
+01IEW,19SIM,Manos,Riesgo electrico; Demolicion o desmontaje
+01IEW,19SIP,Pies,Demolicion o desmontaje
+01IEW,19SSA,Acotamiento,Demolicion o desmontaje
+01IEW,19SSS,Señalización,Riesgo electrico; Demolicion o desmontaje
+01IFD,19SIC,Cabeza,Demolicion o desmontaje
+01IFD,19SIM,Manos,Demolicion o desmontaje
+01IFD,19SIP,Pies,Demolicion o desmontaje
+01IFD,19SSA,Acotamiento,Demolicion o desmontaje
+01IFD,19SSS,Señalización,Demolicion o desmontaje
+01IFF,19SIC,Cabeza,Demolicion o desmontaje
+01IFF,19SIM,Manos,Demolicion o desmontaje
+01IFF,19SIP,Pies,Demolicion o desmontaje
+01IFF,19SSA,Acotamiento,Demolicion o desmontaje
+01IFF,19SSS,Señalización,Demolicion o desmontaje
+01IFS,19SIC,Cabeza,Demolicion o desmontaje
+01IFS,19SIM,Manos,Demolicion o desmontaje
+01IFS,19SIP,Pies,Demolicion o desmontaje
+01IFS,19SSA,Acotamiento,Demolicion o desmontaje
+01IFS,19SSS,Señalización,Demolicion o desmontaje
+01IFT,19SIC,Cabeza,Demolicion o desmontaje
+01IFT,19SIM,Manos,Demolicion o desmontaje
+01IFT,19SIP,Pies,Demolicion o desmontaje
+01IFT,19SSA,Acotamiento,Demolicion o desmontaje
+01IFT,19SSS,Señalización,Demolicion o desmontaje
+01IFW,19SIC,Cabeza,Demolicion o desmontaje
+01IFW,19SIM,Manos,Demolicion o desmontaje
+01IFW,19SIP,Pies,Demolicion o desmontaje
+01IFW,19SSA,Acotamiento,Demolicion o desmontaje
+01IFW,19SSS,Señalización,Demolicion o desmontaje
+01IMA,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01IMA,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01IMA,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01IMA,19SSA,Acotamiento,Demolicion o desmontaje
+01IMA,19SSS,Señalización,Demolicion o desmontaje
+01IVW,19SIC,Cabeza,Riesgo electrico; Equipos y cargas; Demolicion o desmontaje
+01IVW,19SIM,Manos,Riesgo electrico; Equipos y cargas; Demolicion o desmontaje
+01IVW,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01IVW,19SSA,Acotamiento,Demolicion o desmontaje
+01IVW,19SSS,Señalización,Riesgo electrico; Demolicion o desmontaje
+01KAP,19SIC,Cabeza,Demolicion o desmontaje
+01KAP,19SIM,Manos,Demolicion o desmontaje
+01KAP,19SIP,Pies,Demolicion o desmontaje
+01KAP,19SSA,Acotamiento,Demolicion o desmontaje
+01KAP,19SSS,Señalización,Demolicion o desmontaje
+01KAV,19SIC,Cabeza,Demolicion o desmontaje
+01KAV,19SIM,Manos,Demolicion o desmontaje
+01KAV,19SIP,Pies,Demolicion o desmontaje
+01KAV,19SSA,Acotamiento,Demolicion o desmontaje
+01KAV,19SSS,Señalización,Demolicion o desmontaje
+01KLM,19SIC,Cabeza,Demolicion o desmontaje
+01KLM,19SIM,Manos,Demolicion o desmontaje
+01KLM,19SIP,Pies,Demolicion o desmontaje
+01KLM,19SSA,Acotamiento,Demolicion o desmontaje
+01KLM,19SSS,Señalización,Demolicion o desmontaje
+01KLP,19SIC,Cabeza,Demolicion o desmontaje
+01KLP,19SIM,Manos,Demolicion o desmontaje
+01KLP,19SIP,Pies,Demolicion o desmontaje
+01KLP,19SSA,Acotamiento,Demolicion o desmontaje
+01KLP,19SSS,Señalización,Demolicion o desmontaje
+01KLV,19SIC,Cabeza,Demolicion o desmontaje
+01KLV,19SIM,Manos,Demolicion o desmontaje
+01KLV,19SIP,Pies,Demolicion o desmontaje
+01KLV,19SSA,Acotamiento,Demolicion o desmontaje
+01KLV,19SSS,Señalización,Demolicion o desmontaje
+01KMA,19SIC,Cabeza,Demolicion o desmontaje
+01KMA,19SIM,Manos,Demolicion o desmontaje
+01KMA,19SIP,Pies,Demolicion o desmontaje
+01KMA,19SSA,Acotamiento,Demolicion o desmontaje
+01KMA,19SSS,Señalización,Demolicion o desmontaje
+01KMP,19SIC,Cabeza,Demolicion o desmontaje
+01KMP,19SIM,Manos,Demolicion o desmontaje
+01KMP,19SIP,Pies,Demolicion o desmontaje
+01KMP,19SSA,Acotamiento,Demolicion o desmontaje
+01KMP,19SSS,Señalización,Demolicion o desmontaje
+01KMV,19SIC,Cabeza,Demolicion o desmontaje
+01KMV,19SIM,Manos,Demolicion o desmontaje
+01KMV,19SIP,Pies,Demolicion o desmontaje
+01KMV,19SSA,Acotamiento,Demolicion o desmontaje
+01KMV,19SSS,Señalización,Demolicion o desmontaje
+01KSB,19SIC,Cabeza,Demolicion o desmontaje
+01KSB,19SIM,Manos,Demolicion o desmontaje
+01KSB,19SIP,Pies,Demolicion o desmontaje
+01KSB,19SSA,Acotamiento,Demolicion o desmontaje
+01KSB,19SSS,Señalización,Demolicion o desmontaje
+01KSC,19SIC,Cabeza,Demolicion o desmontaje
+01KSC,19SIM,Manos,Demolicion o desmontaje
+01KSC,19SIP,Pies,Demolicion o desmontaje
+01KSC,19SSA,Acotamiento,Demolicion o desmontaje
+01KSC,19SSS,Señalización,Demolicion o desmontaje
+01KSP,19SIC,Cabeza,Demolicion o desmontaje
+01KSP,19SIM,Manos,Demolicion o desmontaje
+01KSP,19SIP,Pies,Demolicion o desmontaje
+01KSP,19SSA,Acotamiento,Demolicion o desmontaje
+01KSP,19SSS,Señalización,Demolicion o desmontaje
+01KSR,19SIC,Cabeza,Demolicion o desmontaje
+01KSR,19SIM,Manos,Demolicion o desmontaje
+01KSR,19SIP,Pies,Demolicion o desmontaje
+01KSR,19SSA,Acotamiento,Demolicion o desmontaje
+01KSR,19SSS,Señalización,Demolicion o desmontaje
+01KSW,19SIC,Cabeza,Demolicion o desmontaje
+01KSW,19SIM,Manos,Demolicion o desmontaje
+01KSW,19SIP,Pies,Demolicion o desmontaje
+01KSW,19SSA,Acotamiento,Demolicion o desmontaje
+01KSW,19SSS,Señalización,Demolicion o desmontaje
+01QHA,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01QHA,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01QHA,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01QHA,19SSA,Acotamiento,Demolicion o desmontaje
+01QHA,19SSS,Señalización,Demolicion o desmontaje
+01QHN,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01QHN,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01QHN,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01QHN,19SSA,Acotamiento,Demolicion o desmontaje
+01QHN,19SSS,Señalización,Demolicion o desmontaje
+01QHT,19SCV,Ventilaciones,Agentes quimicos o polvo
+01QHT,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01QHT,19SIM,Manos,Agentes quimicos o polvo; Equipos y cargas; Demolicion o desmontaje
+01QHT,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01QHT,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+01QHT,19SSA,Acotamiento,Demolicion o desmontaje
+01QHT,19SSS,Señalización,Demolicion o desmontaje
+01QIF,19SCB,Barandillas,Altura y caidas
+01QIF,19SCR,Redes,Altura y caidas
+01QIF,19SCV,Ventilaciones,Agentes quimicos o polvo
+01QIF,19SIC,Cabeza,Altura y caidas; Equipos y cargas; Demolicion o desmontaje
+01QIF,19SIM,Manos,Agentes quimicos o polvo; Equipos y cargas; Demolicion o desmontaje
+01QIF,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01QIF,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+01QIF,19SSA,Acotamiento,Demolicion o desmontaje
+01QIF,19SSS,Señalización,Demolicion o desmontaje
+01QIG,19SCB,Barandillas,Altura y caidas
+01QIG,19SCR,Redes,Altura y caidas
+01QIG,19SIC,Cabeza,Altura y caidas; Equipos y cargas; Demolicion o desmontaje
+01QIG,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01QIG,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01QIG,19SIT,"Tronco, piernas y brazos",Altura y caidas
+01QIG,19SSA,Acotamiento,Demolicion o desmontaje
+01QIG,19SSS,Señalización,Demolicion o desmontaje
+01QIL,19SCB,Barandillas,Altura y caidas
+01QIL,19SCR,Redes,Altura y caidas
+01QIL,19SIC,Cabeza,Altura y caidas; Equipos y cargas; Demolicion o desmontaje
+01QIL,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01QIL,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01QIL,19SIT,"Tronco, piernas y brazos",Altura y caidas
+01QIL,19SSA,Acotamiento,Demolicion o desmontaje
+01QIL,19SSS,Señalización,Demolicion o desmontaje
+01QIP,19SCB,Barandillas,Altura y caidas
+01QIP,19SCR,Redes,Altura y caidas
+01QIP,19SIC,Cabeza,Altura y caidas; Equipos y cargas; Demolicion o desmontaje
+01QIP,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01QIP,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01QIP,19SIT,"Tronco, piernas y brazos",Altura y caidas
+01QIP,19SSA,Acotamiento,Demolicion o desmontaje
+01QIP,19SSS,Señalización,Demolicion o desmontaje
+01QIS,19SCB,Barandillas,Altura y caidas
+01QIS,19SCR,Redes,Altura y caidas
+01QIS,19SIC,Cabeza,Altura y caidas; Equipos y cargas; Demolicion o desmontaje
+01QIS,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01QIS,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01QIS,19SIT,"Tronco, piernas y brazos",Altura y caidas
+01QIS,19SSA,Acotamiento,Demolicion o desmontaje
+01QIS,19SSS,Señalización,Demolicion o desmontaje
+01QIT,19SCB,Barandillas,Altura y caidas
+01QIT,19SCR,Redes,Altura y caidas
+01QIT,19SIC,Cabeza,Altura y caidas; Equipos y cargas; Demolicion o desmontaje
+01QIT,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01QIT,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01QIT,19SIT,"Tronco, piernas y brazos",Altura y caidas
+01QIT,19SSA,Acotamiento,Demolicion o desmontaje
+01QIT,19SSS,Señalización,Demolicion o desmontaje
+01QIW,19SIC,Cabeza,Demolicion o desmontaje
+01QIW,19SIM,Manos,Demolicion o desmontaje
+01QIW,19SIP,Pies,Demolicion o desmontaje
+01QIW,19SSA,Acotamiento,Demolicion o desmontaje
+01QIW,19SSS,Señalización,Demolicion o desmontaje
+01QWW,19SCB,Barandillas,Altura y caidas
+01QWW,19SCR,Redes,Altura y caidas
+01QWW,19SIC,Cabeza,Altura y caidas; Demolicion o desmontaje
+01QWW,19SIM,Manos,Demolicion o desmontaje
+01QWW,19SIP,Pies,Demolicion o desmontaje
+01QWW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+01QWW,19SSA,Acotamiento,Demolicion o desmontaje
+01QWW,19SSS,Señalización,Demolicion o desmontaje
+01RAA,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01RAA,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RAA,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RAA,19SSA,Acotamiento,Demolicion o desmontaje
+01RAA,19SSS,Señalización,Demolicion o desmontaje
+01RAC,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01RAC,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RAC,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RAC,19SSA,Acotamiento,Demolicion o desmontaje
+01RAC,19SSS,Señalización,Demolicion o desmontaje
+01RCE,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01RCE,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RCE,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RCE,19SSA,Acotamiento,Demolicion o desmontaje
+01RCE,19SSS,Señalización,Demolicion o desmontaje
+01RCG,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01RCG,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RCG,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RCG,19SSA,Acotamiento,Demolicion o desmontaje
+01RCG,19SSS,Señalización,Demolicion o desmontaje
+01RLC,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01RLC,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RLC,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RLC,19SSA,Acotamiento,Demolicion o desmontaje
+01RLC,19SSS,Señalización,Demolicion o desmontaje
+01RLL,19SIC,Cabeza,Demolicion o desmontaje
+01RLL,19SIM,Manos,Demolicion o desmontaje
+01RLL,19SIP,Pies,Demolicion o desmontaje
+01RLL,19SSA,Acotamiento,Demolicion o desmontaje
+01RLL,19SSS,Señalización,Demolicion o desmontaje
+01RLM,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01RLM,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RLM,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RLM,19SSA,Acotamiento,Demolicion o desmontaje
+01RLM,19SSS,Señalización,Demolicion o desmontaje
+01RPA,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01RPA,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RPA,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RPA,19SSA,Acotamiento,Demolicion o desmontaje
+01RPA,19SSS,Señalización,Demolicion o desmontaje
+01RPC,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01RPC,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RPC,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RPC,19SSA,Acotamiento,Demolicion o desmontaje
+01RPC,19SSS,Señalización,Demolicion o desmontaje
+01RPL,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01RPL,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RPL,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RPL,19SSA,Acotamiento,Demolicion o desmontaje
+01RPL,19SSS,Señalización,Demolicion o desmontaje
+01RPM,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01RPM,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RPM,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RPM,19SSA,Acotamiento,Demolicion o desmontaje
+01RPM,19SSS,Señalización,Demolicion o desmontaje
+01RPN,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01RPN,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RPN,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RPN,19SSA,Acotamiento,Demolicion o desmontaje
+01RPN,19SSS,Señalización,Demolicion o desmontaje
+01RSC,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01RSC,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RSC,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RSC,19SSA,Acotamiento,Demolicion o desmontaje
+01RSC,19SSS,Señalización,Demolicion o desmontaje
+01RSE,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01RSE,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RSE,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RSE,19SSA,Acotamiento,Demolicion o desmontaje
+01RSE,19SSS,Señalización,Demolicion o desmontaje
+01RSH,19SCB,Barandillas,Altura y caidas
+01RSH,19SCR,Redes,Altura y caidas
+01RSH,19SIC,Cabeza,Altura y caidas; Equipos y cargas; Demolicion o desmontaje
+01RSH,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RSH,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RSH,19SIT,"Tronco, piernas y brazos",Altura y caidas
+01RSH,19SSA,Acotamiento,Demolicion o desmontaje
+01RSH,19SSS,Señalización,Demolicion o desmontaje
+01RSL,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01RSL,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RSL,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RSL,19SSA,Acotamiento,Demolicion o desmontaje
+01RSL,19SSS,Señalización,Demolicion o desmontaje
+01RSM,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01RSM,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RSM,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RSM,19SSA,Acotamiento,Demolicion o desmontaje
+01RSM,19SSS,Señalización,Demolicion o desmontaje
+01RSN,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01RSN,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RSN,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RSN,19SSA,Acotamiento,Demolicion o desmontaje
+01RSN,19SSS,Señalización,Demolicion o desmontaje
+01RSS,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01RSS,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RSS,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RSS,19SSA,Acotamiento,Demolicion o desmontaje
+01RSS,19SSS,Señalización,Demolicion o desmontaje
+01RST,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01RST,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RST,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RST,19SSA,Acotamiento,Demolicion o desmontaje
+01RST,19SSS,Señalización,Demolicion o desmontaje
+01RTE,19SIC,Cabeza,Demolicion o desmontaje
+01RTE,19SIM,Manos,Demolicion o desmontaje
+01RTE,19SIP,Pies,Demolicion o desmontaje
+01RTE,19SSA,Acotamiento,Demolicion o desmontaje
+01RTE,19SSS,Señalización,Demolicion o desmontaje
+01RTL,19SIC,Cabeza,Demolicion o desmontaje
+01RTL,19SIM,Manos,Demolicion o desmontaje
+01RTL,19SIP,Pies,Demolicion o desmontaje
+01RTL,19SSA,Acotamiento,Demolicion o desmontaje
+01RTL,19SSS,Señalización,Demolicion o desmontaje
+01RTM,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01RTM,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01RTM,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01RTM,19SSA,Acotamiento,Demolicion o desmontaje
+01RTM,19SSS,Señalización,Demolicion o desmontaje
+01RTW,19SIC,Cabeza,Demolicion o desmontaje
+01RTW,19SIM,Manos,Demolicion o desmontaje
+01RTW,19SIP,Pies,Demolicion o desmontaje
+01RTW,19SSA,Acotamiento,Demolicion o desmontaje
+01RTW,19SSS,Señalización,Demolicion o desmontaje
+01RWA,19SIC,Cabeza,Demolicion o desmontaje
+01RWA,19SIM,Manos,Demolicion o desmontaje
+01RWA,19SIP,Pies,Demolicion o desmontaje
+01RWA,19SSA,Acotamiento,Demolicion o desmontaje
+01RWA,19SSS,Señalización,Demolicion o desmontaje
+01RWR,19SIC,Cabeza,Demolicion o desmontaje
+01RWR,19SIM,Manos,Demolicion o desmontaje
+01RWR,19SIP,Pies,Demolicion o desmontaje
+01RWR,19SSA,Acotamiento,Demolicion o desmontaje
+01RWR,19SSS,Señalización,Demolicion o desmontaje
+01SCA,19SIC,Cabeza,Demolicion o desmontaje
+01SCA,19SIM,Manos,Demolicion o desmontaje
+01SCA,19SIP,Pies,Demolicion o desmontaje
+01SCA,19SSA,Acotamiento,Demolicion o desmontaje
+01SCA,19SSS,Señalización,Demolicion o desmontaje
+01SCC,19SCV,Ventilaciones,Agentes quimicos o polvo
+01SCC,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01SCC,19SIM,Manos,Agentes quimicos o polvo; Equipos y cargas; Demolicion o desmontaje
+01SCC,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01SCC,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+01SCC,19SSA,Acotamiento,Demolicion o desmontaje
+01SCC,19SSS,Señalización,Demolicion o desmontaje
+01SEA,19SIC,Cabeza,Demolicion o desmontaje
+01SEA,19SIM,Manos,Demolicion o desmontaje
+01SEA,19SIP,Pies,Demolicion o desmontaje
+01SEA,19SSA,Acotamiento,Demolicion o desmontaje
+01SEA,19SSS,Señalización,Demolicion o desmontaje
+01SEC,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01SEC,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01SEC,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01SEC,19SSA,Acotamiento,Demolicion o desmontaje
+01SEC,19SSS,Señalización,Demolicion o desmontaje
+01SVB,19SCV,Ventilaciones,Agentes quimicos o polvo
+01SVB,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01SVB,19SIM,Manos,Agentes quimicos o polvo; Equipos y cargas; Demolicion o desmontaje
+01SVB,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01SVB,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+01SVB,19SSA,Acotamiento,Demolicion o desmontaje
+01SVB,19SSS,Señalización,Demolicion o desmontaje
+01TAH,19SCB,Barandillas,Altura y caidas
+01TAH,19SCR,Redes,Altura y caidas
+01TAH,19SIC,Cabeza,Altura y caidas
+01TAH,19SIT,"Tronco, piernas y brazos",Altura y caidas
+01TAV,19SCB,Barandillas,Altura y caidas
+01TAV,19SCR,Redes,Altura y caidas
+01TAV,19SIC,Cabeza,Altura y caidas; Demolicion o desmontaje
+01TAV,19SIM,Manos,Demolicion o desmontaje
+01TAV,19SIP,Pies,Demolicion o desmontaje
+01TAV,19SIT,"Tronco, piernas y brazos",Altura y caidas
+01TAV,19SSA,Acotamiento,Demolicion o desmontaje
+01TAV,19SSS,Señalización,Demolicion o desmontaje
+01TLL,19LAA,Aseos,Aseos
+01TLL,19LIA,Aseos,Aseos
+01TLL,19LPA,Aseos,Aseos
+01UAP,19SCB,Barandillas,Excavaciones
+01UAP,19SIC,Cabeza,Excavaciones; Equipos y cargas; Demolicion o desmontaje
+01UAP,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01UAP,19SIP,Pies,Excavaciones; Equipos y cargas; Demolicion o desmontaje
+01UAP,19SSA,Acotamiento,Excavaciones; Demolicion o desmontaje
+01UAP,19SSS,Señalización,Excavaciones; Demolicion o desmontaje
+01UAS,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01UAS,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01UAS,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01UAS,19SSA,Acotamiento,Demolicion o desmontaje
+01UAS,19SSS,Señalización,Demolicion o desmontaje
+01UJJ,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01UJJ,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01UJJ,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01UJJ,19SSA,Acotamiento,Demolicion o desmontaje
+01UJJ,19SSS,Señalización,Demolicion o desmontaje
+01UPB,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01UPB,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01UPB,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01UPB,19SSA,Acotamiento,Demolicion o desmontaje
+01UPB,19SSS,Señalización,Demolicion o desmontaje
+01UPP,19SCV,Ventilaciones,Agentes quimicos o polvo
+01UPP,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01UPP,19SIM,Manos,Agentes quimicos o polvo; Equipos y cargas; Demolicion o desmontaje
+01UPP,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01UPP,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+01UPP,19SSA,Acotamiento,Trafico y balizamiento; Demolicion o desmontaje
+01UPP,19SSS,Señalización,Trafico y balizamiento; Demolicion o desmontaje
+01UUB,19SIC,Cabeza,Demolicion o desmontaje
+01UUB,19SIM,Manos,Demolicion o desmontaje
+01UUB,19SIP,Pies,Demolicion o desmontaje
+01UUB,19SSA,Acotamiento,Demolicion o desmontaje
+01UUB,19SSS,Señalización,Demolicion o desmontaje
+01UUF,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01UUF,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01UUF,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01UUF,19SSA,Acotamiento,Demolicion o desmontaje
+01UUF,19SSS,Señalización,Demolicion o desmontaje
+01UUJ,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01UUJ,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01UUJ,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01UUJ,19SSA,Acotamiento,Demolicion o desmontaje
+01UUJ,19SSS,Señalización,Demolicion o desmontaje
+01UUP,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01UUP,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01UUP,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01UUP,19SSA,Acotamiento,Demolicion o desmontaje
+01UUP,19SSS,Señalización,Demolicion o desmontaje
+01UUS,19SIC,Cabeza,Equipos y cargas; Demolicion o desmontaje
+01UUS,19SIM,Manos,Equipos y cargas; Demolicion o desmontaje
+01UUS,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01UUS,19SSA,Acotamiento,Demolicion o desmontaje
+01UUS,19SSS,Señalización,Demolicion o desmontaje
+01UWC,19SCB,Barandillas,Altura y caidas
+01UWC,19SCR,Redes,Altura y caidas
+01UWC,19SCV,Ventilaciones,Soldadura
+01UWC,19SIC,Cabeza,Altura y caidas; Soldadura; Equipos y cargas; Demolicion o desmontaje
+01UWC,19SIM,Manos,Soldadura; Equipos y cargas; Demolicion o desmontaje
+01UWC,19SIP,Pies,Equipos y cargas; Demolicion o desmontaje
+01UWC,19SIT,"Tronco, piernas y brazos",Altura y caidas; Soldadura
+01UWC,19SSA,Acotamiento,Demolicion o desmontaje
+01UWC,19SSS,Señalización,Demolicion o desmontaje
+01WWW,19SCB,Barandillas,Excavaciones
+01WWW,19SIC,Cabeza,Excavaciones
+01WWW,19SIP,Pies,Excavaciones
+01WWW,19SSA,Acotamiento,Excavaciones
+01WWW,19SSS,Señalización,Excavaciones
+01XAC,19SCB,Barandillas,Altura y caidas
+01XAC,19SCR,Redes,Altura y caidas
+01XAC,19SIC,Cabeza,Altura y caidas; Demolicion o desmontaje
+01XAC,19SIM,Manos,Demolicion o desmontaje
+01XAC,19SIP,Pies,Demolicion o desmontaje
+01XAC,19SIT,"Tronco, piernas y brazos",Altura y caidas
+01XAC,19SSA,Acotamiento,Demolicion o desmontaje
+01XAC,19SSS,Señalización,Demolicion o desmontaje
+01XAF,19SIC,Cabeza,Demolicion o desmontaje
+01XAF,19SIM,Manos,Demolicion o desmontaje
+01XAF,19SIP,Pies,Demolicion o desmontaje
+01XAF,19SSA,Acotamiento,Demolicion o desmontaje
+01XAF,19SSS,Señalización,Demolicion o desmontaje
+01XFB,19SCB,Barandillas,Altura y caidas
+01XFB,19SCR,Redes,Altura y caidas
+01XFB,19SIC,Cabeza,Altura y caidas; Demolicion o desmontaje
+01XFB,19SIM,Manos,Demolicion o desmontaje
+01XFB,19SIP,Pies,Demolicion o desmontaje
+01XFB,19SIT,"Tronco, piernas y brazos",Altura y caidas
+01XFB,19SSA,Acotamiento,Demolicion o desmontaje
+01XFB,19SSS,Señalización,Demolicion o desmontaje
+01XFU,19SCB,Barandillas,Altura y caidas
+01XFU,19SCR,Redes,Altura y caidas
+01XFU,19SIC,Cabeza,Altura y caidas; Demolicion o desmontaje
+01XFU,19SIM,Manos,Demolicion o desmontaje
+01XFU,19SIP,Pies,Demolicion o desmontaje
+01XFU,19SIT,"Tronco, piernas y brazos",Altura y caidas
+01XFU,19SSA,Acotamiento,Demolicion o desmontaje
+01XFU,19SSS,Señalización,Demolicion o desmontaje
+01XHL,19SIC,Cabeza,Demolicion o desmontaje
+01XHL,19SIM,Manos,Demolicion o desmontaje
+01XHL,19SIP,Pies,Demolicion o desmontaje
+01XHL,19SSA,Acotamiento,Demolicion o desmontaje
+01XHL,19SSS,Señalización,Demolicion o desmontaje
+01XHW,19SIC,Cabeza,Demolicion o desmontaje
+01XHW,19SIM,Manos,Demolicion o desmontaje
+01XHW,19SIP,Pies,Demolicion o desmontaje
+01XHW,19SSA,Acotamiento,Demolicion o desmontaje
+01XHW,19SSS,Señalización,Demolicion o desmontaje
+01XWW,19SCB,Barandillas,Altura y caidas
+01XWW,19SCR,Redes,Altura y caidas
+01XWW,19SIC,Cabeza,Altura y caidas; Demolicion o desmontaje
+01XWW,19SIM,Manos,Demolicion o desmontaje
+01XWW,19SIP,Pies,Demolicion o desmontaje
+01XWW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+01XWW,19SSA,Acotamiento,Demolicion o desmontaje
+01XWW,19SSS,Señalización,Demolicion o desmontaje
+02ACC,19SCB,Barandillas,Excavaciones
+02ACC,19SIC,Cabeza,Excavaciones
+02ACC,19SIP,Pies,Excavaciones
+02ACC,19SSA,Acotamiento,Excavaciones
+02ACC,19SSS,Señalización,Excavaciones
+02ADD,19SCB,Barandillas,Excavaciones
+02ADD,19SIC,Cabeza,Excavaciones; Demolicion o desmontaje
+02ADD,19SIM,Manos,Demolicion o desmontaje
+02ADD,19SIP,Pies,Excavaciones; Demolicion o desmontaje
+02ADD,19SSA,Acotamiento,Excavaciones; Demolicion o desmontaje
+02ADD,19SSS,Señalización,Excavaciones; Demolicion o desmontaje
+02AEE,19SCB,Barandillas,Excavaciones
+02AEE,19SIC,Cabeza,Excavaciones
+02AEE,19SIP,Pies,Excavaciones
+02AEE,19SSA,Acotamiento,Excavaciones
+02AEE,19SSS,Señalización,Excavaciones
+02AVV,19SCB,Barandillas,Excavaciones
+02AVV,19SIC,Cabeza,Excavaciones
+02AVV,19SIP,Pies,Excavaciones
+02AVV,19SSA,Acotamiento,Excavaciones
+02AVV,19SSS,Señalización,Excavaciones
+02PBB,19SCB,Barandillas,Excavaciones
+02PBB,19SIC,Cabeza,Excavaciones
+02PBB,19SIP,Pies,Excavaciones
+02PBB,19SSA,Acotamiento,Excavaciones
+02PBB,19SSS,Señalización,Excavaciones
+02PMM,19SCB,Barandillas,Excavaciones
+02PMM,19SIC,Cabeza,Excavaciones
+02PMM,19SIP,Pies,Excavaciones
+02PMM,19SSA,Acotamiento,Excavaciones
+02PMM,19SSS,Señalización,Excavaciones
+02TMM,19SIC,Cabeza,Equipos y cargas
+02TMM,19SIM,Manos,Equipos y cargas
+02TMM,19SIP,Pies,Equipos y cargas
+02WEE,19SCB,Barandillas,Excavaciones
+02WEE,19SIC,Cabeza,Excavaciones
+02WEE,19SIP,Pies,Excavaciones
+02WEE,19SSA,Acotamiento,Excavaciones
+02WEE,19SSS,Señalización,Excavaciones
+02WGG,19SCB,Barandillas,Excavaciones
+02WGG,19SIC,Cabeza,Excavaciones
+02WGG,19SIP,Pies,Excavaciones
+02WGG,19SSA,Acotamiento,Excavaciones
+02WGG,19SSS,Señalización,Excavaciones
+02WWW,19SCB,Barandillas,Altura y caidas; Excavaciones
+02WWW,19SCR,Redes,Altura y caidas
+02WWW,19SCV,Ventilaciones,Agentes quimicos o polvo
+02WWW,19SIC,Cabeza,Altura y caidas; Excavaciones; Demolicion o desmontaje
+02WWW,19SIM,Manos,Agentes quimicos o polvo; Demolicion o desmontaje
+02WWW,19SIP,Pies,Excavaciones; Demolicion o desmontaje
+02WWW,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+02WWW,19SSA,Acotamiento,Excavaciones; Demolicion o desmontaje
+02WWW,19SSS,Señalización,Excavaciones; Demolicion o desmontaje
+02ZBB,19SCB,Barandillas,Excavaciones
+02ZBB,19SIC,Cabeza,Excavaciones
+02ZBB,19SIP,Pies,Excavaciones
+02ZBB,19SSA,Acotamiento,Excavaciones
+02ZBB,19SSS,Señalización,Excavaciones
+02ZMM,19SCB,Barandillas,Excavaciones
+02ZMM,19SIC,Cabeza,Excavaciones
+02ZMM,19SIP,Pies,Excavaciones
+02ZMM,19SSA,Acotamiento,Excavaciones
+02ZMM,19SSS,Señalización,Excavaciones
+03CMM,19SCB,Barandillas,Excavaciones
+03CMM,19SIC,Cabeza,Excavaciones; Demolicion o desmontaje
+03CMM,19SIM,Manos,Demolicion o desmontaje
+03CMM,19SIP,Pies,Excavaciones; Demolicion o desmontaje
+03CMM,19SSA,Acotamiento,Excavaciones; Demolicion o desmontaje
+03CMM,19SSS,Señalización,Excavaciones; Demolicion o desmontaje
+03CPS,19SCB,Barandillas,Excavaciones
+03CPS,19SIC,Cabeza,Excavaciones
+03CPS,19SIP,Pies,Excavaciones
+03CPS,19SSA,Acotamiento,Excavaciones
+03CPS,19SSS,Señalización,Excavaciones
+03CPW,19SIC,Cabeza,Demolicion o desmontaje
+03CPW,19SIM,Manos,Demolicion o desmontaje
+03CPW,19SIP,Pies,Demolicion o desmontaje
+03CPW,19SSA,Acotamiento,Demolicion o desmontaje
+03CPW,19SSS,Señalización,Demolicion o desmontaje
+03CWW,19SCB,Barandillas,Altura y caidas; Excavaciones
+03CWW,19SCR,Redes,Altura y caidas
+03CWW,19SCV,Ventilaciones,Agentes quimicos o polvo
+03CWW,19SIC,Cabeza,Altura y caidas; Excavaciones; Demolicion o desmontaje
+03CWW,19SIM,Manos,Agentes quimicos o polvo; Demolicion o desmontaje
+03CWW,19SIP,Pies,Excavaciones; Demolicion o desmontaje
+03CWW,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+03CWW,19SSA,Acotamiento,Excavaciones; Demolicion o desmontaje
+03CWW,19SSS,Señalización,Excavaciones; Demolicion o desmontaje
+03HRA,19SIC,Cabeza,Equipos y cargas
+03HRA,19SIM,Manos,Equipos y cargas
+03HRA,19SIP,Pies,Equipos y cargas
+03HRL,19SIC,Cabeza,Equipos y cargas
+03HRL,19SIM,Manos,Equipos y cargas
+03HRL,19SIP,Pies,Equipos y cargas
+03HRM,19SIC,Cabeza,Equipos y cargas
+03HRM,19SIM,Manos,Equipos y cargas
+03HRM,19SIP,Pies,Equipos y cargas
+03HRZ,19SIC,Cabeza,Equipos y cargas
+03HRZ,19SIM,Manos,Equipos y cargas
+03HRZ,19SIP,Pies,Equipos y cargas
+03RZK,19SCB,Barandillas,Excavaciones
+03RZK,19SIC,Cabeza,Excavaciones
+03RZK,19SIP,Pies,Excavaciones
+03RZK,19SSA,Acotamiento,Excavaciones
+03RZK,19SSS,Señalización,Excavaciones
+04EAB,19SCB,Barandillas,Excavaciones
+04EAB,19SIC,Cabeza,Excavaciones
+04EAB,19SIP,Pies,Excavaciones
+04EAB,19SSA,Acotamiento,Excavaciones
+04EAB,19SSS,Señalización,Excavaciones
+04EAP,19SCB,Barandillas,Excavaciones
+04EAP,19SIC,Cabeza,Excavaciones
+04EAP,19SIP,Pies,Excavaciones
+04EAP,19SSA,Acotamiento,Excavaciones
+04EAP,19SSS,Señalización,Excavaciones
+04EAS,19SCB,Barandillas,Excavaciones
+04EAS,19SIC,Cabeza,Excavaciones
+04EAS,19SIP,Pies,Excavaciones
+04EAS,19SSA,Acotamiento,Excavaciones
+04EAS,19SSS,Señalización,Excavaciones
+04EAW,19SCB,Barandillas,Excavaciones
+04EAW,19SIC,Cabeza,Excavaciones; Demolicion o desmontaje
+04EAW,19SIM,Manos,Demolicion o desmontaje
+04EAW,19SIP,Pies,Excavaciones; Demolicion o desmontaje
+04EAW,19SSA,Acotamiento,Excavaciones; Demolicion o desmontaje
+04EAW,19SSS,Señalización,Excavaciones; Demolicion o desmontaje
+04ECH,19SCB,Barandillas,Excavaciones
+04ECH,19SIC,Cabeza,Excavaciones
+04ECH,19SIP,Pies,Excavaciones
+04ECH,19SSA,Acotamiento,Excavaciones
+04ECH,19SSS,Señalización,Excavaciones
+04ECP,19SCB,Barandillas,Excavaciones
+04ECP,19SIC,Cabeza,Excavaciones
+04ECP,19SIP,Pies,Excavaciones
+04ECP,19SSA,Acotamiento,Excavaciones
+04ECP,19SSS,Señalización,Excavaciones
+04EEE,19SCB,Barandillas,Excavaciones
+04EEE,19SIC,Cabeza,Excavaciones
+04EEE,19SIP,Pies,Excavaciones
+04EEE,19SSA,Acotamiento,Excavaciones
+04EEE,19SSS,Señalización,Excavaciones
+04RCS,19SCV,Ventilaciones,Agentes quimicos o polvo
+04RCS,19SIM,Manos,Agentes quimicos o polvo
+04RCS,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+04RES,19SCB,Barandillas,Excavaciones
+04RES,19SIC,Cabeza,Excavaciones; Demolicion o desmontaje
+04RES,19SIM,Manos,Demolicion o desmontaje
+04RES,19SIP,Pies,Excavaciones; Demolicion o desmontaje
+04RES,19SSA,Acotamiento,Excavaciones; Demolicion o desmontaje
+04RES,19SSS,Señalización,Excavaciones; Demolicion o desmontaje
+04VBF,19SCB,Barandillas,Altura y caidas
+04VBF,19SCR,Redes,Altura y caidas
+04VBF,19SCV,Ventilaciones,Agentes quimicos o polvo
+04VBF,19SIC,Cabeza,Altura y caidas
+04VBF,19SIM,Manos,Agentes quimicos o polvo
+04VBF,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+04VBM,19SCB,Barandillas,Altura y caidas
+04VBM,19SCR,Redes,Altura y caidas
+04VBM,19SIC,Cabeza,Altura y caidas
+04VBM,19SIT,"Tronco, piernas y brazos",Altura y caidas
+04VBP,19SCB,Barandillas,Altura y caidas
+04VBP,19SCR,Redes,Altura y caidas
+04VBP,19SIC,Cabeza,Altura y caidas
+04VBP,19SIT,"Tronco, piernas y brazos",Altura y caidas
+04VCC,19SCB,Barandillas,Altura y caidas
+04VCC,19SCR,Redes,Altura y caidas
+04VCC,19SIC,Cabeza,Altura y caidas
+04VCC,19SIT,"Tronco, piernas y brazos",Altura y caidas
+04VEE,19SCB,Barandillas,Altura y caidas
+04VEE,19SCR,Redes,Altura y caidas
+04VEE,19SIC,Cabeza,Altura y caidas
+04VEE,19SIT,"Tronco, piernas y brazos",Altura y caidas
+05ACJ,19SCV,Ventilaciones,Soldadura
+05ACJ,19SIC,Cabeza,Soldadura
+05ACJ,19SIM,Manos,Soldadura
+05ACJ,19SIT,"Tronco, piernas y brazos",Soldadura
+05ACS,19SCV,Ventilaciones,Soldadura
+05ACS,19SIC,Cabeza,Soldadura
+05ACS,19SIM,Manos,Soldadura
+05ACS,19SIT,"Tronco, piernas y brazos",Soldadura
+05ACT,19SCV,Ventilaciones,Soldadura
+05ACT,19SIC,Cabeza,Soldadura
+05ACT,19SIM,Manos,Soldadura
+05ACT,19SIT,"Tronco, piernas y brazos",Soldadura
+05ACV,19SCB,Barandillas,Altura y caidas
+05ACV,19SCR,Redes,Altura y caidas
+05ACV,19SCV,Ventilaciones,Soldadura
+05ACV,19SIC,Cabeza,Altura y caidas; Soldadura
+05ACV,19SIM,Manos,Soldadura
+05ACV,19SIT,"Tronco, piernas y brazos",Altura y caidas; Soldadura
+05ACW,19SCV,Ventilaciones,Soldadura
+05ACW,19SIC,Cabeza,Soldadura
+05ACW,19SIM,Manos,Soldadura
+05ACW,19SIT,"Tronco, piernas y brazos",Soldadura
+05FBB,19SCB,Barandillas,Altura y caidas
+05FBB,19SCR,Redes,Altura y caidas
+05FBB,19SIC,Cabeza,Altura y caidas
+05FBB,19SIT,"Tronco, piernas y brazos",Altura y caidas
+05FMM,19SCB,Barandillas,Altura y caidas
+05FMM,19SCR,Redes,Altura y caidas
+05FMM,19SIC,Cabeza,Altura y caidas
+05FMM,19SIT,"Tronco, piernas y brazos",Altura y caidas
+05FUA,19SCB,Barandillas,Altura y caidas
+05FUA,19SCR,Redes,Altura y caidas
+05FUA,19SIC,Cabeza,Altura y caidas
+05FUA,19SIT,"Tronco, piernas y brazos",Altura y caidas
+05FUS,19SCB,Barandillas,Altura y caidas
+05FUS,19SCR,Redes,Altura y caidas
+05FUS,19SIC,Cabeza,Altura y caidas
+05FUS,19SIT,"Tronco, piernas y brazos",Altura y caidas
+05FUW,19SCB,Barandillas,Altura y caidas
+05FUW,19SCR,Redes,Altura y caidas
+05FUW,19SIC,Cabeza,Altura y caidas
+05FUW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+05FWW,19SCB,Barandillas,Altura y caidas
+05FWW,19SCR,Redes,Altura y caidas
+05FWW,19SIC,Cabeza,Altura y caidas
+05FWW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+05HEW,19SCB,Barandillas,Altura y caidas
+05HEW,19SCR,Redes,Altura y caidas
+05HEW,19SIC,Cabeza,Altura y caidas
+05HEW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+05MLP,19SCV,Ventilaciones,Agentes quimicos o polvo
+05MLP,19SIM,Manos,Agentes quimicos o polvo
+05MLP,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+05MLV,19SCV,Ventilaciones,Agentes quimicos o polvo
+05MLV,19SIM,Manos,Agentes quimicos o polvo
+05MLV,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+05MTT,19SCB,Barandillas,Altura y caidas
+05MTT,19SCR,Redes,Altura y caidas
+05MTT,19SIC,Cabeza,Altura y caidas
+05MTT,19SIT,"Tronco, piernas y brazos",Altura y caidas
+05RFA,19SCB,Barandillas,Altura y caidas; Excavaciones
+05RFA,19SCR,Redes,Altura y caidas
+05RFA,19SIC,Cabeza,Altura y caidas; Excavaciones
+05RFA,19SIP,Pies,Excavaciones
+05RFA,19SIT,"Tronco, piernas y brazos",Altura y caidas
+05RFA,19SSA,Acotamiento,Excavaciones
+05RFA,19SSS,Señalización,Excavaciones
+05WCH,19SCB,Barandillas,Altura y caidas
+05WCH,19SCR,Redes,Altura y caidas
+05WCH,19SIC,Cabeza,Altura y caidas
+05WCH,19SIT,"Tronco, piernas y brazos",Altura y caidas
+05WCX,19SCB,Barandillas,Altura y caidas
+05WCX,19SCR,Redes,Altura y caidas
+05WCX,19SIC,Cabeza,Altura y caidas
+05WCX,19SIT,"Tronco, piernas y brazos",Altura y caidas
+05WEE,19SCV,Ventilaciones,Soldadura
+05WEE,19SIC,Cabeza,Soldadura
+05WEE,19SIM,Manos,Soldadura
+05WEE,19SIT,"Tronco, piernas y brazos",Soldadura
+06ACE,19SCB,Barandillas,Altura y caidas
+06ACE,19SCR,Redes,Altura y caidas
+06ACE,19SIC,Cabeza,Altura y caidas
+06ACE,19SIT,"Tronco, piernas y brazos",Altura y caidas
+06AEM,19SCB,Barandillas,Altura y caidas
+06AEM,19SCR,Redes,Altura y caidas
+06AEM,19SIC,Cabeza,Altura y caidas
+06AEM,19SIT,"Tronco, piernas y brazos",Altura y caidas
+06BHH,19SCV,Ventilaciones,Agentes quimicos o polvo
+06BHH,19SIM,Manos,Agentes quimicos o polvo
+06BHH,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+06BMM,19SCV,Ventilaciones,Agentes quimicos o polvo
+06BMM,19SIM,Manos,Agentes quimicos o polvo
+06BMM,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+06DPC,19SCB,Barandillas,Altura y caidas
+06DPC,19SCR,Redes,Altura y caidas
+06DPC,19SIC,Cabeza,Altura y caidas
+06DPC,19SIT,"Tronco, piernas y brazos",Altura y caidas
+06DPY,19SCV,Ventilaciones,Agentes quimicos o polvo
+06DPY,19SIM,Manos,Agentes quimicos o polvo
+06DPY,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+06DSS,19LAA,Aseos,Aseos
+06DSS,19LIA,Aseos,Aseos
+06DSS,19LPA,Aseos,Aseos
+06EBT,19SCB,Barandillas,Altura y caidas
+06EBT,19SCR,Redes,Altura y caidas
+06EBT,19SCV,Ventilaciones,Agentes quimicos o polvo
+06EBT,19SIC,Cabeza,Altura y caidas
+06EBT,19SIM,Manos,Agentes quimicos o polvo
+06EBT,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+06EVC,19SCB,Barandillas,Altura y caidas
+06EVC,19SCR,Redes,Altura y caidas
+06EVC,19SIC,Cabeza,Altura y caidas
+06EVC,19SIT,"Tronco, piernas y brazos",Altura y caidas
+06EVP,19SCB,Barandillas,Altura y caidas
+06EVP,19SCR,Redes,Altura y caidas
+06EVP,19SIC,Cabeza,Altura y caidas
+06EVP,19SIT,"Tronco, piernas y brazos",Altura y caidas
+06EVR,19SCB,Barandillas,Altura y caidas
+06EVR,19SCR,Redes,Altura y caidas
+06EVR,19SCV,Ventilaciones,Agentes quimicos o polvo
+06EVR,19SIC,Cabeza,Altura y caidas
+06EVR,19SIM,Manos,Agentes quimicos o polvo
+06EVR,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+06EVW,19SCB,Barandillas,Altura y caidas
+06EVW,19SCR,Redes,Altura y caidas
+06EVW,19SIC,Cabeza,Altura y caidas
+06EVW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+06EWW,19SCB,Barandillas,Altura y caidas
+06EWW,19SCR,Redes,Altura y caidas
+06EWW,19SCV,Ventilaciones,Agentes quimicos o polvo
+06EWW,19SIC,Cabeza,Altura y caidas
+06EWW,19SIM,Manos,Agentes quimicos o polvo
+06EWW,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+06LEW,19SCB,Barandillas,Altura y caidas
+06LEW,19SCR,Redes,Altura y caidas
+06LEW,19SIC,Cabeza,Altura y caidas
+06LEW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+06LHC,19LAA,Aseos,Aseos
+06LHC,19LIA,Aseos,Aseos
+06LHC,19LPA,Aseos,Aseos
+06LPM,19SCV,Ventilaciones,Agentes quimicos o polvo
+06LPM,19SIM,Manos,Agentes quimicos o polvo
+06LPM,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+06LXW,19SCV,Ventilaciones,Agentes quimicos o polvo
+06LXW,19SIM,Manos,Agentes quimicos o polvo
+06LXW,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+06PHB,19SCB,Barandillas,Altura y caidas
+06PHB,19SCR,Redes,Altura y caidas
+06PHB,19SIC,Cabeza,Altura y caidas
+06PHB,19SIT,"Tronco, piernas y brazos",Altura y caidas
+06RLA,19SCB,Barandillas,Excavaciones
+06RLA,19SIC,Cabeza,Excavaciones; Demolicion o desmontaje
+06RLA,19SIM,Manos,Demolicion o desmontaje
+06RLA,19SIP,Pies,Excavaciones; Demolicion o desmontaje
+06RLA,19SSA,Acotamiento,Excavaciones; Demolicion o desmontaje
+06RLA,19SSS,Señalización,Excavaciones; Demolicion o desmontaje
+06RLC,19SCB,Barandillas,Altura y caidas; Excavaciones
+06RLC,19SCR,Redes,Altura y caidas
+06RLC,19SIC,Cabeza,Altura y caidas; Excavaciones
+06RLC,19SIP,Pies,Excavaciones
+06RLC,19SIT,"Tronco, piernas y brazos",Altura y caidas
+06RLC,19SSA,Acotamiento,Excavaciones
+06RLC,19SSS,Señalización,Excavaciones
+06RLM,19SCB,Barandillas,Altura y caidas
+06RLM,19SCR,Redes,Altura y caidas
+06RLM,19SIC,Cabeza,Altura y caidas
+06RLM,19SIT,"Tronco, piernas y brazos",Altura y caidas
+06RLS,19SCB,Barandillas,Altura y caidas
+06RLS,19SCR,Redes,Altura y caidas
+06RLS,19SIC,Cabeza,Altura y caidas
+06RLS,19SIT,"Tronco, piernas y brazos",Altura y caidas
+06WDD,19SCV,Ventilaciones,Agentes quimicos o polvo
+06WDD,19SIM,Manos,Agentes quimicos o polvo
+06WDD,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+06WFF,19SCB,Barandillas,Altura y caidas
+06WFF,19SCR,Redes,Altura y caidas
+06WFF,19SCV,Ventilaciones,Agentes quimicos o polvo
+06WFF,19SIC,Cabeza,Altura y caidas
+06WFF,19SIM,Manos,Agentes quimicos o polvo
+06WFF,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+06WMM,19SCB,Barandillas,Altura y caidas
+06WMM,19SCR,Redes,Altura y caidas
+06WMM,19SIC,Cabeza,Altura y caidas
+06WMM,19SIT,"Tronco, piernas y brazos",Altura y caidas
+06WRF,19SCB,Barandillas,Altura y caidas
+06WRF,19SCR,Redes,Altura y caidas
+06WRF,19SIC,Cabeza,Altura y caidas
+06WRF,19SIT,"Tronco, piernas y brazos",Altura y caidas
+06WRM,19SCV,Ventilaciones,Agentes quimicos o polvo
+06WRM,19SIM,Manos,Agentes quimicos o polvo
+06WRM,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+06WWT,19SCB,Barandillas,Altura y caidas
+06WWT,19SCR,Redes,Altura y caidas
+06WWT,19SIC,Cabeza,Altura y caidas
+06WWT,19SIT,"Tronco, piernas y brazos",Altura y caidas
+06WWW,19SCB,Barandillas,Altura y caidas
+06WWW,19SCR,Redes,Altura y caidas
+06WWW,19SIC,Cabeza,Altura y caidas
+06WWW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+07HAE,19SCV,Ventilaciones,Agentes quimicos o polvo
+07HAE,19SIM,Manos,Agentes quimicos o polvo
+07HAE,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+07HAF,19SCV,Ventilaciones,Agentes quimicos o polvo
+07HAF,19SIM,Manos,Agentes quimicos o polvo
+07HAF,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+07HAW,19SCV,Ventilaciones,Agentes quimicos o polvo
+07HAW,19SIM,Manos,Agentes quimicos o polvo
+07HAW,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+07HNE,19SCV,Ventilaciones,Agentes quimicos o polvo
+07HNE,19SIM,Manos,Agentes quimicos o polvo
+07HNE,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+07HNF,19SCB,Barandillas,Altura y caidas
+07HNF,19SCR,Redes,Altura y caidas
+07HNF,19SCV,Ventilaciones,Soldadura; Agentes quimicos o polvo
+07HNF,19SIC,Cabeza,Altura y caidas; Soldadura
+07HNF,19SIM,Manos,Soldadura; Agentes quimicos o polvo
+07HNF,19SIT,"Tronco, piernas y brazos",Altura y caidas; Soldadura; Agentes quimicos o polvo
+07HTE,19SCV,Ventilaciones,Agentes quimicos o polvo
+07HTE,19SIM,Manos,Agentes quimicos o polvo
+07HTE,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+07HTF,19SCV,Ventilaciones,Soldadura; Agentes quimicos o polvo
+07HTF,19SIC,Cabeza,Soldadura
+07HTF,19SIM,Manos,Soldadura; Agentes quimicos o polvo
+07HTF,19SIT,"Tronco, piernas y brazos",Soldadura; Agentes quimicos o polvo
+07HTW,19SCV,Ventilaciones,Agentes quimicos o polvo
+07HTW,19SIM,Manos,Agentes quimicos o polvo
+07HTW,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+07HWW,19SCB,Barandillas,Altura y caidas
+07HWW,19SCR,Redes,Altura y caidas
+07HWW,19SCV,Ventilaciones,Agentes quimicos o polvo
+07HWW,19SIC,Cabeza,Altura y caidas
+07HWW,19SIM,Manos,Agentes quimicos o polvo
+07HWW,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+07IFE,19SCV,Ventilaciones,Agentes quimicos o polvo
+07IFE,19SIM,Manos,Agentes quimicos o polvo
+07IFE,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+07IFF,19SCV,Ventilaciones,Agentes quimicos o polvo
+07IFF,19SIM,Manos,Agentes quimicos o polvo
+07IFF,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+07IFL,19SCV,Ventilaciones,Agentes quimicos o polvo
+07IFL,19SIM,Manos,Agentes quimicos o polvo
+07IFL,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+07IFW,19SCV,Ventilaciones,Agentes quimicos o polvo
+07IFW,19SIM,Manos,Agentes quimicos o polvo
+07IFW,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+07IGE,19SCV,Ventilaciones,Agentes quimicos o polvo
+07IGE,19SIM,Manos,Agentes quimicos o polvo
+07IGE,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+07IGF,19SCV,Ventilaciones,Agentes quimicos o polvo
+07IGF,19SIM,Manos,Agentes quimicos o polvo
+07IGF,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+07IGL,19SCV,Ventilaciones,Agentes quimicos o polvo
+07IGL,19SIM,Manos,Agentes quimicos o polvo
+07IGL,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+07IGW,19SCV,Ventilaciones,Agentes quimicos o polvo
+07IGW,19SIM,Manos,Agentes quimicos o polvo
+07IGW,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+07WLL,19SCB,Barandillas,Altura y caidas
+07WLL,19SCR,Redes,Altura y caidas
+07WLL,19SIC,Cabeza,Altura y caidas
+07WLL,19SIT,"Tronco, piernas y brazos",Altura y caidas
+07WYA,19SCV,Ventilaciones,Agentes quimicos o polvo
+07WYA,19SIM,Manos,Agentes quimicos o polvo
+07WYA,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+08CAA,19SIC,Cabeza,Riesgo electrico
+08CAA,19SIM,Manos,Riesgo electrico
+08CAA,19SSS,Señalización,Riesgo electrico
+08CAB,19SIC,Cabeza,Riesgo electrico
+08CAB,19SIM,Manos,Riesgo electrico
+08CAB,19SSS,Señalización,Riesgo electrico
+08CAD,19SCB,Barandillas,Altura y caidas
+08CAD,19SCR,Redes,Altura y caidas
+08CAD,19SIC,Cabeza,Altura y caidas; Riesgo electrico
+08CAD,19SIM,Manos,Riesgo electrico
+08CAD,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08CAD,19SSS,Señalización,Riesgo electrico
+08CAE,19SIC,Cabeza,Riesgo electrico
+08CAE,19SIM,Manos,Riesgo electrico
+08CAE,19SSS,Señalización,Riesgo electrico
+08CAF,19SCB,Barandillas,Altura y caidas
+08CAF,19SCR,Redes,Altura y caidas
+08CAF,19SCV,Ventilaciones,Agentes quimicos o polvo
+08CAF,19SIC,Cabeza,Altura y caidas; Riesgo electrico; Equipos y cargas
+08CAF,19SIM,Manos,Riesgo electrico; Agentes quimicos o polvo; Equipos y cargas
+08CAF,19SIP,Pies,Equipos y cargas
+08CAF,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+08CAF,19SSS,Señalización,Riesgo electrico
+08CAR,19SIC,Cabeza,Riesgo electrico
+08CAR,19SIM,Manos,Riesgo electrico
+08CAR,19SSS,Señalización,Riesgo electrico
+08CAT,19SIC,Cabeza,Riesgo electrico
+08CAT,19SIM,Manos,Riesgo electrico
+08CAT,19SSS,Señalización,Riesgo electrico
+08CAU,19SCB,Barandillas,Altura y caidas
+08CAU,19SCR,Redes,Altura y caidas
+08CAU,19SIC,Cabeza,Altura y caidas
+08CAU,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08CAV,19SCB,Barandillas,Altura y caidas
+08CAV,19SCR,Redes,Altura y caidas
+08CAV,19SCV,Ventilaciones,Soldadura; Agentes quimicos o polvo
+08CAV,19SIC,Cabeza,Altura y caidas; Riesgo electrico; Soldadura
+08CAV,19SIM,Manos,Riesgo electrico; Soldadura; Agentes quimicos o polvo
+08CAV,19SIT,"Tronco, piernas y brazos",Altura y caidas; Soldadura; Agentes quimicos o polvo
+08CAV,19SSS,Señalización,Riesgo electrico
+08CCA,19SCB,Barandillas,Excavaciones
+08CCA,19SIC,Cabeza,Excavaciones
+08CCA,19SIP,Pies,Excavaciones
+08CCA,19SSA,Acotamiento,Excavaciones
+08CCA,19SSS,Señalización,Excavaciones
+08CCC,19SIC,Cabeza,Riesgo electrico
+08CCC,19SIM,Manos,Riesgo electrico
+08CCC,19SSS,Señalización,Riesgo electrico
+08CCE,19SCB,Barandillas,Altura y caidas
+08CCE,19SCR,Redes,Altura y caidas
+08CCE,19SIC,Cabeza,Altura y caidas
+08CCE,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08CCR,19SIC,Cabeza,Riesgo electrico
+08CCR,19SIM,Manos,Riesgo electrico
+08CCR,19SSS,Señalización,Riesgo electrico
+08CCV,19SCB,Barandillas,Altura y caidas; Excavaciones
+08CCV,19SCR,Redes,Altura y caidas
+08CCV,19SCV,Ventilaciones,Soldadura; Agentes quimicos o polvo
+08CCV,19SIC,Cabeza,Altura y caidas; Excavaciones; Soldadura
+08CCV,19SIM,Manos,Soldadura; Agentes quimicos o polvo
+08CCV,19SIP,Pies,Excavaciones
+08CCV,19SIT,"Tronco, piernas y brazos",Altura y caidas; Soldadura; Agentes quimicos o polvo
+08CCV,19SSA,Acotamiento,Excavaciones
+08CCV,19SSS,Señalización,Excavaciones
+08CVC,19SCB,Barandillas,Altura y caidas
+08CVC,19SCR,Redes,Altura y caidas
+08CVC,19SCV,Ventilaciones,Agentes quimicos o polvo
+08CVC,19SIC,Cabeza,Altura y caidas
+08CVC,19SIM,Manos,Agentes quimicos o polvo
+08CVC,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+08CVE,19SCB,Barandillas,Altura y caidas
+08CVE,19SCR,Redes,Altura y caidas
+08CVE,19SCV,Ventilaciones,Agentes quimicos o polvo
+08CVE,19SIC,Cabeza,Altura y caidas; Riesgo electrico
+08CVE,19SIM,Manos,Riesgo electrico; Agentes quimicos o polvo
+08CVE,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+08CVE,19SSS,Señalización,Riesgo electrico
+08CVR,19SCB,Barandillas,Altura y caidas
+08CVR,19SCR,Redes,Altura y caidas
+08CVR,19SIC,Cabeza,Altura y caidas
+08CVR,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08CVV,19SCV,Ventilaciones,Agentes quimicos o polvo
+08CVV,19SIC,Cabeza,Riesgo electrico
+08CVV,19SIM,Manos,Riesgo electrico; Agentes quimicos o polvo
+08CVV,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+08CVV,19SSS,Señalización,Riesgo electrico
+08CVW,19SIC,Cabeza,Riesgo electrico
+08CVW,19SIM,Manos,Riesgo electrico
+08CVW,19SSS,Señalización,Riesgo electrico
+08CWW,19SCV,Ventilaciones,Soldadura
+08CWW,19SIC,Cabeza,Soldadura
+08CWW,19SIM,Manos,Soldadura
+08CWW,19SIT,"Tronco, piernas y brazos",Soldadura
+08EAA,19SIC,Cabeza,Riesgo electrico
+08EAA,19SIM,Manos,Riesgo electrico
+08EAA,19SSS,Señalización,Riesgo electrico
+08EAW,19SCB,Barandillas,Altura y caidas; Excavaciones
+08EAW,19SCR,Redes,Altura y caidas
+08EAW,19SIC,Cabeza,Altura y caidas; Excavaciones; Riesgo electrico
+08EAW,19SIM,Manos,Riesgo electrico
+08EAW,19SIP,Pies,Excavaciones
+08EAW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08EAW,19SSA,Acotamiento,Excavaciones
+08EAW,19SSS,Señalización,Excavaciones; Riesgo electrico
+08ECC,19SIC,Cabeza,Riesgo electrico
+08ECC,19SIM,Manos,Riesgo electrico
+08ECC,19SSS,Señalización,Riesgo electrico
+08ECK,19SCB,Barandillas,Altura y caidas
+08ECK,19SCR,Redes,Altura y caidas
+08ECK,19SIC,Cabeza,Altura y caidas; Riesgo electrico
+08ECK,19SIM,Manos,Riesgo electrico
+08ECK,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08ECK,19SSS,Señalización,Riesgo electrico
+08ECW,19SCB,Barandillas,Altura y caidas
+08ECW,19SCR,Redes,Altura y caidas
+08ECW,19SIC,Cabeza,Altura y caidas
+08ECW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08EIM,19SIC,Cabeza,Riesgo electrico
+08EIM,19SIM,Manos,Riesgo electrico
+08EIM,19SSS,Señalización,Riesgo electrico
+08ELL,19LAS,Salas primeros auxilios,Primeros auxilios
+08ELL,19LIS,Salas primeros auxilios,Primeros auxilios
+08ELL,19LMS,Salas primeros auxilios,Primeros auxilios
+08ELL,19LPS,Salas primeros auxilios,Primeros auxilios
+08ELL,19LPW,Varios,Primeros auxilios
+08EPP,19SCB,Barandillas,Excavaciones
+08EPP,19SCV,Ventilaciones,Agentes quimicos o polvo
+08EPP,19SIC,Cabeza,Excavaciones; Riesgo electrico
+08EPP,19SIM,Manos,Riesgo electrico; Agentes quimicos o polvo
+08EPP,19SIP,Pies,Excavaciones
+08EPP,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+08EPP,19SSA,Acotamiento,Excavaciones
+08EPP,19SSS,Señalización,Excavaciones; Riesgo electrico
+08ERR,19SCB,Barandillas,Excavaciones
+08ERR,19SCV,Ventilaciones,Agentes quimicos o polvo
+08ERR,19SIC,Cabeza,Excavaciones
+08ERR,19SIM,Manos,Agentes quimicos o polvo
+08ERR,19SIP,Pies,Excavaciones
+08ERR,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+08ERR,19SSA,Acotamiento,Excavaciones
+08ERR,19SSS,Señalización,Excavaciones
+08ETT,19SIC,Cabeza,Riesgo electrico
+08ETT,19SIM,Manos,Riesgo electrico
+08ETT,19SSS,Señalización,Riesgo electrico
+08EWW,19SIC,Cabeza,Riesgo electrico
+08EWW,19SIM,Manos,Riesgo electrico
+08EWW,19SSS,Señalización,Riesgo electrico
+08FCC,19SCV,Ventilaciones,Agentes quimicos o polvo
+08FCC,19SIM,Manos,Agentes quimicos o polvo
+08FCC,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+08FDP,19LAA,Aseos,Aseos
+08FDP,19LIA,Aseos,Aseos
+08FDP,19LPA,Aseos,Aseos
+08FFP,19SCB,Barandillas,Altura y caidas
+08FFP,19SCR,Redes,Altura y caidas
+08FFP,19SIC,Cabeza,Altura y caidas
+08FFP,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08FSD,19LAA,Aseos,Aseos
+08FSD,19LIA,Aseos,Aseos
+08FSD,19LPA,Aseos,Aseos
+08FSD,19SCV,Ventilaciones,Agentes quimicos o polvo
+08FSD,19SIM,Manos,Agentes quimicos o polvo
+08FSD,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+08FSI,19LAA,Aseos,Aseos
+08FSI,19LIA,Aseos,Aseos
+08FSI,19LPA,Aseos,Aseos
+08FSI,19SCB,Barandillas,Altura y caidas
+08FSI,19SCR,Redes,Altura y caidas
+08FSI,19SIC,Cabeza,Altura y caidas
+08FSI,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08FSW,19SCB,Barandillas,Altura y caidas
+08FSW,19SCR,Redes,Altura y caidas
+08FSW,19SIC,Cabeza,Altura y caidas
+08FSW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08FTC,19SIC,Cabeza,Riesgo electrico
+08FTC,19SIM,Manos,Riesgo electrico
+08FTC,19SSS,Señalización,Riesgo electrico
+08FVL,19SCB,Barandillas,Excavaciones
+08FVL,19SIC,Cabeza,Excavaciones
+08FVL,19SIP,Pies,Excavaciones
+08FVL,19SSA,Acotamiento,Excavaciones
+08FVL,19SSS,Señalización,Excavaciones
+08FWW,19SCV,Ventilaciones,Soldadura
+08FWW,19SIC,Cabeza,Soldadura
+08FWW,19SIM,Manos,Soldadura
+08FWW,19SIT,"Tronco, piernas y brazos",Soldadura
+08KDW,19SCB,Barandillas,Excavaciones
+08KDW,19SIC,Cabeza,Excavaciones
+08KDW,19SIP,Pies,Excavaciones
+08KDW,19SSA,Acotamiento,Excavaciones
+08KDW,19SSS,Señalización,Excavaciones
+08KFC,19SCB,Barandillas,Altura y caidas; Excavaciones
+08KFC,19SCR,Redes,Altura y caidas
+08KFC,19SIC,Cabeza,Altura y caidas; Excavaciones
+08KFC,19SIP,Pies,Excavaciones
+08KFC,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08KFC,19SSA,Acotamiento,Excavaciones
+08KFC,19SSS,Señalización,Excavaciones
+08KFR,19SCB,Barandillas,Altura y caidas; Excavaciones
+08KFR,19SCR,Redes,Altura y caidas
+08KFR,19SIC,Cabeza,Altura y caidas; Excavaciones; Riesgo electrico; Demolicion o desmontaje
+08KFR,19SIM,Manos,Riesgo electrico; Demolicion o desmontaje
+08KFR,19SIP,Pies,Excavaciones; Demolicion o desmontaje
+08KFR,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08KFR,19SSA,Acotamiento,Excavaciones; Demolicion o desmontaje
+08KFR,19SSS,Señalización,Excavaciones; Riesgo electrico; Demolicion o desmontaje
+08KFW,19SIC,Cabeza,Riesgo electrico
+08KFW,19SIM,Manos,Riesgo electrico
+08KFW,19SSS,Señalización,Riesgo electrico
+08KTW,19SIC,Cabeza,Riesgo electrico
+08KTW,19SIM,Manos,Riesgo electrico
+08KTW,19SSS,Señalización,Riesgo electrico
+08KVA,19SCB,Barandillas,Altura y caidas
+08KVA,19SCR,Redes,Altura y caidas
+08KVA,19SIC,Cabeza,Altura y caidas; Riesgo electrico
+08KVA,19SIM,Manos,Riesgo electrico
+08KVA,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08KVA,19SSS,Señalización,Riesgo electrico
+08LBB,19SCV,Ventilaciones,Soldadura
+08LBB,19SIC,Cabeza,Soldadura
+08LBB,19SIM,Manos,Soldadura
+08LBB,19SIT,"Tronco, piernas y brazos",Soldadura
+08LCC,19SCV,Ventilaciones,Soldadura
+08LCC,19SIC,Cabeza,Soldadura
+08LCC,19SIM,Manos,Soldadura
+08LCC,19SIT,"Tronco, piernas y brazos",Soldadura
+08LNC,19SCV,Ventilaciones,Soldadura
+08LNC,19SIC,Cabeza,Soldadura
+08LNC,19SIM,Manos,Soldadura
+08LNC,19SIT,"Tronco, piernas y brazos",Soldadura
+08LNV,19SIC,Cabeza,Riesgo electrico
+08LNV,19SIM,Manos,Riesgo electrico
+08LNV,19SSS,Señalización,Riesgo electrico
+08LPP,19SCB,Barandillas,Excavaciones
+08LPP,19SCV,Ventilaciones,Soldadura; Agentes quimicos o polvo
+08LPP,19SIC,Cabeza,Excavaciones; Soldadura
+08LPP,19SIM,Manos,Soldadura; Agentes quimicos o polvo
+08LPP,19SIP,Pies,Excavaciones
+08LPP,19SIT,"Tronco, piernas y brazos",Soldadura; Agentes quimicos o polvo
+08LPP,19SSA,Acotamiento,Excavaciones
+08LPP,19SSS,Señalización,Excavaciones
+08MAA,19SIC,Cabeza,Riesgo electrico
+08MAA,19SIM,Manos,Riesgo electrico
+08MAA,19SSS,Señalización,Riesgo electrico
+08MAW,19SCB,Barandillas,Altura y caidas
+08MAW,19SCR,Redes,Altura y caidas
+08MAW,19SCV,Ventilaciones,Agentes quimicos o polvo
+08MAW,19SIC,Cabeza,Altura y caidas; Riesgo electrico
+08MAW,19SIM,Manos,Riesgo electrico; Agentes quimicos o polvo
+08MAW,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+08MAW,19SSS,Señalización,Riesgo electrico
+08MBE,19SIC,Cabeza,Riesgo electrico
+08MBE,19SIM,Manos,Riesgo electrico
+08MBE,19SSS,Señalización,Riesgo electrico
+08MBW,19SCB,Barandillas,Altura y caidas
+08MBW,19SCR,Redes,Altura y caidas
+08MBW,19SIC,Cabeza,Altura y caidas; Riesgo electrico; Equipos y cargas
+08MBW,19SIM,Manos,Riesgo electrico; Equipos y cargas
+08MBW,19SIP,Pies,Equipos y cargas
+08MBW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08MBW,19SSS,Señalización,Riesgo electrico
+08NAA,19SCB,Barandillas,Altura y caidas
+08NAA,19SCR,Redes,Altura y caidas
+08NAA,19SIC,Cabeza,Altura y caidas; Riesgo electrico; Demolicion o desmontaje
+08NAA,19SIM,Manos,Riesgo electrico; Demolicion o desmontaje
+08NAA,19SIP,Pies,Demolicion o desmontaje
+08NAA,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08NAA,19SSA,Acotamiento,Demolicion o desmontaje
+08NAA,19SSS,Señalización,Riesgo electrico; Demolicion o desmontaje
+08NDD,19SIC,Cabeza,Demolicion o desmontaje
+08NDD,19SIM,Manos,Demolicion o desmontaje
+08NDD,19SIP,Pies,Demolicion o desmontaje
+08NDD,19SSA,Acotamiento,Demolicion o desmontaje
+08NDD,19SSS,Señalización,Demolicion o desmontaje
+08NII,19SIC,Cabeza,Demolicion o desmontaje
+08NII,19SIM,Manos,Demolicion o desmontaje
+08NII,19SIP,Pies,Demolicion o desmontaje
+08NII,19SSA,Acotamiento,Demolicion o desmontaje
+08NII,19SSS,Señalización,Demolicion o desmontaje
+08NLL,19SCB,Barandillas,Excavaciones
+08NLL,19SIC,Cabeza,Excavaciones
+08NLL,19SIP,Pies,Excavaciones
+08NLL,19SSA,Acotamiento,Excavaciones
+08NLL,19SSS,Señalización,Excavaciones
+08NPP,19SCV,Ventilaciones,Agentes quimicos o polvo
+08NPP,19SIM,Manos,Agentes quimicos o polvo
+08NPP,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+08NRR,19SIC,Cabeza,Riesgo electrico
+08NRR,19SIM,Manos,Riesgo electrico
+08NRR,19SSS,Señalización,Riesgo electrico
+08NSS,19SIC,Cabeza,Riesgo electrico
+08NSS,19SIM,Manos,Riesgo electrico
+08NSS,19SSS,Señalización,Riesgo electrico
+08NTT,19SCB,Barandillas,Altura y caidas
+08NTT,19SCR,Redes,Altura y caidas
+08NTT,19SCV,Ventilaciones,Soldadura; Agentes quimicos o polvo
+08NTT,19SIC,Cabeza,Altura y caidas; Riesgo electrico; Soldadura
+08NTT,19SIM,Manos,Riesgo electrico; Soldadura; Agentes quimicos o polvo
+08NTT,19SIT,"Tronco, piernas y brazos",Altura y caidas; Soldadura; Agentes quimicos o polvo
+08NTT,19SSS,Señalización,Riesgo electrico
+08OEE,19SCB,Barandillas,Altura y caidas
+08OEE,19SCR,Redes,Altura y caidas
+08OEE,19SCV,Ventilaciones,Agentes quimicos o polvo
+08OEE,19SIC,Cabeza,Altura y caidas; Riesgo electrico; Equipos y cargas
+08OEE,19SIM,Manos,Riesgo electrico; Agentes quimicos o polvo; Equipos y cargas
+08OEE,19SIP,Pies,Equipos y cargas
+08OEE,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+08OEE,19SSS,Señalización,Riesgo electrico
+08OOC,19SCB,Barandillas,Altura y caidas
+08OOC,19SCR,Redes,Altura y caidas
+08OOC,19SIC,Cabeza,Altura y caidas; Riesgo electrico; Equipos y cargas
+08OOC,19SIM,Manos,Riesgo electrico; Equipos y cargas
+08OOC,19SIP,Pies,Equipos y cargas
+08OOC,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08OOC,19SSS,Señalización,Riesgo electrico
+08ORR,19SIC,Cabeza,Riesgo electrico
+08ORR,19SIM,Manos,Riesgo electrico
+08ORR,19SSS,Señalización,Riesgo electrico
+08ORW,19SIC,Cabeza,Equipos y cargas
+08ORW,19SIM,Manos,Equipos y cargas
+08ORW,19SIP,Pies,Equipos y cargas
+08PIA,19SCB,Barandillas,Excavaciones
+08PIA,19SIC,Cabeza,Excavaciones
+08PIA,19SIP,Pies,Excavaciones
+08PIA,19SSA,Acotamiento,Excavaciones
+08PIA,19SSS,Señalización,Excavaciones
+08PIC,19SCV,Ventilaciones,Soldadura; Agentes quimicos o polvo
+08PIC,19SIC,Cabeza,Soldadura
+08PIC,19SIM,Manos,Soldadura; Agentes quimicos o polvo
+08PIC,19SIT,"Tronco, piernas y brazos",Soldadura; Agentes quimicos o polvo
+08PID,19SCV,Ventilaciones,Agentes quimicos o polvo
+08PID,19SIC,Cabeza,Riesgo electrico
+08PID,19SIM,Manos,Riesgo electrico; Agentes quimicos o polvo
+08PID,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+08PID,19SSS,Señalización,Riesgo electrico
+08PIE,19SCV,Ventilaciones,Soldadura
+08PIE,19SIC,Cabeza,Soldadura
+08PIE,19SIM,Manos,Soldadura
+08PIE,19SIT,"Tronco, piernas y brazos",Soldadura
+08PIF,19SCB,Barandillas,Altura y caidas; Excavaciones
+08PIF,19SCR,Redes,Altura y caidas
+08PIF,19SCV,Ventilaciones,Soldadura
+08PIF,19SIC,Cabeza,Altura y caidas; Excavaciones; Riesgo electrico; Soldadura
+08PIF,19SIM,Manos,Riesgo electrico; Soldadura
+08PIF,19SIP,Pies,Excavaciones
+08PIF,19SIT,"Tronco, piernas y brazos",Altura y caidas; Soldadura
+08PIF,19SSA,Acotamiento,Excavaciones
+08PIF,19SSS,Señalización,Excavaciones; Riesgo electrico
+08PIM,19SCB,Barandillas,Altura y caidas; Excavaciones
+08PIM,19SCR,Redes,Altura y caidas
+08PIM,19SIC,Cabeza,Altura y caidas; Excavaciones
+08PIM,19SIP,Pies,Excavaciones
+08PIM,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08PIM,19SSA,Acotamiento,Excavaciones
+08PIM,19SSS,Señalización,Excavaciones
+08PIS,19SIC,Cabeza,Riesgo electrico
+08PIS,19SIM,Manos,Riesgo electrico
+08PIS,19SSS,Señalización,Riesgo electrico
+08PPA,19SCB,Barandillas,Altura y caidas
+08PPA,19SCR,Redes,Altura y caidas
+08PPA,19SIC,Cabeza,Altura y caidas
+08PPA,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08PPC,19SCB,Barandillas,Altura y caidas
+08PPC,19SCR,Redes,Altura y caidas
+08PPC,19SCV,Ventilaciones,Soldadura
+08PPC,19SIC,Cabeza,Altura y caidas; Soldadura
+08PPC,19SIM,Manos,Soldadura
+08PPC,19SIT,"Tronco, piernas y brazos",Altura y caidas; Soldadura
+08PRR,19SCB,Barandillas,Altura y caidas
+08PRR,19SCR,Redes,Altura y caidas
+08PRR,19SIC,Cabeza,Altura y caidas; Riesgo electrico
+08PRR,19SIM,Manos,Riesgo electrico
+08PRR,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08PRR,19SSS,Señalización,Riesgo electrico
+08TCA,19SCB,Barandillas,Altura y caidas
+08TCA,19SCR,Redes,Altura y caidas
+08TCA,19SIC,Cabeza,Altura y caidas; Riesgo electrico
+08TCA,19SIM,Manos,Riesgo electrico
+08TCA,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08TCA,19SSS,Señalización,Riesgo electrico
+08WII,19LAA,Aseos,Aseos
+08WII,19LIA,Aseos,Aseos
+08WII,19LPA,Aseos,Aseos
+08WII,19SCB,Barandillas,Altura y caidas
+08WII,19SCR,Redes,Altura y caidas
+08WII,19SIC,Cabeza,Altura y caidas; Riesgo electrico
+08WII,19SIM,Manos,Riesgo electrico
+08WII,19SIT,"Tronco, piernas y brazos",Altura y caidas
+08WII,19SSS,Señalización,Riesgo electrico
+09APP,19SCV,Ventilaciones,Agentes quimicos o polvo
+09APP,19SIM,Manos,Agentes quimicos o polvo
+09APP,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+09ASS,19SCV,Ventilaciones,Agentes quimicos o polvo
+09ASS,19SIM,Manos,Agentes quimicos o polvo
+09ASS,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+09ATT,19SCV,Ventilaciones,Agentes quimicos o polvo
+09ATT,19SIM,Manos,Agentes quimicos o polvo
+09ATT,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+09IJJ,19SCV,Ventilaciones,Agentes quimicos o polvo
+09IJJ,19SIM,Manos,Agentes quimicos o polvo
+09IJJ,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+09IPP,19SCV,Ventilaciones,Agentes quimicos o polvo
+09IPP,19SIM,Manos,Agentes quimicos o polvo
+09IPP,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+09ISS,19SCV,Ventilaciones,Soldadura; Agentes quimicos o polvo
+09ISS,19SIC,Cabeza,Soldadura
+09ISS,19SIM,Manos,Soldadura; Agentes quimicos o polvo
+09ISS,19SIT,"Tronco, piernas y brazos",Soldadura; Agentes quimicos o polvo
+09TCC,19SCV,Ventilaciones,Agentes quimicos o polvo
+09TCC,19SIM,Manos,Agentes quimicos o polvo
+09TCC,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+09TPP,19SCB,Barandillas,Altura y caidas
+09TPP,19SCR,Redes,Altura y caidas
+09TPP,19SCV,Ventilaciones,Agentes quimicos o polvo
+09TPP,19SIC,Cabeza,Altura y caidas; Riesgo electrico
+09TPP,19SIM,Manos,Riesgo electrico; Agentes quimicos o polvo
+09TPP,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+09TPP,19SSS,Señalización,Riesgo electrico
+09TSS,19SCB,Barandillas,Altura y caidas
+09TSS,19SCR,Redes,Altura y caidas
+09TSS,19SCV,Ventilaciones,Agentes quimicos o polvo
+09TSS,19SIC,Cabeza,Altura y caidas
+09TSS,19SIM,Manos,Agentes quimicos o polvo
+09TSS,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+09TTT,19SCV,Ventilaciones,Agentes quimicos o polvo
+09TTT,19SIM,Manos,Agentes quimicos o polvo
+09TTT,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+09TWW,19SCV,Ventilaciones,Agentes quimicos o polvo
+09TWW,19SIM,Manos,Agentes quimicos o polvo
+09TWW,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+09WWW,19SCB,Barandillas,Altura y caidas
+09WWW,19SCR,Redes,Altura y caidas
+09WWW,19SIC,Cabeza,Altura y caidas; Riesgo electrico
+09WWW,19SIM,Manos,Riesgo electrico
+09WWW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+09WWW,19SSS,Señalización,Riesgo electrico
+10AAE,19SCV,Ventilaciones,Agentes quimicos o polvo
+10AAE,19SIM,Manos,Agentes quimicos o polvo
+10AAE,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+10AAL,19LAA,Aseos,Aseos
+10AAL,19LIA,Aseos,Aseos
+10AAL,19LPA,Aseos,Aseos
+10AAL,19SCV,Ventilaciones,Agentes quimicos o polvo
+10AAL,19SIM,Manos,Agentes quimicos o polvo
+10AAL,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+10AAW,19SCV,Ventilaciones,Agentes quimicos o polvo
+10AAW,19SIM,Manos,Agentes quimicos o polvo
+10AAW,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+10CEE,19LAA,Aseos,Aseos
+10CEE,19LIA,Aseos,Aseos
+10CEE,19LPA,Aseos,Aseos
+10CEE,19SCB,Barandillas,Altura y caidas
+10CEE,19SCR,Redes,Altura y caidas
+10CEE,19SCV,Ventilaciones,Agentes quimicos o polvo
+10CEE,19SIC,Cabeza,Altura y caidas
+10CEE,19SIM,Manos,Agentes quimicos o polvo
+10CEE,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+10CPE,19SCB,Barandillas,Altura y caidas
+10CPE,19SCR,Redes,Altura y caidas
+10CPE,19SIC,Cabeza,Altura y caidas
+10CPE,19SIT,"Tronco, piernas y brazos",Altura y caidas
+10CRR,19SCV,Ventilaciones,Agentes quimicos o polvo
+10CRR,19SIM,Manos,Agentes quimicos o polvo
+10CRR,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+10CRW,19SCV,Ventilaciones,Agentes quimicos o polvo
+10CRW,19SIM,Manos,Agentes quimicos o polvo
+10CRW,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+10CWE,19SCV,Ventilaciones,Agentes quimicos o polvo
+10CWE,19SIM,Manos,Agentes quimicos o polvo
+10CWE,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+10CWW,19SCB,Barandillas,Altura y caidas
+10CWW,19SCR,Redes,Altura y caidas
+10CWW,19SCV,Ventilaciones,Agentes quimicos o polvo
+10CWW,19SIC,Cabeza,Altura y caidas
+10CWW,19SIM,Manos,Agentes quimicos o polvo
+10CWW,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+10IAS,19SIC,Cabeza,Equipos y cargas
+10IAS,19SIM,Manos,Equipos y cargas
+10IAS,19SIP,Pies,Equipos y cargas
+10LAP,19SCB,Barandillas,Altura y caidas
+10LAP,19SCR,Redes,Altura y caidas
+10LAP,19SCV,Ventilaciones,Agentes quimicos o polvo
+10LAP,19SIC,Cabeza,Altura y caidas
+10LAP,19SIM,Manos,Agentes quimicos o polvo
+10LAP,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+10LAW,19SCV,Ventilaciones,Agentes quimicos o polvo
+10LAW,19SIM,Manos,Agentes quimicos o polvo
+10LAW,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+10LCC,19SCV,Ventilaciones,Agentes quimicos o polvo
+10LCC,19SIM,Manos,Agentes quimicos o polvo
+10LCC,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+10LMM,19SCV,Ventilaciones,Agentes quimicos o polvo
+10LMM,19SIM,Manos,Agentes quimicos o polvo
+10LMM,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+10LWW,19SCB,Barandillas,Altura y caidas
+10LWW,19SCR,Redes,Altura y caidas
+10LWW,19SIC,Cabeza,Altura y caidas
+10LWW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+10PLP,19SCV,Ventilaciones,Agentes quimicos o polvo
+10PLP,19SIM,Manos,Agentes quimicos o polvo
+10PLP,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+10PMP,19SCV,Ventilaciones,Agentes quimicos o polvo
+10PMP,19SIM,Manos,Agentes quimicos o polvo
+10PMP,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+10PMZ,19SCV,Ventilaciones,Agentes quimicos o polvo
+10PMZ,19SIM,Manos,Agentes quimicos o polvo
+10PMZ,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+10SCR,19SCV,Ventilaciones,Agentes quimicos o polvo
+10SCR,19SIM,Manos,Agentes quimicos o polvo
+10SCR,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+10SCS,19SCV,Ventilaciones,Agentes quimicos o polvo
+10SCS,19SIM,Manos,Agentes quimicos o polvo
+10SCS,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+10SES,19SCV,Ventilaciones,Agentes quimicos o polvo
+10SES,19SIM,Manos,Agentes quimicos o polvo
+10SES,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+10SLR,19SCV,Ventilaciones,Agentes quimicos o polvo
+10SLR,19SIM,Manos,Agentes quimicos o polvo
+10SLR,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+10SLS,19SCV,Ventilaciones,Soldadura; Agentes quimicos o polvo
+10SLS,19SIC,Cabeza,Soldadura
+10SLS,19SIM,Manos,Soldadura; Agentes quimicos o polvo
+10SLS,19SIT,"Tronco, piernas y brazos",Soldadura; Agentes quimicos o polvo
+10SMR,19SCV,Ventilaciones,Agentes quimicos o polvo
+10SMR,19SIM,Manos,Agentes quimicos o polvo
+10SMR,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+10SMS,19SCV,Ventilaciones,Agentes quimicos o polvo
+10SMS,19SIM,Manos,Agentes quimicos o polvo
+10SMS,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+10SWW,19SCB,Barandillas,Altura y caidas
+10SWW,19SCR,Redes,Altura y caidas
+10SWW,19SCV,Ventilaciones,Soldadura; Agentes quimicos o polvo
+10SWW,19SIC,Cabeza,Altura y caidas; Soldadura
+10SWW,19SIM,Manos,Soldadura; Agentes quimicos o polvo
+10SWW,19SIT,"Tronco, piernas y brazos",Altura y caidas; Soldadura; Agentes quimicos o polvo
+10TER,19SCV,Ventilaciones,Agentes quimicos o polvo
+10TER,19SIM,Manos,Agentes quimicos o polvo
+10TER,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+10TET,19SIC,Cabeza,Demolicion o desmontaje
+10TET,19SIM,Manos,Demolicion o desmontaje
+10TET,19SIP,Pies,Demolicion o desmontaje
+10TET,19SSA,Acotamiento,Demolicion o desmontaje
+10TET,19SSS,Señalización,Demolicion o desmontaje
+10TFT,19SIC,Cabeza,Demolicion o desmontaje
+10TFT,19SIM,Manos,Demolicion o desmontaje
+10TFT,19SIP,Pies,Demolicion o desmontaje
+10TFT,19SSA,Acotamiento,Demolicion o desmontaje
+10TFT,19SSS,Señalización,Demolicion o desmontaje
+10TLT,19SIC,Cabeza,Demolicion o desmontaje
+10TLT,19SIM,Manos,Demolicion o desmontaje
+10TLT,19SIP,Pies,Demolicion o desmontaje
+10TLT,19SSA,Acotamiento,Demolicion o desmontaje
+10TLT,19SSS,Señalización,Demolicion o desmontaje
+10TMT,19SIC,Cabeza,Demolicion o desmontaje
+10TMT,19SIM,Manos,Demolicion o desmontaje
+10TMT,19SIP,Pies,Demolicion o desmontaje
+10TMT,19SSA,Acotamiento,Demolicion o desmontaje
+10TMT,19SSS,Señalización,Demolicion o desmontaje
+10TST,19SIC,Cabeza,Demolicion o desmontaje
+10TST,19SIM,Manos,Demolicion o desmontaje
+10TST,19SIP,Pies,Demolicion o desmontaje
+10TST,19SSA,Acotamiento,Demolicion o desmontaje
+10TST,19SSS,Señalización,Demolicion o desmontaje
+10TWW,19SIC,Cabeza,Demolicion o desmontaje
+10TWW,19SIM,Manos,Demolicion o desmontaje
+10TWW,19SIP,Pies,Demolicion o desmontaje
+10TWW,19SSA,Acotamiento,Demolicion o desmontaje
+10TWW,19SSS,Señalización,Demolicion o desmontaje
+10WRC,19SCB,Barandillas,Altura y caidas
+10WRC,19SCR,Redes,Altura y caidas
+10WRC,19SIC,Cabeza,Altura y caidas
+10WRC,19SIT,"Tronco, piernas y brazos",Altura y caidas
+10WRW,19SCB,Barandillas,Altura y caidas
+10WRW,19SCR,Redes,Altura y caidas
+10WRW,19SCV,Ventilaciones,Agentes quimicos o polvo
+10WRW,19SIC,Cabeza,Altura y caidas
+10WRW,19SIM,Manos,Agentes quimicos o polvo
+10WRW,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+10WWW,19SCB,Barandillas,Altura y caidas
+10WWW,19SCR,Redes,Altura y caidas
+10WWW,19SIC,Cabeza,Altura y caidas
+10WWW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+11APA,19SCV,Ventilaciones,Agentes quimicos o polvo
+11APA,19SIM,Manos,Agentes quimicos o polvo
+11APA,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+11APW,19SCV,Ventilaciones,Soldadura; Agentes quimicos o polvo
+11APW,19SIC,Cabeza,Riesgo electrico; Soldadura
+11APW,19SIM,Manos,Riesgo electrico; Soldadura; Agentes quimicos o polvo
+11APW,19SIT,"Tronco, piernas y brazos",Soldadura; Agentes quimicos o polvo
+11APW,19SSS,Señalización,Riesgo electrico
+11LPC,19SCB,Barandillas,Altura y caidas
+11LPC,19SCR,Redes,Altura y caidas
+11LPC,19SIC,Cabeza,Altura y caidas
+11LPC,19SIT,"Tronco, piernas y brazos",Altura y caidas
+11MAB,19SCV,Ventilaciones,Agentes quimicos o polvo
+11MAB,19SIM,Manos,Agentes quimicos o polvo
+11MAB,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+11MAW,19SCB,Barandillas,Altura y caidas
+11MAW,19SCR,Redes,Altura y caidas
+11MAW,19SIC,Cabeza,Altura y caidas
+11MAW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+11MMB,19SCV,Ventilaciones,Agentes quimicos o polvo
+11MMB,19SIM,Manos,Agentes quimicos o polvo
+11MMB,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+11MPB,19SCV,Ventilaciones,Agentes quimicos o polvo
+11MPB,19SIM,Manos,Agentes quimicos o polvo
+11MPB,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+11MPW,19SCB,Barandillas,Altura y caidas
+11MPW,19SCR,Redes,Altura y caidas
+11MPW,19SCV,Ventilaciones,Agentes quimicos o polvo
+11MPW,19SIC,Cabeza,Altura y caidas
+11MPW,19SIM,Manos,Agentes quimicos o polvo
+11MPW,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+11MVB,19SCV,Ventilaciones,Agentes quimicos o polvo
+11MVB,19SIM,Manos,Agentes quimicos o polvo
+11MVB,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+11MVW,19SCB,Barandillas,Altura y caidas
+11MVW,19SCR,Redes,Altura y caidas
+11MVW,19SIC,Cabeza,Altura y caidas
+11MVW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+11SBA,19SCB,Barandillas,Altura y caidas
+11SBA,19SCR,Redes,Altura y caidas
+11SBA,19SCV,Ventilaciones,Soldadura
+11SBA,19SIC,Cabeza,Altura y caidas; Soldadura
+11SBA,19SIM,Manos,Soldadura
+11SBA,19SIT,"Tronco, piernas y brazos",Altura y caidas; Soldadura
+11SBL,19SCB,Barandillas,Altura y caidas
+11SBL,19SCR,Redes,Altura y caidas
+11SBL,19SIC,Cabeza,Altura y caidas
+11SBL,19SIT,"Tronco, piernas y brazos",Altura y caidas
+11SBW,19SCV,Ventilaciones,Agentes quimicos o polvo
+11SBW,19SIM,Manos,Agentes quimicos o polvo
+11SBW,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+11SEA,19SCB,Barandillas,Altura y caidas
+11SEA,19SCR,Redes,Altura y caidas
+11SEA,19SIC,Cabeza,Altura y caidas
+11SEA,19SIT,"Tronco, piernas y brazos",Altura y caidas
+11SPL,19SIC,Cabeza,Riesgo electrico
+11SPL,19SIM,Manos,Riesgo electrico
+11SPL,19SSS,Señalización,Riesgo electrico
+11SPW,19SCV,Ventilaciones,Agentes quimicos o polvo
+11SPW,19SIC,Cabeza,Riesgo electrico
+11SPW,19SIM,Manos,Riesgo electrico; Agentes quimicos o polvo
+11SPW,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+11SPW,19SSS,Señalización,Riesgo electrico
+11SRM,19SCB,Barandillas,Altura y caidas
+11SRM,19SCR,Redes,Altura y caidas
+11SRM,19SCV,Ventilaciones,Soldadura
+11SRM,19SIC,Cabeza,Altura y caidas; Soldadura
+11SRM,19SIM,Manos,Soldadura
+11SRM,19SIT,"Tronco, piernas y brazos",Altura y caidas; Soldadura
+11SWW,19SCV,Ventilaciones,Agentes quimicos o polvo
+11SWW,19SIM,Manos,Agentes quimicos o polvo
+11SWW,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+11WWW,19SCB,Barandillas,Altura y caidas
+11WWW,19SCR,Redes,Altura y caidas
+11WWW,19SCV,Ventilaciones,Agentes quimicos o polvo
+11WWW,19SIC,Cabeza,Altura y caidas; Riesgo electrico
+11WWW,19SIM,Manos,Riesgo electrico; Agentes quimicos o polvo
+11WWW,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+11WWW,19SSS,Señalización,Riesgo electrico
+12LIS,19LAC,Comedores,Comedores
+12LIS,19LIC,Comedores,Comedores
+12LIS,19LPC,Comedores,Comedores
+12LIS,19LPW,Varios,Comedores
+12NTI,19SCV,Ventilaciones,Agentes quimicos o polvo
+12NTI,19SIM,Manos,Agentes quimicos o polvo
+12NTI,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+12WCA,19SCB,Barandillas,Altura y caidas
+12WCA,19SCR,Redes,Altura y caidas
+12WCA,19SIC,Cabeza,Altura y caidas
+12WCA,19SIT,"Tronco, piernas y brazos",Altura y caidas
+12WSI,19SCV,Ventilaciones,Agentes quimicos o polvo
+12WSI,19SIM,Manos,Agentes quimicos o polvo
+12WSI,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+13EAA,19SCV,Ventilaciones,Agentes quimicos o polvo
+13EAA,19SIM,Manos,Agentes quimicos o polvo
+13EAA,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+13IBB,19SCV,Ventilaciones,Agentes quimicos o polvo
+13IBB,19SIM,Manos,Agentes quimicos o polvo
+13IBB,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+13IEE,19SCV,Ventilaciones,Agentes quimicos o polvo
+13IEE,19SIM,Manos,Agentes quimicos o polvo
+13IEE,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+13IOO,19SCV,Ventilaciones,Agentes quimicos o polvo
+13IOO,19SIM,Manos,Agentes quimicos o polvo
+13IOO,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+13IPP,19SCV,Ventilaciones,Agentes quimicos o polvo
+13IPP,19SIM,Manos,Agentes quimicos o polvo
+13IPP,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+13ITT,19SCV,Ventilaciones,Agentes quimicos o polvo
+13ITT,19SIM,Manos,Agentes quimicos o polvo
+13ITT,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+13IWW,19SCV,Ventilaciones,Agentes quimicos o polvo
+13IWW,19SIM,Manos,Agentes quimicos o polvo
+13IWW,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+13SAA,19SCV,Ventilaciones,Agentes quimicos o polvo
+13SAA,19SIM,Manos,Agentes quimicos o polvo
+13SAA,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+13SCC,19SCV,Ventilaciones,Agentes quimicos o polvo
+13SCC,19SIM,Manos,Agentes quimicos o polvo
+13SCC,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+13SII,19SCV,Ventilaciones,Agentes quimicos o polvo
+13SII,19SIM,Manos,Agentes quimicos o polvo
+13SII,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+13SWW,19SCV,Ventilaciones,Agentes quimicos o polvo
+13SWW,19SIM,Manos,Agentes quimicos o polvo
+13SWW,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+13SWW,19SSA,Acotamiento,Trafico y balizamiento
+13SWW,19SSS,Señalización,Trafico y balizamiento
+14MAB,19LAA,Aseos,Aseos
+14MAB,19LIA,Aseos,Aseos
+14MAB,19LPA,Aseos,Aseos
+14MAB,19SCV,Ventilaciones,Agentes quimicos o polvo
+14MAB,19SIM,Manos,Agentes quimicos o polvo
+14MAB,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+14WWW,19SIC,Cabeza,Riesgo electrico
+14WWW,19SIM,Manos,Riesgo electrico
+14WWW,19SSS,Señalización,Riesgo electrico
+15ACF,19SCV,Ventilaciones,Agentes quimicos o polvo
+15ACF,19SIM,Manos,Agentes quimicos o polvo
+15ACF,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+15ACP,19SCV,Ventilaciones,Agentes quimicos o polvo
+15ACP,19SIM,Manos,Agentes quimicos o polvo
+15ACP,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+15ADD,19SCB,Barandillas,Excavaciones
+15ADD,19SIC,Cabeza,Excavaciones
+15ADD,19SIP,Pies,Excavaciones
+15ADD,19SSA,Acotamiento,Excavaciones
+15ADD,19SSS,Señalización,Excavaciones
+15APA,19SCB,Barandillas,Excavaciones
+15APA,19SIC,Cabeza,Excavaciones
+15APA,19SIP,Pies,Excavaciones
+15APA,19SSA,Acotamiento,Excavaciones
+15APA,19SSS,Señalización,Excavaciones
+15APP,19SCB,Barandillas,Altura y caidas; Excavaciones
+15APP,19SCR,Redes,Altura y caidas
+15APP,19SCV,Ventilaciones,Espacios confinados
+15APP,19SIC,Cabeza,Altura y caidas; Excavaciones; Espacios confinados
+15APP,19SIP,Pies,Excavaciones
+15APP,19SIT,"Tronco, piernas y brazos",Altura y caidas
+15APP,19SSA,Acotamiento,Excavaciones
+15APP,19SSS,Señalización,Excavaciones
+15ASS,19SCB,Barandillas,Excavaciones
+15ASS,19SIC,Cabeza,Excavaciones; Demolicion o desmontaje
+15ASS,19SIM,Manos,Demolicion o desmontaje
+15ASS,19SIP,Pies,Excavaciones; Demolicion o desmontaje
+15ASS,19SSA,Acotamiento,Excavaciones; Demolicion o desmontaje
+15ASS,19SSS,Señalización,Excavaciones; Demolicion o desmontaje
+15AWW,19SCB,Barandillas,Altura y caidas; Excavaciones
+15AWW,19SCR,Redes,Altura y caidas
+15AWW,19SIC,Cabeza,Altura y caidas; Excavaciones
+15AWW,19SIP,Pies,Excavaciones
+15AWW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+15AWW,19SSA,Acotamiento,Excavaciones
+15AWW,19SSS,Señalización,Excavaciones
+15CPP,19SCV,Ventilaciones,Agentes quimicos o polvo
+15CPP,19SIM,Manos,Agentes quimicos o polvo
+15CPP,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+15CRP,19SSA,Acotamiento,Trafico y balizamiento
+15CRP,19SSS,Señalización,Trafico y balizamiento
+15CRR,19SCV,Ventilaciones,Agentes quimicos o polvo
+15CRR,19SIM,Manos,Agentes quimicos o polvo
+15CRR,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+15CRR,19SSS,Señalización,Senalizacion de obra
+15EEE,19SCV,Ventilaciones,Agentes quimicos o polvo
+15EEE,19SIC,Cabeza,Riesgo electrico
+15EEE,19SIM,Manos,Riesgo electrico; Agentes quimicos o polvo
+15EEE,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+15EEE,19SSS,Señalización,Riesgo electrico
+15EPP,19SCB,Barandillas,Excavaciones
+15EPP,19SCV,Ventilaciones,Agentes quimicos o polvo
+15EPP,19SIC,Cabeza,Excavaciones; Riesgo electrico
+15EPP,19SIM,Manos,Riesgo electrico; Agentes quimicos o polvo
+15EPP,19SIP,Pies,Excavaciones
+15EPP,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+15EPP,19SSA,Acotamiento,Excavaciones
+15EPP,19SSS,Señalización,Excavaciones; Riesgo electrico
+15ETT,19SIC,Cabeza,Riesgo electrico
+15ETT,19SIM,Manos,Riesgo electrico
+15ETT,19SSS,Señalización,Riesgo electrico
+15EWW,19SCV,Ventilaciones,Agentes quimicos o polvo
+15EWW,19SIC,Cabeza,Riesgo electrico
+15EWW,19SIM,Manos,Riesgo electrico; Agentes quimicos o polvo
+15EWW,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+15EWW,19SSS,Señalización,Riesgo electrico
+15GPP,19SCB,Barandillas,Excavaciones
+15GPP,19SCV,Ventilaciones,Soldadura; Agentes quimicos o polvo
+15GPP,19SIC,Cabeza,Excavaciones; Soldadura
+15GPP,19SIM,Manos,Soldadura; Agentes quimicos o polvo
+15GPP,19SIP,Pies,Excavaciones
+15GPP,19SIT,"Tronco, piernas y brazos",Soldadura; Agentes quimicos o polvo
+15GPP,19SSA,Acotamiento,Excavaciones
+15GPP,19SSS,Señalización,Excavaciones
+15GWW,19SCB,Barandillas,Excavaciones
+15GWW,19SIC,Cabeza,Excavaciones
+15GWW,19SIP,Pies,Excavaciones
+15GWW,19SSA,Acotamiento,Excavaciones
+15GWW,19SSS,Señalización,Excavaciones
+15JAA,19SCB,Barandillas,Altura y caidas; Excavaciones
+15JAA,19SCR,Redes,Altura y caidas
+15JAA,19SIC,Cabeza,Altura y caidas; Excavaciones
+15JAA,19SIP,Pies,Excavaciones
+15JAA,19SIT,"Tronco, piernas y brazos",Altura y caidas
+15JAA,19SSA,Acotamiento,Excavaciones
+15JAA,19SSS,Señalización,Excavaciones
+15JAW,19SCB,Barandillas,Altura y caidas
+15JAW,19SCR,Redes,Altura y caidas
+15JAW,19SIC,Cabeza,Altura y caidas; Equipos y cargas
+15JAW,19SIM,Manos,Equipos y cargas
+15JAW,19SIP,Pies,Equipos y cargas
+15JAW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+15JPP,19SCB,Barandillas,Altura y caidas
+15JPP,19SCR,Redes,Altura y caidas
+15JPP,19SIC,Cabeza,Altura y caidas
+15JPP,19SIT,"Tronco, piernas y brazos",Altura y caidas
+15JRS,19SCB,Barandillas,Altura y caidas
+15JRS,19SCR,Redes,Altura y caidas
+15JRS,19SIC,Cabeza,Altura y caidas
+15JRS,19SIT,"Tronco, piernas y brazos",Altura y caidas
+15JSS,19SCB,Barandillas,Altura y caidas; Excavaciones
+15JSS,19SCR,Redes,Altura y caidas
+15JSS,19SIC,Cabeza,Altura y caidas; Excavaciones
+15JSS,19SIP,Pies,Excavaciones
+15JSS,19SIT,"Tronco, piernas y brazos",Altura y caidas
+15JSS,19SSA,Acotamiento,Excavaciones
+15JSS,19SSS,Señalización,Excavaciones
+15JTT,19SCB,Barandillas,Altura y caidas
+15JTT,19SCR,Redes,Altura y caidas
+15JTT,19SIC,Cabeza,Altura y caidas
+15JTT,19SIT,"Tronco, piernas y brazos",Altura y caidas
+15MAA,19SCB,Barandillas,Excavaciones
+15MAA,19SIC,Cabeza,Excavaciones
+15MAA,19SIP,Pies,Excavaciones
+15MAA,19SSA,Acotamiento,Excavaciones
+15MAA,19SSS,Señalización,Excavaciones
+15MDD,19SCB,Barandillas,Excavaciones
+15MDD,19SIC,Cabeza,Excavaciones; Demolicion o desmontaje
+15MDD,19SIM,Manos,Demolicion o desmontaje
+15MDD,19SIP,Pies,Excavaciones; Demolicion o desmontaje
+15MDD,19SSA,Acotamiento,Excavaciones; Demolicion o desmontaje
+15MDD,19SSS,Señalización,Excavaciones; Demolicion o desmontaje
+15MEE,19SCB,Barandillas,Excavaciones
+15MEE,19SIC,Cabeza,Excavaciones
+15MEE,19SIP,Pies,Excavaciones
+15MEE,19SSA,Acotamiento,Excavaciones
+15MEE,19SSS,Señalización,Excavaciones
+15MPP,19SCB,Barandillas,Excavaciones
+15MPP,19SIC,Cabeza,Excavaciones
+15MPP,19SIP,Pies,Excavaciones
+15MPP,19SSA,Acotamiento,Excavaciones
+15MPP,19SSS,Señalización,Excavaciones
+15MRR,19SCB,Barandillas,Excavaciones
+15MRR,19SIC,Cabeza,Excavaciones
+15MRR,19SIP,Pies,Excavaciones
+15MRR,19SSA,Acotamiento,Excavaciones
+15MRR,19SSS,Señalización,Excavaciones
+15MWW,19SCB,Barandillas,Excavaciones
+15MWW,19SIC,Cabeza,Excavaciones
+15MWW,19SIP,Pies,Excavaciones
+15MWW,19SSA,Acotamiento,Excavaciones
+15MWW,19SSS,Señalización,Excavaciones
+15MZZ,19SCB,Barandillas,Excavaciones
+15MZZ,19SIC,Cabeza,Excavaciones
+15MZZ,19SIP,Pies,Excavaciones
+15MZZ,19SSA,Acotamiento,Excavaciones
+15MZZ,19SSS,Señalización,Excavaciones
+15PCC,19SCV,Ventilaciones,Agentes quimicos o polvo
+15PCC,19SIM,Manos,Agentes quimicos o polvo
+15PCC,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+15PCC,19SSA,Acotamiento,Trafico y balizamiento
+15PCC,19SSS,Señalización,Trafico y balizamiento
+15PEE,19SCB,Barandillas,Altura y caidas; Excavaciones
+15PEE,19SCR,Redes,Altura y caidas
+15PEE,19SIC,Cabeza,Altura y caidas; Excavaciones
+15PEE,19SIP,Pies,Excavaciones
+15PEE,19SIT,"Tronco, piernas y brazos",Altura y caidas
+15PEE,19SSA,Acotamiento,Excavaciones
+15PEE,19SSS,Señalización,Excavaciones
+15PPP,19SCB,Barandillas,Altura y caidas
+15PPP,19SCR,Redes,Altura y caidas
+15PPP,19SCV,Ventilaciones,Agentes quimicos o polvo
+15PPP,19SIC,Cabeza,Altura y caidas
+15PPP,19SIM,Manos,Agentes quimicos o polvo
+15PPP,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+15PWW,19SCV,Ventilaciones,Agentes quimicos o polvo
+15PWW,19SIM,Manos,Agentes quimicos o polvo
+15PWW,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+15SAA,19SCB,Barandillas,Excavaciones
+15SAA,19SCV,Ventilaciones,Agentes quimicos o polvo
+15SAA,19SIC,Cabeza,Excavaciones; Demolicion o desmontaje
+15SAA,19SIM,Manos,Agentes quimicos o polvo; Demolicion o desmontaje
+15SAA,19SIP,Pies,Excavaciones; Demolicion o desmontaje
+15SAA,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+15SAA,19SSA,Acotamiento,Excavaciones; Demolicion o desmontaje
+15SAA,19SSS,Señalización,Excavaciones; Demolicion o desmontaje
+15SBE,19SCV,Ventilaciones,Soldadura
+15SBE,19SIC,Cabeza,Soldadura
+15SBE,19SIM,Manos,Soldadura
+15SBE,19SIT,"Tronco, piernas y brazos",Soldadura
+15SBF,19SCV,Ventilaciones,Agentes quimicos o polvo
+15SBF,19SIM,Manos,Agentes quimicos o polvo
+15SBF,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+15SCD,19SCB,Barandillas,Excavaciones
+15SCD,19SIC,Cabeza,Excavaciones
+15SCD,19SIP,Pies,Excavaciones
+15SCD,19SSA,Acotamiento,Excavaciones
+15SCD,19SSS,Señalización,Excavaciones
+15SCE,19SCB,Barandillas,Excavaciones
+15SCE,19SCV,Ventilaciones,Soldadura
+15SCE,19SIC,Cabeza,Excavaciones; Soldadura
+15SCE,19SIM,Manos,Soldadura
+15SCE,19SIP,Pies,Excavaciones
+15SCE,19SIT,"Tronco, piernas y brazos",Soldadura
+15SCE,19SSA,Acotamiento,Excavaciones
+15SCE,19SSS,Señalización,Excavaciones
+15SCF,19SCB,Barandillas,Excavaciones
+15SCF,19SCV,Ventilaciones,Agentes quimicos o polvo
+15SCF,19SIC,Cabeza,Excavaciones
+15SCF,19SIM,Manos,Agentes quimicos o polvo
+15SCF,19SIP,Pies,Excavaciones
+15SCF,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+15SCF,19SSA,Acotamiento,Excavaciones
+15SCF,19SSS,Señalización,Excavaciones
+15SCP,19SCB,Barandillas,Excavaciones
+15SCP,19SIC,Cabeza,Excavaciones
+15SCP,19SIP,Pies,Excavaciones
+15SCP,19SSA,Acotamiento,Excavaciones
+15SCP,19SSS,Señalización,Excavaciones
+15SDD,19SCB,Barandillas,Excavaciones
+15SDD,19SCV,Ventilaciones,Espacios confinados
+15SDD,19SIC,Cabeza,Excavaciones; Espacios confinados
+15SDD,19SIP,Pies,Excavaciones
+15SDD,19SSA,Acotamiento,Excavaciones
+15SDD,19SSS,Señalización,Excavaciones
+15SDE,19SCB,Barandillas,Excavaciones
+15SDE,19SCV,Ventilaciones,Soldadura; Espacios confinados
+15SDE,19SIC,Cabeza,Excavaciones; Soldadura; Espacios confinados
+15SDE,19SIM,Manos,Soldadura
+15SDE,19SIP,Pies,Excavaciones
+15SDE,19SIT,"Tronco, piernas y brazos",Soldadura
+15SDE,19SSA,Acotamiento,Excavaciones
+15SDE,19SSS,Señalización,Excavaciones
+15SDF,19SCB,Barandillas,Excavaciones
+15SDF,19SCV,Ventilaciones,Agentes quimicos o polvo; Espacios confinados
+15SDF,19SIC,Cabeza,Excavaciones; Espacios confinados
+15SDF,19SIM,Manos,Agentes quimicos o polvo
+15SDF,19SIP,Pies,Excavaciones
+15SDF,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+15SDF,19SSA,Acotamiento,Excavaciones
+15SDF,19SSS,Señalización,Excavaciones
+15SHD,19SCB,Barandillas,Excavaciones
+15SHD,19SCV,Ventilaciones,Espacios confinados
+15SHD,19SIC,Cabeza,Excavaciones; Espacios confinados
+15SHD,19SIP,Pies,Excavaciones
+15SHD,19SSA,Acotamiento,Excavaciones
+15SHD,19SSS,Señalización,Excavaciones
+15SHE,19SCV,Ventilaciones,Soldadura
+15SHE,19SIC,Cabeza,Soldadura
+15SHE,19SIM,Manos,Soldadura
+15SHE,19SIT,"Tronco, piernas y brazos",Soldadura
+15SHF,19SCB,Barandillas,Excavaciones
+15SHF,19SCV,Ventilaciones,Agentes quimicos o polvo; Espacios confinados
+15SHF,19SIC,Cabeza,Excavaciones; Espacios confinados
+15SHF,19SIM,Manos,Agentes quimicos o polvo
+15SHF,19SIP,Pies,Excavaciones
+15SHF,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+15SHF,19SSA,Acotamiento,Excavaciones
+15SHF,19SSS,Señalización,Excavaciones
+15SHW,19SCB,Barandillas,Excavaciones
+15SHW,19SCV,Ventilaciones,Espacios confinados
+15SHW,19SIC,Cabeza,Excavaciones; Espacios confinados
+15SHW,19SIP,Pies,Excavaciones
+15SHW,19SSA,Acotamiento,Excavaciones
+15SHW,19SSS,Señalización,Excavaciones
+15SPE,19SCV,Ventilaciones,Soldadura
+15SPE,19SIC,Cabeza,Soldadura
+15SPE,19SIM,Manos,Soldadura
+15SPE,19SIT,"Tronco, piernas y brazos",Soldadura
+15SPF,19SCV,Ventilaciones,Agentes quimicos o polvo
+15SPF,19SIM,Manos,Agentes quimicos o polvo
+15SPF,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+15SVE,19SCV,Ventilaciones,Soldadura
+15SVE,19SIC,Cabeza,Soldadura
+15SVE,19SIM,Manos,Soldadura
+15SVE,19SIT,"Tronco, piernas y brazos",Soldadura
+15SVF,19SCV,Ventilaciones,Agentes quimicos o polvo
+15SVF,19SIM,Manos,Agentes quimicos o polvo
+15SVF,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+15SVW,19SCB,Barandillas,Excavaciones
+15SVW,19SIC,Cabeza,Excavaciones
+15SVW,19SIP,Pies,Excavaciones
+15SVW,19SSA,Acotamiento,Excavaciones
+15SVW,19SSS,Señalización,Excavaciones
+15SWA,19SCB,Barandillas,Excavaciones
+15SWA,19SIC,Cabeza,Excavaciones
+15SWA,19SIP,Pies,Excavaciones
+15SWA,19SSA,Acotamiento,Excavaciones
+15SWA,19SSS,Señalización,Excavaciones
+15SWP,19SCB,Barandillas,Excavaciones
+15SWP,19SCV,Ventilaciones,Espacios confinados
+15SWP,19SIC,Cabeza,Excavaciones; Espacios confinados
+15SWP,19SIP,Pies,Excavaciones
+15SWP,19SSA,Acotamiento,Excavaciones
+15SWP,19SSS,Señalización,Excavaciones
+15SYD,19SCB,Barandillas,Excavaciones
+15SYD,19SCV,Ventilaciones,Espacios confinados
+15SYD,19SIC,Cabeza,Excavaciones; Espacios confinados
+15SYD,19SIP,Pies,Excavaciones
+15SYD,19SSA,Acotamiento,Excavaciones
+15SYD,19SSS,Señalización,Excavaciones
+15SYE,19SCB,Barandillas,Excavaciones
+15SYE,19SCV,Ventilaciones,Espacios confinados
+15SYE,19SIC,Cabeza,Excavaciones; Espacios confinados
+15SYE,19SIP,Pies,Excavaciones
+15SYE,19SSA,Acotamiento,Excavaciones
+15SYE,19SSS,Señalización,Excavaciones
+15SYF,19SCB,Barandillas,Excavaciones
+15SYF,19SCV,Ventilaciones,Agentes quimicos o polvo; Espacios confinados
+15SYF,19SIC,Cabeza,Excavaciones; Espacios confinados
+15SYF,19SIM,Manos,Agentes quimicos o polvo
+15SYF,19SIP,Pies,Excavaciones
+15SYF,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+15SYF,19SSA,Acotamiento,Excavaciones
+15SYF,19SSS,Señalización,Excavaciones
+15SYP,19SCB,Barandillas,Excavaciones
+15SYP,19SCV,Ventilaciones,Espacios confinados
+15SYP,19SIC,Cabeza,Excavaciones; Espacios confinados
+15SYP,19SIP,Pies,Excavaciones
+15SYP,19SSA,Acotamiento,Excavaciones
+15SYP,19SSS,Señalización,Excavaciones
+15TRR,19SCB,Barandillas,Excavaciones
+15TRR,19SIC,Cabeza,Excavaciones
+15TRR,19SIP,Pies,Excavaciones
+15TRR,19SSA,Acotamiento,Excavaciones
+15TRR,19SSS,Señalización,Excavaciones
+15UBB,19SCB,Barandillas,Altura y caidas
+15UBB,19SCR,Redes,Altura y caidas
+15UBB,19SCV,Ventilaciones,Agentes quimicos o polvo
+15UBB,19SIC,Cabeza,Altura y caidas
+15UBB,19SIM,Manos,Agentes quimicos o polvo
+15UBB,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+15UFF,19SCB,Barandillas,Altura y caidas
+15UFF,19SCR,Redes,Altura y caidas
+15UFF,19SCV,Ventilaciones,Agentes quimicos o polvo
+15UFF,19SIC,Cabeza,Altura y caidas
+15UFF,19SIM,Manos,Agentes quimicos o polvo
+15UFF,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+15UJJ,19SCB,Barandillas,Altura y caidas
+15UJJ,19SCR,Redes,Altura y caidas
+15UJJ,19SCV,Ventilaciones,Agentes quimicos o polvo
+15UJJ,19SIC,Cabeza,Altura y caidas
+15UJJ,19SIM,Manos,Agentes quimicos o polvo
+15UJJ,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+15UJW,19SCV,Ventilaciones,Agentes quimicos o polvo
+15UJW,19SIM,Manos,Agentes quimicos o polvo
+15UJW,19SIT,"Tronco, piernas y brazos",Agentes quimicos o polvo
+15UPP,19SCB,Barandillas,Altura y caidas
+15UPP,19SCR,Redes,Altura y caidas
+15UPP,19SCV,Ventilaciones,Agentes quimicos o polvo
+15UPP,19SIC,Cabeza,Altura y caidas
+15UPP,19SIM,Manos,Agentes quimicos o polvo
+15UPP,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+15USA,19SCB,Barandillas,Altura y caidas
+15USA,19SCR,Redes,Altura y caidas
+15USA,19SCV,Ventilaciones,Soldadura; Agentes quimicos o polvo
+15USA,19SIC,Cabeza,Altura y caidas; Soldadura; Demolicion o desmontaje
+15USA,19SIM,Manos,Soldadura; Agentes quimicos o polvo; Demolicion o desmontaje
+15USA,19SIP,Pies,Demolicion o desmontaje
+15USA,19SIT,"Tronco, piernas y brazos",Altura y caidas; Soldadura; Agentes quimicos o polvo
+15USA,19SSA,Acotamiento,Demolicion o desmontaje
+15USA,19SSS,Señalización,Demolicion o desmontaje
+15USC,19SCB,Barandillas,Altura y caidas
+15USC,19SCR,Redes,Altura y caidas
+15USC,19SCV,Ventilaciones,Agentes quimicos o polvo; Espacios confinados
+15USC,19SIC,Cabeza,Altura y caidas; Espacios confinados
+15USC,19SIM,Manos,Agentes quimicos o polvo
+15USC,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+15USK,19SCB,Barandillas,Altura y caidas
+15USK,19SCR,Redes,Altura y caidas
+15USK,19SCV,Ventilaciones,Agentes quimicos o polvo
+15USK,19SIC,Cabeza,Altura y caidas
+15USK,19SIM,Manos,Agentes quimicos o polvo
+15USK,19SIT,"Tronco, piernas y brazos",Altura y caidas; Agentes quimicos o polvo
+15USM,19SCB,Barandillas,Altura y caidas
+15USM,19SCR,Redes,Altura y caidas
+15USM,19SIC,Cabeza,Altura y caidas
+15USM,19SIT,"Tronco, piernas y brazos",Altura y caidas
+15UWW,19SCB,Barandillas,Altura y caidas; Excavaciones
+15UWW,19SCR,Redes,Altura y caidas
+15UWW,19SIC,Cabeza,Altura y caidas; Excavaciones
+15UWW,19SIP,Pies,Excavaciones
+15UWW,19SIT,"Tronco, piernas y brazos",Altura y caidas
+15UWW,19SSA,Acotamiento,Excavaciones
+15UWW,19SSS,Señalización,Excavaciones
+15WCC,19SCB,Barandillas,Altura y caidas
+15WCC,19SCR,Redes,Altura y caidas
+15WCC,19SIC,Cabeza,Altura y caidas
+15WCC,19SIT,"Tronco, piernas y brazos",Altura y caidas
+15WWW,19SIC,Cabeza,Riesgo electrico
+15WWW,19SIM,Manos,Riesgo electrico
+15WWW,19SSS,Señalización,Riesgo electrico

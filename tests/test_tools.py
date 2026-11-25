@@ -1,23 +1,26 @@
 """Pruebas de descubrimiento, menu dinamico y proyectos sin herramientas."""
-from copy import deepcopy
 import importlib
-import json
+import os
 from pathlib import Path
 import shutil
 import sys
 import tempfile
-import tkinter as tk
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from bc3_gui import BudgetApp, ProjectItem
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PySide6.QtWidgets import QApplication, QMessageBox, QMenu
+
+from budget_qt_window import BudgetMainWindow
 from tool_loader import discover_tools
 
 
 ROOT = Path(__file__).resolve().parent.parent
 PLUGIN = '''TOOL_LABEL = "Extra"
 TOOL_ORDER = 1
-def open_tool(app):
+def open_tool_qt(app):
     """Registra la ejecucion del complemento."""
     app.extra_opened = True
 '''
@@ -92,7 +95,7 @@ class ToolDiscoveryTests(ToolTestCase):
         loaded, errors = discover_tools(self.directory)
         self.assertEqual(errors, [])
         self.assertEqual([(tool.name, tool.label) for tool in loaded], [("extra", "Extra")])
-        app = BudgetApp.__new__(BudgetApp)
+        app = SimpleNamespace()
         loaded[0].open(app)
         self.assertTrue(app.extra_opened)
 
@@ -132,7 +135,11 @@ class ToolDiscoveryTests(ToolTestCase):
         self.assertEqual(errors, [])
         self.assertEqual(
             [tool.name for tool in loaded],
-            ["price_justification", "rcd", "safety_health", "planning", "pptp", "certifications", "invoicing", "bim"],
+            [
+                "document_structure", "quality_assurance", "price_justification",
+                "rcd", "safety_health", "planning", "pptp", "certifications",
+                "invoicing", "bim",
+            ],
         )
         labels = {tool.name: tool.label for tool in loaded}
         self.assertEqual(labels["pptp"], "PPTP (BCCA · Junta de Andalucía)")
@@ -189,6 +196,7 @@ class ToolDiscoveryTests(ToolTestCase):
                 ROOT / "tools" / name, folder / name,
                 ignore=shutil.ignore_patterns("__pycache__"),
             )
+        shutil.copyfile(ROOT / "tools" / "_library_markdown.py", folder / "_library_markdown.py")
         for name in list(sys.modules):
             if name == "tools" or name.startswith("tools."):
                 del sys.modules[name]
@@ -227,6 +235,10 @@ class ToolDiscoveryTests(ToolTestCase):
                 ROOT / "tools" / name, self.directory / name,
                 ignore=shutil.ignore_patterns("__pycache__"),
             )
+        shutil.copyfile(
+            ROOT / "tools" / "_library_markdown.py",
+            self.directory / "_library_markdown.py",
+        )
         resources = self.directory / "pptp" / "archivos" / "UNI"
         resources.mkdir(parents=True, exist_ok=True)
         (resources / "INDICE_FICHAS.md").write_text(
@@ -247,148 +259,89 @@ class ToolDiscoveryTests(ToolTestCase):
         self.assertEqual(catalog[0].code, "01TR")
 
 
-class ToolMenuTests(ToolTestCase):
-    """Verifica la integracion real con Tkinter y el guardado del proyecto."""
+class QtToolMenuTests(ToolTestCase):
+    """Verifica el descubrimiento y los hooks de herramientas en la interfaz PySide6."""
 
-    def make_app(self):
-        """Construye la interfaz con preferencias y herramientas aisladas."""
-        root = tk.Tk()
-        root.withdraw()
-        self.addCleanup(root.destroy)
+    def write_plugin(self, name, source=PLUGIN):
+        """Crea un complemento en la carpeta que descubre la ventana Qt."""
+        tools_directory = self.directory / "tools"
+        tools_directory.mkdir(exist_ok=True)
+        (tools_directory / f"{name}.py").write_text(source, encoding="utf-8")
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Crea una aplicación Qt compartida por las pruebas de menú."""
+        cls.application = QApplication.instance() or QApplication([])
+
+    def make_app(self) -> BudgetMainWindow:
+        """Construye la ventana con herramientas y preferencias temporales."""
+        (self.directory / "tools").mkdir(exist_ok=True)
+        (self.directory / "user").mkdir(exist_ok=True)
         with (
-            patch.object(root, "state"),
-            patch("bc3_gui.user_data_directory", return_value=self.directory),
-            patch("bc3_gui.application_directory", return_value=self.directory),
+            patch("budget_qt_window.application_directory", return_value=self.directory),
+            patch(
+                "budget_qt_window.user_data_directory",
+                return_value=self.directory / "user",
+            ),
         ):
-            return BudgetApp(root)
+            app = BudgetMainWindow()
+        self.addCleanup(app.close)
+        self.addCleanup(setattr, app, "is_dirty", False)
+        return app
 
-    def test_startup_discovers_and_executes_menu_entry(self):
-        """Un modulo encontrado al arrancar aparece y se ejecuta desde Herramientas."""
-        self.directory = self.directory / "tools"
-        self.directory.mkdir()
+    def tool_menu(self, app: BudgetMainWindow) -> QMenu:
+        """Devuelve el menú de herramientas de la ventana principal."""
+        for action in app.menuBar().actions():
+            if action.text() == "Herramientas" and action.menu() is not None:
+                return action.menu()
+        self.fail("No se encontró el menú Herramientas.")
+
+    def test_qt_menu_discovers_and_executes_plugin(self):
+        """Muestra y ejecuta el hook Qt de un complemento descubierto."""
         self.write_plugin("extra")
-        self.directory = self.directory.parent
         app = self.make_app()
-        self.assertEqual(app.tools_menu.entrycget(0, "label"), "Extra")
-        app.tools_menu.invoke(0)
+
+        actions = self.tool_menu(app).actions()
+
+        self.assertEqual([action.text() for action in actions], ["Extra"])
+        actions[0].trigger()
         self.assertTrue(app.extra_opened)
 
-    def test_empty_menu_and_unavailable_direct_access_are_explicit(self):
-        """El menu vacio y el acceso directo a modulos ausentes no causan errores."""
-        app = self.make_app()
-        self.assertEqual(app.tools_menu.entrycget(0, "state"), "disabled")
-        self.assertEqual(app.loaded_tools, [])
-        with patch("bc3_gui.messagebox.showwarning") as warning:
-            app.open_invoicing()
-        warning.assert_called_once()
-
-    def test_menu_availability_uses_tool_not_fixed_index(self):
-        """El bloqueo de un modulo se aplica a su posicion real en el menu."""
-        folder = self.directory / "tools"
-        folder.mkdir()
-        (folder / "first.py").write_text(PLUGIN, encoding="utf-8")
-        (folder / "locked.py").write_text(
-            PLUGIN.replace("TOOL_ORDER = 1", "TOOL_ORDER = 80")
-            + '\ndef is_available(app):\n    """Bloquea este complemento."""\n    return False\n',
-            encoding="utf-8",
+    def test_qt_menu_reports_plugin_open_errors(self):
+        """Notifica un error de apertura del complemento sin romper el menú."""
+        self.write_plugin(
+            "broken",
+            PLUGIN.replace(
+                "app.extra_opened = True",
+                'raise ValueError("opening")',
+            ),
         )
         app = self.make_app()
-        app._refresh_tool_menu()
-        self.assertEqual(app.tools_menu.entrycget(0, "state"), "normal")
-        self.assertEqual(app.tools_menu.entrycget(1, "state"), "disabled")
 
-    def test_broken_module_warns_and_keeps_valid_menu_entries(self):
-        """Los errores de carga son visibles sin impedir el arranque."""
-        folder = self.directory / "tools"
-        folder.mkdir()
-        (folder / "extra.py").write_text(PLUGIN, encoding="utf-8")
-        (folder / "broken.py").write_text('raise ImportError("missing")', encoding="ascii")
-        with patch("bc3_gui.messagebox.showwarning") as warning:
-            app = self.make_app()
-        warning.assert_called_once()
-        self.assertEqual(app.tools_menu.entrycget(0, "label"), "Extra")
+        with patch.object(QMessageBox, "critical") as error:
+            self.tool_menu(app).actions()[0].trigger()
 
-    def test_removing_module_removes_menu_entry_on_next_startup(self):
-        """La presencia fisica del archivo, no la cache, decide el menu."""
-        folder = self.directory / "tools"
-        folder.mkdir()
-        plugin = folder / "extra.py"
-        plugin.write_text(PLUGIN, encoding="utf-8")
-        self.assertEqual([tool.name for tool in self.make_app().loaded_tools], ["extra"])
-        plugin.unlink()
-        app = self.make_app()
-        self.assertEqual(app.loaded_tools, [])
-        self.assertEqual(app.tools_menu.entrycget(0, "state"), "disabled")
+        error.assert_called_once()
 
-    def test_failed_availability_and_open_are_reported(self):
-        """Los fallos de callbacks no quedan solo en la consola de Tkinter."""
-        folder = self.directory / "tools"
-        folder.mkdir()
-        (folder / "broken_callback.py").write_text(
-            'TOOL_LABEL = "Error"\n'
-            'def open_tool(app):\n    """Falla al abrir."""\n    raise RuntimeError("opening")\n'
-            'def is_available(app):\n    """Devuelve un estado invalido."""\n    return "invalid"\n',
-            encoding="utf-8",
-        )
-        with patch("bc3_gui.messagebox.showerror") as error:
-            app = self.make_app()
-            app._refresh_tool_menu()
-            app._open_tool("broken_callback")
-        self.assertGreaterEqual(error.call_count, 2)
-        self.assertEqual(app.tools_menu.entrycget(0, "state"), "disabled")
-
-    def test_failed_save_hook_leaves_existing_json_unchanged(self):
-        """Un error del complemento no sobrescribe el archivo ya guardado."""
-        folder = self.directory / "tools"
-        folder.mkdir()
-        (folder / "bad_save.py").write_text(
-            PLUGIN + '\ndef before_project_save(app):\n'
-            '    """Falla antes del guardado."""\n    raise RuntimeError("saving")\n',
-            encoding="utf-8",
+    def test_qt_save_hook_does_not_overwrite_project_after_validation_error(self):
+        """Preserva el JSON existente si falla el hook Qt previo al guardado."""
+        self.write_plugin(
+            "bad_save",
+            PLUGIN + (
+                '\ndef before_project_save_qt(app):\n'
+                '    """Falla antes del guardado."""\n'
+                '    raise ValueError("saving")\n'
+            ),
         )
         app = self.make_app()
         target = self.directory / "previous.json"
         target.write_text('{"previous": true}', encoding="ascii")
-        with patch("bc3_gui.messagebox.showerror") as error:
+
+        with patch.object(QMessageBox, "critical") as error:
             self.assertFalse(app._write_project_file(target))
+
         error.assert_called_once()
         self.assertEqual(target.read_text(encoding="ascii"), '{"previous": true}')
-
-    def test_project_roundtrip_preserves_states_when_modules_are_missing(self):
-        """Abrir y guardar sin tools no elimina datos ni recalcula partidas."""
-        app = self.make_app()
-        states = {
-            "rcds": {"custom": [1, 2, 3]},
-            "invoicing": {"folder": "facturas", "custom": {"preserved": True}},
-            "safety_health": {"percentage": "2.5", "lines": []},
-            "planning": {"custom": "saved"},
-            "pptp": {"custom": {"selections": [True, False]}},
-            "price_justification": {"custom": {"preserved": True}},
-        }
-        payload = {
-            "items": [{"code": "R1", "chapter": "RCD", "unit": "ud", "summary": "Residuo",
-                       "measurement": 2, "unit_price": 10, "source": "RCD:test"}],
-            **deepcopy(states),
-        }
-        project = self.directory / "project.json"
-        project.write_text(json.dumps(payload), encoding="utf-8")
-        with patch("bc3_gui.messagebox.showwarning") as warning:
-            self.assertTrue(app._load_project_file(project))
-        warning.assert_called_once()
-        self.assertTrue(app._write_project_file(project))
-        saved = json.loads(project.read_text(encoding="utf-8"))
-        for key, state in states.items():
-            self.assertEqual(saved[key], state)
-        self.assertEqual(saved["items"][0]["unit_price"], 10)
-        self.assertEqual(saved["items"][0]["measurement"], 2)
-
-    def test_empty_app_saves_without_tools_and_rejects_invalid_state(self):
-        """El guardado ordinario funciona sin herramientas; el estado debe ser JSON."""
-        app = self.make_app()
-        app.budget_items = [ProjectItem("P1", "C1", "ud", "Partida", 1, 5)]
-        self.assertTrue(app._write_project_file(self.directory / "empty.json"))
-        with self.assertRaises(ValueError):
-            app._restore_tool_state("rcd", [])
 
 
 if __name__ == "__main__":

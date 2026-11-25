@@ -3,16 +3,18 @@ import ast
 import json
 import os
 from pathlib import Path
-import shutil
 import tempfile
-from time import monotonic
-import tkinter as tk
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 from zipfile import ZipFile
 
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PySide6.QtWidgets import QApplication
+
 from app_paths import user_data_directory
-from bc3_gui import Bc3Dataset, BudgetApp, find_bc3_files, main, show_startup_screen
+from bc3_gui import Bc3Dataset, find_bc3_files, main
+from budget_qt_window import BudgetMainWindow
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -31,6 +33,11 @@ SYNTHETIC_BC3 = r"""~V|SYNTHETIC|FIEBDC-3/2016|Pruebas||
 
 class DistributionTests(unittest.TestCase):
     """Verifica que el código distribuido no requiere los datos del puesto de trabajo."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Crea la aplicación PySide necesaria para verificar el arranque actual."""
+        cls.application = QApplication.instance() or QApplication([])
 
     def test_budget_fixture_contains_only_synthetic_records(self):
         """Impide incorporar campos libres o metadatos privados en el BC3 de prueba."""
@@ -82,36 +89,6 @@ class DistributionTests(unittest.TestCase):
                         fields[4], r"^(?:\\TRAMO SINTETICO \d+\\[123]\\[1-5]\\\\\\)+$",
                     )
 
-    def test_splash_displays_image_for_two_seconds_and_closes(self):
-        """Mantiene la imagen visible dos segundos sin mostrar la ventana principal."""
-        root = tk.Tk()
-        root.withdraw()
-        observed = []
-
-        def observe_splash():
-            """Registra el estado de la imagen durante la espera de arranque."""
-            splash = next(child for child in root.winfo_children() if isinstance(child, tk.Toplevel))
-            label = splash.winfo_children()[0]
-            observed.append((
-                splash.winfo_viewable(),
-                splash.overrideredirect(),
-                splash.winfo_width(),
-                splash.winfo_height(),
-                bool(label.cget("image")),
-                root.state(),
-            ))
-
-        try:
-            root.after(100, observe_splash)
-            started = monotonic()
-            show_startup_screen(root)
-            elapsed = monotonic() - started
-            self.assertGreaterEqual(elapsed, 2.0)
-            self.assertEqual(observed, [(1, True, 612, 245, True, "withdrawn")])
-            self.assertEqual(root.winfo_children(), [])
-        finally:
-            root.destroy()
-
     def test_main_delegates_to_pyside6_entrypoint(self):
         """La entrada pública usa PySide6 sin construir la ventana Tk heredada."""
         with patch("bc3_qt.main", return_value=17) as qt_main:
@@ -136,26 +113,10 @@ class DistributionTests(unittest.TestCase):
         )
         self.assertTrue({"tkinter", "PySide6"}.isdisjoint(imports))
 
-    def test_missing_splash_image_warns_without_blocking_startup(self):
-        """Notifica un recurso ausente y permite continuar al programa."""
-        root = tk.Tk()
-        root.withdraw()
-        try:
-            with (
-                patch("bc3_gui.application_directory", return_value=Path("imagen_inexistente")),
-                patch("bc3_gui.messagebox.showwarning") as warning,
-            ):
-                show_startup_screen(root)
-            warning.assert_called_once()
-            self.assertEqual(root.winfo_children(), [])
-        finally:
-            root.destroy()
-
-    def test_startup_ignores_adjacent_data_until_explicit_project_selection(self):
-        """Arranca vacío con BC3 e historial y carga solo al importar o elegir un reciente."""
+    def test_startup_does_not_load_adjacent_budget_or_recent_project(self):
+        """Arranca vacío aunque haya un presupuesto y un proyecto reciente junto al ejecutable."""
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
-            shutil.copytree(ROOT / "iconos", folder / "iconos")
             budget = folder / "ejemplo.bc3"
             budget.write_text(SYNTHETIC_BC3, encoding="cp1252")
             (folder / "BCCA_ejemplo.bc3").write_text(SYNTHETIC_BC3, encoding="cp1252")
@@ -168,49 +129,34 @@ class DistributionTests(unittest.TestCase):
                     "summary": "Partida de prueba", "measurement": 4, "unit_price": 10,
                 }],
             }), encoding="utf-8")
-            history = folder / "proyectos_recientes.json"
+            user_directory = folder / "user"
+            user_directory.mkdir()
+            history = user_directory / "proyectos_recientes.json"
             history.write_text(json.dumps([str(project)]), encoding="utf-8")
-            for selection in ("recent", "import"):
-                with self.subTest(selection=selection):
-                    original_files = {
-                        path.relative_to(folder): path.read_bytes()
-                        for path in folder.rglob("*") if path.is_file()
-                    }
-                    root = tk.Tk()
-                    root.withdraw()
-                    try:
-                        with patch("bc3_gui.__file__", str(folder / "bc3_gui.py")):
-                            app = BudgetApp(root)
-                        self.assertEqual(app.budget_items, [])
-                        self.assertEqual(app.reference_bases, [])
-                        self.assertEqual(app.chapter_order, [])
-                        self.assertEqual(app.planning_state, {})
-                        self.assertIsNone(app.budget_dataset)
-                        self.assertIsNone(app.project_path)
-                        self.assertIsNone(app.source_budget_path)
-                        self.assertIsNone(app.project_title)
-                        self.assertFalse(app.is_dirty)
-                        self.assertEqual(app.budget_tree.get_children(), ())
-                        self.assertEqual(app.recent_projects, [project])
-                        self.assertEqual(
-                            {
-                                path.relative_to(folder): path.read_bytes()
-                                for path in folder.rglob("*") if path.is_file()
-                            },
-                            original_files,
-                        )
-                        if selection == "recent":
-                            app.file_menu.invoke(1)
-                        else:
-                            with patch("bc3_gui.filedialog.askopenfilename", return_value=str(budget)):
-                                app.load_budget_dialog()
-                        self.assertEqual([item.code for item in app.budget_items], ["P1"])
-                        self.assertEqual(app.project_path, project)
-                        self.assertEqual(app.source_budget_path, budget)
-                        self.assertIsNotNone(app.budget_dataset)
-                        self.assertTrue(app.budget_tree.get_children())
-                    finally:
-                        root.destroy()
+            with (
+                patch("budget_qt_window.application_directory", return_value=folder),
+                patch(
+                    "budget_qt_window.user_data_directory",
+                    return_value=user_directory,
+                ),
+            ):
+                app = BudgetMainWindow()
+            try:
+                self.assertEqual(app.budget_items, [])
+                self.assertEqual(app.reference_bases, [])
+                self.assertEqual(app.chapter_order, [])
+                self.assertEqual(app.planning_state, {})
+                self.assertIsNone(app.budget_dataset)
+                self.assertIsNone(app.project_path)
+                self.assertIsNone(app.source_budget_path)
+                self.assertIsNone(app.project_title)
+                self.assertFalse(app.is_dirty)
+                self.assertEqual(app.budget_tree.topLevelItemCount(), 0)
+                self.assertEqual(app.recent_projects, [project])
+            finally:
+                app.is_dirty = False
+                app.close()
+                self.application.processEvents()
 
     def test_synthetic_bc3_loads_measurements_prices_and_resources(self):
         """Lee un BC3 ficticio y comprueba su presupuesto y descomposición."""
@@ -263,7 +209,6 @@ class DistributionTests(unittest.TestCase):
         """Comprueba los recursos enlazados y las dependencias externas de la app."""
         self.assertTrue((ROOT / "iconos" / "logo.ico").is_file())
         self.assertTrue((ROOT / "iconos" / "Arranque.jpg").is_file())
-        self.assertTrue((ROOT / "iconos" / "logo_odt.jpg").is_file())
         requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8").lower()
         for name in (
             "odfpy", "openpyxl", "reportlab", "pillow", "matplotlib",
@@ -303,6 +248,8 @@ class DistributionTests(unittest.TestCase):
             self.assertIn(f'"{resource.lower()}"', build_script)
         for resource in (
             r"safety_health\datos\ntps.csv", r"pptp\docs\unes.csv",
+            r"safety_health\datos\vinculos_familia_bcca2023.csv",
+            r"safety_health\datos\catalogo_ss_vinculado_bcca2023.csv",
             r"safety_health\datos\NTP_tematica_por_codigo_BCCA.csv",
             r"document_structure\plantillas\maestro\plantilla.odt",
             r"document_structure\plantillas\maestro\logo.jpg",

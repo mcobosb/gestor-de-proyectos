@@ -114,7 +114,13 @@ class SafetyHealthTests(unittest.TestCase):
 
     def test_saved_review_validation_and_roundtrip(self):
         """Validate saved selections and reject malformed or nonfinite project data."""
-        lines = [SafetyLine("A", "ud", "Casco", Decimal("3.50"), Decimal("2"), False)]
+        lines = [
+            SafetyLine("A", "ud", "Casco", Decimal("3.50"), Decimal("2"), False),
+            SafetyLine(
+                "19SIC00001", "ud", "Barandilla", Decimal("12.50"), Decimal(),
+                quantity=Decimal("1"),
+            ),
+        ]
         state = serialize_state(
             lines, Decimal("2.5"), centros_asistenciales="Hospital General\nCentro de Salud",
             external_conditions={
@@ -150,6 +156,7 @@ class SafetyHealthTests(unittest.TestCase):
             {**state, "centros_asistenciales": ["Hospital General"]},
             {**state, "lines": [state["lines"][0], state["lines"][0]]},
             {**state, "lines": [{**state["lines"][0], "price": "inf"}]},
+            {**state, "lines": [{**state["lines"][1], "quantity": "0"}]},
             {**state, "lines": [{**state["lines"][0], "selected": "yes"}]},
             {**state, "external_conditions": []},
             {**state, "resumen_actuacion": None},
@@ -172,6 +179,37 @@ class SafetyHealthTests(unittest.TestCase):
         ):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 restore_state(invalid)
+
+    def test_fixed_quantity_linked_units_use_catalog_price_without_weight(self):
+        """Materializa una unidad vinculada al precio de catálogo y cantidad mínima."""
+        source = ProjectItem(
+            "01AAB00001", "01#", "m2", "Demolición de bóveda",
+            measurement=10, unit_price=15.89,
+        )
+        linked = SafetyLine(
+            "19SIC00001", "ud", "Barandilla", Decimal("12.50"), Decimal(),
+            quantity=Decimal("1"),
+        )
+        app = SimpleNamespace(
+            budget_items=[source],
+            chapter_order=["01#"],
+            chapter_titles={},
+            report_settings=ReportSettings(general_expenses=0, industrial_profit=0, vat=0),
+            safety_health_state={"chapter_selection": {"01#": True}},
+            _ensure_chapter=lambda chapter: None,
+            refresh_budget_tree=lambda: None,
+            _mark_dirty=lambda: None,
+            _chapter_title=lambda chapter: "OBRA",
+        )
+
+        synchronize_budget(app, [linked], Decimal("2"))
+
+        generated = next(
+            item for item in app.budget_items
+            if item.source == SAFETY_BUDGET_SOURCE + linked.code
+        )
+        self.assertEqual(generated.measurement, 1)
+        self.assertEqual(generated.unit_price, float(linked.price))
 
     def test_proposal_and_generated_chapter_preserve_the_original_budget(self):
         source = ProjectItem(

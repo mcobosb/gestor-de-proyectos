@@ -286,6 +286,7 @@ def _wrap_project_title(root: ET.Element, element: ET.Element) -> None:
     metrics = QFontMetricsF(font)
 
     def width(value: str) -> float:
+        """Mide el texto a su tamaño SVG original."""
         return metrics.horizontalAdvance(value) * size / font.pixelSize()
 
     available = 32 * size
@@ -329,6 +330,7 @@ def _wrap_project_title(root: ET.Element, element: ET.Element) -> None:
             style = node.get("style")
             if style:
                 def scale_style(match: re.Match) -> str:
+                    """Ajusta el tamaño de fuente SVG conservando unidades relativas."""
                     if node is element:
                         return f"{match.group(1)}{element_size * factor}px"
                     value = re.fullmatch(

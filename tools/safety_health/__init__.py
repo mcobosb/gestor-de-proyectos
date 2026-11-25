@@ -248,6 +248,7 @@ class SafetyLine:
     price: Decimal
     weight: Decimal
     selected: bool = True
+    quantity: Decimal | None = None
 
 
 def _budget_safety_lines(app: BudgetApp) -> list[SafetyLine]:
@@ -322,12 +323,16 @@ def serialize_state(
         "centros_asistenciales_datos": [
             dict(row) for row in centros_asistenciales_datos or []
         ],
-        "lines": [
-            {"code": line.code, "unit": line.unit, "summary": line.summary,
-             "price": str(line.price), "weight": str(line.weight), "selected": line.selected}
-            for line in lines
-        ],
+        "lines": [],
     }
+    for line in lines:
+        row = {
+            "code": line.code, "unit": line.unit, "summary": line.summary,
+            "price": str(line.price), "weight": str(line.weight), "selected": line.selected,
+        }
+        if line.quantity is not None:
+            row["quantity"] = str(line.quantity)
+        state["lines"].append(row)
     criteria = _study_criteria_values(study_criteria)
     if chapter_selection is not None:
         state["chapter_selection"] = restore_chapter_selection(chapter_selection)
@@ -378,10 +383,14 @@ def restore_state(data: object) -> tuple[list[SafetyLine], Decimal]:
             if not row["code"] or row["code"] in codes or not isinstance(row.get("selected"), bool):
                 raise ValueError("La selección de Seguridad y Salud no es válida.")
             price, weight = _decimal(row["price"]), _decimal(row["weight"])
+            quantity = _decimal(row["quantity"]) if "quantity" in row else None
             if (not price.is_finite() or not weight.is_finite() or price <= 0 or weight < 0):
                 raise ValueError("Los precios y pesos de Seguridad y Salud no son válidos.")
+            if quantity is not None and (not quantity.is_finite() or quantity <= 0):
+                raise ValueError("La cantidad de Seguridad y Salud no es válida.")
             lines.append(SafetyLine(
                 row["code"], row["unit"], row["summary"], price, weight, row["selected"],
+                quantity,
             ))
             codes.add(row["code"])
     except (KeyError, ArithmeticError, TypeError) as exc:
@@ -448,9 +457,10 @@ def synchronize_budget(
     selected = [line for line in lines if line.selected]
     if not selected:
         raise ValueError("Selecciona al menos una partida de Seguridad y Salud.")
-    total_weight = sum((line.weight for line in selected), Decimal())
+    weighted = [line for line in selected if line.quantity is None]
+    total_weight = sum((line.weight for line in weighted), Decimal())
     target = (base * percentage / 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    if total_weight <= 0:
+    if weighted and total_weight <= 0:
         raise ValueError("La propuesta no contiene pesos válidos.")
     previous_items = [
         item for item in app.budget_items if item.source.startswith(SAFETY_BUDGET_SOURCE)
@@ -479,15 +489,26 @@ def synchronize_budget(
             ]
             app.chapter_titles.pop(previous_chapter, None)
     for line in selected:
-        amount = target * line.weight / total_weight
-        quantity = (amount / line.price).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+        quantity = line.quantity
+        if quantity is None:
+            amount = target * line.weight / total_weight
+            quantity = (amount / line.price).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
         item = ProjectItem(
             f"SS-{line.code}", chapter, line.unit, line.summary.upper(),
             unit_price=float(line.price), source=SAFETY_BUDGET_SOURCE + line.code,
-            text="Partida propuesta por la matriz de Seguridad y Salud. Revisar por técnico competente.",
+            text=(
+                "Unidad vinculada a partidas del presupuesto; cantidad mínima propuesta. "
+                "Revisar por técnico competente."
+                if line.quantity is not None else
+                "Partida propuesta por la matriz de Seguridad y Salud. Revisar por técnico competente."
+            ),
         )
         item.measurement_lines = [MeasurementLine(
-            comment=f"Propuesta SS ({percentage.normalize()} % del presupuesto previo)",
+            comment=(
+                "Propuesta vinculada al presupuesto (1 unidad mínima)"
+                if line.quantity is not None else
+                f"Propuesta SS ({percentage.normalize()} % del presupuesto previo)"
+            ),
             units=float(quantity),
         )]
         item.recalculate_measurement()

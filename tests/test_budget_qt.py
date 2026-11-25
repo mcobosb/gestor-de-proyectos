@@ -35,7 +35,7 @@ from tools._shared.reference_pill import ReferencePill
 from tools.price_justification.qt_window import PriceJustificationWindowQt
 from tools.rcd import RCD_BUDGET_SOURCE
 from tools.rcd.qt_window import RcdWindowQt
-from tools.safety_health import proposed_lines, serialize_state
+from tools.safety_health import SAFETY_BUDGET_SOURCE, proposed_lines, serialize_state
 from tools.safety_health.qt_window import (
     ChapterSelectionDialogQt,
     ExternalConditionsDialogQt,
@@ -1385,7 +1385,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             tool.drawings_format.setCurrentText("A3")
             first = tool.drawings_table.item(0, 0)
             first.setCheckState(Qt.CheckState.Checked)
-            self.assertTrue(window.safety_health_state["drawings"]["selected"]["CIN12"])
+            self.assertTrue(window.safety_health_state["drawings"]["selected"]["A3-AUX09"])
             tool.summary_text.setPlainText("Resumen preventivo Qt")
             tool.commit_basic_state()
             self.assertEqual(
@@ -1405,28 +1405,131 @@ class BudgetQtWindowTests(unittest.TestCase):
                 "yes",
             )
             proposal = tool.open_proposal()
-            self.assertEqual(proposal.table.rowCount(), 3)
+            proposal_codes = [line.code for line in proposal.lines]
+            self.assertEqual(proposal.table.rowCount(), len(proposal.lines))
+            self.assertEqual(len(proposal_codes), len(set(proposal_codes)))
             self.assertTrue(proposal.insert_button.isEnabled())
             with patch.object(window, "save_project", return_value=False):
                 self.assertTrue(proposal.create_chapter())
             self.assertEqual(window.safety_health_state["drawings"]["paper"], "A3")
-            self.assertTrue(window.safety_health_state["drawings"]["selected"]["CIN12"])
+            self.assertTrue(window.safety_health_state["drawings"]["selected"]["A3-AUX09"])
             reopened = SafetyHealthWindowQt(window)
             self.assertEqual(reopened.drawings_format.currentText(), "A3")
             self.assertEqual(reopened.drawings_table.item(0, 0).checkState(), Qt.CheckState.Checked)
+            self.assertTrue(
+                window.safety_health_state["drawings"]["selected"]["A3-AUX09"]
+            )
             reopened.reject()
             generated = [
                 row
                 for row in window.budget_items
                 if row.source.startswith("SS:")
             ]
-            self.assertEqual(len(generated), 3)
+            self.assertEqual(len(generated), len(proposal.lines))
+            self.assertEqual(
+                {row.source.removeprefix("SS:") for row in generated},
+                set(proposal_codes),
+            )
             self.assertFalse(proposal.insert_button.isEnabled())
             proposal.reject()
             tool.reject()
             window.is_dirty = False
             window.close()
             self.application.processEvents()
+
+    def test_safety_proposal_displays_mapped_units_without_adding_them(self) -> None:
+        """Consulta las unidades vinculadas sin incorporarlas al presupuesto."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            self.addCleanup(self.application.processEvents)
+            self.addCleanup(window.close)
+            self.addCleanup(setattr, window, "is_dirty", False)
+            item = ProjectItem(
+                "01AAB00001", "01#", "m2", "Demolición de bóveda",
+                measurement=1, unit_price=15.89,
+            )
+            window.budget_items = [item]
+            window.chapter_order = ["01#"]
+            window.safety_health_state = serialize_state(
+                proposed_lines([item]), Decimal("2"), chapter_selection={"01#": True},
+            )
+            tool = SafetyHealthWindowQt(window)
+            self.addCleanup(tool.close)
+            proposal = tool.open_proposal()
+            self.addCleanup(proposal.close)
+
+            self.assertEqual(proposal.tabs.tabText(1), "Vínculos con obra")
+            source_index = proposal.work_family_combo.findData("01AAB")
+            self.assertGreaterEqual(source_index, 0)
+            proposal.work_family_combo.setCurrentIndex(source_index)
+            self.assertGreater(proposal.related_families_table.rowCount(), 0)
+            self.assertGreater(proposal.related_units_table.rowCount(), 0)
+            self.assertTrue(
+                proposal.related_units_table.item(0, 0).text().startswith("19")
+            )
+            related_codes = [unit.code for unit in proposal.related_items]
+            proposal_codes = [line.code for line in proposal.lines]
+            self.assertTrue(related_codes)
+            self.assertEqual(len(proposal_codes), len(set(proposal_codes)))
+            self.assertTrue(set(related_codes).issubset(proposal_codes))
+            for unit in proposal.related_items:
+                line = next(line for line in proposal.lines if line.code == unit.code)
+                self.assertEqual(line.price, unit.price)
+                self.assertEqual(line.quantity, Decimal("1"))
+                self.assertTrue(line.selected)
+            self.assertEqual(window.budget_items, [item])
+
+    def test_safety_proposal_creates_linked_units_once_and_honors_unchecks(self) -> None:
+        """Crea cada unidad vinculada una vez y respeta las casillas desmarcadas."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            self.addCleanup(window.close)
+            self.addCleanup(setattr, window, "is_dirty", False)
+            source = ProjectItem(
+                "01AAB00001", "01#", "m2", "Demolición de bóveda",
+                measurement=1, unit_price=15.89,
+            )
+            window.budget_items = [source]
+            window.chapter_order = ["01#"]
+            window.safety_health_state = serialize_state(
+                [], Decimal("2"), chapter_selection={"01#": True},
+            )
+            tool = SafetyHealthWindowQt(window)
+            self.addCleanup(tool.close)
+            proposal = tool.open_proposal()
+            self.addCleanup(proposal.close)
+
+            excluded_code = proposal.related_items[0].code
+            row = next(
+                row for row in range(proposal.table.rowCount())
+                if proposal.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+                == excluded_code
+            )
+            proposal.table.item(row, 0).setCheckState(Qt.CheckState.Unchecked)
+
+            self.assertTrue(proposal.create_chapter())
+
+            generated_codes = [
+                item.source.removeprefix(SAFETY_BUDGET_SOURCE)
+                for item in window.budget_items
+                if item.source.startswith(SAFETY_BUDGET_SOURCE)
+            ]
+            self.assertEqual(len(generated_codes), len(set(generated_codes)))
+            self.assertNotIn(excluded_code, generated_codes)
+            for unit in proposal.related_items:
+                if unit.code == excluded_code:
+                    continue
+                generated = next(code for code in generated_codes if code == unit.code)
+                generated_item = next(
+                    item for item in window.budget_items
+                    if item.source == SAFETY_BUDGET_SOURCE + generated
+                )
+                self.assertEqual(generated_item.measurement, 1)
+                self.assertEqual(generated_item.unit_price, float(unit.price))
 
     def test_safety_drawings_can_preview_add_and_restore_custom_svg(self) -> None:
         """La biblioteca personal se previsualiza y su selección se conserva."""
@@ -2611,8 +2714,14 @@ class BudgetQtWindowTests(unittest.TestCase):
             "budget_qt_window.user_data_directory", return_value=Path(directory)
         ):
             window = BudgetMainWindow()
-            source = Path(ROOT / "tests" / "test.bc3")
-            window._load_budget_file(source)
+            source = Path(directory) / "test.bc3"
+            shutil.copyfile(ROOT / "tests" / "test.bc3", source)
+            with patch.object(
+                window,
+                "_ask_collaboration_protection",
+                return_value=(False, True),
+            ):
+                window._load_budget_file(source)
             window._load_reference_file(source)
             self.assertEqual(
                 set(window.budget_filter_buttons), {"2", "1", "3"}

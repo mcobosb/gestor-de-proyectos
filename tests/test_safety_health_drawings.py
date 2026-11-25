@@ -121,7 +121,7 @@ class SafetyDrawingsTests(unittest.TestCase):
                     add_user_sheet(path)
             self.assertEqual(available_sheets(), list(SHEETS))
 
-    def test_packaged_library_contains_each_catalogued_original(self):
+    def test_packaged_library_contains_each_catalogued_sheet(self):
         with ZipFile(LIBRARY) as archive:
             self.assertEqual(
                 {name for name in archive.namelist() if not name.endswith("/")},
@@ -161,7 +161,7 @@ class SafetyDrawingsTests(unittest.TestCase):
                         luminance = sum(value * weight for value, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
                         self.assertGreaterEqual(1.05 / (luminance + 0.05), 4.5, (sheet.filename, color))
 
-    def test_a3_combines_a4_pairs_and_full_width_a3_plan(self):
+    def test_rendering_uses_the_selected_paper_catalog(self):
         with TemporaryDirectory() as directory:
             app = self.make_app(directory)
             archive_path = Path(directory) / "planos.zip"
@@ -181,14 +181,11 @@ class SafetyDrawingsTests(unittest.TestCase):
                  patch("tools.safety_health.drawings.LIBRARY", archive_path):
                 selected = {sheet.code: True for sheet in sheets}
                 images = render_drawings(app, {"paper": "A3", "selected": selected})
-                self.assertEqual(len(images), 2)
-                paired = QImage.fromData(images[0])
-                native = QImage.fromData(images[1])
+                self.assertEqual(len(images), 1)
+                native = QImage.fromData(images[0])
                 pixels_per_mm = 200 / 25.4
                 def pixel(image, x, y):
                     return image.pixelColor(round(x * pixels_per_mm), round(y * pixels_per_mm))
-                self.assertGreater(pixel(paired, 80, 145).red(), 200)
-                self.assertGreater(pixel(paired, 250, 145).blue(), 200)
                 self.assertGreater(pixel(native, 20, 145).green(), 100)
                 self.assertGreater(pixel(native, 300, 145).green(), 100)
                 self.assertEqual(
@@ -383,7 +380,7 @@ class SafetyDrawingsTests(unittest.TestCase):
                 inner = next(node for node in root.iter() if node.get("id") == "inner")
                 self.assertEqual(inner.text, "Proyecto")
 
-    def test_pdf_and_odt_embed_one_a4_or_two_a3_sheets_per_page(self):
+    def test_pdf_and_odt_embed_selected_format_sheets(self):
         with TemporaryDirectory() as directory:
             app = self.make_app(directory)
             content = _StudyContent(
@@ -392,9 +389,14 @@ class SafetyDrawingsTests(unittest.TestCase):
             )
             for paper, count in (("A4", 3), ("A3", 2)):
                 with self.subTest(paper=paper):
-                    state = {"paper": paper, "selected": {
-                        sheet.code: index < 3 for index, sheet in enumerate(SHEETS)
-                    }}
+                    catalog = [sheet for sheet in SHEETS if sheet.paper == paper]
+                    state = {
+                        "paper": paper,
+                        "selected": {
+                            sheet.code: index < count
+                            for index, sheet in enumerate(catalog)
+                        },
+                    }
                     images = render_drawings(app, state)
                     self.assertEqual(len(images), count)
                     self.assertTrue(all(image.startswith(b"\x89PNG\r\n\x1a\n") for image in images))

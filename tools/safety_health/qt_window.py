@@ -44,6 +44,7 @@ from . import (
     CARE_CENTERS_URL,
     SAFETY_BUDGET_SOURCE,
     LIBRARY_PATH,
+    SafetyLine,
     _budget_safety_lines,
     _decimal,
     _format_decimal,
@@ -74,6 +75,10 @@ from .technical_conditions import (
     TECHNICAL_BLOCKS,
     restore_technical_review,
     technical_review_confirmed,
+)
+from .related_units import (
+    load_related_safety_data,
+    related_items_for_work_families,
 )
 
 
@@ -999,7 +1004,40 @@ class SafetyProposalDialogQt(QDialog):
         super().__init__(owner)
         self.owner = owner
         self.app = owner.app
+        self.related_data_error = ""
+        try:
+            self.related_family_links, self.related_catalog = load_related_safety_data()
+        except ValueError as exc:
+            self.related_family_links = {}
+            self.related_catalog = {}
+            self.related_data_error = str(exc)
+        work_items = study_items(self.app)
+        self.work_families: dict[str, str] = {}
+        for work_item in work_items:
+            family = work_item.code[:5].upper()
+            if family in self.related_family_links:
+                self.work_families.setdefault(family, work_item.summary)
+        self.related_items = related_items_for_work_families(
+            self.work_families, self.related_family_links, self.related_catalog,
+        )
         self.lines = owner.lines
+        lines_by_code = {line.code: line for line in self.lines}
+        for unit in self.related_items:
+            line = lines_by_code.get(unit.code)
+            if line is None:
+                line = SafetyLine(
+                    unit.code, unit.unit, unit.summary, unit.price, Decimal(),
+                    quantity=Decimal("1"),
+                )
+                self.lines.append(line)
+                lines_by_code[unit.code] = line
+            else:
+                line.unit = unit.unit
+                line.summary = unit.summary
+                line.price = unit.price
+                line.weight = Decimal()
+                line.quantity = Decimal("1")
+        owner.lines = self.lines
         self.library_editor: LibraryEditorQt | None = None
         self.setWindowTitle("Propuesta de unidades de Seguridad y Salud")
         self.resize(1120, 720)
@@ -1014,9 +1052,15 @@ class SafetyProposalDialogQt(QDialog):
         library.clicked.connect(self.open_library_editor)
         header.addWidget(library)
         layout.addLayout(header)
+        proposal_note = QLabel(
+            "Las unidades vinculadas a partidas del presupuesto se incluyen una sola vez, "
+            "marcadas y con cantidad 1. Las demás conservan el reparto porcentual vigente."
+        )
+        proposal_note.setWordWrap(True)
+        layout.addWidget(proposal_note)
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(
-            ("Incluir", "Código", "Partida", "Ud.", "Precio", "Peso")
+            ("Incluir", "Código", "Partida", "Ud.", "Precio", "Cantidad")
         )
         self.table.horizontalHeader().setSectionResizeMode(
             2, QHeaderView.ResizeMode.Stretch
@@ -1032,12 +1076,23 @@ class SafetyProposalDialogQt(QDialog):
             )
             self.table.setItem(row, 0, check)
             for column, value in enumerate(
-                (line.code, line.summary, line.unit, f"{line.price:.2f}", f"{line.weight:.2f}"),
+                (
+                    line.code, line.summary, line.unit, f"{line.price:.2f}",
+                    _format_decimal(line.quantity) if line.quantity is not None
+                    else "Según porcentaje",
+                ),
                 1,
             ):
                 self.table.setItem(row, column, QTableWidgetItem(value))
         self.table.itemChanged.connect(self.changed)
-        layout.addWidget(self.table, 1)
+        self.tabs = QTabWidget()
+        proposal_tab = QWidget()
+        proposal_layout = QVBoxLayout(proposal_tab)
+        proposal_layout.setContentsMargins(0, 0, 0, 0)
+        proposal_layout.addWidget(self.table)
+        self.tabs.addTab(proposal_tab, "Propuesta")
+        self.tabs.addTab(self._build_related_units_tab(), "Vínculos con obra")
+        layout.addWidget(self.tabs, 1)
         actions = QHBoxLayout()
         report = QPushButton("Generar estudio completo")
         report.clicked.connect(self.generate_report)
@@ -1052,6 +1107,119 @@ class SafetyProposalDialogQt(QDialog):
         layout.addLayout(actions)
         self.app.budget_refreshed.connect(self._refresh_insert_action)
         self._refresh_insert_action()
+
+    def _build_related_units_tab(self) -> QWidget:
+        """Crea la consulta revisable de unidades vinculadas a las partidas de obra."""
+        tab = QWidget()
+        related_layout = QVBoxLayout(tab)
+        note = QLabel(
+            "Vínculos orientativos por familia BCCA de cinco caracteres. "
+            "Las unidades de las partidas seleccionadas aparecen en Propuesta una sola vez, "
+            "con cantidad 1; revisa técnicamente su inclusión."
+        )
+        note.setWordWrap(True)
+        related_layout.addWidget(note)
+        family_row = QHBoxLayout()
+        family_row.addWidget(QLabel("Partida de obra:"))
+        self.work_family_combo = QComboBox()
+        family_row.addWidget(self.work_family_combo, 1)
+        related_layout.addLayout(family_row)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.related_families_table = QTableWidget(0, 3)
+        self.related_families_table.setHorizontalHeaderLabels(
+            ("Familia SyS", "Categoría", "Criterio")
+        )
+        self.related_families_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch
+        )
+        self.related_families_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.related_families_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        splitter.addWidget(self.related_families_table)
+        self.related_units_table = QTableWidget(0, 4)
+        self.related_units_table.setHorizontalHeaderLabels(
+            ("Código", "Ud.", "Unidad de Seguridad y Salud", "Precio (€)")
+        )
+        self.related_units_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch
+        )
+        self.related_units_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.related_units_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        splitter.addWidget(self.related_units_table)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 2)
+        related_layout.addWidget(splitter, 1)
+        self.related_status = QLabel()
+        self.related_status.setWordWrap(True)
+        related_layout.addWidget(self.related_status)
+        self.related_families_table.itemSelectionChanged.connect(
+            self._show_related_units
+        )
+        self.work_family_combo.currentIndexChanged.connect(
+            self._show_related_families
+        )
+        if self.related_data_error:
+            self.related_status.setText(self.related_data_error)
+            self.work_family_combo.setEnabled(False)
+            self.related_families_table.setEnabled(False)
+            self.related_units_table.setEnabled(False)
+            return tab
+
+        for family, summary in sorted(self.work_families.items()):
+            self.work_family_combo.addItem(f"{family} — {summary}", family)
+        if self.work_family_combo.count():
+            self._show_related_families()
+        else:
+            self.related_status.setText(
+                "No hay partidas seleccionadas con vínculos disponibles."
+            )
+        return tab
+
+    def _show_related_families(self) -> None:
+        """Muestra las familias de Seguridad y Salud asociadas a la partida elegida."""
+        self.related_families_table.setRowCount(0)
+        self.related_units_table.setRowCount(0)
+        family = self.work_family_combo.currentData()
+        links = self.related_family_links.get(family, ())
+        for link in links:
+            row = self.related_families_table.rowCount()
+            self.related_families_table.insertRow(row)
+            code = QTableWidgetItem(link.code)
+            code.setData(Qt.ItemDataRole.UserRole, link.code)
+            self.related_families_table.setItem(row, 0, code)
+            self.related_families_table.setItem(row, 1, QTableWidgetItem(link.category))
+            self.related_families_table.setItem(row, 2, QTableWidgetItem(link.criterion))
+        if links:
+            self.related_families_table.selectRow(0)
+            self.related_status.setText(
+                f"{len(links)} familias vinculadas. Selecciona una para ver sus unidades."
+            )
+        else:
+            self.related_status.setText("La partida seleccionada no tiene vínculos.")
+
+    def _show_related_units(self) -> None:
+        """Muestra las unidades del catálogo para la familia de Seguridad seleccionada."""
+        self.related_units_table.setRowCount(0)
+        row = self.related_families_table.currentRow()
+        family_item = self.related_families_table.item(row, 0) if row >= 0 else None
+        if family_item is None:
+            return
+        family = str(family_item.data(Qt.ItemDataRole.UserRole))
+        for unit in self.related_catalog.get(family, ()):
+            row = self.related_units_table.rowCount()
+            self.related_units_table.insertRow(row)
+            values = (
+                unit.code, unit.unit, unit.summary, f"{unit.price:.2f}",
+            )
+            for column, value in enumerate(values):
+                self.related_units_table.setItem(row, column, QTableWidgetItem(value))
 
     def _refresh_insert_action(self) -> None:
         """Impide volver a insertar un capítulo preventivo existente."""
