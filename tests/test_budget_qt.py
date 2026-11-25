@@ -12,8 +12,8 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import (
-    QApplication, QDialog, QDialogButtonBox, QFileDialog, QFileSystemModel, QLabel,
-    QLineEdit, QMainWindow, QMessageBox,
+    QApplication, QDialog, QDialogButtonBox, QFileDialog, QFileSystemModel, QHeaderView,
+    QLabel, QLineEdit, QMainWindow, QMessageBox,
     QPushButton, QScrollArea, QSplashScreen, QSplitter, QTreeView, QVBoxLayout,
 )
 from PySide6.QtCore import QCoreApplication, QEvent, Qt, QTimer, QUrl
@@ -201,6 +201,26 @@ class BudgetQtWindowTests(unittest.TestCase):
             window.refresh_reference_tree()
             self.assertEqual(window.reference_heading.text(), "Sin cargar")
             self.assertEqual(window.reference_heading.toolTip(), "")
+
+    def test_budget_columns_can_be_resized_horizontally(self) -> None:
+        """Permite ajustar manualmente el ancho de todas las columnas del presupuesto."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            self.addCleanup(QCoreApplication.sendPostedEvents, None, QEvent.Type.DeferredDelete)
+            self.addCleanup(window.deleteLater)
+            header = window.budget_tree.header()
+
+            for column in range(header.count()):
+                self.assertEqual(
+                    header.sectionResizeMode(column),
+                    QHeaderView.ResizeMode.Interactive,
+                )
+
+            previous_width = header.sectionSize(2)
+            header.resizeSection(2, previous_width + 80)
+            self.assertEqual(header.sectionSize(2), previous_width + 80)
 
     def test_drag_drop_loads_bc3_json_and_collaborative_folder(self) -> None:
         """Acepta arrastre de los tres formatos compatibles y rechaza otros."""
