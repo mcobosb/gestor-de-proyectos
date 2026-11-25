@@ -21,7 +21,7 @@ class ReportCalculationsTests(unittest.TestCase):
         from bc3_gui import ProjectItem
         from odt_reports import _tag
         from pypdf import PdfReader
-        from report_layout import DEFAULT_TEMPLATE_PATH, ReportLayout
+        from report_layout import ReportLayout
 
         items = [ProjectItem(
             "P1", "01#", "ud", "Partida sin plantilla", 3, 10,
@@ -62,33 +62,33 @@ class ReportCalculationsTests(unittest.TestCase):
             self.assertIn("Partida sin plantilla", " ".join(content.itertext()))
 
     def test_odt_template_inserts_logo_and_replaces_project_fields(self):
-        """Insert the bundled logo at {{logo}} and resolve title and expediente fields."""
+        """Insert the configured logo at {{logo}} and resolve project fields."""
         from odt_reports import _new_report, _tag
-        from report_layout import DEFAULT_TEMPLATE_PATH
+        from PIL import Image
+        from report_layout import (
+            ReportLayout, _read_report_template, _template_length_to_points,
+        )
 
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
+            logo_path = root / "logo-institucional.jpg"
+            Image.new("RGB", (4, 2), (220, 10, 10)).save(logo_path, format="JPEG")
+            configured_logo = logo_path.read_bytes()
+            base_template = root / "base-template.odt"
             template = root / "dynamic-logo-template.odt"
-            with ZipFile(DEFAULT_TEMPLATE_PATH) as source, ZipFile(template, "w") as target:
+            with patch("report_layout.DEFAULT_TEMPLATE_PATH", root / "missing-default-template.odt"):
+                _new_report("Plantilla base", "Proyecto", ReportSettings()).write(base_template)
+            with ZipFile(base_template) as source, ZipFile(template, "w") as target:
                 for entry in source.infolist():
                     data = source.read(entry.filename)
                     if entry.filename == "styles.xml":
                         styles = ElementTree.fromstring(data)
                         header = styles.find(f".//{_tag('style:header')}")
-                        frame = header.find(f".//{_tag('draw:frame')}")
-                        parents = {child: parent for parent in header.iter() for child in parent}
-                        paragraph = next(
-                            parent for parent in parents
-                            if parent.tag == _tag("text:p") and frame in list(parent.iter())
-                        )
-                        parents[frame].remove(frame)
-                        for child in list(paragraph):
-                            paragraph.remove(child)
-                        paragraph.text = "{{logo}}"
-                        fields = ElementTree.SubElement(header, _tag("text:p"), {
-                            _tag("text:style-name"): paragraph.get(_tag("text:style-name"), ""),
-                        })
-                        ElementTree.SubElement(fields, _tag("text:span")).text = (
+                        self.assertIsNotNone(header)
+                        for child in list(header):
+                            header.remove(child)
+                        ElementTree.SubElement(header, _tag("text:p")).text = "{{logo}}"
+                        ElementTree.SubElement(header, _tag("text:p")).text = (
                             "{{titulo}} · {{expediente}}"
                         )
                         data = ElementTree.tostring(styles, encoding="utf-8")
@@ -96,10 +96,15 @@ class ReportCalculationsTests(unittest.TestCase):
 
             settings = ReportSettings(
                 template_path=str(template), expediente="GEX 2026/01",
+                master_logo_path=str(logo_path),
             )
             target = root / "dynamic-logo-output.odt"
             _new_report("Documento", "Proyecto singular", settings).write(target)
 
+            layout = ReportLayout(
+                template_path=str(template), logo_path=str(logo_path),
+            )
+            self.assertEqual(layout.template_image_path, str(logo_path))
             with ZipFile(target) as archive:
                 styles = ElementTree.fromstring(archive.read("styles.xml"))
                 header = styles.find(f".//{_tag('style:header')}")
@@ -113,7 +118,88 @@ class ReportCalculationsTests(unittest.TestCase):
                 self.assertIsNotNone(image)
                 image_path = image.get(_tag("xlink:href"))
                 self.assertIn(image_path, archive.namelist())
-                self.assertTrue(archive.read(image_path))
+                self.assertEqual(archive.read(image_path), configured_logo)
+                parents = {child: parent for parent in header.iter() for child in parent}
+                logo_frame = parents[image]
+                self.assertAlmostEqual(
+                    _template_length_to_points(logo_frame.get(_tag("svg:width"))),
+                    _template_length_to_points("2.314cm"),
+                    places=2,
+                )
+                self.assertAlmostEqual(
+                    _template_length_to_points(logo_frame.get(_tag("svg:x"))), 0,
+                    places=2,
+                )
+
+            framed_template = root / "framed-logo-template.odt"
+            with ZipFile(template) as source, ZipFile(framed_template, "w") as target:
+                for entry in source.infolist():
+                    data = source.read(entry.filename)
+                    if entry.filename == "styles.xml":
+                        styles = ElementTree.fromstring(data)
+                        header = styles.find(f".//{_tag('style:header')}")
+                        marker = next(
+                            paragraph for paragraph in header.findall(f".//{_tag('text:p')}")
+                            if "{{logo}}" in "".join(paragraph.itertext())
+                        )
+                        parents = {child: parent for parent in header.iter() for child in parent}
+                        parents[marker].remove(marker)
+                        frame = ElementTree.Element(_tag("draw:frame"), {
+                            _tag("svg:width"): "6cm", _tag("svg:height"): "2cm",
+                        })
+                        text_box = ElementTree.SubElement(frame, _tag("draw:text-box"))
+                        ElementTree.SubElement(text_box, _tag("text:p")).text = "{{logo}}"
+                        header.insert(0, frame)
+                        data = ElementTree.tostring(styles, encoding="utf-8")
+                    target.writestr(entry, data)
+
+            framed_settings = ReportSettings(
+                template_path=str(framed_template), master_logo_path=str(logo_path),
+            )
+            framed_output = root / "framed-logo-output.odt"
+            _new_report("Documento", "Proyecto singular", framed_settings).write(framed_output)
+            _, _, width, height, _ = _read_report_template(
+                str(framed_template), str(logo_path),
+            )
+            self.assertAlmostEqual(width, _template_length_to_points("4cm"), places=2)
+            self.assertAlmostEqual(height, _template_length_to_points("2cm"), places=2)
+            with ZipFile(framed_output) as archive:
+                styles = ElementTree.fromstring(archive.read("styles.xml"))
+                header = styles.find(f".//{_tag('style:header')}")
+                image = header.find(f".//{_tag('draw:image')}")
+                parents = {child: parent for parent in header.iter() for child in parent}
+                image_frame = parents[image]
+                self.assertAlmostEqual(
+                    _template_length_to_points(image_frame.get(_tag("svg:width"))),
+                    _template_length_to_points("4cm"),
+                    places=2,
+                )
+                self.assertAlmostEqual(
+                    _template_length_to_points(image_frame.get(_tag("svg:height"))),
+                    _template_length_to_points("2cm"),
+                    places=2,
+                )
+                self.assertAlmostEqual(
+                    _template_length_to_points(image_frame.get(_tag("svg:x"))),
+                    _template_length_to_points("1cm"),
+                    places=2,
+                )
+                self.assertAlmostEqual(
+                    _template_length_to_points(image_frame.get(_tag("svg:y"))), 0,
+                    places=2,
+                )
+
+            no_logo_target = root / "no-dynamic-logo-output.odt"
+            no_logo_settings = ReportSettings(template_path=str(template))
+            with patch(
+                "report_layout.DEFAULT_TEMPLATE_PATH", root / "missing-default-template.odt",
+            ):
+                _new_report("Documento", "Proyecto singular", no_logo_settings).write(no_logo_target)
+            with ZipFile(no_logo_target) as archive:
+                styles = ElementTree.fromstring(archive.read("styles.xml"))
+                header = styles.find(f".//{_tag('style:header')}")
+                self.assertNotIn("{{logo}}", " ".join(header.itertext()))
+                self.assertIsNone(header.find(f".//{_tag('draw:image')}"))
 
     def test_section_contents_in_budget_and_certification_exports(self):
         """Indexa capitulos independientes, pero no resumenes ni listados incrustados."""

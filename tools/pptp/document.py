@@ -845,7 +845,8 @@ def write_document(
 
         layout = ReportLayout(
             text_styles=settings.text_styles,
-            template_path=settings.template_path, repeat_titles=False, footer_title=title,
+            template_path=settings.template_path, logo_path=settings.master_logo_path,
+            repeat_titles=False, footer_title=title,
             expediente=settings.expediente, template_title=project,
         )
         body = ParagraphStyle("PPTPBody", parent=layout.normal, fontSize=10,

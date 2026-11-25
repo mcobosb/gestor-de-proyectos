@@ -705,7 +705,8 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
 
     layout = ReportLayout(
         text_styles=settings.text_styles,
-        template_path=settings.template_path, expediente=settings.expediente,
+        template_path=settings.template_path, logo_path=settings.master_logo_path,
+        expediente=settings.expediente,
         template_title=title, repeat_titles=False, footer_title=FOOTER_TITLE,
     )
     footer_text = "\n".join([layout.template_footer, *(

@@ -182,7 +182,7 @@ class ReportSettings:
                 if key == "master_template_path" and suffix and suffix != ".odt":
                     raise ValueError("La plantilla del documento maestro debe ser un archivo ODT.")
                 if key == "master_logo_path" and suffix and suffix not in {".jpg", ".jpeg"}:
-                    raise ValueError("El logo del documento maestro debe ser una imagen JPEG.")
+                    raise ValueError("El logo institucional debe ser una imagen JPEG.")
                 values[key] = str(Path(raw_path).expanduser()) if raw_path else ""
             else:
                 if not isinstance(value, str):
@@ -679,7 +679,8 @@ def write_pdf(app: BudgetApp, report: str, target: Path) -> None:
     title = app._project_title()
     layout = ReportLayout(
         text_styles=settings.text_styles,
-        template_path=settings.template_path, expediente=settings.expediente, template_title=title,
+        template_path=settings.template_path, logo_path=settings.master_logo_path,
+        expediente=settings.expediente, template_title=title,
     )
     story, page_header = build_pdf_report(app, report, layout)
     add_pdf_contents(story, layout)
@@ -781,6 +782,7 @@ def write_certification_pdf(
         text_styles=settings.text_styles,
         certification=True,
         template_path=settings.template_path,
+        logo_path=settings.master_logo_path,
         expediente=settings.expediente,
         template_title=project_title,
     )

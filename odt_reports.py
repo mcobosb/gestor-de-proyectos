@@ -860,8 +860,10 @@ def _new_report(
         _read_report_template, _read_report_template_borders, _read_report_template_header,
     )
 
-    image, image_path, width, height, footer = _read_report_template(settings.template_path)
-    template = _read_report_template_header(settings.template_path)
+    image, image_path, width, height, footer = _read_report_template(
+        settings.template_path, settings.master_logo_path,
+    )
+    template = _read_report_template_header(settings.template_path, settings.master_logo_path)
     document = _OdtReport(
         title, report_project_label(project_title), settings.document_author, image_data=image,
         image_path=f"Pictures/report-template{Path(image_path).suffix.lower()}",
@@ -874,6 +876,7 @@ def _new_report(
         layout=ReportLayout(
             text_styles=settings.text_styles,
             certification=certification, template_path=settings.template_path,
+            logo_path=settings.master_logo_path,
             repeat_titles=repeat_titles, footer_title=footer_title,
             expediente=settings.expediente,
             template_title=project_title if template_title is None else template_title,

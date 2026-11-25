@@ -361,6 +361,7 @@ def write_planning_report(
     layout = ReportLayout(
         text_styles=settings.text_styles,
         template_path=settings.template_path,
+        logo_path=settings.master_logo_path,
         expediente=settings.expediente, repeat_titles=False,
         footer_title="Planificación", landscape=True,
     )

@@ -106,8 +106,35 @@ def _template_length_to_points(value: str) -> float:
     ]
 
 
-def _read_default_report_logo():
-    """Carga el logo institucional de la plantilla incluida o del recurso empaquetado."""
+def _read_default_report_logo(
+    logo_path: str = "", max_size: tuple[float, float] | None = None,
+):
+    """Carga el logo y lo ajusta al marco de la plantilla o al ancho predeterminado."""
+    def fit(width: float, height: float) -> tuple[float, float]:
+        """Ajusta el logo al marco sin deformarlo ni recortarlo."""
+        if max_size is None:
+            return width, height
+        scale = min(max_size[0] / width, max_size[1] / height)
+        return width * scale, height * scale
+
+    configured = logo_path.strip()
+    if configured:
+        path = Path(configured).expanduser()
+        try:
+            image_data = path.read_bytes()
+            from PIL import Image
+
+            with Image.open(BytesIO(image_data)) as logo:
+                pixel_width, pixel_height = logo.size
+        except (OSError, ValueError) as exc:
+            raise ValueError(f"No se pudo leer el logo configurado {path}: {exc}") from exc
+        if pixel_width <= 0 or pixel_height <= 0:
+            raise ValueError(f"El logo configurado no tiene dimensiones válidas: {path}.")
+        image_width = _template_length_to_points("2.314cm")
+        image_height = image_width * pixel_height / pixel_width
+        image_width, image_height = fit(image_width, image_height)
+        return image_data, str(path), image_width, image_height
+
     namespaces = {
         "style": "urn:oasis:names:tc:opendocument:xmlns:style:1.0",
         "draw": "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0",
@@ -135,26 +162,14 @@ def _read_default_report_logo():
                     )
                     if image_width <= 0 or image_height <= 0:
                         raise ValueError("El logo de la plantilla incluida debe tener dimensiones positivas.")
+                    image_width, image_height = fit(image_width, image_height)
                     return image_data, image_path, image_width, image_height
         except (OSError, KeyError, BadZipFile, ElementTree.ParseError) as exc:
             raise ValueError(
                 f"No se pudo leer el logo de la plantilla incluida {DEFAULT_TEMPLATE_PATH}: {exc}"
             ) from exc
 
-    logo_path = application_directory(__file__) / "iconos" / "Arranque.jpg"
-    try:
-        image_data = logo_path.read_bytes()
-        from PIL import Image
-
-        with Image.open(BytesIO(image_data)) as logo:
-            pixel_width, pixel_height = logo.size
-    except (OSError, ValueError) as exc:
-        raise ValueError(f"No se pudo leer el logo institucional {logo_path}: {exc}") from exc
-    if pixel_width <= 0 or pixel_height <= 0:
-        raise ValueError(f"El logo institucional no tiene dimensiones válidas: {logo_path}.")
-    image_width = _template_length_to_points("2.314cm")
-    image_height = image_width * pixel_height / pixel_width
-    return image_data, str(logo_path), image_width, image_height
+    return None
 
 
 def _has_template_logo_marker(section, namespaces) -> bool:
@@ -167,6 +182,42 @@ def _has_template_logo_marker(section, namespaces) -> bool:
     )
 
 
+def _template_logo_frame_size(
+    section, namespaces, paragraph=None,
+) -> tuple[float, float] | None:
+    """Obtiene el ancho y alto del marco ODT que contiene {{logo}}, si existe."""
+    if section is None:
+        return None
+    parents = {child: parent for parent in section.iter() for child in parent}
+    frame_tag = f"{{{namespaces['draw']}}}frame"
+    width_tag = f"{{{namespaces['svg']}}}width"
+    height_tag = f"{{{namespaces['svg']}}}height"
+    paragraphs = (
+        (paragraph,) if paragraph is not None
+        else section.findall(".//text:p", namespaces)
+    )
+    for paragraph in paragraphs:
+        if "{{logo}}" not in "".join(paragraph.itertext()):
+            continue
+        ancestor = parents.get(paragraph)
+        while ancestor is not None:
+            if ancestor.tag == frame_tag:
+                if "".join(ancestor.itertext()).strip() != "{{logo}}":
+                    ancestor = parents.get(ancestor)
+                    continue
+                width_value = ancestor.get(width_tag, "")
+                height_value = ancestor.get(height_tag, "")
+                if not width_value or not height_value:
+                    return None
+                width = _template_length_to_points(width_value)
+                height = _template_length_to_points(height_value)
+                if width > 0 and height > 0:
+                    return width, height
+                return None
+            ancestor = parents.get(ancestor)
+    return None
+
+
 def _insert_template_logo(section, image_path: str, width: float, height: float, namespaces) -> None:
     """Sustituye cada párrafo {{logo}} por un marco de imagen anclado a la cabecera."""
     for paragraph in section.findall(".//text:p", namespaces):
@@ -174,6 +225,9 @@ def _insert_template_logo(section, image_path: str, width: float, height: float,
             continue
         if "".join(paragraph.itertext()).strip() != "{{logo}}":
             raise ValueError("El marcador {{logo}} debe ocupar su propio párrafo.")
+        box = _template_logo_frame_size(section, namespaces, paragraph)
+        x = max((box[0] - width) / 2, 0) if box else 0
+        y = max((box[1] - height) / 2, 0) if box else 0
         paragraph.text = None
         for child in list(paragraph):
             paragraph.remove(child)
@@ -181,8 +235,8 @@ def _insert_template_logo(section, image_path: str, width: float, height: float,
             f"{{{namespaces['draw']}}}name": "ReportHeaderLogo",
             f"{{{namespaces['draw']}}}style-name": "HeaderLogo",
             f"{{{namespaces['text']}}}anchor-type": "paragraph",
-            f"{{{namespaces['svg']}}}x": "0pt",
-            f"{{{namespaces['svg']}}}y": "0pt",
+            f"{{{namespaces['svg']}}}x": f"{x:.3f}pt",
+            f"{{{namespaces['svg']}}}y": f"{y:.3f}pt",
             f"{{{namespaces['svg']}}}width": f"{width:.3f}pt",
             f"{{{namespaces['svg']}}}height": f"{height:.3f}pt",
         })
@@ -194,7 +248,19 @@ def _insert_template_logo(section, image_path: str, width: float, height: float,
         })
 
 
-def _read_report_template(template_path: str = ""):
+def _remove_template_logo_marker(section, namespaces) -> None:
+    """Quita un marcador de logo que no tiene una imagen configurada."""
+    for paragraph in section.findall(".//text:p", namespaces):
+        if "{{logo}}" not in "".join(paragraph.itertext()):
+            continue
+        if "".join(paragraph.itertext()).strip() != "{{logo}}":
+            raise ValueError("El marcador {{logo}} debe ocupar su propio párrafo.")
+        paragraph.text = None
+        for child in list(paragraph):
+            paragraph.remove(child)
+
+
+def _read_report_template(template_path: str = "", logo_path: str = ""):
     """Carga la imagen de cabecera y el texto del pie de la plantilla ODT indicada."""
     namespaces = {
         "style": "urn:oasis:names:tc:opendocument:xmlns:style:1.0",
@@ -216,7 +282,13 @@ def _read_report_template(template_path: str = ""):
             frame = header.find(".//draw:frame", namespaces) if header is not None else None
             image = frame.find(".//draw:image", namespaces) if frame is not None else None
             if _has_template_logo_marker(header, namespaces):
-                image_data, image_path, image_width, image_height = _read_default_report_logo()
+                logo = _read_default_report_logo(
+                    logo_path, _template_logo_frame_size(header, namespaces),
+                )
+                if logo is None:
+                    image_data, image_path, image_width, image_height = None, "", 0, 0
+                else:
+                    image_data, image_path, image_width, image_height = logo
             elif image is None:
                 image_data, image_path, image_width, image_height = None, "", 0, 0
             else:
@@ -336,7 +408,7 @@ def _normalize_template_tables(section_tables, table_sections, styles, automatic
                     column_index += int(column.get(tag("table:number-columns-repeated"), "1"))
 
 
-def _read_report_template_header(template_path: str = ""):
+def _read_report_template_header(template_path: str = "", logo_path: str = ""):
     """Carga cabecera y pie ODT completos, sus estilos y recursos gráficos."""
     namespaces = {
         "office": "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
@@ -517,13 +589,19 @@ def _read_report_template_header(template_path: str = ""):
             )
             dynamic_resources = {}
             if _has_template_logo_marker(header, namespaces):
-                image_data, image_path, image_width, image_height = _read_default_report_logo()
-                extension = Path(image_path).suffix.lower() or ".jpg"
-                dynamic_path = f"Pictures/dynamic-report-logo{extension}"
-                _insert_template_logo(
-                    header, dynamic_path, image_width, image_height, namespaces,
+                logo = _read_default_report_logo(
+                    logo_path, _template_logo_frame_size(header, namespaces),
                 )
-                dynamic_resources[dynamic_path] = image_data
+                if logo is None:
+                    _remove_template_logo_marker(header, namespaces)
+                else:
+                    image_data, image_path, image_width, image_height = logo
+                    extension = Path(image_path).suffix.lower() or ".jpg"
+                    dynamic_path = f"Pictures/dynamic-report-logo{extension}"
+                    _insert_template_logo(
+                        header, dynamic_path, image_width, image_height, namespaces,
+                    )
+                    dynamic_resources[dynamic_path] = image_data
             resources = []
             first_frame = None
             graphics = []
@@ -816,6 +894,7 @@ class ReportLayout:
         self, *, certification: bool = False, template_path: str = "",
         repeat_titles: bool = True, footer_title: str = "", expediente: str = "",
         template_title: str = "", landscape: bool = False, text_styles: StyleTable | None = None,
+        logo_path: str = "",
     ):
         """Carga el logo y configura fuentes, sangrías y estilos del modelo elegido."""
         from reportlab.lib.enums import TA_CENTER, TA_RIGHT
@@ -892,8 +971,8 @@ class ReportLayout:
         (
             image_data, self.template_image_path, self.logo_width, self.logo_height,
             self.template_footer,
-        ) = _read_report_template(template_path)
-        template_header = _read_report_template_header(template_path)
+        ) = _read_report_template(template_path, logo_path)
+        template_header = _read_report_template_header(template_path, logo_path)
         self.template_header_section = template_header["header"]
         self.template_footer_section = template_header["footer"]
         self.template_header_text = template_header["text"]

@@ -376,7 +376,7 @@ class SettingsDialog(QDialog):
         self.master_template_path = QLineEdit(self.settings.master_template_path)
         self.master_template_path.setPlaceholderText("Usar plantilla.odt incluida en el módulo")
         self.master_logo_path = QLineEdit(self.settings.master_logo_path)
-        self.master_logo_path.setPlaceholderText("Usar logo.jpg incluido en el módulo")
+        self.master_logo_path.setPlaceholderText("Usar el logo predeterminado de la plantilla")
         self.drawing_title_block_path = QLineEdit(self.settings.drawing_title_block_path)
         self.drawing_title_block_path.setPlaceholderText("Carpeta con cajetin_A4.svg y cajetin_A3.svg")
         report_help = (
@@ -386,7 +386,9 @@ class SettingsDialog(QDialog):
             "{{título}} inserta el título del proyecto; {{expediente}} inserta el número de "
             "expediente. En los pies se pueden usar {{capitulo}} / {{capítulo}} y "
             "{no_pagina} / {{no_pagina}} para el capítulo y la página cuando el informe "
-            "corresponda.\n\n"
+            "corresponda. Si {{logo}} está dentro de un marco con ancho y alto definidos, "
+            "el logo se ajusta y se centra en ese espacio sin deformarse ni recortarse. "
+            "Sin marco, se mantiene el ancho predeterminado de 2,314 cm.\n\n"
             "Si se deja vacía la ruta, se intenta usar la plantilla incluida. Si no está "
             "disponible, se genera el contenido que pueda sin esa plantilla."
         )
@@ -402,10 +404,9 @@ class SettingsDialog(QDialog):
             "Si se deja vacía la ruta, se usa la plantilla incluida en el módulo."
         )
         logo_help = (
-            "Imagen JPEG que se usa en la cabecera del documento maestro ODM. Sustituye las "
-            "imágenes de cabecera de la plantilla maestra y rellena sus marcadores {{logo}}. "
-            "Si se deja vacía la ruta, se usa logo.jpg incluido en el módulo. Esta opción no "
-            "cambia el logo de las plantillas de informes."
+            "Imagen JPEG usada para los marcadores {{logo}} de las plantillas de informes y del "
+            "documento maestro ODM. Si se deja vacía la ruta, se conserva el logo incluido en la "
+            "plantilla, si lo hay; no se usa el icono de la aplicación."
         )
         fields = (
             (
@@ -419,9 +420,9 @@ class SettingsDialog(QDialog):
                 "Información sobre la plantilla del documento maestro", master_help,
             ),
             (
-                "logo", "Logo del documento maestro (JPEG)",
+                "logo", "Logo institucional (JPEG)",
                 self.master_logo_path, self._select_master_logo,
-                "Información sobre el logo del documento maestro", logo_help,
+                "Información sobre el logo institucional", logo_help,
             ),
             (
                 "drawings", "Carpeta de cajetines de planos (A4 / A3)",
@@ -622,9 +623,9 @@ class SettingsDialog(QDialog):
         )
 
     def _select_master_logo(self) -> None:
-        """Selecciona el logo JPEG para los documentos maestros."""
+        """Selecciona el logo JPEG de los documentos."""
         self._select_file(
-            self.master_logo_path, "Selecciona el logo del documento maestro",
+            self.master_logo_path, "Selecciona el logo institucional",
             "Imagen JPEG (*.jpg *.jpeg)",
         )
 

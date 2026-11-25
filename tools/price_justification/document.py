@@ -563,7 +563,8 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable |
     settings = app.report_settings
     layout = ReportLayout(
         text_styles=settings.text_styles,
-        template_path=settings.template_path, expediente=settings.expediente,
+        template_path=settings.template_path, logo_path=settings.master_logo_path,
+        expediente=settings.expediente,
         template_title=TITLE, footer_title=FOOTER_TITLE, repeat_titles=False,
     )
     layout.table_references = False

@@ -144,7 +144,8 @@ def _write_pdf(target, project, settings, blocks, data) -> None:
     from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
     from tools._shared.pdf_contents import ContentsDocTemplate, add_pdf_contents
 
-    layout = ReportLayout(template_path=settings.template_path, template_title=project,
+    layout = ReportLayout(template_path=settings.template_path, logo_path=settings.master_logo_path,
+                          template_title=project,
                           expediente=settings.expediente, repeat_titles=False,
                           footer_title=FOOTER, text_styles=settings.text_styles)
     footer = "\n".join([layout.template_footer, *(

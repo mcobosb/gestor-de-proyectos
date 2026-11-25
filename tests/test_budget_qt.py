@@ -398,7 +398,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             for key, expected in (
                 ("report", "{{expediente}}"),
                 ("master", "{{PBL}}"),
-                ("logo", "logo.jpg"),
+                ("logo", "no se usa el icono de la aplicación"),
             ):
                 with patch.object(QMessageBox, "information") as information:
                     dialog.template_info_buttons[key].click()
