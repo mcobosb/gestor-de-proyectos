@@ -24,6 +24,7 @@ LIBRARY_PATH = Path(__file__).with_name("BIBLIOTECA.zip")
 DOCUMENTS = (
     "01_objeto.md", "02_normativa.md", "03_recepcion.md", "04_ejecucion.md",
     "05_ensayos.md", "06_no_conformidades.md", "07_presupuesto.md",
+    "08_catalogo_pac.md", "09_ensayos_clave.md",
 )
 TITLE = f"ANEJO Nº {int(QUALITY_ASSURANCE_NUMBER)}: PLAN DE ASEGURAMIENTO Y CONTROL DE LA CALIDAD"
 FOOTER = f"ANEJO Nº {int(QUALITY_ASSURANCE_NUMBER)}. ASEGURAMIENTO Y CONTROL DE LA CALIDAD"
@@ -36,8 +37,9 @@ TABLES = {
     ),
     "{{tabla_ensayos}}": (
         "Ensayos revisados por unidad de obra",
-        ("Unidad de obra", "Ensayo / prueba", "Frecuencia revisada", "N.º", "Criterio de aceptación"),
-        (1.8, 1.65, 1.5, 0.45, 2.1), (3,),
+        ("Unidad de obra", "Ensayo / prueba", "Frecuencia revisada", "N.º",
+         "Criterio de aceptación", "Referencia normativa"),
+        (1.6, 1.35, 1.3, 0.4, 1.8, 1.4), (3,),
     ),
 }
 
@@ -49,7 +51,7 @@ def write_document(app, target: Path, rows: list[dict]) -> None:
     rows = validate_rows(rows, units)
     library = shared_library_path(app, "quality_assurance", LIBRARY_PATH)
     markdown = "\n\n".join(document_markdown(read_markdown(library, name)) for name in DOCUMENTS)
-    for token in (*TABLES, "{{presupuesto_control}}"):
+    for token in (*TABLES, "{{presupuesto_control}}", "{{detalles_catalogo}}"):
         if sum(line.strip() == token for line in markdown.splitlines()) != 1:
             raise ValueError(f"La biblioteca debe contener una vez el marcador {token} en una línea propia.")
     generated = [item for item in app.budget_items if item.source == SOURCE]
@@ -63,6 +65,10 @@ def write_document(app, target: Path, rows: list[dict]) -> None:
             budget += f" Representan el {fmt_number(100 * total / pem)} % del PEM actual."
     else:
         budget = "Las partidas de este plan aún no se han incorporado al presupuesto."
+    details = "\n\n".join(
+        f"### {row['name']}\n\n{row['details']}" for row in rows if row.get("details")
+    ) or "No se han seleccionado fichas con detalle ampliado del catálogo."
+    markdown = markdown.replace("{{detalles_catalogo}}", details)
     blocks = text_blocks(markdown.replace("{{presupuesto_control}}", budget))
     data = {
         "{{tabla_frecuencias}}": [
@@ -73,7 +79,8 @@ def write_document(app, target: Path, rows: list[dict]) -> None:
         ],
         "{{tabla_ensayos}}": [
             [f"{units[row['unit_id']].code} — {units[row['unit_id']].summary}",
-             row["name"], row["frequency"], str(row["count"]), row["criteria"]]
+             row["name"], row["frequency"], str(row["count"]), row["criteria"],
+             row.get("reference", "")]
             for row in rows
         ],
     }

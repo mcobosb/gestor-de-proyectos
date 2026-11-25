@@ -278,6 +278,14 @@ class DistributionTests(unittest.TestCase):
             self.assertIn(f"--include-package={package}", build_script)
         self.assertTrue((ROOT / "installer" / "GestorDeProyectos.iss").is_file())
 
+    def test_quality_catalog_is_a_packaged_runtime_asset(self):
+        """Exige el libro PAC como recurso del instalador y del módulo de calidad."""
+        catalog = ROOT / "tools" / "quality_assurance" / "Plan_Aseguramiento_Calidad_CTE_CE_PG3-v2.xlsx"
+        build_script = (ROOT / "build_installer.ps1").read_text(encoding="utf-8").lower()
+        self.assertTrue(catalog.is_file())
+        self.assertIn(r"quality_assurance\Plan_Aseguramiento_Calidad_CTE_CE_PG3-v2.xlsx".lower(),
+                      build_script)
+
 
 if __name__ == "__main__":
     unittest.main()

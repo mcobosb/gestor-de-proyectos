@@ -83,6 +83,7 @@ foreach ($requiredResource in @(
     "price_justification\BIBLIOTECA.zip",
     "rcd\BIBLIOTECA.zip",
     "quality_assurance\BIBLIOTECA.zip",
+    "quality_assurance\Plan_Aseguramiento_Calidad_CTE_CE_PG3-v2.xlsx",
     "rcd\Codigos_LER_BCCA2023.csv",
     "BCCA2023_V02.bc3",
     "document_structure\plantillas\maestro\plantilla.odt",

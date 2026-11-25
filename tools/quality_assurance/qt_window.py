@@ -15,13 +15,14 @@ from qt_localization import get_document_save_path
 from tools._library_editor_qt import LibraryEditorQt
 
 from . import TOOL_LABEL
+from .catalog import get_catalog_entry, load_catalog
 from .document import DOCUMENTS, LIBRARY_PATH, write_document
 from .plan import (
     TRIALS, applicable_trials, has_inserted, insert_budget, suggested_quantity, unit_snapshot,
     validate_rows, work_units,
 )
 
-FIELDS = ("name", "frequency", "count", "criteria", "price")
+FIELDS = ("name", "frequency", "count", "criteria", "price", "reference")
 ROLE = Qt.ItemDataRole.UserRole
 
 
@@ -40,7 +41,8 @@ class QualityWindow(QDialog):
         note = QLabel(
             "Revisa las UO, la frecuencia, el número de ensayos y los criterios del pliego. "
             "Los precios se introducen sin costes indirectos y solo son obligatorios para insertar. "
-            "Las frecuencias sugeridas no acreditan el cumplimiento normativo."
+            "Las coincidencias del catálogo aparecen desmarcadas; confirma su aplicabilidad. "
+            "Las frecuencias y tolerancias del libro son orientativas y no acreditan cumplimiento normativo."
         )
         note.setWordWrap(True)
         layout.addWidget(note)
@@ -57,22 +59,35 @@ class QualityWindow(QDialog):
         self.unit = QComboBox()
         self.unit.setMinimumContentsLength(25)
         self.unit.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        manual.addWidget(QLabel("Unidad de obra:"))
         manual.addWidget(self.unit, 1)
-        self.add_button = QPushButton("Añadir ensayo a la UO")
+        self.catalog = QComboBox()
+        self.catalog.setMinimumContentsLength(32)
+        self.catalog.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.catalog.setMaxVisibleItems(20)
+        for entry in load_catalog():
+            self.catalog.addItem(entry.label, entry.identifier)
+        manual.addWidget(QLabel("Control / ensayo:"))
+        manual.addWidget(self.catalog, 2)
+        self.add_catalog_button = QPushButton("Añadir del catálogo")
+        self.add_catalog_button.clicked.connect(self.add_catalog)
+        manual.addWidget(self.add_catalog_button)
+        self.add_button = QPushButton("Añadir fila libre")
         self.add_button.clicked.connect(self.add_manual)
         manual.addWidget(self.add_button)
         self.remove_button = QPushButton("Quitar filas seleccionadas")
         self.remove_button.clicked.connect(self.remove_rows)
         manual.addWidget(self.remove_button)
         layout.addLayout(manual)
-        self.table = QTableWidget(0, 7)
+        self.table = QTableWidget(0, 8)
         self.table.setObjectName("qualityTrialsTable")
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.verticalHeader().setDefaultSectionSize(42)
         self.table.setHorizontalHeaderLabels(("Incluir", "Unidad de obra", "Ensayo / prueba",
-                                              "Frecuencia", "N.º", "Aceptación", "Precio directo/ud"))
-        for column, width in enumerate((65, 220, 210, 165, 65, 260, 120)):
+                                              "Frecuencia", "N.º", "Aceptación", "Precio directo/ud",
+                                              "Referencia"))
+        for column, width in enumerate((65, 220, 210, 165, 65, 260, 120, 180)):
             self.table.setColumnWidth(column, width)
         self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
         self.table.itemChanged.connect(self.invalidate)
@@ -120,7 +135,10 @@ class QualityWindow(QDialog):
         origin.setToolTip(f"{chapter} · {label}")
         self.table.setItem(index, 1, origin)
         for column, name in enumerate(FIELDS, 2):
-            self.table.setItem(index, column, QTableWidgetItem(str(row.get(name, ""))))
+            cell = QTableWidgetItem(str(row.get(name, "")))
+            if name == "name":
+                cell.setToolTip(str(row.get("details", "")))
+            self.table.setItem(index, column, cell)
 
     def rows(self) -> list[dict]:
         """Recoge todas las filas, preservando las exclusiones para futuras revisiones."""
@@ -146,12 +164,39 @@ class QualityWindow(QDialog):
             for trial in applicable_trials(item):
                 if (key, trial) in existing:
                     continue
-                specification = TRIALS[trial]
-                self.append_row({"unit_id": key, "snapshot": unit_snapshot(item), "trial": trial,
-                                 "name": specification.name, "frequency": specification.frequency,
-                                 "criteria": specification.criteria,
-                                 "count": suggested_quantity(item, trial) or ""})
+                specification = TRIALS.get(trial)
+                if specification is not None:
+                    row = {"name": specification.name, "frequency": specification.frequency,
+                           "criteria": specification.criteria,
+                           "count": suggested_quantity(item, trial) or ""}
+                else:
+                    entry = get_catalog_entry(trial)
+                    row = {"name": entry.label, "frequency": entry.frequency, "criteria": entry.criteria,
+                           "reference": entry.reference, "details": entry.details, "count": "",
+                           "included": False}
+                self.append_row({"unit_id": key, "snapshot": unit_snapshot(item), "trial": trial, **row})
         self.table.blockSignals(False)
+        self.invalidate()
+
+    def add_catalog(self) -> None:
+        """Añade a la UO la ficha PAC o el ensayo elegido en el catálogo."""
+        key = self.unit.currentData()
+        item = work_units(self.app.budget_items).get(key)
+        identifier = self.catalog.currentData()
+        if item is None or not identifier:
+            return
+        if any(row["unit_id"] == key and row.get("trial") == identifier for row in self.rows()):
+            QMessageBox.information(self, TOOL_LABEL, "Esta ficha ya está asociada a la unidad de obra.")
+            return
+        entry = get_catalog_entry(identifier)
+        self.table.blockSignals(True)
+        self.append_row({
+            "unit_id": key, "snapshot": unit_snapshot(item), "trial": identifier,
+            "name": entry.label, "frequency": entry.frequency, "criteria": entry.criteria,
+            "reference": entry.reference, "details": entry.details, "count": "",
+        })
+        self.table.blockSignals(False)
+        self.table.setCurrentCell(self.table.rowCount() - 1, 2)
         self.invalidate()
 
     def add_manual(self) -> None:
@@ -190,6 +235,7 @@ class QualityWindow(QDialog):
         inserted = has_inserted(self.app.budget_items)
         self.suggest_button.setEnabled(not inserted)
         self.add_button.setEnabled(not inserted and bool(units))
+        self.add_catalog_button.setEnabled(not inserted and bool(units) and self.catalog.count() > 0)
         self.remove_button.setEnabled(not inserted)
         self.review_button.setEnabled(not inserted)
         self.table.setEnabled(not inserted)
@@ -233,7 +279,7 @@ class QualityWindow(QDialog):
             QMessageBox.warning(self, TOOL_LABEL, str(exc))
 
     def open_library(self) -> None:
-        """Abre las siete fichas editables con registro de revisiones."""
+        """Abre las fichas editables con registro de revisiones."""
         if self.editor is not None and self.editor.isVisible():
             self.editor.raise_()
             return
