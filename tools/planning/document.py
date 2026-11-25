@@ -9,7 +9,13 @@ from typing import TYPE_CHECKING, Callable
 from xml.etree import ElementTree
 
 from budget_reports import report_output_format
-from .._shared.document_layout import add_odt_narrative_styles
+from .._shared.document_layout import (
+    TABLE_BORDER_COLOR,
+    add_odt_blue_table_cells,
+    add_odt_blue_table_headers,
+    add_odt_narrative_styles,
+    pdf_blue_table_style,
+)
 from .._shared.scheduling import PlanActivity, PlanParams, activity_segments, merge_date_ranges
 
 if TYPE_CHECKING:
@@ -21,7 +27,6 @@ GANTT_PALETTE = (
     "#2e86ab", "#c03221", "#5c946e", "#a23b72", "#3d5a80",
 )
 _MAX_TIMELINE_PERIODS = 10
-_GRID_COLOR = "#D9DEE5"
 
 
 @dataclass(frozen=True)
@@ -36,7 +41,6 @@ class _ChartRow:
     label: str
     details: str
     measurement: str
-    duration: int
     start: date
     end: date
     is_chapter: bool
@@ -98,9 +102,9 @@ def _build_chart_rows(
         ) else ()
         rows.append(_ChartRow(
             chapter_index, f"{first.chapter} · {first.chapter_name}",
-            f"{start:%d/%m/%Y} – {end:%d/%m/%Y}",
+            f"{start:%d/%m/%Y} – {end:%d/%m/%Y} · {chapter_duration} días laborables",
             currency_formatter(sum(record[0].amount for record in records)),
-            chapter_duration, start, end, True, ranges,
+            start, end, True, ranges,
         ))
         if plan == "Resumen":
             continue
@@ -110,9 +114,10 @@ def _build_chart_rows(
                 f"{activity.id} · {activity.code}  "
                 + (f"[{activity.phase_name}] " if activity.phase_name else "") + activity.summary
                 + (" (toda la obra)" if activity.continuous else ""),
-                f"{activity_start:%d/%m/%Y} – {activity_end:%d/%m/%Y}",
+                f"{activity_start:%d/%m/%Y} – {activity_end:%d/%m/%Y} · "
+                f"{activity.duration} días laborables",
                 f"{_format_quantity(activity.quantity)} {activity.unit}".strip(),
-                activity.duration, activity_start, activity_end, False,
+                activity_start, activity_end, False,
             )
             for activity, activity_start, activity_end in records
         )
@@ -152,6 +157,8 @@ def _write_odt_chart(document, rows: list[_ChartRow], periods: list[_TimelinePer
     from odt_reports import _tag
 
     content_width = document.layout.content_width
+    add_odt_blue_table_cells(document, "Planning")
+    add_odt_blue_table_headers(document, "Planning", centered=True)
 
     def add_cell_style(name: str, background: str) -> None:
         """Crea un estilo ODF de celda con fondo y bordes de cuadrícula."""
@@ -163,24 +170,22 @@ def _write_odt_chart(document, rows: list[_ChartRow], periods: list[_TimelinePer
         })
         ElementTree.SubElement(style, _tag("style:table-cell-properties"), {
             _tag("fo:background-color"): background,
-            _tag("fo:border"): f"0.25pt solid {_GRID_COLOR}",
-            _tag("fo:padding"): "1pt",
+            _tag("fo:border"): f"0.5pt solid {TABLE_BORDER_COLOR}",
+            _tag("fo:padding"): "3pt",
             _tag("style:vertical-align"): "middle",
         })
 
     for index, color in enumerate(GANTT_PALETTE):
         add_cell_style(f"PlanningChapter{index}", _light_color(color))
         add_cell_style(f"PlanningBar{index}", color)
-    add_cell_style("PlanningHeaderCell", "#EDF1F5")
-    add_cell_style("PlanningEmptyCell", "#FFFFFF")
 
     axis_style = ElementTree.SubElement(document.automatic_styles, _tag("style:style"), {
         _tag("style:name"): "PlanningAxis",
         _tag("style:family"): "paragraph",
-        _tag("style:parent-style-name"): "TableHeader",
+        _tag("style:parent-style-name"): "PlanningHeaderCenter",
     })
     ElementTree.SubElement(axis_style, _tag("style:text-properties"), {
-        _tag("fo:font-size"): "5pt",
+        _tag("fo:font-size"): "6pt",
     })
     ElementTree.SubElement(axis_style, _tag("style:paragraph-properties"), {
         _tag("fo:text-align"): "center",
@@ -221,24 +226,29 @@ def _write_odt_chart(document, rows: list[_ChartRow], periods: list[_TimelinePer
     ]
     for index, value in enumerate(header_values):
         _append_odt_cell(
-            header, value, "PlanningHeaderCell", "PlanningAxis" if index >= 2 else "TableHeader",
+            header, value, "PlanningHeaderCell",
+            "PlanningAxis" if index >= 2 else (
+                "PlanningHeaderCenter" if index == 1 else "PlanningHeader"
+            ),
         )
 
-    for row in rows:
+    for row_index, row in enumerate(rows):
         table_row = ElementTree.SubElement(table, _tag("table:table-row"))
-        row_style = f"PlanningChapter{row.chapter_index % len(GANTT_PALETTE)}" if row.is_chapter else (
-            "PlanningEmptyCell"
+        row_style = (
+            f"PlanningChapter{row.chapter_index % len(GANTT_PALETTE)}"
+            if row.is_chapter else ("PlanningBlueCell" if row_index % 2 == 0 else "PlanningWhiteCell")
         )
         label = f"{row.label}\n{row.details}"
         _append_odt_cell(table_row, label, row_style, "TableHeader" if row.is_chapter else "TableText")
         _append_odt_cell(
-            table_row, f"{row.duration} d", row_style, "TableHeader" if row.is_chapter else "TableText",
+            table_row, row.measurement, row_style,
+            "TableHeader" if row.is_chapter else "TableText",
         )
         for period in periods:
             is_bar = row.covers(period)
             style = (
                 f"PlanningBar{row.chapter_index % len(GANTT_PALETTE)}"
-                if is_bar else "PlanningEmptyCell"
+                if is_bar else row_style
             )
             _append_odt_cell(table_row, "", style, "TableText")
 
@@ -266,14 +276,19 @@ def _pdf_chart_table(layout, rows: list[_ChartRow], periods: list[_TimelinePerio
     from reportlab.lib.enums import TA_CENTER
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.platypus import Table, TableStyle
+
     content_width = layout.content_width
 
+    header_style = ParagraphStyle(
+        "planning-header", parent=layout.bold, fontSize=7, leading=8,
+        textColor=colors.white,
+    )
     axis_style = ParagraphStyle(
-        "planning-axis", parent=layout.normal, fontSize=5, leading=6, alignment=TA_CENTER,
+        "planning-axis", parent=header_style, fontSize=6, leading=7, alignment=TA_CENTER,
     )
     data = [[
-        layout.text("ACTIVIDAD / PERIODO", layout.bold),
-        layout.text("MEDICIÓN / PEM", layout.bold),
+        layout.text("ACTIVIDAD / PERIODO", header_style),
+        layout.text("MEDICIÓN / PEM", header_style),
         *[layout.text(period.start.strftime("%d/%m"), axis_style) for period in periods],
     ]]
     for row in rows:
@@ -291,16 +306,11 @@ def _pdf_chart_table(layout, rows: list[_ChartRow], periods: list[_TimelinePerio
         data, colWidths=[*fixed_widths, *([period_width] * len(periods))],
         repeatRows=1, splitByRow=1, hAlign="LEFT",
     )
-    styles = [
-        ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor(_GRID_COLOR)),
+    styles = pdf_blue_table_style()
+    styles.extend([
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 2),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-        ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EDF1F5")),
         ("ALIGN", (2, 0), (-1, -1), "CENTER"),
-    ]
+    ])
     for row_index, row in enumerate(rows, start=1):
         color = GANTT_PALETTE[row.chapter_index % len(GANTT_PALETTE)]
         if row.is_chapter:
