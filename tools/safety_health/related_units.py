@@ -30,6 +30,12 @@ _PRODUCT_TYPE_PATTERNS: dict[str, tuple[tuple[str, re.Pattern[str]], ...]] = {
     "19LIA": (
         ("instalacion-local-aseos", re.compile(r"^instalacion provisional local aseos")),
     ),
+    "19SCB": (
+        ("barandillas", re.compile(r"^barandilla")),
+    ),
+    "19SCR": (
+        ("proteccion-perimetral-forjado", re.compile(r"^proteccion perimetro forj")),
+    ),
     "19SIC": (
         ("proteccion-auditiva",
          re.compile(r"^(?:protector auditivo|par tapones antirr)")),
@@ -48,8 +54,17 @@ _PRODUCT_TYPE_PATTERNS: dict[str, tuple[tuple[str, re.Pattern[str]], ...]] = {
     "19SIP": (
         ("calzado-seguridad", re.compile(r"^par (?:de )?(?:botas|zapatos)")),
     ),
+    "19SCV": (
+        ("conductos-ventilacion", re.compile(r"^conducto vent")),
+    ),
     "19SIT": (
         ("arneses-anticaidas", re.compile(r"^arnes anticaidas")),
+        ("cinturones", re.compile(r"^cinturon ")),
+        ("chalecos-reflectantes", re.compile(r"^chaleco reflectante")),
+    ),
+    "19SSA": (
+        ("conos-balizamiento", re.compile(r"^cono balizamiento")),
+        ("lamparas-intermitentes", re.compile(r"^lampara intermitente")),
     ),
 }
 
@@ -178,7 +193,7 @@ def related_items_for_work_families(
 
 
 def _alternative_key(item: RelatedSafetyItem) -> tuple[str, str, str, str]:
-    """Agrupa variantes del mismo tipo sin mezclar protecciones distintas."""
+    """Agrupa por tipo reconocido aunque cambien el material, la unidad o la categoría."""
     summary = unicodedata.normalize("NFKD", item.summary)
     summary = summary.encode("ascii", "ignore").decode("ascii").casefold()
     summary = _DURATION_VARIANT.sub("", summary)
@@ -204,8 +219,7 @@ def _alternative_key(item: RelatedSafetyItem) -> tuple[str, str, str, str]:
     summary = " ".join(summary.split())
     for group, pattern in _PRODUCT_TYPE_PATTERNS.get(item.code[:5], ()):
         if pattern.match(summary):
-            summary = group
-            break
+            return "", "", "", group
     return item.code[:5], item.category.casefold(), item.unit.casefold(), summary
 
 

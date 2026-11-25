@@ -107,25 +107,64 @@ def _template_length_to_points(value: str) -> float:
 
 
 def _crop_logo_to_aspect(image_data: bytes, aspect_ratio: float) -> bytes:
-    """Recorta el sobrante alrededor del centro para llenar el marco sin deformar."""
-    from PIL import Image, ImageOps
+    """Recorta márgenes vacíos y centra el logo para llenar el marco sin deformarlo."""
+    from PIL import Image, ImageChops, ImageOps
 
     with Image.open(BytesIO(image_data)) as source:
         image_format = source.format or "PNG"
         image = ImageOps.exif_transpose(source)
+        full_bounds = (0, 0, *image.size)
+        content_bounds = None
+        if "A" in image.getbands() or "transparency" in image.info:
+            alpha_bounds = image.convert("RGBA").getchannel("A").point(
+                lambda value: 255 if value > 16 else 0,
+            ).getbbox()
+            if alpha_bounds != full_bounds:
+                content_bounds = alpha_bounds
+        if content_bounds is None:
+            rgb_image = image.convert("RGB")
+            corners = (
+                rgb_image.getpixel((0, 0)),
+                rgb_image.getpixel((image.width - 1, 0)),
+                rgb_image.getpixel((0, image.height - 1)),
+                rgb_image.getpixel((image.width - 1, image.height - 1)),
+            )
+            background = tuple(
+                sum(pixel[channel] for pixel in corners) // len(corners)
+                for channel in range(3)
+            )
+            if all(
+                max(abs(pixel[channel] - background[channel]) for channel in range(3)) <= 32
+                for pixel in corners
+            ):
+                difference = ImageChops.difference(
+                    rgb_image, Image.new("RGB", rgb_image.size, background),
+                )
+                mask = ImageChops.lighter(
+                    difference.getchannel("R"),
+                    ImageChops.lighter(
+                        difference.getchannel("G"), difference.getchannel("B"),
+                    ),
+                ).point(lambda value: 255 if value > 32 else 0)
+                content_bounds = mask.getbbox()
+        if content_bounds and content_bounds != full_bounds:
+            image = image.crop(content_bounds)
         pixel_width, pixel_height = image.size
         image_ratio = pixel_width / pixel_height
         if abs(image_ratio - aspect_ratio) < 1 / max(pixel_width, pixel_height):
-            return image_data
-        if image_ratio > aspect_ratio:
+            if content_bounds is None or content_bounds == full_bounds:
+                return image_data
+            cropped = image
+        elif image_ratio > aspect_ratio:
             crop_width = max(1, round(pixel_height * aspect_ratio))
             left = (pixel_width - crop_width) // 2
             bounds = (left, 0, left + crop_width, pixel_height)
+            cropped = image.crop(bounds)
         else:
             crop_height = max(1, round(pixel_width / aspect_ratio))
             top = (pixel_height - crop_height) // 2
             bounds = (0, top, pixel_width, top + crop_height)
-        cropped = image.crop(bounds)
+            cropped = image.crop(bounds)
     if image_format.upper() in {"JPEG", "JPG"}:
         if cropped.mode not in {"L", "RGB", "CMYK"}:
             cropped = cropped.convert("RGB")

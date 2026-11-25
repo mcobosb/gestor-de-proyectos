@@ -93,6 +93,42 @@ class SafetyHealthRelatedUnitsTests(unittest.TestCase):
         )
         self.assertNotEqual(group_by_code[next(iter(masks))], group_by_code[next(iter(filters))])
 
+        catalog_groups = related_alternative_groups_for_work_families(
+            family_links.keys(), family_links, catalog,
+        )
+        catalog_group_by_code = {
+            item.code: frozenset(member.code for member in group)
+            for group in catalog_groups for item in group
+        }
+        railing_codes = {item.code for item in catalog["19SCB"]}
+        self.assertTrue(railing_codes)
+        self.assertEqual(
+            {catalog_group_by_code[code] for code in railing_codes},
+            {frozenset(railing_codes)},
+        )
+
+        for family, prefix in (
+            ("19SCV", "conducto vent"),
+            ("19SIT", "arnes anticaidas"),
+            ("19SIT", "cinturon"),
+            ("19SSA", "lampara intermitente"),
+            ("19SCR", "proteccion perimetro forj"),
+        ):
+            matches = {
+                item.code for item in catalog[family]
+                if _summary_key(item.summary).startswith(prefix)
+            }
+            self.assertTrue(matches)
+            self.assertEqual(
+                {catalog_group_by_code[code] for code in matches},
+                {frozenset(matches)},
+            )
+
+        self.assertNotEqual(
+            catalog_group_by_code["19SSA00029"],
+            catalog_group_by_code["19SSA00011"],
+        )
+
     def test_only_same_type_size_and_duration_variants_are_grouped(self):
         """Mantiene separados los productos distintos de una misma familia."""
         alternatives = (

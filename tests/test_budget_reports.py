@@ -218,6 +218,27 @@ class ReportCalculationsTests(unittest.TestCase):
                 self.assertNotIn("{{logo}}", " ".join(header.itertext()))
                 self.assertIsNone(header.find(f".//{_tag('draw:image')}"))
 
+    def test_logo_with_blank_margins_fills_template_frame(self):
+        """Trim a blank canvas before cropping the logo to the frame's aspect ratio."""
+        from io import BytesIO
+        from PIL import Image, ImageDraw
+        from report_layout import _read_default_report_logo
+
+        with tempfile.TemporaryDirectory() as folder:
+            logo_path = Path(folder) / "padded-logo.png"
+            image = Image.new("RGB", (600, 300), "white")
+            ImageDraw.Draw(image).rectangle((200, 100, 399, 199), fill="red")
+            image.save(logo_path)
+
+            logo_data, _, width, height = _read_default_report_logo(
+                str(logo_path), (3, 1),
+            )
+
+        self.assertEqual((width, height), (3, 1))
+        with Image.open(BytesIO(logo_data)) as fitted_logo:
+            self.assertAlmostEqual(fitted_logo.width / fitted_logo.height, 3, delta=0.02)
+            self.assertEqual(fitted_logo.getpixel((0, 0)), (255, 0, 0))
+
     def test_section_contents_in_budget_and_certification_exports(self):
         """Indexa capitulos independientes, pero no resumenes ni listados incrustados."""
         from bc3_gui import ProjectItem

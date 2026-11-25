@@ -1072,8 +1072,9 @@ class SafetyProposalDialogQt(QDialog):
         header.addWidget(library)
         layout.addLayout(header)
         proposal_note = QLabel(
-            "Las alternativas del mismo tipo de EPI (guantes, calzado, gafas, cascos y "
-            "protecciones auditivas o respiratorias) se agrupan en desplegables y se "
+            "Las alternativas del mismo tipo (barandillas, guantes, arneses, cinturones, "
+            "calzado, gafas, cascos, protecciones auditivas o respiratorias, conductos y "
+            "lámparas intermitentes) se agrupan en desplegables y se "
             "preselecciona una opción; las protecciones complementarias permanecen separadas. "
             "Las unidades vinculadas se proponen una sola vez, con cantidad 1 y precio de "
             "catálogo. El capítulo se calcula para aproximarse al porcentaje indicado del "
