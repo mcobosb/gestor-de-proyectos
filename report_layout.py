@@ -106,16 +106,40 @@ def _template_length_to_points(value: str) -> float:
     ]
 
 
+def _crop_logo_to_aspect(image_data: bytes, aspect_ratio: float) -> bytes:
+    """Recorta el sobrante alrededor del centro para llenar el marco sin deformar."""
+    from PIL import Image, ImageOps
+
+    with Image.open(BytesIO(image_data)) as source:
+        image_format = source.format or "PNG"
+        image = ImageOps.exif_transpose(source)
+        pixel_width, pixel_height = image.size
+        image_ratio = pixel_width / pixel_height
+        if abs(image_ratio - aspect_ratio) < 1 / max(pixel_width, pixel_height):
+            return image_data
+        if image_ratio > aspect_ratio:
+            crop_width = max(1, round(pixel_height * aspect_ratio))
+            left = (pixel_width - crop_width) // 2
+            bounds = (left, 0, left + crop_width, pixel_height)
+        else:
+            crop_height = max(1, round(pixel_width / aspect_ratio))
+            top = (pixel_height - crop_height) // 2
+            bounds = (0, top, pixel_width, top + crop_height)
+        cropped = image.crop(bounds)
+    if image_format.upper() in {"JPEG", "JPG"}:
+        if cropped.mode not in {"L", "RGB", "CMYK"}:
+            cropped = cropped.convert("RGB")
+        image_format = "JPEG"
+    output = BytesIO()
+    options = {"quality": 95} if image_format.upper() == "JPEG" else {}
+    cropped.save(output, format=image_format, **options)
+    return output.getvalue()
+
+
 def _read_default_report_logo(
     logo_path: str = "", max_size: tuple[float, float] | None = None,
 ):
     """Carga el logo y lo ajusta al marco de la plantilla o al ancho predeterminado."""
-    def fit(width: float, height: float) -> tuple[float, float]:
-        """Ajusta el logo al marco sin deformarlo ni recortarlo."""
-        if max_size is None:
-            return width, height
-        scale = min(max_size[0] / width, max_size[1] / height)
-        return width * scale, height * scale
 
     configured = logo_path.strip()
     if configured:
@@ -130,9 +154,14 @@ def _read_default_report_logo(
             raise ValueError(f"No se pudo leer el logo configurado {path}: {exc}") from exc
         if pixel_width <= 0 or pixel_height <= 0:
             raise ValueError(f"El logo configurado no tiene dimensiones válidas: {path}.")
+        if max_size is not None:
+            try:
+                image_data = _crop_logo_to_aspect(image_data, max_size[0] / max_size[1])
+            except (OSError, ValueError) as exc:
+                raise ValueError(f"No se pudo ajustar el logo configurado {path}: {exc}") from exc
+            return image_data, str(path), max_size[0], max_size[1]
         image_width = _template_length_to_points("2.314cm")
         image_height = image_width * pixel_height / pixel_width
-        image_width, image_height = fit(image_width, image_height)
         return image_data, str(path), image_width, image_height
 
     namespaces = {
@@ -162,7 +191,11 @@ def _read_default_report_logo(
                     )
                     if image_width <= 0 or image_height <= 0:
                         raise ValueError("El logo de la plantilla incluida debe tener dimensiones positivas.")
-                    image_width, image_height = fit(image_width, image_height)
+                    if max_size is not None:
+                        image_data = _crop_logo_to_aspect(
+                            image_data, max_size[0] / max_size[1],
+                        )
+                        image_width, image_height = max_size
                     return image_data, image_path, image_width, image_height
         except (OSError, KeyError, BadZipFile, ElementTree.ParseError) as exc:
             raise ValueError(
@@ -182,10 +215,8 @@ def _has_template_logo_marker(section, namespaces) -> bool:
     )
 
 
-def _template_logo_frame_size(
-    section, namespaces, paragraph=None,
-) -> tuple[float, float] | None:
-    """Obtiene el ancho y alto del marco ODT que contiene {{logo}}, si existe."""
+def _template_logo_placeholder_frame(section, namespaces, paragraph=None):
+    """Localiza el marco ODT dedicado al marcador {{logo}}, si existe."""
     if section is None:
         return None
     parents = {child: parent for parent in section.iter() for child in parent}
@@ -208,26 +239,47 @@ def _template_logo_frame_size(
                 width_value = ancestor.get(width_tag, "")
                 height_value = ancestor.get(height_tag, "")
                 if not width_value or not height_value:
-                    return None
+                    ancestor = parents.get(ancestor)
+                    continue
                 width = _template_length_to_points(width_value)
                 height = _template_length_to_points(height_value)
                 if width > 0 and height > 0:
-                    return width, height
-                return None
+                    return ancestor
             ancestor = parents.get(ancestor)
     return None
 
 
+def _template_logo_frame_size(
+    section, namespaces, paragraph=None,
+) -> tuple[float, float] | None:
+    """Obtiene el ancho y alto del marco ODT dedicado a {{logo}}, si existe."""
+    frame = _template_logo_placeholder_frame(section, namespaces, paragraph)
+    if frame is None:
+        return None
+    return (
+        _template_length_to_points(frame.get(f"{{{namespaces['svg']}}}width", "")),
+        _template_length_to_points(frame.get(f"{{{namespaces['svg']}}}height", "")),
+    )
+
+
 def _insert_template_logo(section, image_path: str, width: float, height: float, namespaces) -> None:
-    """Sustituye cada párrafo {{logo}} por un marco de imagen anclado a la cabecera."""
+    """Reutiliza el marco de {{logo}} o crea uno cuando la plantilla no lo define."""
     for paragraph in section.findall(".//text:p", namespaces):
         if "{{logo}}" not in "".join(paragraph.itertext()):
             continue
         if "".join(paragraph.itertext()).strip() != "{{logo}}":
             raise ValueError("El marcador {{logo}} debe ocupar su propio párrafo.")
-        box = _template_logo_frame_size(section, namespaces, paragraph)
-        x = max((box[0] - width) / 2, 0) if box else 0
-        y = max((box[1] - height) / 2, 0) if box else 0
+        placeholder_frame = _template_logo_placeholder_frame(section, namespaces, paragraph)
+        if placeholder_frame is not None:
+            for child in list(placeholder_frame):
+                placeholder_frame.remove(child)
+            ElementTree.SubElement(placeholder_frame, f"{{{namespaces['draw']}}}image", {
+                f"{{{namespaces['xlink']}}}href": image_path,
+                f"{{{namespaces['xlink']}}}type": "simple",
+                f"{{{namespaces['xlink']}}}show": "embed",
+                f"{{{namespaces['xlink']}}}actuate": "onLoad",
+            })
+            continue
         paragraph.text = None
         for child in list(paragraph):
             paragraph.remove(child)
@@ -235,8 +287,8 @@ def _insert_template_logo(section, image_path: str, width: float, height: float,
             f"{{{namespaces['draw']}}}name": "ReportHeaderLogo",
             f"{{{namespaces['draw']}}}style-name": "HeaderLogo",
             f"{{{namespaces['text']}}}anchor-type": "paragraph",
-            f"{{{namespaces['svg']}}}x": f"{x:.3f}pt",
-            f"{{{namespaces['svg']}}}y": f"{y:.3f}pt",
+            f"{{{namespaces['svg']}}}x": "0pt",
+            f"{{{namespaces['svg']}}}y": "0pt",
             f"{{{namespaces['svg']}}}width": f"{width:.3f}pt",
             f"{{{namespaces['svg']}}}height": f"{height:.3f}pt",
         })

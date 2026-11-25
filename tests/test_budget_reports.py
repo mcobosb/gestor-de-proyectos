@@ -64,6 +64,7 @@ class ReportCalculationsTests(unittest.TestCase):
     def test_odt_template_inserts_logo_and_replaces_project_fields(self):
         """Insert the configured logo at {{logo}} and resolve project fields."""
         from odt_reports import _new_report, _tag
+        from io import BytesIO
         from PIL import Image
         from report_layout import (
             ReportLayout, _read_report_template, _template_length_to_points,
@@ -72,7 +73,7 @@ class ReportCalculationsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             logo_path = root / "logo-institucional.jpg"
-            Image.new("RGB", (4, 2), (220, 10, 10)).save(logo_path, format="JPEG")
+            Image.new("RGB", (600, 300), (220, 10, 10)).save(logo_path, format="JPEG")
             configured_logo = logo_path.read_bytes()
             base_template = root / "base-template.odt"
             template = root / "dynamic-logo-template.odt"
@@ -161,8 +162,21 @@ class ReportCalculationsTests(unittest.TestCase):
             _, _, width, height, _ = _read_report_template(
                 str(framed_template), str(logo_path),
             )
-            self.assertAlmostEqual(width, _template_length_to_points("4cm"), places=2)
+            self.assertAlmostEqual(width, _template_length_to_points("6cm"), places=2)
             self.assertAlmostEqual(height, _template_length_to_points("2cm"), places=2)
+            framed_layout = ReportLayout(
+                template_path=str(framed_template), logo_path=str(logo_path),
+            )
+            self.assertAlmostEqual(
+                framed_layout.template_graphics[0]["width"],
+                _template_length_to_points("6cm"),
+                places=2,
+            )
+            self.assertAlmostEqual(
+                framed_layout.template_graphics[0]["height"],
+                _template_length_to_points("2cm"),
+                places=2,
+            )
             with ZipFile(framed_output) as archive:
                 styles = ElementTree.fromstring(archive.read("styles.xml"))
                 header = styles.find(f".//{_tag('style:header')}")
@@ -171,7 +185,7 @@ class ReportCalculationsTests(unittest.TestCase):
                 image_frame = parents[image]
                 self.assertAlmostEqual(
                     _template_length_to_points(image_frame.get(_tag("svg:width"))),
-                    _template_length_to_points("4cm"),
+                    _template_length_to_points("6cm"),
                     places=2,
                 )
                 self.assertAlmostEqual(
@@ -180,14 +194,17 @@ class ReportCalculationsTests(unittest.TestCase):
                     places=2,
                 )
                 self.assertAlmostEqual(
-                    _template_length_to_points(image_frame.get(_tag("svg:x"))),
-                    _template_length_to_points("1cm"),
+                    _template_length_to_points(image_frame.get(_tag("svg:x"), "0pt")), 0,
                     places=2,
                 )
                 self.assertAlmostEqual(
-                    _template_length_to_points(image_frame.get(_tag("svg:y"))), 0,
+                    _template_length_to_points(image_frame.get(_tag("svg:y"), "0pt")), 0,
                     places=2,
                 )
+                cropped_logo = archive.read(image.get(_tag("xlink:href")))
+                self.assertNotEqual(cropped_logo, configured_logo)
+                with Image.open(BytesIO(cropped_logo)) as cropped:
+                    self.assertAlmostEqual(cropped.width / cropped.height, 3, places=2)
 
             no_logo_target = root / "no-dynamic-logo-output.odt"
             no_logo_settings = ReportSettings(template_path=str(template))
