@@ -18,6 +18,15 @@ from tools._shared.drawing_templates import find_title_block, read_title_block_f
 LIBRARY = Path(__file__).resolve().parent / "PLANOS.zip"
 MAX_SVG_BYTES = 16 * 1024 * 1024
 _CUSTOM_CODE = re.compile(r"CUSTOM-[0-9a-f]{64}\Z")
+_QT_MIN_FONT_SIZE = 1.0
+_FONT_SIZE_VALUE = re.compile(
+    r"\s*((?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))(px|pt|pc|mm|cm|in)?\s*",
+    re.IGNORECASE,
+)
+_FONT_SIZE_UNITS = {
+    "px": 1, "pt": 4 / 3, "pc": 16, "mm": 96 / 25.4, "cm": 96 / 2.54,
+    "in": 96,
+}
 
 
 @dataclass(frozen=True)
@@ -168,6 +177,44 @@ def read_sheet(sheet: DrawingSheet) -> bytes:
     if len(data) > MAX_SVG_BYTES or "CUSTOM-" + hashlib.sha256(data).hexdigest() != sheet.code:
         raise ValueError(f"La ficha personal {sheet.title} ha sido modificada o está dañada.")
     return data
+
+
+def prepare_svg_for_qt(data: bytes) -> bytes:
+    """Ajusta fuentes subpíxel para Qt sin quitar texto ni modificar el SVG original."""
+    try:
+        root = ET.fromstring(data)
+    except ET.ParseError as exc:
+        raise ValueError(f"No se puede mostrar la ficha SVG: {exc}") from exc
+
+    def readable_font_size(value: str) -> str:
+        """Aumenta solo las fuentes absolutas que Qt podría redondear a cero."""
+        match = _FONT_SIZE_VALUE.fullmatch(value)
+        if not match:
+            return value
+        number, unit = match.groups()
+        unit = (unit or "px").lower()
+        size = float(number) * _FONT_SIZE_UNITS[unit]
+        if math.isfinite(size) and size < _QT_MIN_FONT_SIZE:
+            return f"{_QT_MIN_FONT_SIZE}px"
+        return value
+
+    def adjust_style(style: str) -> str:
+        """Normaliza las declaraciones font-size de estilos SVG."""
+        return re.sub(
+            r"(font-size\s*:\s*)([^;]+)",
+            lambda match: match.group(1) + readable_font_size(match.group(2)),
+            style,
+            flags=re.IGNORECASE,
+        )
+
+    for element in root.iter():
+        if "font-size" in element.attrib:
+            element.set("font-size", readable_font_size(element.get("font-size", "")))
+        if "style" in element.attrib:
+            element.set("style", adjust_style(element.get("style", "")))
+        if element.tag == "{http://www.w3.org/2000/svg}style" and element.text:
+            element.text = adjust_style(element.text)
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
 def restore_drawings(value: object) -> dict | None:
@@ -472,7 +519,9 @@ def render_drawings(app, state: dict) -> list[bytes]:
         raise ValueError("Configura la carpeta de cajetines de planos en los ajustes del proyecto.")
     try:
         block = find_title_block(Path(directory), selection["paper"])
-        source = {sheet.code: read_sheet(sheet) for sheet in sheets}
+        source = {
+            sheet.code: prepare_svg_for_qt(read_sheet(sheet)) for sheet in sheets
+        }
     except OSError as exc:
         raise ValueError(f"No se pudieron cargar las fichas o el cajetín: {exc}") from exc
 

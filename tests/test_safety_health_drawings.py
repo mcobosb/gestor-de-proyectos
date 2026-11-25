@@ -29,7 +29,7 @@ from tools.safety_health.document import (
 )
 from tools.safety_health.drawings import (
     LIBRARY, SHEETS, DrawingSheet, _filled_title_block, add_user_sheet, available_sheets, read_sheet,
-    group_sheets_by_page, render_drawings, restore_drawings, selected_sheets,
+    group_sheets_by_page, prepare_svg_for_qt, render_drawings, restore_drawings, selected_sheets,
 )
 
 
@@ -130,6 +130,65 @@ class SafetyDrawingsTests(unittest.TestCase):
                 {name for name in archive.namelist() if not name.endswith("/")},
                 {f"{sheet.paper}/{sheet.filename}" for sheet in SHEETS},
             )
+
+    def test_qt_svg_normalization_preserves_text_and_original_sheet(self):
+        """Conserva las etiquetas y corrige el tamaño solo en la copia de renderizado."""
+        sheet = next(sheet for sheet in SHEETS if sheet.code == "A3-CER11")
+        original = read_sheet(sheet)
+        normalized = prepare_svg_for_qt(original)
+        original_root = ET.fromstring(original)
+        normalized_root = ET.fromstring(normalized)
+        original_styles = " ".join(
+            node.get("style", "") for node in original_root.iter()
+        ) + " " + " ".join(
+            node.text or "" for node in original_root.iter()
+            if node.tag.endswith("}style")
+        )
+        normalized_styles = " ".join(
+            node.get("style", "") for node in normalized_root.iter()
+        ) + " " + " ".join(
+            node.text or "" for node in normalized_root.iter()
+            if node.tag.endswith("}style")
+        )
+        original_sizes = re.findall(r"font-size\s*:\s*([0-9.]+)px", original_styles)
+        normalized_sizes = re.findall(
+            r"font-size\s*:\s*([0-9.]+)px", normalized_styles
+        )
+        original_text = [
+            node.text or "" for node in original_root.iter()
+            if node.tag.endswith(("}text", "}tspan"))
+        ]
+        normalized_text = [
+            node.text or "" for node in normalized_root.iter()
+            if node.tag.endswith(("}text", "}tspan"))
+        ]
+
+        self.assertTrue(any(float(size) < 1 for size in original_sizes))
+        self.assertTrue(all(float(size) >= 1 for size in normalized_sizes))
+        self.assertEqual(normalized_text, original_text)
+        self.assertEqual(read_sheet(sheet), original)
+        self.assertTrue(QSvgRenderer(QByteArray(normalized)).isValid())
+
+    def test_saving_a3_cerramiento_has_no_qt_font_warnings(self):
+        """Evita warnings de fuentes al rasterizar Cerramiento perimetral."""
+        with TemporaryDirectory() as directory:
+            app = self.make_app(directory)
+            sheet = next(sheet for sheet in SHEETS if sheet.code == "A3-CER11")
+            messages = []
+            previous = qInstallMessageHandler(
+                lambda _kind, _context, message: messages.append(message)
+                if "Pixel size <= 0" in message or "GetGlyphRunOutline failed" in message
+                else None
+            )
+            try:
+                pages = render_drawings(
+                    app, {"paper": "A3", "selected": {sheet.code: True}},
+                )
+            finally:
+                qInstallMessageHandler(previous)
+
+            self.assertEqual(len(pages), 1)
+            self.assertEqual(messages, [])
 
     def test_packaged_a3_sheets_have_no_outer_frame(self):
         """Conserva las fichas A3 sin su contorno rectangular exterior."""

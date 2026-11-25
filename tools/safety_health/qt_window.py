@@ -60,7 +60,9 @@ from . import (
 from .care_centers import FIELDS, format_centers, restore_centers
 from .chapter_selection import restore_chapter_selection, study_chapters, study_items
 from .external_conditions import APPLICABILITY, EXTERNAL_CONDITIONS, restore_external_conditions
-from .drawings import add_user_sheet, available_sheets, read_sheet, restore_drawings
+from .drawings import (
+    add_user_sheet, available_sheets, prepare_svg_for_qt, read_sheet, restore_drawings,
+)
 from .regulations import (
     REGULATIONS,
     initially_selected,
@@ -470,7 +472,7 @@ class SafetyHealthWindowQt(QDialog):
             return
         try:
             data = read_sheet(sheet)
-            self.drawings_svg.load(QByteArray(data))
+            self.drawings_svg.load(QByteArray(prepare_svg_for_qt(data)))
             if not self.drawings_svg.renderer().isValid():
                 raise ValueError(f"No se puede representar la ficha {sheet.title}.")
         except ValueError as exc:
