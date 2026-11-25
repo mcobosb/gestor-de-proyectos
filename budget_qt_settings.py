@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QMessageBox,
     QScrollArea,
+    QStyle,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -378,26 +379,88 @@ class SettingsDialog(QDialog):
         self.master_logo_path.setPlaceholderText("Usar logo.jpg incluido en el módulo")
         self.drawing_title_block_path = QLineEdit(self.settings.drawing_title_block_path)
         self.drawing_title_block_path.setPlaceholderText("Carpeta con cajetin_A4.svg y cajetin_A3.svg")
-        fields = (
-            ("Plantilla de informes (cabecera y pie, ODT)", self.template_path, self._select_template),
-            ("Plantilla del documento maestro (ODT)", self.master_template_path, self._select_master_template),
-            ("Logo del documento maestro (JPEG)", self.master_logo_path, self._select_master_logo),
-            ("Carpeta de cajetines de planos (A4 / A3)", self.drawing_title_block_path, self._select_drawing_title_block),
+        report_help = (
+            "Plantilla ODT de cabecera y pie para los informes de las herramientas. "
+            "El programa genera el contenido del informe y conserva el diseño de esta plantilla.\n\n"
+            "Marcadores opcionales: {{logo}} inserta el logo institucional; {{titulo}} o "
+            "{{título}} inserta el título del proyecto; {{expediente}} inserta el número de "
+            "expediente. En los pies se pueden usar {{capitulo}} / {{capítulo}} y "
+            "{no_pagina} / {{no_pagina}} para el capítulo y la página cuando el informe "
+            "corresponda.\n\n"
+            "Si se deja vacía la ruta, se intenta usar la plantilla incluida. Si no está "
+            "disponible, se genera el contenido que pueda sin esa plantilla."
         )
-        for label, field, callback in fields:
+        master_help = (
+            "Plantilla ODT de portada y diseño para el documento maestro ODM. El programa "
+            "genera el índice, la trazabilidad y los vínculos a los documentos seleccionados; "
+            "la plantilla aporta su estructura y presentación.\n\n"
+            "Debe conservar una estructura ODT válida, con texto, estilos y páginas maestras, "
+            "y una imagen en la cabecera o el marcador {{logo}}. Marcadores que se sustituyen "
+            "si están presentes: {{entidad}}, {{servicio}}, {{expediente}}, {{tipo_proyecto}}, "
+            "{{título}}, {{autores}}, {{PBL}}, {{PBL+IVA}}, {{plazo_ejecucion}}, {{fecha}} y "
+            "{{capítulo}}. {{no_pagina}} se convierte en el número de página.\n\n"
+            "Si se deja vacía la ruta, se usa la plantilla incluida en el módulo."
+        )
+        logo_help = (
+            "Imagen JPEG que se usa en la cabecera del documento maestro ODM. Sustituye las "
+            "imágenes de cabecera de la plantilla maestra y rellena sus marcadores {{logo}}. "
+            "Si se deja vacía la ruta, se usa logo.jpg incluido en el módulo. Esta opción no "
+            "cambia el logo de las plantillas de informes."
+        )
+        fields = (
+            (
+                "report", "Plantilla de informes (cabecera y pie, ODT)",
+                self.template_path, self._select_template, "Información sobre la plantilla de informes",
+                report_help,
+            ),
+            (
+                "master", "Plantilla del documento maestro (ODT)",
+                self.master_template_path, self._select_master_template,
+                "Información sobre la plantilla del documento maestro", master_help,
+            ),
+            (
+                "logo", "Logo del documento maestro (JPEG)",
+                self.master_logo_path, self._select_master_logo,
+                "Información sobre el logo del documento maestro", logo_help,
+            ),
+            (
+                "drawings", "Carpeta de cajetines de planos (A4 / A3)",
+                self.drawing_title_block_path, self._select_drawing_title_block,
+                "Etiquetas del cajetín SVG", TITLE_BLOCK_HELP,
+            ),
+        )
+        self.template_info_buttons: dict[str, QToolButton] = {}
+        for key, label, field, callback, help_title, help_text in fields:
             button = QPushButton("Examinar…")
             button.clicked.connect(callback)
             row = QHBoxLayout()
             row.addWidget(field, 1)
             row.addWidget(button)
-            if field is self.drawing_title_block_path:
-                self.drawing_title_block_info_button = QToolButton()
-                self.drawing_title_block_info_button.setText("i")
-                self.drawing_title_block_info_button.setToolTip("Etiquetas del cajetín SVG")
-                self.drawing_title_block_info_button.setAccessibleName("Información sobre las etiquetas del cajetín")
-                self.drawing_title_block_info_button.clicked.connect(self._drawing_title_block_info)
-                row.addWidget(self.drawing_title_block_info_button)
-            form.addRow(label, row)
+            label_widget = QLabel(label)
+            label_widget.setBuddy(field)
+            label_container = QWidget()
+            label_row = QHBoxLayout(label_container)
+            label_row.setContentsMargins(0, 0, 0, 0)
+            label_row.setSpacing(4)
+            label_row.addWidget(label_widget)
+            info_button = QToolButton()
+            info_button.setIcon(self.style().standardIcon(
+                QStyle.StandardPixmap.SP_MessageBoxInformation,
+            ))
+            info_button.setToolTip(help_title)
+            info_button.setAccessibleName(help_title)
+            info_button.setAutoRaise(True)
+            if key == "drawings":
+                info_button.clicked.connect(self._drawing_title_block_info)
+                self.drawing_title_block_info_button = info_button
+            else:
+                info_button.clicked.connect(
+                    lambda _checked=False, title=help_title, text=help_text:
+                    QMessageBox.information(self, title, text)
+                )
+            self.template_info_buttons[key] = info_button
+            label_row.addWidget(info_button)
+            form.addRow(label_container, row)
         note = QLabel(
             "Deja vacías las rutas de informes, maestro o logo para utilizar los recursos incluidos. "
             "La carpeta de cajetines es opcional; se busca A4 o A3 en los nombres de los SVG según el formato del plano. "

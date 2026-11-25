@@ -392,6 +392,18 @@ class BudgetQtWindowTests(unittest.TestCase):
                 lambda language: True,
             )
             self.assertEqual(
+                set(dialog.template_info_buttons),
+                {"report", "master", "logo", "drawings"},
+            )
+            for key, expected in (
+                ("report", "{{expediente}}"),
+                ("master", "{{PBL}}"),
+                ("logo", "logo.jpg"),
+            ):
+                with patch.object(QMessageBox, "information") as information:
+                    dialog.template_info_buttons[key].click()
+                self.assertIn(expected, information.call_args.args[2])
+            self.assertEqual(
                 [dialog.tabs.tabText(index) for index in range(dialog.tabs.count())],
                 [
                     "Informes", "Plantillas", "Tipo de proyecto y normas", "Idioma", "Apariencia", "Colaboración",
