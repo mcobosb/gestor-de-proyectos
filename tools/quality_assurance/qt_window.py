@@ -19,8 +19,8 @@ from . import TOOL_LABEL
 from .catalog import get_catalog_entry, load_catalog
 from .document import DOCUMENTS, LIBRARY_PATH, write_document
 from .plan import (
-    TRIALS, applicable_trials, describe_price_source, has_inserted, insert_budget, suggested_quantity, unit_snapshot,
-    validate_rows, work_units,
+    PARTIAL_EQUIVALENTS, PARTIAL_TRIALS, TRIALS, applicable_trials, apply_quantity_proposal,
+    describe_price_source, has_inserted, insert_budget, quantity_proposal, unit_snapshot, validate_rows, work_units,
 )
 from .pricing import estimate_empty_price, price_candidates
 
@@ -45,7 +45,11 @@ class QualityWindow(QDialog):
             "Los precios se introducen sin costes indirectos y solo son obligatorios para insertar. "
             "Las coincidencias del catálogo aparecen desmarcadas; confirma su aplicabilidad. "
             "Los precios orientativos pueden cubrir solo parte del control; consulta su alcance en la celda. "
-            "Las frecuencias y tolerancias del libro son orientativas y no acreditan cumplimiento normativo."
+            "Las frecuencias y tolerancias del libro son orientativas y no acreditan cumplimiento normativo. "
+            "Completar propuestas recalcula todas las cantidades, incluso las desmarcadas. "
+            "Si faltan datos se propone 1 provisional; consulta la explicación en la celda N.º. "
+            "Las entregas de hormigón se estiman con 6 m³ y no equivalen necesariamente a amasadas. "
+            "Los ensayos desglosados pueden solaparse con su control PAC."
         )
         note.setWordWrap(True)
         layout.addWidget(note)
@@ -53,7 +57,7 @@ class QualityWindow(QDialog):
         library = QPushButton("Editar fichas del anejo…")
         library.clicked.connect(self.open_library)
         top.addWidget(library)
-        self.suggest_button = QPushButton("Completar propuestas")
+        self.suggest_button = QPushButton("Completar propuestas y recalcular cantidades")
         self.suggest_button.clicked.connect(self.suggest)
         top.addWidget(self.suggest_button)
         top.addStretch()
@@ -133,6 +137,10 @@ class QualityWindow(QDialog):
         """Añade una fila con referencia estable a la partida de origen."""
         original = row
         if not has_inserted(self.app.budget_items):
+            item = work_units(self.app.budget_items).get(row["unit_id"])
+            if (item is not None and row["snapshot"] == unit_snapshot(item)
+                    and not str(row.get("count", "")).strip()):
+                row = apply_quantity_proposal(item, row)
             row = estimate_empty_price(row, self.app.report_settings.currency)
         index = self.table.rowCount()
         self.table.insertRow(index)
@@ -151,6 +159,8 @@ class QualityWindow(QDialog):
             cell = QTableWidgetItem(str(row.get(name, "")))
             if name == "name":
                 cell.setToolTip(str(row.get("details", "")))
+            if name == "count" and row.get("quantity_source"):
+                cell.setToolTip(row["quantity_source"]["basis"])
             if name == "price" and row.get("price_source"):
                 source = row["price_source"]
                 cell.setToolTip(describe_price_source(source))
@@ -166,6 +176,14 @@ class QualityWindow(QDialog):
             for index in range(self.table.rowCount())
         ]
         for row in rows:
+            quantity_source = row.get("quantity_source")
+            if quantity_source and (
+                row["count"] != str(quantity_source["count"])
+                or row["frequency"] != quantity_source["frequency"]
+                or (row["name"] != quantity_source["name"]
+                    and not quantity_source["basis"].startswith("Cantidad provisional:"))
+            ):
+                row.pop("quantity_source")
             source = row.get("price_source")
             if source:
                 try:
@@ -233,7 +251,7 @@ class QualityWindow(QDialog):
         self.invalidate()
 
     def suggest(self) -> None:
-        """Completa candidatos nuevos y actualiza referencias sin pisar valores revisados."""
+        """Completa candidatos y recalcula todas las cantidades, incluidas las desmarcadas."""
         units = work_units(self.app.budget_items)
         saved = self.rows()
         existing = {(row["unit_id"], row.get("trial")) for row in saved}
@@ -242,7 +260,7 @@ class QualityWindow(QDialog):
         for row in saved:
             if (item := units.get(row["unit_id"])) is not None:
                 snapshot = unit_snapshot(item)
-                self.append_row(row if snapshot == row["snapshot"] else row | {"snapshot": snapshot, "count": ""})
+                self.append_row(apply_quantity_proposal(item, row | {"snapshot": snapshot}))
         for key, item in units.items():
             for trial in applicable_trials(item):
                 if (key, trial) in existing:
@@ -250,12 +268,20 @@ class QualityWindow(QDialog):
                 specification = TRIALS.get(trial)
                 if specification is not None:
                     row = {"name": specification.name, "frequency": specification.frequency,
-                           "criteria": specification.criteria,
-                           "count": suggested_quantity(item, trial) or ""}
+                           "criteria": specification.criteria, "count": ""}
+                    if trial in PARTIAL_TRIALS:
+                        parent = get_catalog_entry(PARTIAL_TRIALS[trial])
+                        row.update({
+                            "reference": parent.reference,
+                            "details": f"Ensayo desglosado de {parent.label}. "
+                                       "No incluye los demás ensayos ni inspecciones del control.",
+                            "included": False,
+                        })
                 else:
                     entry = get_catalog_entry(trial)
                     row = {"name": entry.label, "frequency": entry.frequency, "criteria": entry.criteria,
-                           "reference": entry.reference, "details": entry.details, "count": "",
+                           "reference": entry.reference, "details": entry.details,
+                           "count": "",
                            "included": False}
                 self.append_row({"unit_id": key, "snapshot": unit_snapshot(item), "trial": trial, **row})
         self.table.blockSignals(False)
@@ -299,8 +325,17 @@ class QualityWindow(QDialog):
             self.table.removeRow(index)
         self.invalidate()
 
-    def invalidate(self, *_args) -> None:
+    def invalidate(self, *args) -> None:
         """Requiere una revisión nueva cuando cambia una estimación."""
+        if args and isinstance(args[0], QTableWidgetItem) and args[0].column() in (2, 3, 4):
+            index = args[0].row()
+            check, count = self.table.item(index, 0), self.table.item(index, 4)
+            if check is not None and count is not None:
+                row = self.rows()[index]
+                basis = row.get("quantity_source", {}).get("basis", "")
+                blocked = self.table.blockSignals(True)
+                count.setToolTip(basis)
+                self.table.blockSignals(blocked)
         self.reviewed = False
         self.refresh_actions()
 
@@ -326,6 +361,9 @@ class QualityWindow(QDialog):
         approved = [row for row in self.rows() if row["included"]]
         current = self.reviewed and bool(approved) and all(
             row["unit_id"] in units and row["snapshot"] == unit_snapshot(units[row["unit_id"]])
+            and (not row.get("quantity_source") or row["quantity_source"]["basis"] == quantity_proposal(
+                units[row["unit_id"]], row.get("trial", ""), row["frequency"]
+            )[1])
             for row in approved
         )
         self.export_button.setEnabled(current)
@@ -343,9 +381,29 @@ class QualityWindow(QDialog):
         except ValueError as exc:
             QMessageBox.warning(self, TOOL_LABEL, str(exc))
             return
+        included = {(row["unit_id"], row.get("trial")) for row in rows if row["included"]}
+        overlap = any(
+            (row["unit_id"], PARTIAL_TRIALS[row["trial"]]) in included
+            or (row["trial"] in PARTIAL_EQUIVALENTS
+                and (row["unit_id"], PARTIAL_EQUIVALENTS[row["trial"]]) in included)
+            for row in rows if row["included"] and row.get("trial") in PARTIAL_TRIALS
+        ) or any(
+            (row["unit_id"], "concrete") in included
+            for row in rows if row["included"] and row.get("trial") in {"PAC-16", "PAC-17"}
+        )
+        warning = (
+            "Hay controles o ensayos con alcances potencialmente solapados en la misma unidad de obra. "
+            "Comprueba que no se dupliquen su alcance ni su coste.\n\n"
+        ) if overlap else ""
+        if any(row.get("quantity_source") for row in rows if row["included"]):
+            warning += (
+                "Las cantidades automáticas son orientativas. Los valores provisionales y las entregas "
+                "estimadas de hormigón deben revisarse conforme al proyecto y su pliego.\n\n"
+            )
         answer = QMessageBox.question(
             self, TOOL_LABEL,
-            "¿Has comprobado que los ensayos, cantidades y criterios de aceptación se ajustan al proyecto y su pliego?",
+            warning + "¿Has comprobado que los ensayos, cantidades y criterios de aceptación "
+            "se ajustan al proyecto y su pliego?",
         )
         if answer == QMessageBox.StandardButton.Yes:
             self.app.quality_assurance_state = {"rows": rows}

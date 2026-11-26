@@ -9,6 +9,7 @@ import unicodedata
 from budget_core import MeasurementLine, ProjectItem
 
 SOURCE = "QUALITY:control"
+CONCRETE_DELIVERY_VOLUME = Decimal("6")
 
 
 @dataclass(frozen=True)
@@ -31,7 +32,26 @@ TRIALS = {
                      "Espesor de proyecto y densidad según capa, fórmula de trabajo y pliego."),
     "paint": Trial("Retrorreflexión de marcas viales", "En cada paso o línea, según el plan de control",
                    "Según clase, proyecto y PG-3 aplicable."),
+    "soil_identification": Trial(
+        "Identificación de suelos excavados", "1 cada 2.500-5.000 m³",
+        "Clasificación del suelo según su destino, el proyecto y el pliego aplicable.",
+    ),
+    "subbase_density": Trial(
+        "Densidad in situ de zahorra", "1 cada 500 m²",
+        "Compactación según proyecto, categoría de tráfico y pliego aplicable.",
+    ),
+    "subbase_plate": Trial(
+        "Placa de carga de zahorra", "1 cada 2.000-3.000 m²",
+        "Módulo de deformación según proyecto y pliego aplicable.",
+    ),
 }
+
+PARTIAL_TRIALS = {
+    "soil_identification": "PAC-06",
+    "subbase_density": "PAC-30",
+    "subbase_plate": "PAC-30",
+}
+PARTIAL_EQUIVALENTS = {"subbase_density": "density", "subbase_plate": "plate"}
 
 PAC_RULES = (
     (r"\b(?:estudio geotecnico|sondeo geotecnico|campana geotecnica)\w*\b", ("PAC-02",)),
@@ -96,7 +116,10 @@ def normalized(text: str) -> str:
 def applicable_trials(item: ProjectItem) -> list[str]:
     """Detecta candidatos conservadores en la descripción; no certifica su aplicabilidad."""
     text = normalized(item.summary)
-    if re.search(r"\b(?:demolicion|demoler|derribo|retirada|fresado|transporte|vertido)\b", text):
+    if (item.source.startswith("SS:")
+            or re.search(r"\b(?:demolicion|demoler|derribo|retirada|fresado|transporte|vertido)\b", text)
+            or re.search(r"\bcorte\b.*\bpavimento\b", text)
+            or re.search(r"\b(?:tratamiento|gestion)\s+de\s+(?:rcs|rcd|residuos)\b", text)):
         return []
     trials = []
     if "zanja" in text and re.search(r"relleno|compact|terraplen", text):
@@ -112,17 +135,119 @@ def applicable_trials(item: ProjectItem) -> list[str]:
     for pattern, identifiers in PAC_RULES:
         if re.search(pattern, text):
             trials.extend(identifiers)
+    trials.extend(
+        trial for trial, parent in PARTIAL_TRIALS.items()
+        if parent in trials and suggested_quantity(item, trial) is not None
+    )
     return list(dict.fromkeys(trials))
 
 
-def suggested_quantity(item: ProjectItem, trial: str) -> int | None:
-    """Redondea por exceso solo si se conoce toda la base del cálculo."""
-    if trial != "asphalt" or normalized(item.unit).replace(" ", "").replace("^", "") != "m2":
+def suggested_quantity(item: ProjectItem, trial: str, frequency: str | None = None) -> int | None:
+    """Calcula frecuencias simples compatibles con la medición, sin suponer lotes adicionales."""
+    if frequency is None:
+        specification = TRIALS.get(trial)
+        if specification is None:
+            return None
+        frequency = specification.frequency
+    number = r"(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d+)?"
+    match = re.fullmatch(
+        rf"\s*(?:(\d+)\s+(?:(?:ensayos?|pruebas?|testigos?|muestras?)\s+)?)?"
+        rf"cada\s+({number})(?:\s*[-–]\s*({number}))?\s*"
+        r"(m2|m3|ml|m|km|kg|t|ud|u)(?:\s+lineales?)?(?:\s+o\s+fraccion)?\s*",
+        normalized(frequency).replace("^", ""),
+    )
+    if not match:
+        return None
+    units = {"ml": "m", "u": "ud"}
+    unit = normalized(item.unit).replace(" ", "").replace("^", "")
+    if units.get(unit, unit) != units.get(match.group(4), match.group(4)):
+        return None
+    intervals = [Decimal(value.replace(".", "").replace(",", "."))
+                 for value in (match.group(2), match.group(3)) if value is not None]
+    if any(value <= 0 for value in intervals):
+        return None
+    per_interval = int(match.group(1) or "1")
+    if per_interval < 1:
         return None
     measurement = Decimal(str(item.measurement))
     if not measurement.is_finite() or measurement <= 0:
         return None
-    return int((measurement / 500).to_integral_value(rounding=ROUND_CEILING))
+    return int((measurement / min(intervals)).to_integral_value(rounding=ROUND_CEILING)) * per_interval
+
+
+def _concrete_thickness(item: ProjectItem) -> tuple[Decimal, bool] | None:
+    """Obtiene un espesor único expresado explícitamente en la descripción."""
+    number = r"(\d+(?:[.,]\d+)?)"
+    unit = r"(mm|cm|m)"
+    description = normalized(item.text)
+    summary = normalized(item.summary)
+    matches = [
+        (match.group(2), match.group(3), bool(match.group(1)))
+        for match in re.finditer(
+            rf"\bde\s+(hasta\s+)?{number}\s*{unit}\s+de\s+espesor\b", description
+        )
+    ]
+    matches.extend(
+        (match.group(2), match.group(3), bool(match.group(1)))
+        for match in re.finditer(
+            rf"\bespesor\s+(?:de\s+)?(hasta\s+)?{number}\s*{unit}\b", description
+        )
+    )
+    match = re.search(rf"\bde\s+(hasta\s+)?{number}\s*{unit}\s*$", summary)
+    if match:
+        matches.append((match.group(2), match.group(3), bool(match.group(1))))
+    factors = {"mm": Decimal("0.001"), "cm": Decimal("0.01"), "m": Decimal("1")}
+    values = [(Decimal(value.replace(",", ".")) * factors[unit_name], maximum)
+              for value, unit_name, maximum in matches]
+    thicknesses = {value for value, _ in values}
+    if len(thicknesses) != 1 or next(iter(thicknesses)) <= 0:
+        return None
+    return next(iter(thicknesses)), any(maximum for _, maximum in values)
+
+
+def quantity_proposal(item: ProjectItem, trial: str, frequency: str) -> tuple[int, str]:
+    """Propone una cantidad y explica si es calculada o meramente provisional."""
+    if (trial == "concrete" and frequency == TRIALS["concrete"].frequency) or (
+        trial == "PAC-16" and frequency == (
+            "En el 100% de las amasadas sometidas a control de resistencia "
+            "y siempre que se detecten alteraciones en obra."
+        )
+    ):
+        measurement = Decimal(str(item.measurement))
+        unit = normalized(item.unit).replace(" ", "").replace("^", "")
+        thickness = _concrete_thickness(item) if unit == "m2" else None
+        if measurement.is_finite() and measurement > 0 and (unit == "m3" or thickness is not None):
+            volume = measurement if unit == "m3" else measurement * thickness[0]
+            count = int((volume / CONCRETE_DELIVERY_VOLUME).to_integral_value(rounding=ROUND_CEILING))
+            formatted_volume = format(volume.normalize(), "f").replace(".", ",")
+            basis = f"Volumen estimado {formatted_volume} m³"
+            if thickness is not None:
+                qualifier = " máximo indicado" if thickness[1] else ""
+                formatted_thickness = format(thickness[0].normalize(), "f").replace(".", ",")
+                basis += f" a partir de un espesor{qualifier} de {formatted_thickness} m"
+            return count, (
+                f"{basis}; 1 ensayo por entrega estimada de {CONCRETE_DELIVERY_VOLUME} m³ o fracción. "
+                "Una entrega no equivale necesariamente a una amasada; revisar lotes y frecuencia del pliego."
+            )
+    count = suggested_quantity(item, trial, frequency)
+    if count is not None:
+        return count, "Cantidad orientativa calculada a partir de la medición y la frecuencia indicada."
+    return 1, (
+        "Cantidad provisional: 1. No hay datos suficientes para calcular la frecuencia; "
+        "comprobar lotes, jornadas y condiciones aplicables."
+    )
+
+
+def apply_quantity_proposal(item: ProjectItem, row: dict) -> dict:
+    """Actualiza la cantidad y conserva la explicación de su procedencia."""
+    frequency = str(row.get("frequency", ""))
+    count, basis = quantity_proposal(item, str(row.get("trial", "")), frequency)
+    return row | {
+        "count": count,
+        "quantity_source": {
+            "count": count, "name": str(row.get("name", "")), "frequency": frequency, "basis": basis,
+        },
+    }
 
 
 def work_units(items: list[ProjectItem]) -> dict[str, ProjectItem]:
@@ -155,6 +280,14 @@ def validate_rows(rows: list[dict], items: dict[str, ProjectItem], *, require_pr
             raise ValueError(f"{item.code}: introduce un número de ensayos y un precio válidos.") from exc
         if not count.is_finite() or count < 1 or count > 999999 or count != count.to_integral_value():
             raise ValueError(f"{item.code}: el número de ensayos debe ser un entero positivo (máx. 999 999).")
+        quantity_source = row.get("quantity_source")
+        if quantity_source and (
+            quantity_source["count"] != int(count) or quantity_source["frequency"] != frequency
+            or (quantity_source["name"] != name
+                and not quantity_source["basis"].startswith("Cantidad provisional:"))
+            or quantity_source["basis"] != quantity_proposal(item, row.get("trial", ""), frequency)[1]
+        ):
+            raise ValueError(f"{item.code}: ha cambiado la base de cálculo. Actualiza y revisa el plan.")
         if price is not None and (not price.is_finite() or price <= 0 or price > 1_000_000_000):
             raise ValueError(f"{item.code}: el precio unitario debe ser positivo y válido.")
         if require_prices and price is None:
@@ -211,6 +344,8 @@ def insert_budget(app, rows: list[dict]) -> None:
             description += f" Referencia normativa: {row['reference']}."
         if row.get("details"):
             description += f" Detalle del control: {row['details']}."
+        if row.get("quantity_source"):
+            description += f" Cantidad orientativa: {row['quantity_source']['basis']}"
         if row.get("price_source"):
             source = row["price_source"]
             description += f" Precio de referencia: {describe_price_source(source)}"

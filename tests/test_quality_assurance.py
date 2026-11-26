@@ -18,7 +18,9 @@ from odt_reports import _tag
 from tools._library_history import read_revisions
 from tools.quality_assurance.catalog import get_catalog_entry, load_catalog
 from tools.quality_assurance.document import LIBRARY_PATH, write_document
-from tools.quality_assurance.plan import SOURCE, applicable_trials, insert_budget, suggested_quantity
+from tools.quality_assurance.plan import (
+    SOURCE, TRIALS, applicable_trials, insert_budget, quantity_proposal, suggested_quantity,
+)
 from tools.quality_assurance.pricing import estimate_empty_price, price_candidates, price_catalog
 
 
@@ -31,6 +33,218 @@ class QualityAssuranceTests(unittest.TestCase):
             with self.subTest(unit=unit, measure=measure):
                 item = ProjectItem("P", "01#", unit, "Mezcla bituminosa", measure)
                 self.assertEqual(suggested_quantity(item, "asphalt"), count)
+
+    def test_explicit_frequency_requires_a_complete_compatible_basis(self):
+        """Calcula intervalos conservadores y rechaza condiciones o unidades desconocidas."""
+        for unit, measure, frequency, expected in (
+            ("m³", 250, "1 cada 100 - 250 m3", 3),
+            ("m3", 200, "2 ensayos cada 100-250 m³", 4),
+            ("m²", 1000, "1 testigo cada 1.000-2.000 m2 o fracción", 1),
+            ("m", 100.01, "cada 50 m lineales", 3),
+            ("t", 1000, "1 cada 1.000 m²", None),
+            ("m", 100, "1 cada 50 m de zanja y por tongada", None),
+            ("m²", 1000, "cada 500 m² (mín. 1/día)", None),
+            ("m²", 1000, "1 cada 500 m²; placa cada 2.000 m²", None),
+            ("m²", 0, "1 cada 500 m²", None),
+            ("m²", 100, "1 cada 0 m²", None),
+        ):
+            with self.subTest(unit=unit, measure=measure, frequency=frequency):
+                item = ProjectItem("P", "01#", unit, "Unidad de obra", measure)
+                self.assertEqual(suggested_quantity(item, "", frequency), expected)
+
+    def test_partial_controls_use_only_compatible_measurements(self):
+        """Desglosa ensayos medibles sin confundir volúmenes, superficies o partidas auxiliares."""
+        for measure, count in ((343.4, 1), (2500, 1), (2500.01, 2)):
+            item = ProjectItem("EXC", "01#", "m3", "Excavación apertura de caja", measure)
+            self.assertIn("PAC-06", applicable_trials(item))
+            self.assertIn("soil_identification", applicable_trials(item))
+            self.assertEqual(suggested_quantity(item, "soil_identification"), count)
+        surface = ProjectItem("ZAH", "01#", "m²", "Subbase de zahorra", 2501)
+        self.assertIn("subbase_density", applicable_trials(surface))
+        self.assertIn("subbase_plate", applicable_trials(surface))
+        self.assertEqual(suggested_quantity(surface, "subbase_density"), 6)
+        self.assertEqual(suggested_quantity(surface, "subbase_plate"), 2)
+        volume = ProjectItem("ZAH", "01#", "m³", "Subbase de zahorra", 103.03)
+        self.assertNotIn("subbase_density", applicable_trials(volume))
+        self.assertNotIn("subbase_plate", applicable_trials(volume))
+        for item in (
+            ProjectItem("CORTE", "01#", "m", "Corte pavimento asfáltico c/disco", 55),
+            ProjectItem("RCD", "01#", "m3", "Tratamiento de RCS tierras de excavación", 17.17),
+            ProjectItem("SS", "SS#", "u", "Estructura metálica de protección", 1, source="SS:01"),
+        ):
+            with self.subTest(summary=item.summary):
+                self.assertEqual(applicable_trials(item), [])
+
+    def test_concrete_delivery_estimates_and_provisional_default(self):
+        """Estima entregas de 6 m³ solo con un volumen o espesor identificable."""
+        for unit, measure, summary, text, count in (
+            ("m³", 6, "Hormigón", "", 1),
+            ("m3", 6.01, "Hormigón", "", 2),
+            ("m²", 185.15, "Solera de hormigón de 10 cm", "Hormigón de 10 cm de espesor.", 4),
+            ("m2", 211.85, "Pavimento de hormigón", "Hormigón de hasta 10cm de espesor.", 4),
+            ("m2", 185.15, "Solera de hormigón de 20 cm", "Hormigón de 10 cm de espesor.", 1),
+            ("m²", 100, "Hormigón", "Espesor de 5 a 10 cm.", 1),
+            ("u", 100, "Hormigón", "", 1),
+        ):
+            item = ProjectItem("H", "01#", unit, summary, measure, text=text)
+            actual, basis = quantity_proposal(item, "concrete", TRIALS["concrete"].frequency)
+            with self.subTest(unit=unit, summary=summary, text=text):
+                self.assertEqual(actual, count)
+                self.assertIn("entrega" if unit == "m3" or unit == "m³" or count == 4 else "provisional", basis)
+        item = ProjectItem("H", "01#", "m3", "Hormigón", 12.01)
+        self.assertEqual(quantity_proposal(item, "concrete", "1 cada 50 m³")[0], 1)
+
+    def test_unchecked_quantities_and_concrete_basis_are_persisted(self):
+        """Calcula filas no marcadas e invalida la revisión si cambia el espesor."""
+        from tools.quality_assurance.qt_window import QualityWindow
+
+        qt = QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as folder, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(folder)
+        ), patch("budget_qt_window.apply_theme"), patch.object(
+            QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes
+        ) as question:
+            window = BudgetMainWindow()
+            dialog = None
+            try:
+                work = ProjectItem("SOL", "01#", "m²", "Solera de hormigón", 185.15,
+                                   text="Solera de 10 cm de espesor.")
+                window.budget_items = [work]
+                dialog = QualityWindow(window)
+                rows = dialog.rows()
+                concrete = next(row for row in rows if row.get("trial") == "concrete")
+                pac = next(row for row in rows if row.get("trial") == "PAC-16")
+                self.assertEqual((concrete["count"], pac["count"], pac["included"]), ("4", "4", False))
+                self.assertIn("6 m³", concrete["quantity_source"]["basis"])
+                self.assertTrue(all(row["count"] for row in rows))
+                pac_index = next(i for i, row in enumerate(rows) if row.get("trial") == "PAC-16")
+                dialog.table.item(pac_index, 0).setCheckState(Qt.CheckState.Checked)
+                dialog.review()
+                self.assertIn("no se dupliquen", question.call_args.args[2])
+                dialog.table.item(pac_index, 0).setCheckState(Qt.CheckState.Unchecked)
+                dialog.review()
+                self.assertTrue(dialog.export_button.isEnabled())
+                work.text = "Solera de 20 cm de espesor."
+                window.refresh_budget_tree()
+                self.assertFalse(dialog.export_button.isEnabled())
+                with self.assertRaisesRegex(ValueError, "base de cálculo"):
+                    insert_budget(window, [concrete])
+                dialog.suggest()
+                rows = dialog.rows()
+                self.assertEqual(next(row for row in rows if row.get("trial") == "concrete")["count"], "7")
+                pac = next(row for row in rows if row.get("trial") == "PAC-16")
+                self.assertEqual((pac["count"], pac["included"]), ("7", False))
+                dialog.review()
+                dialog.insert()
+                inserted = next(item for item in window.budget_items if item.source == SOURCE)
+                self.assertIn("entrega estimada de 6 m³", inserted.text)
+                restored = decode_project_payload(build_project_payload(window), Path(folder) / "p.json",
+                                                  window.report_settings)
+                self.assertEqual(restored.quality_assurance["rows"], dialog.rows())
+            finally:
+                if dialog is not None:
+                    dialog.close()
+                window.is_dirty = False
+                window.close()
+                qt.processEvents()
+
+    def test_partial_control_review_warns_about_overlap(self):
+        """Conserva el PAC y pide revisar el posible solapamiento de sus precios."""
+        from tools.quality_assurance.qt_window import QualityWindow
+
+        qt = QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as folder, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(folder)
+        ), patch("budget_qt_window.apply_theme"), patch.object(
+            QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes
+        ) as question:
+            window = BudgetMainWindow()
+            dialog = None
+            try:
+                work = ProjectItem("EXC", "01#", "m3", "Excavación apertura de caja", 343.4)
+                window.budget_items = [work]
+                dialog = QualityWindow(window)
+                rows = dialog.rows()
+                partial = next(i for i, row in enumerate(rows) if row.get("trial") == "soil_identification")
+                parent = next(i for i, row in enumerate(rows) if row.get("trial") == "PAC-06")
+                row = rows[partial]
+                self.assertEqual((row["count"], row["included"]), ("1", False))
+                self.assertIn("PAC-06", row["details"])
+                self.assertIn("PG-3", row["reference"])
+                self.assertEqual(row["price_source"]["code"], "C10EF100")
+                dialog.table.item(partial, 0).setCheckState(Qt.CheckState.Checked)
+                dialog.table.item(parent, 0).setCheckState(Qt.CheckState.Checked)
+                dialog.table.item(parent, 4).setText("1")
+                dialog.review()
+                self.assertTrue(dialog.reviewed)
+                self.assertIn("no se dupliquen", question.call_args.args[2])
+                window.budget_items = [ProjectItem("ZAH", "01#", "m²", "Subbase de zahorra", 2501)]
+                dialog.suggest()
+                rows = dialog.rows()
+                generic = next(i for i, row in enumerate(rows) if row.get("trial") == "plate")
+                partial = next(i for i, row in enumerate(rows) if row.get("trial") == "subbase_plate")
+                dialog.table.item(generic, 4).setText("1")
+                dialog.table.item(partial, 0).setCheckState(Qt.CheckState.Checked)
+                dialog.review()
+                self.assertIn("no se dupliquen", question.call_args.args[2])
+            finally:
+                if dialog is not None:
+                    dialog.close()
+                window.is_dirty = False
+                window.close()
+                qt.processEvents()
+
+    def test_recalculate_saved_rows_and_changed_measurement(self):
+        """Recalcula lo interpretable y marca como provisional el valor desconocido."""
+        from tools.quality_assurance.qt_window import QualityWindow
+
+        qt = QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as folder, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(folder)
+        ), patch("budget_qt_window.apply_theme"), patch.object(
+            QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes
+        ):
+            window = BudgetMainWindow()
+            dialog = None
+            reopened = None
+            try:
+                work = ProjectItem("ZAN", "01#", "m³", "Relleno de zanja compactada", 450)
+                window.budget_items = [work]
+                dialog = QualityWindow(window)
+                density = next(i for i, row in enumerate(dialog.rows()) if row.get("trial") == "density")
+                dialog.table.item(density, 3).setText("2 ensayos cada 100 - 250 m³")
+                dialog.table.item(density, 4).setText("99")
+                dialog.table.item(density, 6).setText("33")
+                dialog.suggest_button.click()
+                row = next(row for row in dialog.rows() if row.get("trial") == "density")
+                self.assertEqual((row["count"], row["price"]), ("10", "33"))
+                dialog.review()
+                self.assertTrue(dialog.reviewed)
+                reopened = QualityWindow(window)
+                self.assertEqual(next(row for row in reopened.rows() if row.get("trial") == "density")["count"], "10")
+                work.measurement = 575
+                dialog.suggest()
+                row = next(row for row in dialog.rows() if row.get("trial") == "density")
+                self.assertEqual((row["count"], row["snapshot"][-1]), ("12", 575))
+                density = next(i for i, row in enumerate(dialog.rows()) if row.get("trial") == "density")
+                dialog.table.item(density, 3).setText("1 cada 50 m de zanja y por tongada")
+                dialog.table.item(density, 4).setText("5")
+                dialog.suggest()
+                row = next(row for row in dialog.rows() if row.get("trial") == "density")
+                self.assertEqual(row["count"], "1")
+                self.assertIn("provisional", row["quantity_source"]["basis"])
+                work.measurement = 600
+                dialog.suggest()
+                self.assertEqual(next(row for row in dialog.rows() if row.get("trial") == "density")["count"], "1")
+                self.assertFalse(dialog.reviewed)
+            finally:
+                if dialog is not None:
+                    dialog.close()
+                if reopened is not None:
+                    reopened.close()
+                window.is_dirty = False
+                window.close()
+                qt.processEvents()
 
     def test_workbook_catalog_and_unit_matches(self):
         """Carga los catálogos PAC y propone controles para unidades adicionales."""
@@ -389,6 +603,7 @@ class QualityAssuranceTests(unittest.TestCase):
                         self.assertIn("https://www.boe.es/buscar/act.php?id=BOE-A-2003-22787", links)
                         normalized = " ".join(text.split())
                         for expected in ("ANEJO Nº 17", "Tabla 2.", "ASF", "321,00", "Texto revisado en la ficha.",
+                                         "Cantidad orientativa",
                                          "6. GESTIÓN DE NO CONFORMIDADES", "8. CATÁLOGO DE CONTROLES PAC",
                                          "9. FICHAS TÉCNICAS DE ENSAYOS CLAVE",
                                          "Ensayos e inspecciones", "ENS-14", "CATÁLOGO"):

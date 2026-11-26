@@ -570,10 +570,23 @@ referencia o completa los precios necesarios antes de volver a generarlo.
 En **Herramientas → Aseguramiento de la calidad**, justo antes de
 **Justificación de precios**, revisa las propuestas por unidad de obra.
 Puedes añadir ensayos manualmente y cambiar el número, la frecuencia
-y el criterio de aceptación. Para los testigos de mezcla bituminosa, si la UO
-está en m², se propone un ensayo por cada 500 m² o fracción; cuando faltan datos
-de lotes, tongadas o elementos, se deja el número pendiente. Las propuestas
-deben contrastarse con el pliego y la normativa aplicable.
+y el criterio de aceptación. Para frecuencias simples como «1 cada 500 m² o
+fracción», la cantidad se calcula a partir de la medición de la UO, redondeando
+por exceso; en intervalos como «1 cada 100-250 m³» se usa el valor más exigente.
+La unidad de la frecuencia debe coincidir con la de la UO. La acción **Completar
+propuestas y recalcular cantidades** sustituye las cantidades existentes, también
+en filas desmarcadas. Si no se puede calcular una frecuencia, se propone
+provisionalmente 1. Para los controles de amasadas de hormigón se estima una
+entrega de 6 m³ por ensayo; si la UO está en m², se utiliza el espesor indicado
+expresamente. Una entrega no equivale necesariamente a una amasada: comprueba
+lotes, frecuencia, espesor y transporte. La explicación aparece al situar el
+cursor sobre el número y se conserva en el anejo y el presupuesto. Todas las
+propuestas deben contrastarse con el pliego y la normativa aplicable.
+Algunos ensayos cuantificables de controles PAC se ofrecen por separado y
+desmarcados, indicando el control de origen. Revisa las condiciones y evita
+duplicar su alcance o precio si también incluyes la ficha PAC completa.
+Las unidades generadas de Seguridad y Salud no se proponen automáticamente
+como unidades de obra para el plan de calidad.
 
 Algunas filas con precio vacío reciben una estimación orientativa en euros
 basada en tarifas públicas o partidas revisadas de las bases BCCA Andalucía

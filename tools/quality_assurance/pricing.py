@@ -65,6 +65,8 @@ BC3_COMPONENTS = {
 BC3_ESTIMATES = {
     "PAC-02": (("C10EF100",), "Paquete parcial: clasificación de una muestra; no incluye sondeos ni estudio."),
     "PAC-06": (("C10EF100",), "Paquete parcial: clasificación de suelo para rellenos; no incluye inspección de obra."),
+    "soil_identification": (("C10EF100",), "Clasificación de suelo para rellenos; "
+                            "verificar que el destino y el alcance coinciden con la muestra."),
     "PAC-07": (("CM1C01FS010", "CM1C01FS040"), "Paquete parcial: clasificación para terraplén "
                "y Proctor modificado; no incluye controles de ejecución."),
     "PAC-08": (("C10W010.", "C10W050"), "Paquete parcial: Los Ángeles y lajas; no incluye tramo de prueba ni finos."),
@@ -199,6 +201,9 @@ ESTIMATES = {
     "ENS-28": ("60.26", "Prueba de estanqueidad y evacuación de cubierta por unidad de bajante.",
                "BORM, tasas de 2018", BORM_URL),
 }
+
+ESTIMATES["subbase_density"] = ESTIMATES["density"]
+ESTIMATES["subbase_plate"] = ESTIMATES["plate"]
 
 
 def estimate_empty_price(row: dict, currency: str) -> dict:

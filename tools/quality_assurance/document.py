@@ -87,6 +87,9 @@ def write_document(app, target: Path, rows: list[dict]) -> None:
                 f"Criterios orientativos: {entry.criteria}\n\n{entry.details}"
             )
         price_detail = ""
+        quantity_detail = ""
+        if row.get("quantity_source"):
+            quantity_detail = f"Cantidad orientativa: {row['quantity_source']['basis']}"
         if row["price"]:
             price = Decimal(row["price"])
             price_detail = (f"Precio directo por ensayo: {fmt_number(float(price))} {currency}. "
@@ -94,11 +97,11 @@ def write_document(app, target: Path, rows: list[dict]) -> None:
             source = row.get("price_source")
             if source:
                 price_detail += f" Precio de referencia: {describe_price_source(source)}"
-        if detail or references or price_detail:
+        if detail or references or price_detail or quantity_detail:
             unit = units[row["unit_id"]]
             detail_sections.append(
                 f"### {unit.code} — {row['name']}\n\n"
-                + "\n\n".join(filter(None, (price_detail, detail, *references)))
+                + "\n\n".join(filter(None, (quantity_detail, price_detail, detail, *references)))
             )
     details = "\n\n".join(detail_sections) or "No hay fichas ampliadas asociadas a los controles incluidos."
     markdown = markdown.replace("{{detalles_catalogo}}", details)
