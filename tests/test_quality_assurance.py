@@ -16,8 +16,10 @@ from budget_project import build_project_payload, decode_project_payload
 from budget_qt_window import BudgetMainWindow
 from odt_reports import _tag
 from tools._library_history import read_revisions
-from tools.quality_assurance.catalog import get_catalog_entry, load_catalog
-from tools.quality_assurance.document import LIBRARY_PATH, write_document
+from tools.quality_assurance.catalog import correct_legacy_slip_criteria, get_catalog_entry, load_catalog
+from tools.quality_assurance.document import (
+    LIBRARY_PATH, _control_details, _generic_control_details, write_document,
+)
 from tools.quality_assurance.plan import (
     SOURCE, TRIALS, applicable_trials, insert_budget, quantity_proposal, suggested_quantity,
 )
@@ -26,6 +28,155 @@ from tools.quality_assurance.pricing import estimate_empty_price, price_candidat
 
 class QualityAssuranceTests(unittest.TestCase):
     """Comprueba límites de frecuencia y el ciclo real de revisión."""
+
+    def test_control_details_preserve_custom_text_and_do_not_invent_fields(self):
+        """Conserva el detalle propio y no asigna fichas a nombres modificados."""
+        from tools._library_editor import read_markdown
+
+        generic = _generic_control_details(read_markdown(LIBRARY_PATH, "05_ensayos.md"))
+        self.assertIsNotNone(generic)
+        item = ProjectItem("H", "01#", "m³", "Hormigón", 12)
+        base = {"unit_id": item.storage_id, "trial": "concrete",
+                "name": TRIALS["concrete"].name, "count": 2, "price": ""}
+        text = _control_details([base], {item.storage_id: item}, "€", generic)
+        self.assertIn("Número de ensayos: 2", text)
+        self.assertIn("Ensayos e inspecciones:", text)
+        self.assertNotIn("Precio directo", text)
+        for changed in (base | {"name": "Ensayo modificado"},
+                        base | {"trial": "", "name": "Ensayo libre"}):
+            self.assertNotIn("Ensayos e inspecciones:", _control_details(
+                [changed], {item.storage_id: item}, "€", generic))
+        custom = _control_details([base | {"details": "- Ámbito: Texto personalizado."}],
+                                  {item.storage_id: item}, "€", generic)
+        self.assertIn("Texto personalizado", custom)
+        self.assertNotIn("Elementos y pavimentos de hormigón", custom)
+
+    def test_generic_control_block_rejects_duplicate_and_invalid_identifiers(self):
+        """No oculta errores en los identificadores editados."""
+        for content in ("### concrete\n- Uno\n### concrete\n- Dos",
+                        "### desconocido\n- Uno", "### concrete\n",
+                        "Texto perdido\n### concrete\n- Uno"):
+            with self.subTest(content=content), self.assertRaises(ValueError):
+                _generic_control_details('"""\n## Datos de controles genéricos\n' + content + '\n"""\n')
+
+    def test_edited_control_details_and_price_links_in_both_formats(self):
+        """Exporta campos editados, controles PAC y enlaces reales de la procedencia."""
+        from tools._library_editor import _signature, read_markdown, write_markdown
+
+        qt = QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as folder, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(folder)
+        ), patch("budget_qt_window.apply_theme"):
+            window = BudgetMainWindow()
+            try:
+                archive = Path(folder) / "fichas.zip"
+                shutil.copyfile(LIBRARY_PATH, archive)
+                source = read_markdown(archive, "05_ensayos.md").replace(
+                    "Ámbito: Elementos y pavimentos de hormigón.",
+                    "Ámbito: Hormigón personalizado.",
+                )
+                write_markdown(archive, "05_ensayos.md", source, _signature(archive))
+                window.library_sources["quality_assurance"] = str(archive)
+                window.budget_items = [
+                    ProjectItem("H", "01#", "m³", "Hormigón", 12),
+                    ProjectItem("P", "01#", "m²", "Pavimento de adoquines", 100),
+                ]
+                window._open_tool("quality_assurance")
+                tool = window._project_windows[-1]
+                concrete = next(row for row in tool.rows() if row["trial"] == "concrete")
+                pac = next(row for row in tool.rows() if row["trial"] == "PAC-16")
+                pending = next(row for row in tool.rows() if row["trial"] == "PAC-50")
+                self.assertFalse(pending["included"])
+                pac["included"] = True
+                for kind in ("odt", "pdf"):
+                    target = Path(folder) / f"detalle.{kind}"
+                    window.report_settings.output_format = kind
+                    write_document(window, target, [concrete, pac, pending])
+                    if kind == "odt":
+                        with ZipFile(target) as document:
+                            xml = ET.fromstring(document.read("content.xml"))
+                        text = " ".join(xml.itertext())
+                        links = {node.get(_tag("xlink:href")) for node in xml.iter(_tag("text:a"))}
+                    else:
+                        pages = PdfReader(target).pages
+                        text = " ".join(page.extract_text() for page in pages)
+                        links = {
+                            str(action.get("/URI"))
+                            for page in pages for annotation in page.get("/Annots", [])
+                            if (action := annotation.get_object().get("/A")) and action.get("/URI")
+                        }
+                    text = " ".join(text.split())
+                    for expected in ("Hormigón personalizado", "Número de ensayos: 2",
+                                     "Cantidad orientativa", "Precio directo por ensayo",
+                                     "Precio de referencia", "PAC-16", "Ensayos e inspecciones",
+                                     "Registros"):
+                        self.assertIn(expected, text)
+                    self.assertIn(concrete["price_source"]["url"], links)
+                    pending_text = text.split("8. PROPUESTAS DE CONTROL PENDIENTES DE REVISIÓN")[-1]
+                    pending_text = pending_text.split("9. FICHAS TÉCNICAS DE ENSAYOS", 1)[0]
+                    for expected in ("PAC-50", "Estado: propuesta pendiente", "Frecuencia propuesta:",
+                                     "Criterio propuesto:", "Número propuesto:", "Base de la cantidad:",
+                                     "Precio propuesto por ensayo:", "Precio de referencia:",
+                                     "Ensayos e inspecciones:", "Registros:", "≥ 6%", "≤ 20-23 mm"):
+                        self.assertIn(expected, pending_text)
+                    self.assertNotIn("$", pending_text)
+                    sheet_text = text.split("9. FICHAS TÉCNICAS DE ENSAYOS")[-1]
+                    for expected in ("ENS-19", "ENS-01", "ENS-02", "ENS-03",
+                                     "propuesta pendiente de revisión", "no incorpora otro ensayo",
+                                     "Parámetro medido", "Momento y punto de toma",
+                                     "Motivo de rechazo", "Protocolo y contraprueba",
+                                     "clase 1, 15 < Rd ≤ 35", "clase 2, 35 < Rd ≤ 45"):
+                        self.assertIn(expected, sheet_text)
+                    self.assertEqual(sheet_text.count("ENS-19 —"), 1)
+                    self.assertNotIn("ENS-25 —", sheet_text)
+            finally:
+                window.is_dirty = False
+                window.close()
+                qt.processEvents()
+
+    def test_slip_catalog_corrects_only_the_known_legacy_classification(self):
+        """Corrige las clases del DB-SUA sin reemplazar criterios personalizados."""
+        old = ("• Clase 1 (Rd ≤ 15): zonas interiores secas.\n"
+               "• Clase 2 (15 < Rd ≤ 35): interiores húmedos.\n"
+               "• Clase 3 (Rd > 45): exteriores, aceras, piscinas y rampas ≥ 6%.")
+        corrected = correct_legacy_slip_criteria("ENS-19", old)
+        self.assertIn("clase 0, Rd ≤ 15", corrected)
+        self.assertIn("clase 1, 15 < Rd ≤ 35", corrected)
+        self.assertIn("clase 2, 35 < Rd ≤ 45", corrected)
+        self.assertEqual(correct_legacy_slip_criteria("ENS-19", "Criterio propio"), "Criterio propio")
+        self.assertEqual(correct_legacy_slip_criteria("ENS-20", old), old)
+        self.assertEqual(get_catalog_entry("ENS-19").criteria, corrected)
+
+    def test_legacy_slip_review_requires_confirmation_after_correction(self):
+        """Una revisión guardada con la clasificación antigua se debe confirmar de nuevo."""
+        from tools.quality_assurance.qt_window import QualityWindow
+
+        old = ("• Clase 1 (Rd ≤ 15): zonas interiores secas.\n"
+               "• Clase 2 (15 < Rd ≤ 35): interiores húmedos.\n"
+               "• Clase 3 (Rd > 45): exteriores, aceras, piscinas y rampas ≥ 6%.")
+        qt = QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as folder, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(folder)
+        ), patch("budget_qt_window.apply_theme"):
+            window = BudgetMainWindow()
+            dialogs = []
+            try:
+                window.budget_items = [ProjectItem("P", "01#", "m²", "Pavimento de adoquines", 100)]
+                first = QualityWindow(window)
+                dialogs.append(first)
+                row = first.rows()[0] | {"trial": "ENS-19", "criteria": old}
+                window.quality_assurance_state = {"rows": [row]}
+                reopened = QualityWindow(window)
+                dialogs.append(reopened)
+                self.assertFalse(reopened.reviewed)
+                self.assertIn("clase 1, 15 < Rd ≤ 35", reopened.rows()[0]["criteria"])
+                self.assertEqual(window.quality_assurance_state["rows"][0]["criteria"], old)
+            finally:
+                for dialog in dialogs:
+                    dialog.close()
+                window.is_dirty = False
+                window.close()
+                qt.processEvents()
 
     def test_surface_frequency(self):
         """Respeta la frontera de 500 m² y no convierte toneladas a superficie."""
@@ -258,10 +409,22 @@ class QualityAssuranceTests(unittest.TestCase):
             ("Subbase granular de zahorra artificial", "PAC-30"),
             ("Valla metálica de protección de baja altura", "PAC-56"),
             ("Mezcla bituminosa en caliente", "PAC-34"),
+            ("H. bituminoso AC16 SURF S c/áridos", "PAC-34"),
+            ("Exc. zanja tierra", "PAC-06"),
+            ("Solado bald. terrazo", "PAC-50"),
+            ("Señalización marca vial en calzada", "PAC-42"),
         ):
             item = ProjectItem("P", "01#", "m²", summary, 100)
             with self.subTest(summary=summary):
                 self.assertIn(expected, applicable_trials(item))
+        asphalt = ProjectItem("P", "01#", "m²", "H. bituminoso AC16 SURF S c/áridos", 750)
+        self.assertIn("asphalt", applicable_trials(asphalt))
+        self.assertIn("PAC-29", applicable_trials(asphalt))
+        self.assertNotIn("PAC-20", applicable_trials(asphalt))
+        for summary in ("Levantado de solado con baldosas", "Levantado de bordillo viejo"):
+            self.assertEqual(applicable_trials(ProjectItem("P", "01#", "m²", summary, 10)), [])
+        self.assertNotIn("PAC-51", applicable_trials(
+            ProjectItem("P", "01#", "u", "Arqueta de registro de alumbrado público", 1)))
         with ZipFile(LIBRARY_PATH) as archive:
             for name in ("02_normativa.md", "05_ensayos.md", "06_no_conformidades.md",
                          "07_presupuesto.md", "08_catalogo_pac.md", "09_ensayos_clave.md"):
@@ -269,7 +432,8 @@ class QualityAssuranceTests(unittest.TestCase):
                 content = archive.read(name)
                 self.assertEqual(content, source)
                 revisions, _remainder = read_revisions(content.decode("utf-8-sig"))
-                self.assertEqual(len(revisions), 1 if name.startswith(("08_", "09_")) else 2)
+                self.assertEqual(len(revisions), 4 if name.startswith("05_") else
+                                 3 if name.startswith(("06_", "09_")) else 2)
 
     def test_manual_catalog_add(self):
         """Añade una ficha seleccionada con su referencia y detalle."""
@@ -527,6 +691,93 @@ class QualityAssuranceTests(unittest.TestCase):
                 window.close()
                 qt.processEvents()
 
+    def test_export_contains_pending_project_controls_and_related_tests(self):
+        """Exporta solo propuestas vinculadas y distingue pendientes de controles incluidos."""
+        qt = QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as folder, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(folder)
+        ), patch("budget_qt_window.apply_theme"), patch.object(
+            QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes
+        ), patch.object(QMessageBox, "information"):
+            window = BudgetMainWindow()
+            try:
+                work = ProjectItem("ASF", "01#", "m²", "Mezcla bituminosa", 750)
+                excavation = ProjectItem("EXC", "01#", "m³", "Excavación de tierras", 400)
+                window.budget_items = [work, excavation]
+                window._open_tool("quality_assurance")
+                tool = window._project_windows[-1]
+                tool.review()
+                excavation.measurement = 800
+                window.refresh_budget_tree()
+                self.assertTrue(tool.export_button.isEnabled())
+                for kind in ("odt", "pdf"):
+                    target = Path(folder) / f"pac.{kind}"
+                    with patch("tools.quality_assurance.qt_window.get_document_save_path",
+                               return_value=(target, kind)):
+                        tool.export()
+                    if kind == "odt":
+                        with ZipFile(target) as archive:
+                            xml = ET.fromstring(archive.read("content.xml"))
+                        text = " ".join(xml.itertext())
+                        tables = list(xml.iter(_tag("table:table")))
+                        reviewed_table = " ".join(tables[1].itertext())
+                        self.assertNotIn("PAC-33", reviewed_table)
+                    else:
+                        text = " ".join(page.extract_text() for page in PdfReader(target).pages)
+                    text = " ".join(text.split())
+                    pending = text.split("8. PROPUESTAS DE CONTROL PENDIENTES DE REVISIÓN")[-1]
+                    pending, sheets = pending.split("9. FICHAS TÉCNICAS DE ENSAYOS", 1)
+                    self.assertIn("PAC-33", pending)
+                    self.assertIn("PAC-34", pending)
+                    self.assertIn("no incluida en el plan aprobado", pending)
+                    self.assertIn("actualiza la propuesta y su cantidad", pending)
+                    self.assertIn("ENS-09", sheets)
+                    self.assertIn("ENS-14", sheets)
+                    self.assertIn("no incorpora otro ensayo", sheets)
+                    self.assertEqual(sheets.count("ENS-14 —"), 1)
+                    self.assertNotIn("PAC-39", text)
+                    self.assertNotIn("Matriz_Maestra_PAC", text)
+                    self.assertNotIn("Detalle_Ensayos_Clave", text)
+                    self.assertNotIn("Plan_Aseguramiento_Calidad_CTE_CE_PG3-v2.xlsx", text)
+                self.assertFalse(any(item.source == SOURCE for item in window.budget_items))
+            finally:
+                window.is_dirty = False
+                window.close()
+                qt.processEvents()
+
+    def test_custom_quality_library_without_new_markers_remains_compatible(self):
+        """Añade los apartados dinámicos sin sobrescribir una biblioteca personalizada antigua."""
+        from tools._library_editor import _signature, read_markdown, write_markdown
+
+        qt = QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as folder, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(folder)
+        ), patch("budget_qt_window.apply_theme"):
+            window = BudgetMainWindow()
+            try:
+                archive = Path(folder) / "personalizada.zip"
+                shutil.copyfile(LIBRARY_PATH, archive)
+                for name, title in (("08_catalogo_pac.md", "Control personalizado"),
+                                    ("09_ensayos_clave.md", "Ensayos personalizados")):
+                    write_markdown(archive, name, f"# {title}\n\nTexto propio.\n", _signature(archive))
+                window.library_sources["quality_assurance"] = str(archive)
+                window.budget_items = [ProjectItem("ASF", "01#", "m²", "Mezcla bituminosa", 750)]
+                window._open_tool("quality_assurance")
+                tool = window._project_windows[-1]
+                report = Path(folder) / "personalizado.odt"
+                write_document(window, report, tool.rows())
+                with ZipFile(report) as document:
+                    text = " ".join(ET.fromstring(document.read("content.xml")).itertext())
+                for expected in ("Control personalizado", "Ensayos personalizados", "Texto propio.",
+                                 "PAC-33", "ENS-14"):
+                    self.assertIn(expected, text)
+                self.assertEqual(read_markdown(archive, "08_catalogo_pac.md"),
+                                 "# Control personalizado\n\nTexto propio.\n")
+            finally:
+                window.is_dirty = False
+                window.close()
+                qt.processEvents()
+
     def test_review_budget_and_exports(self):
         """Valida la revisión, la inserción única y ambos formatos editados."""
         qt = QApplication.instance() or QApplication([])
@@ -604,9 +855,10 @@ class QualityAssuranceTests(unittest.TestCase):
                         normalized = " ".join(text.split())
                         for expected in ("ANEJO Nº 17", "Tabla 2.", "ASF", "321,00", "Texto revisado en la ficha.",
                                          "Cantidad orientativa",
-                                         "6. GESTIÓN DE NO CONFORMIDADES", "8. CATÁLOGO DE CONTROLES PAC",
-                                         "9. FICHAS TÉCNICAS DE ENSAYOS CLAVE",
-                                         "Ensayos e inspecciones", "ENS-14", "CATÁLOGO"):
+                                         "6. GESTIÓN DE NO CONFORMIDADES",
+                                         "8. PROPUESTAS DE CONTROL PENDIENTES DE REVISIÓN",
+                                         "9. FICHAS TÉCNICAS DE ENSAYOS",
+                                         "Ensayos e inspecciones", "ENS-14"):
                             self.assertIn(expected, normalized)
                         self.assertNotIn("CAT?LOGO", normalized)
                         self.assertNotIn("Estado en obra: Pendiente", normalized)

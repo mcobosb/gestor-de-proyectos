@@ -52,12 +52,13 @@ PARTIAL_TRIALS = {
     "subbase_plate": "PAC-30",
 }
 PARTIAL_EQUIVALENTS = {"subbase_density": "density", "subbase_plate": "plate"}
+ASPHALT_PATTERN = r"(?:\bh\.\s*bituminos[oa]\b|\b(?:mezcla|aglomerado|pavimento|hormigon)\s+(?:bituminos[oa]|asfaltic[oa])\b)"
 
 PAC_RULES = (
     (r"\b(?:estudio geotecnico|sondeo geotecnico|campana geotecnica)\w*\b", ("PAC-02",)),
     (r"\b(?:replanteo topografico|control topografico)\w*\b", ("PAC-04",)),
     (r"\b(?:gestion ambiental|rcd|residuos de construccion)\w*\b", ("PAC-05",)),
-    (r"\b(?:excavacion|desmonte)\w*\b", ("PAC-06",)),
+    (r"\b(?:excavacion|desmonte|exc)\b", ("PAC-06",)),
     (r"\bterraplen(?:es)?\b", ("PAC-07",)),
     (r"\bpedraplen\w*\b", ("PAC-08",)),
     (r"\b(?:relleno localizado|trasdos)\b", ("PAC-09",)),
@@ -78,16 +79,16 @@ PAC_RULES = (
     (r"\b(?:zahorra|subbase)\w*\b", ("PAC-30",)),
     (r"\b(?:suelocemento|gravacemento)\w*\b", ("PAC-31",)),
     (r"\b(?:riego de imprimacion|riego de adherencia)\w*\b", ("PAC-32",)),
-    (r"\b(?:mezcla bituminosa|aglomerado asfaltico|pavimento asfaltico)\w*\b", ("PAC-33", "PAC-34")),
+    (ASPHALT_PATTERN, ("PAC-33", "PAC-34")),
     (r"\b(?:pavimento de hormigon|hormigon vibrado)\w*\b", ("PAC-35",)),
     (r"\b(?:regularidad superficial|iri|macrotextura|rozamiento transversal)\w*\b", ("PAC-36",)),
-    (r"\b(?:marcas viales|pintura vial|senalizacion horizontal)\w*\b", ("PAC-42",)),
+    (r"\b(?:marcas? vial(?:es)?|pintura vial|senalizacion horizontal)\w*\b", ("PAC-42",)),
     (r"\b(?:saneamiento|colector|alcantarillado|pluviales)\w*\b", ("PAC-39",)),
     (r"\b(?:abastecimiento|tuberia de agua|red de agua potable)\w*\b", ("PAC-38",)),
     (r"\b(?:drenaje|cuneta|drenes)\w*\b", ("PAC-37",)),
     (r"\b(?:senalizacion vertical|senal vertical|cartel|balizamiento)\w*\b", ("PAC-43",)),
     (r"\b(?:barrera de seguridad|pretil|defensa metalica)\w*\b", ("PAC-44",)),
-    (r"\b(?:adoquin|baldosa|bordillo|pavimento urbano|loseta|acera)\w*\b", ("PAC-50",)),
+    (r"\b(?:adoquin|baldosa|bordillo|pavimento urbano|loseta|acera|solado(?:\s+con)?\s+terrazo|solado\s+bald)\w*\b", ("PAC-50",)),
     (r"\b(?:alumbrado publico|luminaria|baculo)\w*\b", ("PAC-51",)),
     (r"\b(?:riego|jardineria|tierra vegetal)\w*\b", ("PAC-52",)),
     (r"\b(?:albanileria|fabrica de ladrillo|ladrillo|bloque)\w*\b", ("PAC-53",)),
@@ -117,7 +118,7 @@ def applicable_trials(item: ProjectItem) -> list[str]:
     """Detecta candidatos conservadores en la descripción; no certifica su aplicabilidad."""
     text = normalized(item.summary)
     if (item.source.startswith("SS:")
-            or re.search(r"\b(?:demolicion|demoler|derribo|retirada|fresado|transporte|vertido)\b", text)
+            or re.search(r"\b(?:demolicion|demoler|derribo|retirada|levantado|levantada|fresado|transporte|vertido)\b", text)
             or re.search(r"\bcorte\b.*\bpavimento\b", text)
             or re.search(r"\b(?:tratamiento|gestion)\s+de\s+(?:rcs|rcd|residuos)\b", text)):
         return []
@@ -126,15 +127,20 @@ def applicable_trials(item: ProjectItem) -> list[str]:
         trials.append("density")
     if re.search(r"zahorra|subbase|explanada|terraplen", text):
         trials.append("plate")
-    if re.search(r"\bhormigon\b", text) and not re.search(r"prefabricad|bordillo|baldosa", text):
+    asphalt = bool(re.search(ASPHALT_PATTERN, text))
+    if re.search(r"\bhormigon\b", text) and not asphalt and not re.search(r"prefabricad|bordillo|baldosa", text):
         trials.append("concrete")
-    if re.search(r"mezcla bituminosa|aglomerado asfaltico|pavimento asfaltico", text):
+    if asphalt:
         trials.append("asphalt")
     if re.search(r"marca[s]? vial|pintura vial|senalizacion horizontal", text):
         trials.append("paint")
     for pattern, identifiers in PAC_RULES:
         if re.search(pattern, text):
-            trials.extend(identifiers)
+            trials.extend(identifier for identifier in identifiers
+                          if not (asphalt and identifier == "PAC-20")
+                          and not (re.search(r"\barqueta\b", text) and identifier in {"PAC-51", "PAC-59"}))
+    if asphalt and re.search(r"\baridos?\b", text):
+        trials.append("PAC-29")
     trials.extend(
         trial for trial, parent in PARTIAL_TRIALS.items()
         if parent in trials and suggested_quantity(item, trial) is not None

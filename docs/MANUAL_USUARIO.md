@@ -614,8 +614,20 @@ la partida seleccionada se guarda con la revisión y se incorpora a la descripci
 de la partida generada. Los precios están en euros y deben actualizarse si procede.
 
 **Editar fichas del anejo…** abre los nueve apartados editables con historial.
+En la ficha «05_ensayos.md», el bloque informativo «Datos de controles
+genéricos» permite editar los campos mostrados en el detalle de cada ensayo.
+Las bibliotecas anteriores sin ese bloque utilizan los datos distribuidos.
 **Generar anejo…** exporta las fichas y la tabla revisada en PDF u ODT, según
-el formato elegido en el diálogo de guardado. El importe y el porcentaje sobre el PEM se calculan con las
+el formato elegido en el diálogo de guardado. Las propuestas no marcadas se
+describen aparte como pendientes de revisión y no se suman al presupuesto.
+Las fichas técnicas relacionadas se incluyen únicamente para los controles
+vinculados a unidades de obra; su consulta no añade ensayos al plan.
+En ellas se identifican los controles vinculados y si están incluidos o
+pendientes; los parámetros, criterios y actuaciones deben verificarse frente
+al proyecto y la normativa aplicable.
+En bibliotecas personalizadas antiguas, los nuevos apartados dinámicos se
+añaden al final de las fichas 8 y 9 sin modificar su texto editable.
+El importe y el porcentaje sobre el PEM se calculan con las
 partidas incorporadas; el intervalo orientativo no se usa para fijar precios.
 
 ## 8. Estimar residuos de construcción y demolición (RCDs)

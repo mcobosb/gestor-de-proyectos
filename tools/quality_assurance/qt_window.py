@@ -16,7 +16,7 @@ from qt_localization import get_document_save_path
 from tools._library_editor_qt import LibraryEditorQt
 
 from . import TOOL_LABEL
-from .catalog import get_catalog_entry, load_catalog
+from .catalog import correct_legacy_slip_criteria, get_catalog_entry, load_catalog
 from .document import DOCUMENTS, LIBRARY_PATH, write_document
 from .plan import (
     PARTIAL_EQUIVALENTS, PARTIAL_TRIALS, TRIALS, applicable_trials, apply_quantity_proposal,
@@ -136,6 +136,9 @@ class QualityWindow(QDialog):
     def append_row(self, row: dict) -> bool:
         """Añade una fila con referencia estable a la partida de origen."""
         original = row
+        criteria = correct_legacy_slip_criteria(row.get("trial", ""), row.get("criteria", ""))
+        if criteria != row.get("criteria", ""):
+            row = row | {"criteria": criteria}
         if not has_inserted(self.app.budget_items):
             item = work_units(self.app.budget_items).get(row["unit_id"])
             if (item is not None and row["snapshot"] == unit_snapshot(item)
@@ -454,7 +457,7 @@ class QualityWindow(QDialog):
         try:
             with tempfile.TemporaryDirectory(dir=target.parent) as folder:
                 pending = Path(folder) / target.name
-                write_document(self.app, pending, [row for row in self.rows() if row["included"]])
+                write_document(self.app, pending, self.rows())
                 pending.replace(target)
         except (ImportError, OSError, ValueError) as exc:
             QMessageBox.warning(self, TOOL_LABEL, str(exc))

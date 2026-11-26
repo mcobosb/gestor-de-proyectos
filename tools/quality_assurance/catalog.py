@@ -11,6 +11,17 @@ from openpyxl import load_workbook
 
 
 WORKBOOK_PATH = Path(__file__).with_name("Plan_Aseguramiento_Calidad_CTE_CE_PG3-v2.xlsx")
+_LEGACY_SLIP_CRITERIA = (
+    "• Clase 1 (Rd ≤ 15): zonas interiores secas.\n"
+    "• Clase 2 (15 < Rd ≤ 35): interiores húmedos.\n"
+    "• Clase 3 (Rd > 45): exteriores, aceras, piscinas y rampas ≥ 6%."
+)
+# DB-SUA 1, tabla 1.1: https://www.codigotecnico.org/pdf/Documentos/SUA/DBSUA.pdf
+_SLIP_CRITERIA = (
+    "CTE DB-SUA 1, cuando sea aplicable: clase 0, Rd ≤ 15; clase 1, 15 < Rd ≤ 35; "
+    "clase 2, 35 < Rd ≤ 45; clase 3, Rd > 45. La clase exigible depende de la "
+    "localización, pendiente y uso."
+)
 
 
 @dataclass(frozen=True)
@@ -52,6 +63,13 @@ def _value(row: tuple, headers: list[str], header: str) -> str:
     except ValueError as exc:
         raise ValueError(f"Falta la columna «{header}» en el catálogo PAC.") from exc
     return str(row[index] or "").strip()
+
+
+def correct_legacy_slip_criteria(identifier: str, criteria: str) -> str:
+    """Corrige la clasificación errónea original sin modificar criterios personalizados."""
+    if identifier == "ENS-19" and criteria.strip() == _LEGACY_SLIP_CRITERIA:
+        return _SLIP_CRITERIA
+    return criteria
 
 
 @lru_cache(maxsize=1)
@@ -128,7 +146,9 @@ def load_catalog() -> tuple[CatalogEntry, ...]:
                 label=f"{identifier} — {name}",
                 reference=_value(row, test_headers, "Norma UNE / EN / Pliego"),
                 frequency="Según el lote del PAC aplicable y el pliego del proyecto.",
-                criteria=_value(row, test_headers, "Valores Límite / Tolerancias Reglamentarias"),
+                criteria=correct_legacy_slip_criteria(
+                    identifier, _value(row, test_headers, "Valores Límite / Tolerancias Reglamentarias")
+                ),
                 details=details,
             ))
         identifiers = [entry.identifier for entry in entries]
