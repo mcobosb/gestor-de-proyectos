@@ -56,6 +56,18 @@ LAW_URLS.update({
     for name, url in tuple(LAW_URLS.items()) if name.startswith("Real Decreto")
 })
 LAW_URLS["Decisión 2000/532/CE"] = "https://eur-lex.europa.eu/eli/dec/2000/532/oj?locale=es"
+LAW_URLS.update({
+    "Código Estructural": "https://www.boe.es/eli/es/rd/2021/06/29/470/con",
+    "REBT": "https://www.boe.es/eli/es/rd/2002/08/02/842/con",
+    "CTE DB-SUA 1": "https://www.codigotecnico.org/pdf/Documentos/SUA/DBSUA.pdf",
+    "CTE DB-SUA": "https://www.codigotecnico.org/pdf/Documentos/SUA/DBSUA.pdf",
+    "CTE DB-SE-C": "https://www.codigotecnico.org/pdf/Documentos/SE/DBSE-C.pdf",
+    "PG-3": "https://www.boe.es/buscar/legislacion.php?" + urlencode({
+        "campo[2]": "DOC",
+        "dato[2]": '"Pliego de Prescripciones Técnicas Generales" "carreteras"',
+        "checkbox_solo_tit": "S", "accion": "Buscar",
+    }),
+})
 _LAW_LOOKUP = {name.casefold(): url for name, url in LAW_URLS.items()}
 _CITATION = re.compile(
     r"\b(?:"

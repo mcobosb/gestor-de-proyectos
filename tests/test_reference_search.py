@@ -76,6 +76,10 @@ class ReferenceCatalogueTests(unittest.TestCase):
         self.assertEqual((parsed.scheme, parsed.netloc, parsed.path),
                          ("https", "www.boe.es", "/buscar/legislacion.php"))
         self.assertEqual(parse_qs(parsed.query)["dato[2]"], ['"Real Decreto 57/2005"'])
+        aliases = {value: url for value, url in normative_runs("PG-3 y CTE DB-SUA 1") if url}
+        self.assertIn("www.boe.es/buscar/legislacion.php", aliases["PG-3"])
+        self.assertEqual(aliases["CTE DB-SUA 1"],
+                         "https://www.codigotecnico.org/pdf/Documentos/SUA/DBSUA.pdf")
 
     def test_real_catalogues_keep_official_metadata_and_same_code_different_entries(self):
         """Lee NTP numericamente y conserva las dos fichas del proyecto UNE repetido."""

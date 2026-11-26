@@ -18,10 +18,10 @@ from odt_reports import _tag
 from tools._library_history import read_revisions
 from tools.quality_assurance.catalog import correct_legacy_slip_criteria, get_catalog_entry, load_catalog
 from tools.quality_assurance.document import (
-    LIBRARY_PATH, _control_details, _generic_control_details, write_document,
+    LIBRARY_PATH, _control_details, _generic_control_details, _matrix_rows, write_document,
 )
 from tools.quality_assurance.plan import (
-    SOURCE, TRIALS, applicable_trials, insert_budget, quantity_proposal, suggested_quantity,
+    SOURCE, TRIALS, applicable_trials, insert_budget, quantity_proposal, suggested_quantity, unit_snapshot,
 )
 from tools.quality_assurance.pricing import estimate_empty_price, price_candidates, price_catalog
 
@@ -58,6 +58,24 @@ class QualityAssuranceTests(unittest.TestCase):
                         "Texto perdido\n### concrete\n- Uno"):
             with self.subTest(content=content), self.assertRaises(ValueError):
                 _generic_control_details('"""\n## Datos de controles genéricos\n' + content + '\n"""\n')
+
+    def test_matrix_handles_unvalidated_rows_and_removed_units(self):
+        """No presenta cantidades inválidas o desactualizadas como datos válidos."""
+        item = ProjectItem("H", "01#", "m³", "Hormigón", 12)
+        base = {"unit_id": item.storage_id, "snapshot": unit_snapshot(item), "trial": "",
+                "name": "PAC-16 — Título personalizado", "frequency": "", "criteria": "",
+                "count": "-1", "price": "incorrecto", "included": False}
+        matrix = _matrix_rows([base, base | {"unit_id": "eliminada"}], {item.storage_id: item}, "€", {})
+        self.assertIn("C-01", matrix[0][0])
+        self.assertIn("PAC-16 — Título personalizado", matrix[0][1])
+        self.assertIn("Frecuencia: Por definir.", matrix[0][2])
+        self.assertIn("Criterio: Por definir.", matrix[0][2])
+        self.assertIn("N.º por corregir: -1", matrix[0][3])
+        self.assertIn("Precio por corregir: incorrecto", matrix[0][3])
+        self.assertIn("C-02", matrix[1][0])
+        self.assertIn("H — Hormigón", matrix[1][0])
+        self.assertIn("Actualizar", matrix[1][3])
+        self.assertNotIn("N.º:", matrix[1][3])
 
     def test_edited_control_details_and_price_links_in_both_formats(self):
         """Exporta campos editados, controles PAC y enlaces reales de la procedencia."""
@@ -115,24 +133,26 @@ class QualityAssuranceTests(unittest.TestCase):
                             if (action := annotation.get_object().get("/A")) and action.get("/URI")
                         }
                     text = " ".join(text.split())
-                    for expected in ("Hormigón personalizado", "Número de ensayos: 2",
-                                     "Cantidad orientativa", "Precio directo por ensayo",
-                                     "Precio de referencia", "PAC-16", "Ensayos e inspecciones",
+                    for expected in ("Hormigón personalizado", "N.º: 2",
+                                     "Base:", "Precio unitario:",
+                                     "Referencia de precio", "Ensayos e inspecciones",
                                      "Registros"):
                         self.assertIn(expected, text)
                     self.assertIn(concrete["price_source"]["url"], links)
                     self.assertIn("https://www.une.org/encuentra-tu-norma/busca-tu-norma/norma/?c=N0063378", links)
-                    pending_text = text.split("8. PROPUESTAS DE CONTROL PENDIENTES DE REVISIÓN")[-1]
-                    pending_text = pending_text.split("9. FICHAS TÉCNICAS DE ENSAYOS", 1)[0]
-                    for expected in ("PAC-50", "Estado: propuesta pendiente", "Frecuencia propuesta:",
-                                     "Criterio propuesto:", "Número propuesto:", "Base de la cantidad:",
-                                     "Precio propuesto por ensayo:", "Precio de referencia:",
+                    matrix_text = text.split("8. MATRIZ DE CONTROLES DE CALIDAD DEL PROYECTO")[-1]
+                    matrix_text = matrix_text.split("9. FICHAS TÉCNICAS DE ENSAYOS", 1)[0]
+                    for expected in ("C-01", "C-02", "C-03", "Pavimentos Urbanos", "Frecuencia:",
+                                     "Criterio:", "N.º:", "Base:", "Precio unitario:", "Referencia de precio:",
                                      "Ensayos e inspecciones:", "Registros:", "≥ 6%", "≤ 20-23 mm"):
-                        self.assertIn(expected, pending_text)
-                    self.assertNotIn("$", pending_text)
+                        self.assertIn(expected, matrix_text)
+                    self.assertNotIn("PAC-16", text)
+                    self.assertNotIn("PAC-50", text)
+                    self.assertNotIn("pendiente de revisión", matrix_text.casefold())
+                    self.assertNotIn("$", matrix_text)
                     sheet_text = text.split("9. FICHAS TÉCNICAS DE ENSAYOS")[-1]
                     for expected in ("ENS-19", "ENS-01", "ENS-02", "ENS-03",
-                                     "propuesta pendiente de revisión", "no incorpora otro ensayo",
+                                     "C-03", "C-02", "no incorpora otro ensayo",
                                      "Parámetro medido", "Momento y punto de toma",
                                      "Motivo de rechazo", "Protocolo y contraprueba",
                                      "clase 1, 15 < Rd ≤ 35", "clase 2, 35 < Rd ≤ 45"):
@@ -442,8 +462,9 @@ class QualityAssuranceTests(unittest.TestCase):
                 content = archive.read(name)
                 self.assertEqual(content, source)
                 revisions, _remainder = read_revisions(content.decode("utf-8-sig"))
-                self.assertEqual(len(revisions), 4 if name.startswith("05_") else
-                                 3 if name.startswith(("06_", "09_")) else 2)
+                self.assertEqual(len(revisions), 5 if name.startswith("05_") else
+                                 4 if name.startswith("09_") else
+                                 3 if name.startswith(("06_", "08_")) else 2)
 
     def test_manual_catalog_add(self):
         """Añade una ficha seleccionada con su referencia y detalle."""
@@ -515,7 +536,7 @@ class QualityAssuranceTests(unittest.TestCase):
                 with ZipFile(report) as archive:
                     text = " ".join(ET.fromstring(archive.read("content.xml")).itertext())
                 self.assertIn("18ALF00010", text)
-                self.assertIn("Precio directo por ensayo", text)
+                self.assertIn("Precio unitario", text)
                 window.report_settings.currency = "USD"
                 with self.assertRaisesRegex(ValueError, "euros"):
                     insert_budget(window, [tool.rows()[0]])
@@ -701,8 +722,8 @@ class QualityAssuranceTests(unittest.TestCase):
                 window.close()
                 qt.processEvents()
 
-    def test_export_contains_pending_project_controls_and_related_tests(self):
-        """Exporta solo propuestas vinculadas y distingue pendientes de controles incluidos."""
+    def test_export_contains_project_controls_and_related_tests(self):
+        """Incluye ambas clases de fila y señala las unidades desactualizadas."""
         qt = QApplication.instance() or QApplication([])
         with TemporaryDirectory() as folder, patch(
             "budget_qt_window.user_data_directory", return_value=Path(folder)
@@ -730,17 +751,18 @@ class QualityAssuranceTests(unittest.TestCase):
                             xml = ET.fromstring(archive.read("content.xml"))
                         text = " ".join(xml.itertext())
                         tables = list(xml.iter(_tag("table:table")))
-                        reviewed_table = " ".join(tables[1].itertext())
-                        self.assertNotIn("PAC-33", reviewed_table)
+                        self.assertEqual(len(tables), 1)
                     else:
                         text = " ".join(page.extract_text() for page in PdfReader(target).pages)
                     text = " ".join(text.split())
-                    pending = text.split("8. PROPUESTAS DE CONTROL PENDIENTES DE REVISIÓN")[-1]
-                    pending, sheets = pending.split("9. FICHAS TÉCNICAS DE ENSAYOS", 1)
-                    self.assertIn("PAC-33", pending)
-                    self.assertIn("PAC-34", pending)
-                    self.assertIn("no incluida en el plan aprobado", pending)
-                    self.assertIn("actualiza la propuesta y su cantidad", pending)
+                    matrix = text.split("8. MATRIZ DE CONTROLES DE CALIDAD DEL PROYECTO")[-1]
+                    matrix, sheets = matrix.split("9. FICHAS TÉCNICAS DE ENSAYOS", 1)
+                    self.assertIn("C-01", matrix)
+                    self.assertIn("C-02", matrix)
+                    self.assertIn("Actualizar los datos de la unidad y su cantidad", matrix)
+                    self.assertNotIn("pendiente de revisión", matrix.casefold())
+                    self.assertNotIn("PAC-33", text)
+                    self.assertNotIn("PAC-34", text)
                     self.assertIn("ENS-09", sheets)
                     self.assertIn("ENS-14", sheets)
                     self.assertIn("no incorpora otro ensayo", sheets)
@@ -779,7 +801,7 @@ class QualityAssuranceTests(unittest.TestCase):
                 with ZipFile(report) as document:
                     text = " ".join(ET.fromstring(document.read("content.xml")).itertext())
                 for expected in ("Control personalizado", "Ensayos personalizados", "Texto propio.",
-                                 "PAC-33", "ENS-14"):
+                                 "C-02", "ENS-14"):
                     self.assertIn(expected, text)
                 self.assertEqual(read_markdown(archive, "08_catalogo_pac.md"),
                                  "# Control personalizado\n\nTexto propio.\n")
@@ -850,7 +872,7 @@ class QualityAssuranceTests(unittest.TestCase):
                         if kind == "odt":
                             with ZipFile(target) as archive:
                                 xml = ET.fromstring(archive.read("content.xml"))
-                            self.assertEqual(len(list(xml.iter(_tag("table:table")))), 2)
+                            self.assertEqual(len(list(xml.iter(_tag("table:table")))), 1)
                             links = {node.get(_tag("xlink:href")) for node in xml.iter(_tag("text:a"))}
                             text = " ".join(xml.itertext())
                         else:
@@ -863,10 +885,10 @@ class QualityAssuranceTests(unittest.TestCase):
                             }
                         self.assertIn("https://www.boe.es/buscar/act.php?id=BOE-A-2003-22787", links)
                         normalized = " ".join(text.split())
-                        for expected in ("ANEJO Nº 17", "Tabla 2.", "ASF", "321,00", "Texto revisado en la ficha.",
-                                         "Cantidad orientativa",
+                        for expected in ("ANEJO Nº 17", "Tabla 1.", "ASF", "321,00", "Texto revisado en la ficha.",
+                                         "Base:",
                                          "6. GESTIÓN DE NO CONFORMIDADES",
-                                         "8. PROPUESTAS DE CONTROL PENDIENTES DE REVISIÓN",
+                                         "8. MATRIZ DE CONTROLES DE CALIDAD DEL PROYECTO",
                                          "9. FICHAS TÉCNICAS DE ENSAYOS",
                                          "Ensayos e inspecciones", "ENS-14"):
                             self.assertIn(expected, normalized)

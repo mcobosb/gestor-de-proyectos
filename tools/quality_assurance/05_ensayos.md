@@ -1,5 +1,6 @@
 """
 ## Registro de cambios
+- Versión: 5 | Autor: Biblioteca distribuida con el programa | Fecha: 26/11/2026 | Cambio: Integración de los controles en la matriz del proyecto.
 - Versión: 4 | Autor: Biblioteca distribuida con el programa | Fecha: 26/11/2026 | Cambio: Campos editables de los controles genéricos.
 - Versión: 3 | Autor: Biblioteca distribuida con el programa | Fecha: 26/11/2026 | Cambio: Descripción de los controles revisados de la obra.
 - Versión: 2 | Autor: Biblioteca distribuida con el programa | Fecha: 26/11/2026 | Cambio: Corrección y mejora del texto.
@@ -8,19 +9,7 @@
 
 # 5. PLAN DE ENSAYOS DE LABORATORIO
 
-El contratista recurrirá a un laboratorio habilitado o acreditado cuando resulte exigible. Las frecuencias y criterios de la Tabla 1 son orientativos y no sustituyen los lotes, métodos ni exigencias del proyecto, el pliego o la normativa aplicable.
-
-{{tabla_frecuencias}}
-
-La Tabla 2 recoge los controles incluidos en la revisión, sus cantidades y criterios de aceptación por unidad de obra. Las filas descartadas no forman parte del plan.
-
-{{tabla_ensayos}}
-
-## 5.1. DETALLE DE LOS CONTROLES REVISADOS
-
-Para cada unidad de obra se recogen el alcance del control incluido, la base de las cantidades y, cuando se dispone de ella, su valoración. Los métodos, parámetros y evidencias se ajustarán al proyecto, al pliego y a las instrucciones de la Dirección Facultativa.
-
-{{detalles_catalogo}}
+El contratista recurrirá a un laboratorio habilitado o acreditado cuando resulte exigible. La matriz del apartado 8 reúne los controles, sus criterios, frecuencias, cantidades y registros por unidad de obra. Los lotes y métodos se ajustarán al proyecto, al pliego, a la normativa aplicable y a las instrucciones de la Dirección Facultativa.
 
 """
 ## Datos de controles genéricos

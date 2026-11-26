@@ -46,6 +46,12 @@ RELATED_TESTS = {
     "PAC-42": ("ENS-20", "ENS-21"), "PAC-50": ("ENS-19",), "PAC-54": ("ENS-28",),
 }
 TABLES = {
+    "{{matriz_controles}}": (
+        "Matriz de controles de calidad del proyecto",
+        ("Control y unidad de obra", "Alcance e inspecciones", "Frecuencia, criterios y referencia",
+         "Cantidad y valoración"),
+        (1.45, 2.5, 2.5, 1.8), (),
+    ),
     "{{tabla_frecuencias}}": (
         "Frecuencias orientativas y criterios de aceptación",
         ("Familia de UO", "Ensayo / prueba", "Frecuencia orientativa", "Criterio de aceptación"),
@@ -68,8 +74,11 @@ def _row_detail(row: dict) -> str:
     )
 
 
-def _price_reference(source: dict) -> str:
+def _price_reference(source: dict, trial: str = "") -> str:
     """Conserva las limitaciones y enlaza la URL de la fuente, si existe."""
+    if (re.fullmatch(r"PAC-\d{2}", trial) and source.get("code") == trial
+            and source.get("source", "").startswith("Estimación orientativa:")):
+        source = source | {"code": "Referencia orientativa"}
     description = describe_price_source(source)
     if url := source.get("url"):
         description = description.replace(url, f"[{url}]({url})")
@@ -103,6 +112,35 @@ def _generic_control_details(source: str) -> dict[str, str] | None:
     return details
 
 
+def _project_control_name(row: dict) -> str:
+    """Elimina el identificador de catálogo del nombre mostrado al proyecto."""
+    name = str(row.get("name", "")).strip()
+    trial = row.get("trial", "")
+    if re.fullmatch(r"PAC-\d{2}", trial) and name == get_catalog_entry(trial).label:
+        return re.sub(rf"^{re.escape(trial)}\s*—\s*", "", name)
+    return name
+
+
+def _detail_for_control(row: dict, generic_details: dict[str, str]) -> str:
+    """Combina los campos editables con el detalle específico de una fila."""
+    detail = _row_detail(row)
+    trial = row.get("trial", "")
+    generic = generic_details.get(trial, "")
+    if not generic or row["name"] != TRIALS[trial].name:
+        return detail
+    if trial in PARTIAL_TRIALS:
+        parent = get_catalog_entry(PARTIAL_TRIALS[trial])
+        expected = (f"Ensayo desglosado de {parent.label}. "
+                    "No incluye los demás ensayos ni inspecciones del control.")
+        if detail != expected:
+            return detail
+        label = re.sub(r"^PAC-\d{2}\s*—\s*", "", parent.label)
+        detail = f"Ensayo desglosado de {label}. No incluye los demás ensayos ni inspecciones del control."
+    elif detail:
+        return detail
+    return "\n".join(filter(None, (detail, generic)))
+
+
 def _control_details(rows: list[dict], units: dict, currency: str, generic_details: dict[str, str]) -> str:
     """Presenta los datos de cada control revisado como una ficha de campos."""
     sections = []
@@ -115,23 +153,12 @@ def _control_details(rows: list[dict], units: dict, currency: str, generic_detai
             parts.append(f"- Precio directo por ensayo: {fmt_number(float(price))} {currency}.")
             parts.append(f"- Importe directo previsto: {fmt_number(float(price * row['count']))} {currency}.")
             if source := row.get("price_source"):
-                parts.append(f"- Precio de referencia: {_price_reference(source)}")
-        detail = _row_detail(row)
+                parts.append(f"- Precio de referencia: {_price_reference(source, row.get('trial', ''))}")
+        detail = _detail_for_control(row, generic_details)
         if detail:
             parts.append(detail if detail.startswith("- ") else f"- Alcance y control: {detail}")
-        trial = row.get("trial", "")
-        generic = generic_details.get(trial, "")
-        if generic and row["name"] == TRIALS[trial].name:
-            if trial in PARTIAL_TRIALS:
-                parent = get_catalog_entry(PARTIAL_TRIALS[trial])
-                expected = (f"Ensayo desglosado de {parent.label}. "
-                            "No incluye los demás ensayos ni inspecciones del control.")
-                if detail == expected:
-                    parts.append(generic)
-            elif not detail:
-                parts.append(generic)
         unit = units[row["unit_id"]]
-        sections.append(f"### {unit.code} — {row['name']}\n\n" + "\n".join(parts))
+        sections.append(f"### {unit.code} — {_project_control_name(row)}\n\n" + "\n".join(parts))
     return "\n\n".join(sections) or "No hay controles incluidos."
 
 
@@ -139,36 +166,55 @@ def _proposal_is_current(row: dict, item) -> bool:
     """Comprueba tanto la medición como los datos usados para estimar la cantidad."""
     source = row.get("quantity_source")
     return row["snapshot"] == unit_snapshot(item) and (
-        not source or source["basis"] == quantity_proposal(
-            item, row.get("trial", ""), row.get("frequency", "")
-        )[1]
+        not source or (
+            str(source["count"]) == str(row.get("count", "")).strip()
+            and source["frequency"] == row.get("frequency", "").strip()
+            and (source["name"] == row.get("name", "").strip()
+                 or source["basis"].startswith("Cantidad provisional:"))
+            and source["basis"] == quantity_proposal(
+                item, row.get("trial", ""), row.get("frequency", "")
+            )[1]
+        )
     )
 
 
-def _pending_controls(rows: list[dict], units: dict, currency: str) -> str:
-    """Describe las propuestas no marcadas sin convertirlas en controles aprobados."""
-    sections = []
-    missing = False
+def _matrix_rows(rows: list[dict], units: dict, currency: str,
+                 generic_details: dict[str, str]) -> list[list[str]]:
+    """Reúne todos los controles de la obra sin atribuirles un estado de aprobación."""
+    matrix = []
     for row in rows:
-        if row.get("included", True) or not str(row.get("name", "")).strip():
+        if not str(row.get("name", "")).strip():
             continue
         item = units.get(row["unit_id"])
-        if item is None:
-            missing = True
-            continue
-        current = _proposal_is_current(row, item)
+        snapshot = row["snapshot"]
+        code, chapter, summary = ((item.code, item.chapter, item.summary) if item else snapshot[:3])
+        identifier = f"C-{len(matrix) + 1:02d}"
+        origin = f"{identifier}\n{code} — {summary}\nCapítulo: {chapter}"
+        details = _detail_for_control(row, generic_details)
+        scope = "\n".join(filter(None, (_project_control_name(row), details)))
         criteria = correct_legacy_slip_criteria(row.get("trial", ""), row.get("criteria", ""))
-        parts = [
-            "- Estado: propuesta pendiente de revisión; no incluida en el plan aprobado.",
-            f"- Frecuencia propuesta: {_inline_field(row.get('frequency') or 'Pendiente de definir.')}",
-            f"- Criterio propuesto: {_inline_field(criteria or 'Pendiente de definir.')}",
-        ]
-        if current:
-            parts.append(f"- Número propuesto: {row.get('count') or 'Pendiente de definir.'}")
-            if row.get("quantity_source"):
-                parts.append(f"- Base de la cantidad: {row['quantity_source']['basis']}")
+        specifications = "\n".join(
+            f"{label}: {_inline_field(value) if value else 'Por definir.'}"
+            for label, value in (("Frecuencia", row.get("frequency", "")),
+                                 ("Criterio", criteria), ("Referencia", row.get("reference", "")))
+        )
+        quantity = []
+        count = None
+        if item is None or not _proposal_is_current(row, item):
+            quantity.append("Actualizar los datos de la unidad y su cantidad.")
         else:
-            parts.append("- La unidad de obra ha cambiado; actualiza la propuesta y su cantidad.")
+            value = str(row.get("count", "")).strip()
+            try:
+                count = Decimal(value)
+                if not count.is_finite() or count < 1 or count > 999999 or count != count.to_integral_value():
+                    raise ValueError("Número fuera de los límites admitidos.")
+            except (InvalidOperation, ValueError):
+                count = None
+                quantity.append(f"N.º por corregir: {value}" if value else "N.º por definir.")
+            else:
+                quantity.append(f"N.º: {int(count)}")
+            if source := row.get("quantity_source"):
+                quantity.append(f"Base: {source['basis']}")
         if row.get("price"):
             value = str(row["price"]).strip()
             try:
@@ -176,27 +222,23 @@ def _pending_controls(rows: list[dict], units: dict, currency: str) -> str:
                 if not price.is_finite() or price <= 0 or price > 1_000_000_000:
                     raise ValueError("Precio fuera de los límites admitidos.")
             except (InvalidOperation, ValueError):
-                parts.append(f"- Precio propuesto pendiente de corregir: {value}.")
+                quantity.append(f"Precio por corregir: {value}")
             else:
                 price_currency = "EUR" if row.get("price_source") else currency
-                parts.append(f"- Precio propuesto por ensayo: {fmt_number(float(price))} {price_currency}.")
+                quantity.append(f"Precio unitario: {fmt_number(float(price))} {price_currency}")
+                if count is not None:
+                    quantity.append(f"Importe: {fmt_number(float(price * count))} {price_currency}")
             if source := row.get("price_source"):
-                parts.append(f"- Precio de referencia: {_price_reference(source)}")
-        if row.get("reference"):
-            parts.append(f"- Referencia: {row['reference']}")
-        if detail := _row_detail(row):
-            parts.append(detail if detail.startswith("- ") else f"- Alcance y control: {detail}")
-        sections.append(f"### {item.code} — {row['name']}\n\n" + "\n".join(parts))
-    if missing:
-        sections.append("Hay propuestas sin una unidad de obra vigente; actualízalas antes de incorporarlas.")
-    return "\n\n".join(sections) or "No hay propuestas pendientes de revisión."
+                quantity.append(f"Referencia de precio: {_price_reference(source, row.get('trial', ''))}")
+        matrix.append([origin, scope, specifications, "\n".join(quantity)])
+    return matrix
 
 
 def _test_sheets(rows: list[dict], units: dict) -> str:
     """Asocia fichas técnicas solo a controles o ensayos del proyecto."""
     sections = []
     related: dict[str, list[str]] = {}
-    for row in rows:
+    for index, row in enumerate(rows, 1):
         item = units.get(row["unit_id"])
         trial = row.get("trial", "")
         if item is None or not str(row.get("name", "")).strip():
@@ -213,14 +255,12 @@ def _test_sheets(rows: list[dict], units: dict) -> str:
             direct = identifier == trial
             current = _proposal_is_current(row, item)
             if not direct:
-                status = "control incluido" if row.get("included", True) else "propuesta pendiente de revisión"
-                if not current:
-                    status += ", pendiente de actualización"
-                related.setdefault(identifier, []).append(f"- {item.code} — {row['name']} ({status}).")
+                update = " (actualizar datos de la unidad)" if not current else ""
+                related.setdefault(identifier, []).append(
+                    f"- C-{index:02d} — {item.code} — {_project_control_name(row)}{update}."
+                )
                 continue
-            status = ("Ensayo incluido en el plan revisado." if row.get("included", True)
-                      else "Ensayo propuesto, pendiente de revisión.")
-            parts = [f"- Estado: {status}"]
+            parts = [f"- Control de la matriz: C-{index:02d}."]
             if not current:
                 parts.append("- La unidad de obra ha cambiado; actualiza la propuesta antes de utilizarla.")
             for label, value in (("Referencia", row.get("reference", "")),
@@ -231,7 +271,7 @@ def _test_sheets(rows: list[dict], units: dict) -> str:
                     parts.append(f"- {label}: {_inline_field(value)}")
             if detail := _row_detail(row):
                 parts.append(detail if detail.startswith("- ") else f"- Detalle: {detail}")
-            sections.append(f"### {item.code} — {row['name']}\n\n" + "\n".join(parts))
+            sections.append(f"### {item.code} — {_project_control_name(row)}\n\n" + "\n".join(parts))
     for identifier, associations in related.items():
         entry = get_catalog_entry(identifier)
         parts = [
@@ -258,8 +298,8 @@ def write_document(app, target: Path, rows: list[dict]) -> None:
     settings = app.report_settings
     currency = currency_label(settings.currency, settings.custom_currency)
     units = work_units(app.budget_items)
-    all_rows = rows
-    rows = validate_rows([row for row in all_rows if row.get("included", True)], units)
+    all_rows = [row for row in rows if str(row.get("name", "")).strip()]
+    rows = validate_rows([row for row in rows if row.get("included", True)], units)
     rows = [row | {"criteria": correct_legacy_slip_criteria(row.get("trial", ""), row["criteria"])}
             for row in rows]
     if settings.currency != "EUR" and any(row.get("price_source") for row in rows):
@@ -272,8 +312,10 @@ def write_document(app, target: Path, rows: list[dict]) -> None:
         if generic_details is None:
             raise ValueError("La biblioteca distribuida no contiene datos de controles genéricos.")
     sections = [document_markdown(source) for source in sources]
-    for token, name in (("{{controles_pendientes}}", "08_catalogo_pac.md"),
+    for token, name in (("{{matriz_controles}}", "08_catalogo_pac.md"),
                         ("{{ensayos_proyecto}}", "09_ensayos_clave.md")):
+        if token == "{{matriz_controles}}" and not any(token in section for section in sections):
+            sections = [section.replace("{{controles_pendientes}}", token) for section in sections]
         count = sum(line.strip() == token for section in sections for line in section.splitlines())
         if count > 1:
             raise ValueError(f"La biblioteca solo puede contener una vez el marcador {token}.")
@@ -282,8 +324,11 @@ def write_document(app, target: Path, rows: list[dict]) -> None:
             sections[index] += f"\n\n{token}"
     markdown = "\n\n".join(sections)
     for token in (*TABLES, "{{presupuesto_control}}", "{{detalles_catalogo}}"):
-        if sum(line.strip() == token for line in markdown.splitlines()) != 1:
-            raise ValueError(f"La biblioteca debe contener una vez el marcador {token} en una línea propia.")
+        count = sum(line.strip() == token for line in markdown.splitlines())
+        required = token in ("{{matriz_controles}}", "{{presupuesto_control}}")
+        if count > 1 or (required and count != 1):
+            raise ValueError(f"La biblioteca debe contener {'una vez' if required else 'como máximo una vez'} "
+                             f"el marcador {token} en una línea propia.")
     generated = [item for item in app.budget_items if item.source == SOURCE]
     if generated:
         total = sum(item.import_total for item in generated)
@@ -295,10 +340,11 @@ def write_document(app, target: Path, rows: list[dict]) -> None:
     else:
         budget = "Las partidas de este plan aún no se han incorporado al presupuesto."
     markdown = markdown.replace("{{detalles_catalogo}}", _control_details(rows, units, currency, generic_details))
-    markdown = markdown.replace("{{controles_pendientes}}", _pending_controls(all_rows, units, currency))
+    markdown = markdown.replace("{{controles_pendientes}}", "")
     markdown = markdown.replace("{{ensayos_proyecto}}", _test_sheets(all_rows, units))
     blocks = text_blocks(markdown.replace("{{presupuesto_control}}", budget), preserve_links=True)
     data = {
+        "{{matriz_controles}}": _matrix_rows(all_rows, units, currency, generic_details),
         "{{tabla_frecuencias}}": [
             [label, TRIALS[key].name, TRIALS[key].frequency, TRIALS[key].criteria]
             for key, label in (("density", "Suelos y zanjas"), ("plate", "Suelos y explanadas"),
@@ -307,7 +353,7 @@ def write_document(app, target: Path, rows: list[dict]) -> None:
         ],
         "{{tabla_ensayos}}": [
             [f"{units[row['unit_id']].code} — {units[row['unit_id']].summary}",
-             row["name"], row["frequency"], str(row["count"]), row["criteria"],
+             _project_control_name(row), row["frequency"], str(row["count"]), row["criteria"],
              row.get("reference", "")]
             for row in rows
         ],
@@ -395,7 +441,7 @@ def _write_pdf(target, project, settings, blocks, data) -> None:
         """Escapa texto y conserva los enlaces HTTP del Markdown."""
         return "".join(
             f'<link href="{escape(url, quote=True)}" color="#174B83"><u>{escape(value)}</u></link>'
-            if url else escape(value)
+            if url else escape(value).replace("\n", "<br/>")
             for value, url in normative_runs(text)
         )
 

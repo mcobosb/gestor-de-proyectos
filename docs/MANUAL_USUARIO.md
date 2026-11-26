@@ -625,16 +625,21 @@ de la partida generada. Los precios están en euros y deben actualizarse si proc
 En la ficha «05_ensayos.md», el bloque informativo «Datos de controles
 genéricos» permite editar los campos mostrados en el detalle de cada ensayo.
 Las bibliotecas anteriores sin ese bloque utilizan los datos distribuidos.
-**Generar anejo…** exporta las fichas y la tabla revisada en PDF u ODT, según
-el formato elegido en el diálogo de guardado. Las propuestas no marcadas se
-describen aparte como pendientes de revisión y no se suman al presupuesto.
+**Generar anejo…** exporta en PDF u ODT una matriz de controles por unidad de
+obra, con identificadores propios del proyecto, criterios, frecuencias, cantidades,
+registros y fuentes disponibles. La matriz reúne filas marcadas y no marcadas
+sin distinguir su estado; solo las marcadas se incorporan al presupuesto.
+Los controles y sus cantidades deben contrastarse y aprobarse técnicamente.
+Si cambia una unidad, la matriz indica que deben actualizarse sus datos.
 Las fichas técnicas relacionadas se incluyen únicamente para los controles
 vinculados a unidades de obra; su consulta no añade ensayos al plan.
-En ellas se identifican los controles vinculados y si están incluidos o
-pendientes; los parámetros, criterios y actuaciones deben verificarse frente
-al proyecto y la normativa aplicable.
+En ellas se identifican los controles vinculados mediante los mismos códigos;
+los parámetros, criterios y actuaciones deben verificarse frente al proyecto
+y la normativa aplicable.
 En bibliotecas personalizadas antiguas, los nuevos apartados dinámicos se
-añaden al final de las fichas 8 y 9 sin modificar su texto editable.
+añaden al final de las fichas 8 y 9 si no tienen marcadores, sin modificar su
+texto editable. El marcador anterior de propuestas se sustituye por la matriz;
+los demás textos o tablas antiguos personalizados se conservan.
 El importe y el porcentaje sobre el PEM se calculan con las
 partidas incorporadas; el intervalo orientativo no se usa para fijar precios.
 
