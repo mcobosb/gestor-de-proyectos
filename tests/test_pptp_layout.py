@@ -12,7 +12,8 @@ from zipfile import ZipFile
 from pypdf import PdfReader
 
 from budget_reports import ReportSettings
-from report_layout import DEFAULT_TEMPLATE_PATH, replace_footer_fields, replace_template_fields
+from report_layout import replace_footer_fields, replace_template_fields
+from tests._report_template import write_report_template
 from tools.pptp.document import number_headings, write_document
 
 
@@ -329,9 +330,10 @@ class PptpLayoutTests(unittest.TestCase):
         """La ausencia de un campo no se suple con texto o numeros adicionales."""
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            base = write_report_template(root / "base.odt")
             for marker in ("PIE EXISTENTE", "{{capítulo}}", "{{no_pagina}}"):
                 template = root / "footer.odt"
-                with ZipFile(DEFAULT_TEMPLATE_PATH) as source, ZipFile(template, "w") as archive:
+                with ZipFile(base) as source, ZipFile(template, "w") as archive:
                     for member in source.infolist():
                         data = source.read(member.filename)
                         if member.filename == "styles.xml":
@@ -384,7 +386,8 @@ class PptpLayoutTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             template = root / "footer.odt"
-            with ZipFile(DEFAULT_TEMPLATE_PATH) as source, ZipFile(template, "w") as target:
+            base = write_report_template(root / "base.odt")
+            with ZipFile(base) as source, ZipFile(template, "w") as target:
                 for member in source.infolist():
                     data = source.read(member.filename)
                     if member.filename == "styles.xml":

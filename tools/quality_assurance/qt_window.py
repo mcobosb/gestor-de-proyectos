@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from decimal import Decimal, InvalidOperation
 import tempfile
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView, QComboBox, QDialog, QFileDialog, QHBoxLayout, QHeaderView, QLabel,
+    QAbstractItemView, QComboBox, QDialog, QFileDialog, QHBoxLayout, QHeaderView, QInputDialog, QLabel,
     QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout,
 )
 
@@ -21,6 +22,7 @@ from .plan import (
     TRIALS, applicable_trials, has_inserted, insert_budget, suggested_quantity, unit_snapshot,
     validate_rows, work_units,
 )
+from .pricing import price_candidates
 
 FIELDS = ("name", "frequency", "count", "criteria", "price", "reference")
 ROLE = Qt.ItemDataRole.UserRole
@@ -79,6 +81,12 @@ class QualityWindow(QDialog):
         self.remove_button.clicked.connect(self.remove_rows)
         manual.addWidget(self.remove_button)
         layout.addLayout(manual)
+        price_bar = QHBoxLayout()
+        self.price_button = QPushButton("Consultar precios BCCA para la fila…")
+        self.price_button.clicked.connect(self.choose_price)
+        price_bar.addWidget(self.price_button)
+        price_bar.addStretch()
+        layout.addLayout(price_bar)
         self.table = QTableWidget(0, 8)
         self.table.setObjectName("qualityTrialsTable")
         self.table.setAlternatingRowColors(True)
@@ -138,16 +146,85 @@ class QualityWindow(QDialog):
             cell = QTableWidgetItem(str(row.get(name, "")))
             if name == "name":
                 cell.setToolTip(str(row.get("details", "")))
+            if name == "price" and row.get("price_source"):
+                source = row["price_source"]
+                cell.setToolTip(f"{source['code']} — {source['summary']} · {source['source']}")
             self.table.setItem(index, column, cell)
 
     def rows(self) -> list[dict]:
         """Recoge todas las filas, preservando las exclusiones para futuras revisiones."""
-        return [
-            self.table.item(index, 0).data(ROLE) |
+        rows = [
+            dict(self.table.item(index, 0).data(ROLE)) |
             {name: self.table.item(index, column).text() for column, name in enumerate(FIELDS, 2)} |
             {"included": self.table.item(index, 0).checkState() == Qt.CheckState.Checked}
             for index in range(self.table.rowCount())
         ]
+        for row in rows:
+            source = row.get("price_source")
+            if source:
+                try:
+                    same_price = Decimal(row["price"].replace(",", ".")) == Decimal(source["price"])
+                except InvalidOperation:
+                    same_price = False
+                if not same_price or row["name"] != source["trial_name"]:
+                    row.pop("price_source")
+        return rows
+
+    def choose_price(self) -> None:
+        """Permite seleccionar expresamente una partida BCCA sin pisar precios sin aviso."""
+        index = self.table.currentRow()
+        if index < 0:
+            QMessageBox.information(self, TOOL_LABEL, "Selecciona primero una fila de ensayo.")
+            return
+        if self.app.report_settings.currency != "EUR":
+            QMessageBox.warning(self, TOOL_LABEL, "Los precios BCCA están en euros; revisa la moneda del proyecto.")
+            return
+        name = self.table.item(index, 2).text().strip()
+        query, accepted = QInputDialog.getText(
+            self, TOOL_LABEL, "Busca por palabras o código; deja vacío para ver propuestas orientativas:"
+        )
+        if not accepted:
+            return
+        try:
+            candidates = price_candidates(name, query)
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, TOOL_LABEL, f"No se pudo consultar la base BCCA: {exc}")
+            return
+        if not candidates:
+            QMessageBox.information(
+                self, TOOL_LABEL,
+                "No hay coincidencias por unidad. Prueba otra búsqueda; las partidas con otras unidades "
+                "no se pueden aplicar directamente a un número de ensayos.",
+            )
+            return
+        labels = [f"{item.code} — {item.summary} — {item.price:g} €/{item.unit} (BCCA 2023)"
+                  for item in candidates]
+        selected, accepted = QInputDialog.getItem(
+            self, TOOL_LABEL, "Comprueba el alcance y selecciona una partida:", labels, 0, False
+        )
+        if not accepted:
+            return
+        concept = candidates[labels.index(selected)]
+        price_cell = self.table.item(index, 6)
+        replacement = "\n\nSe sustituirá el precio que ya figura en la fila." if price_cell.text().strip() else ""
+        if QMessageBox.question(
+            self, TOOL_LABEL,
+            f"{concept.code} — {concept.summary}\n\n{concept.text}\n\n"
+            f"Precio BCCA 2023: {concept.price:g} €/{concept.unit}.{replacement}\n\n"
+            "La partida puede cubrir solo una parte del control; comprueba su alcance.\n\n"
+            "¿Aplicar este precio al ensayo seleccionado?",
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        check = self.table.item(index, 0)
+        row = dict(check.data(ROLE))
+        row["price_source"] = {
+            "code": concept.code, "summary": concept.summary, "unit": concept.unit,
+            "price": str(concept.price), "trial_name": name, "source": "BCCA 2023",
+        }
+        check.setData(ROLE, row)
+        price_cell.setText(str(concept.price))
+        price_cell.setToolTip(f"{concept.code} — {concept.summary} · BCCA 2023")
+        self.invalidate()
 
     def suggest(self) -> None:
         """Completa candidatos nuevos y actualiza referencias sin pisar valores revisados."""
@@ -237,6 +314,7 @@ class QualityWindow(QDialog):
         self.add_button.setEnabled(not inserted and bool(units))
         self.add_catalog_button.setEnabled(not inserted and bool(units) and self.catalog.count() > 0)
         self.remove_button.setEnabled(not inserted)
+        self.price_button.setEnabled(not inserted and bool(units))
         self.review_button.setEnabled(not inserted)
         self.table.setEnabled(not inserted)
         approved = [row for row in self.rows() if row["included"]]

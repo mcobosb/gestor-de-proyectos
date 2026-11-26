@@ -10,7 +10,7 @@ from budget_reports import report_output_format
 from collaborative_storage import shared_library_path
 from document_styles import ROLES
 from tools._library_editor import read_markdown
-from tools._library_markdown import document_markdown, text_blocks
+from tools._library_markdown import document_markdown, link_runs, text_blocks
 from tools._shared.document_layout import (
     DEFAULT_TOC_DEPTH, add_odt_blue_table_cells, add_odt_blue_table_headers, add_odt_list_style,
     add_odt_narrative_styles,
@@ -18,6 +18,7 @@ from tools._shared.document_layout import (
 )
 from tools.document_structure.catalog import QUALITY_ASSURANCE_NUMBER
 
+from .catalog import get_catalog_entry
 from .plan import SOURCE, TRIALS, validate_rows, work_units
 
 LIBRARY_PATH = Path(__file__).with_name("BIBLIOTECA.zip")
@@ -29,6 +30,7 @@ DOCUMENTS = (
 TITLE = f"ANEJO Nº {int(QUALITY_ASSURANCE_NUMBER)}: PLAN DE ASEGURAMIENTO Y CONTROL DE LA CALIDAD"
 FOOTER = f"ANEJO Nº {int(QUALITY_ASSURANCE_NUMBER)}. ASEGURAMIENTO Y CONTROL DE LA CALIDAD"
 CHAPTER_FIELD = re.compile(r"\{\{cap[ií]tulo\}\}")
+RELATED_TESTS = {"concrete": ("ENS-01", "ENS-03"), "asphalt": ("ENS-14",), "paint": ("ENS-20",)}
 TABLES = {
     "{{tabla_frecuencias}}": (
         "Frecuencias orientativas y criterios de aceptación",
@@ -65,11 +67,29 @@ def write_document(app, target: Path, rows: list[dict]) -> None:
             budget += f" Representan el {fmt_number(100 * total / pem)} % del PEM actual."
     else:
         budget = "Las partidas de este plan aún no se han incorporado al presupuesto."
-    details = "\n\n".join(
-        f"### {row['name']}\n\n{row['details']}" for row in rows if row.get("details")
-    ) or "No se han seleccionado fichas con detalle ampliado del catálogo."
+    detail_sections = []
+    for row in rows:
+        detail = "\n".join(
+            line for line in row.get("details", "").splitlines()
+            if not line.startswith("- Estado en obra:")
+        )
+        trial = row.get("trial")
+        related = RELATED_TESTS.get(trial, ()) if trial in TRIALS and row["name"] == TRIALS[trial].name else ()
+        references = []
+        for identifier in related:
+            entry = get_catalog_entry(identifier)
+            references.append(
+                f"Ficha relacionada para consulta: {entry.label}\n\n"
+                f"Referencia: {entry.reference}\n\nCriterios orientativos: {entry.criteria}\n\n{entry.details}"
+            )
+        if detail or references:
+            unit = units[row["unit_id"]]
+            detail_sections.append(
+                f"### {unit.code} — {row['name']}\n\n" + "\n\n".join(filter(None, (detail, *references)))
+            )
+    details = "\n\n".join(detail_sections) or "No hay fichas ampliadas asociadas a los controles incluidos."
     markdown = markdown.replace("{{detalles_catalogo}}", details)
-    blocks = text_blocks(markdown.replace("{{presupuesto_control}}", budget))
+    blocks = text_blocks(markdown.replace("{{presupuesto_control}}", budget), preserve_links=True)
     data = {
         "{{tabla_frecuencias}}": [
             [label, TRIALS[key].name, TRIALS[key].frequency, TRIALS[key].criteria]
@@ -94,6 +114,15 @@ def write_document(app, target: Path, rows: list[dict]) -> None:
 def _write_odt(target, project, settings, blocks, data) -> None:
     """Conserva encabezados, tablas y listas nativos y editables."""
     from odt_reports import _new_report, _tag
+
+    def add_inline(parent, text):
+        """Conserva enlaces externos como elementos editables de Writer."""
+        for value, url in link_runs(text):
+            if value:
+                node = ET.SubElement(parent, _tag("text:a" if url else "text:span"), {
+                    _tag("xlink:href"): url, _tag("xlink:type"): "simple",
+                } if url else {})
+                node.text = value
 
     doc = _new_report(TITLE, project, settings, repeat_titles=False, footer_title=FOOTER)
     if doc.template_footer is None:
@@ -131,9 +160,11 @@ def _write_odt(target, project, settings, blocks, data) -> None:
             node = ET.SubElement(doc.body, _tag("text:p"),
                                  {_tag("text:style-name"): f"QualityBullet{-level}"})
             node.text = marker
-            ET.SubElement(node, _tag("text:tab")).tail = label
+            ET.SubElement(node, _tag("text:tab"))
+            add_inline(node, label)
         else:
-            doc.paragraph(text, "QualityBody")
+            node = ET.SubElement(doc.body, _tag("text:p"), {_tag("text:style-name"): "QualityBody"})
+            add_inline(node, text)
     doc.append_signature(settings)
     doc.name_text_styles({
         f"QualityHeading{level}": f"Calidad - Título {level}"
@@ -150,6 +181,14 @@ def _write_pdf(target, project, settings, blocks, data) -> None:
     from reportlab.platypus import Spacer
     from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
     from tools._shared.pdf_contents import ContentsDocTemplate, add_pdf_contents
+
+    def inline(text):
+        """Escapa texto y conserva los enlaces HTTP del Markdown."""
+        return "".join(
+            f'<link href="{escape(url, quote=True)}" color="#174B83"><u>{escape(value)}</u></link>'
+            if url else escape(value)
+            for value, url in link_runs(text)
+        )
 
     layout = ReportLayout(template_path=settings.template_path, logo_path=settings.master_logo_path,
                           template_title=project,
@@ -187,9 +226,9 @@ def _write_pdf(target, project, settings, blocks, data) -> None:
             story.append(heading)
         elif level < 0:
             marker, label = split_list_item(text)
-            story.append(layout.paragraph(escape(label), bullets[level], bulletText=marker))
+            story.append(layout.paragraph(inline(label), bullets[level], bulletText=marker))
         else:
-            story.append(layout.text(text, body, role="body"))
+            story.append(layout.paragraph(inline(text), body, role="body"))
     story.extend(layout.signature_block(settings))
     add_pdf_contents(story, layout, insertion=1)
 

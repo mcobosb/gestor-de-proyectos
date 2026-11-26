@@ -19,6 +19,7 @@ from tools._library_history import read_revisions
 from tools.quality_assurance.catalog import load_catalog
 from tools.quality_assurance.document import LIBRARY_PATH, write_document
 from tools.quality_assurance.plan import SOURCE, applicable_trials, insert_budget, suggested_quantity
+from tools.quality_assurance.pricing import price_candidates, price_catalog
 
 
 class QualityAssuranceTests(unittest.TestCase):
@@ -75,6 +76,58 @@ class QualityAssuranceTests(unittest.TestCase):
                 self.assertIn("LOE", row["reference"])
                 self.assertIn("Ensayos e inspecciones", row["details"])
                 self.assertEqual(tool.table.item(tool.table.rowCount() - 1, 7).text(), row["reference"])
+            finally:
+                window.is_dirty = False
+                window.close()
+                qt.processEvents()
+
+    def test_bcca_price_selection_and_provenance(self):
+        """La selección es explícita y no conserva una referencia para un precio manual."""
+        self.assertEqual([(entry.code, entry.price) for entry in price_candidates("", "18ALF00010")],
+                         [("18ALF00010", 44.0)])
+        self.assertFalse(any(entry.unit.casefold() not in {"u", "ud"} for entry in price_catalog()))
+        self.assertFalse(any(entry.code == "18ASS000201" for entry in price_catalog()))
+        self.assertFalse(price_candidates("Densidad in situ"))
+        self.assertEqual({entry.code for entry in price_candidates(
+            "Probetas y consistencia (cono de Abrams)")}, {"18HHL00010", "18HHL00020"})
+        qt = QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as folder, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(folder)
+        ), patch("budget_qt_window.apply_theme"), patch(
+            "tools.quality_assurance.qt_window.QInputDialog.getText", return_value=("18ALF00010", True)
+        ), patch(
+            "tools.quality_assurance.qt_window.QInputDialog.getItem",
+            return_value=("18ALF00010 — Análisis granulométrico de suelos — 44 €/ud (BCCA 2023)", True)
+        ), patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No) as question:
+            window = BudgetMainWindow()
+            try:
+                window.budget_items = [ProjectItem("SUELO", "01#", "m²", "Subbase de zahorra", 50)]
+                window._open_tool("quality_assurance")
+                tool = window._project_windows[-1]
+                tool.table.setCurrentCell(0, 2)
+                tool.table.item(0, 6).setText("99")
+                tool.choose_price()
+                self.assertEqual(tool.rows()[0]["price"], "99")
+                self.assertNotIn("price_source", tool.rows()[0])
+                question.return_value = QMessageBox.StandardButton.Yes
+                tool.choose_price()
+                row = tool.rows()[0]
+                self.assertEqual((row["price"], row["price_source"]["code"]), ("44.0", "18ALF00010"))
+                tool.table.item(0, 6).setText("45")
+                self.assertNotIn("price_source", tool.rows()[0])
+                tool.choose_price()
+                tool.table.item(0, 4).setText("1")
+                tool.review()
+                restored = decode_project_payload(build_project_payload(window), Path(folder) / "p.json",
+                                                  window.report_settings)
+                self.assertEqual(restored.quality_assurance["rows"][0]["price_source"]["code"], "18ALF00010")
+                window.report_settings.currency = "USD"
+                with self.assertRaisesRegex(ValueError, "euros"):
+                    insert_budget(window, [tool.rows()[0]])
+                window.report_settings.currency = "EUR"
+                tool.insert()
+                inserted = next(item for item in window.budget_items if item.source == SOURCE)
+                self.assertIn("18ALF00010", inserted.text)
             finally:
                 window.is_dirty = False
                 window.close()
@@ -143,15 +196,25 @@ class QualityAssuranceTests(unittest.TestCase):
                             with ZipFile(target) as archive:
                                 xml = ET.fromstring(archive.read("content.xml"))
                             self.assertEqual(len(list(xml.iter(_tag("table:table")))), 2)
+                            links = {node.get(_tag("xlink:href")) for node in xml.iter(_tag("text:a"))}
                             text = " ".join(xml.itertext())
                         else:
-                            text = " ".join(page.extract_text() for page in PdfReader(target).pages)
+                            pages = PdfReader(target).pages
+                            text = " ".join(page.extract_text() for page in pages)
+                            links = {
+                                str(action.get("/URI"))
+                                for page in pages for annotation in page.get("/Annots", [])
+                                if (action := annotation.get_object().get("/A")) and action.get("/URI")
+                            }
+                        self.assertIn("https://www.boe.es/buscar/act.php?id=BOE-A-2003-22787", links)
                         normalized = " ".join(text.split())
                         for expected in ("ANEJO Nº 17", "Tabla 2.", "ASF", "321,00", "Texto revisado en la ficha.",
                                          "6. GESTIÓN DE NO CONFORMIDADES", "8. CATÁLOGO DE CONTROLES PAC",
                                          "9. FICHAS TÉCNICAS DE ENSAYOS CLAVE",
-                                         "Ensayos e inspecciones"):
+                                         "Ensayos e inspecciones", "ENS-14", "CATÁLOGO"):
                             self.assertIn(expected, normalized)
+                        self.assertNotIn("CAT?LOGO", normalized)
+                        self.assertNotIn("Estado en obra: Pendiente", normalized)
                 work.measurement = 800
                 window.refresh_budget_tree()
                 self.assertFalse(tool.export_button.isEnabled())

@@ -4,6 +4,16 @@ from __future__ import annotations
 import re
 
 
+def link_runs(text: str):
+    """Separa enlaces Markdown HTTP del texto sin interpretar otras marcas."""
+    cursor = 0
+    for match in re.finditer(r"\[([^]\n]+)\]\((https?://[^)\s]+)\)", text):
+        yield text[cursor:match.start()], ""
+        yield match[1], match[2]
+        cursor = match.end()
+    yield text[cursor:], ""
+
+
 def informational_ranges(source: str, *, strict: bool = True) -> list[tuple[int, int]]:
     """Localiza bloques delimitados por comillas triples en líneas independientes."""
     ranges = []

@@ -570,7 +570,16 @@ capítulo existente de **Control de Calidad** o lo crea, y se desactiva tras ins
 La acción no guarda el archivo del proyecto: utiliza **Guardar** para conservar
 los cambios. Para rehacer la inserción, retira primero las partidas generadas.
 
-**Editar fichas del anejo…** abre los siete apartados editables con historial.
+**Consultar precios BCCA para la fila…** permite buscar y seleccionar una partida
+del capítulo 18 de la BCCA 2023 distribuida. Las coincidencias son orientativas:
+comprueba su alcance y precio, especialmente si una propuesta solo cubre parte
+del control. Si no hay propuestas, puedes buscar por palabras o código. Solo se
+ofrecen partidas positivas por unidad (`u` o `ud`), no precios por superficie o volumen; los
+precios existentes se sustituyen únicamente con confirmación. La referencia de
+la partida seleccionada se guarda con la revisión y se incorpora a la descripción
+de la partida generada. Los precios están en euros y deben actualizarse si procede.
+
+**Editar fichas del anejo…** abre los nueve apartados editables con historial.
 **Generar anejo…** exporta las fichas y la tabla revisada en PDF u ODT, según
 el formato elegido en el diálogo de guardado. El importe y el porcentaje sobre el PEM se calculan con las
 partidas incorporadas; el intervalo orientativo no se usa para fijar precios.

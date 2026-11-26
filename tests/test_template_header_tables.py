@@ -6,7 +6,8 @@ from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
 from odt_reports import _tag
-from report_layout import CONTENT_WIDTH, DEFAULT_TEMPLATE_PATH, ReportLayout
+from report_layout import CONTENT_WIDTH, ReportLayout
+from tests._report_template import write_report_template
 
 
 class TemplateHeaderTableTests(unittest.TestCase):
@@ -16,7 +17,8 @@ class TemplateHeaderTableTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.folder = Path(self.temporary.name)
         self.template = self.folder / "table-header.odt"
-        with ZipFile(DEFAULT_TEMPLATE_PATH) as source, ZipFile(self.template, "w") as target:
+        base = write_report_template(self.folder / "base.odt")
+        with ZipFile(base) as source, ZipFile(self.template, "w") as target:
             for entry in source.infolist():
                 data = source.read(entry.filename)
                 if entry.filename == "styles.xml":

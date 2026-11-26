@@ -9,7 +9,7 @@ from pypdf import PdfReader
 
 from budget_reports import ReportSettings
 from odt_reports import _tag
-from report_layout import DEFAULT_TEMPLATE_PATH
+from tests._report_template import write_report_template
 from tools.pptp.document import text_blocks, write_document
 
 
@@ -55,11 +55,13 @@ class PptpFormattingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             template = root / "generic.odt"
-            with ZipFile(DEFAULT_TEMPLATE_PATH) as source, ZipFile(template, "w") as archive:
+            base = write_report_template(root / "base.odt")
+            with ZipFile(base) as source, ZipFile(template, "w") as archive:
                 styles = ET.fromstring(source.read("styles.xml"))
                 named = styles.find(_tag("office:styles"))
                 for style in list(named):
-                    if style.get(_tag("style:default-outline-level")):
+                    if (style.get(_tag("style:default-outline-level"))
+                            or style.get(_tag("style:name")) in {f"Heading{level}" for level in range(1, 7)}):
                         named.remove(style)
                 for info in source.infolist():
                     archive.writestr(
@@ -105,7 +107,9 @@ class PptpFormattingTests(unittest.TestCase):
             self.assertTrue(all(paragraph.find(".//" + _tag("text:tab")) is not None for paragraph in items))
             for name in ("PPTPContents1", "PPTPContents2"):
                 style = automatic[name]
-                self.assertEqual(style.get(_tag("style:parent-style-name")), "PPTPBody")
+                self.assertEqual(
+                    style.find(_tag("style:paragraph-properties")).get(_tag("fo:line-height")), "115%",
+                )
                 self.assertEqual(
                     style.find(_tag("style:text-properties")).get(_tag("fo:font-size")), "10pt",
                 )
@@ -184,7 +188,8 @@ class PptpFormattingTests(unittest.TestCase):
         """Conserva fuentes y tamaños personalizados y normaliza la maquetación del PPTP."""
         with tempfile.TemporaryDirectory() as directory:
             template = Path(directory) / "template.odt"
-            with ZipFile(DEFAULT_TEMPLATE_PATH) as source, ZipFile(template, "w") as target:
+            base = write_report_template(Path(directory) / "base.odt")
+            with ZipFile(base) as source, ZipFile(template, "w") as target:
                 root = ET.fromstring(source.read("styles.xml"))
                 styles = root.find(_tag("office:styles"))
                 default = next((

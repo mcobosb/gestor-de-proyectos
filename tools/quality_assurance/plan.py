@@ -175,6 +175,8 @@ def insert_budget(app, rows: list[dict]) -> None:
         raise ValueError("El plan ya se ha incorporado al presupuesto.")
     units = work_units(app.budget_items)
     valid = validate_rows(rows, units, require_prices=True)
+    if app.report_settings.currency != "EUR" and any(row.get("price_source") for row in valid):
+        raise ValueError("Los precios BCCA están en euros; revisa la moneda y los precios antes de insertar.")
     chapters = set(app.chapter_order) | set(app.chapter_titles) | {item.chapter for item in app.budget_items}
     matching = [chapter for chapter in chapters if re.search(
         r"\b(?:control|aseguramiento)(?:\s+y\s+control)?\s+de\s+(?:la\s+)?calidad\b",
@@ -198,6 +200,10 @@ def insert_budget(app, rows: list[dict]) -> None:
             description += f" Referencia normativa: {row['reference']}."
         if row.get("details"):
             description += f" Detalle del control: {row['details']}."
+        if row.get("price_source"):
+            source = row["price_source"]
+            description += (f" Precio seleccionado de {source['source']}: {source['code']} — "
+                            f"{source['summary']} ({source['price']} EUR/{source['unit']}).")
         item = ProjectItem(f"CC-{next_code:03d}", chapter, "ud", row["name"], source=SOURCE,
                            text=description)
         next_code += 1

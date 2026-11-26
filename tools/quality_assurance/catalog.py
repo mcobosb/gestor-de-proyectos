@@ -86,7 +86,6 @@ def load_catalog() -> tuple[CatalogEntry, ...]:
                     ("Criticidad / PPI", _value(row, pac_headers, "Criticidad / PPI")),
                     ("Ensayos e inspecciones", _value(row, pac_headers, "Ensayos, Inspecciones y Parámetros Clave")),
                     ("Registros", _value(row, pac_headers, "Registro / Entregable Documental")),
-                    ("Estado en obra", _value(row, pac_headers, "Estado en Obra")),
                 ) if value
             )
             entries.append(CatalogEntry(
