@@ -397,9 +397,12 @@ def study_blocks(
     counts = Counter(re.findall(marker, source, flags=re.MULTILINE))
     if set(counts) != set(tables) | set(narrative) or any(count != 1 for count in counts.values()):
         raise ValueError("La biblioteca RCDs debe contener una vez cada marcador del estudio.")
+    add_currency_warning = bool(values["aviso_moneda"]) and "{{aviso_moneda}}" not in source
     blocks: list[StudyBlock] = []
     for index, part in enumerate(re.split(marker, source, flags=re.MULTILINE)):
         if index % 2:
+            if part == "tabla_proyecto" and add_currency_warning:
+                blocks.append((0, values["aviso_moneda"]))
             blocks.extend(narrative[part] if part in narrative else tables[part])
             if part in management_fields:
                 observation = state.documentation.get(management_fields[part], "").strip()

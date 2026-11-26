@@ -1,5 +1,6 @@
 """Personaliza los ODT y prepara el documento maestro de LibreOffice."""
 from copy import deepcopy
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from typing import BinaryIO
@@ -938,7 +939,7 @@ def _add_annex_covers(root, entries: list[dict[str, str]], links: list[Path]) ->
 
 
 def write_project_master(
-    source: Path,
+    source: Path | None,
     output: Path,
     *,
     fields: dict[str, str],
@@ -947,14 +948,23 @@ def write_project_master(
     links: list[Path],
     folder: Path,
     text_styles=None,
-    logo: Path = MASTER_LOGO,
+    logo: Path | None = None,
     document_control_text: str = DOCUMENT_CONTROL_TEXT,
 ) -> None:
-    """Construye el ODM desde la carátula elegida, sin alterar sus recursos originales."""
-    if not source.is_file():
+    """Construye el ODM con una plantilla elegida o una base sin cabecera ni pie."""
+    if source is not None and not source.is_file():
         raise FileNotFoundError(f"Falta la plantilla del documento maestro: {source}")
-    if not logo.is_file():
+    if logo is not None and not logo.is_file():
         raise FileNotFoundError(f"Falta el logo de la plantilla del documento maestro: {logo}")
+    if source is None:
+        from odt_reports import _OdtReport
+
+        blank = BytesIO()
+        _OdtReport("", "", "").write(blank)
+        blank.seek(0)
+        template_source = blank
+    else:
+        template_source = source
 
     sample_title = (
         "GEX2026/36718 – Proyecto de Construcción - Glorieta en cruce Ronda del Valle "
@@ -970,7 +980,7 @@ def write_project_master(
     master_page_names = [
         f"ProjectDocumentPage{index}" for index in range(1, len(footer_titles) + 1)
     ]
-    with ZipFile(source) as original, ZipFile(output, "w", ZIP_DEFLATED) as result:
+    with ZipFile(template_source) as original, ZipFile(output, "w", ZIP_DEFLATED) as result:
         names = original.namelist()
         library_path = f"Basic/{LIBRARY_NAME}/script-lb.xml"
         macros = macro_entries(
@@ -979,11 +989,16 @@ def write_project_master(
         )
         template_content = ET.fromstring(original.read("content.xml"))
         template_styles = ET.fromstring(original.read("styles.xml"))
+        if source is None:
+            for page in template_styles.iter(_tag("style:master-page")):
+                for section in list(page):
+                    if section.tag.rsplit("}", 1)[-1].startswith(("header", "footer")):
+                        page.remove(section)
         traceability_page, index_page, document_page = _prepare_master_sections(
             template_content, template_styles,
         )
         _merge_index_source_styles(template_styles, links, folder)
-        logo_resource = _logo_resource_name(original.namelist())
+        logo_resource = _logo_resource_name(original.namelist()) if logo is not None else None
         result.writestr("mimetype", _MASTER_MIME, compress_type=ZIP_STORED)
         for name in names:
             if name == "mimetype" or name in macros:
@@ -995,7 +1010,7 @@ def write_project_master(
                     index for index, paragraph in enumerate(root.iter(_tag("text:p")))
                     if "{{no_pagina}}" in "".join(paragraph.itertext())
                 }
-                if name == "styles.xml":
+                if name == "styles.xml" and logo_resource is not None:
                     _insert_template_logos(root, logo_resource)
                 root = replace_template_fields(root, replacements)
                 if name == "content.xml":
@@ -1030,10 +1045,11 @@ def write_project_master(
                 if root_entry is None:
                     raise ValueError("El paquete de la plantilla no declara su tipo de documento.")
                 root_entry.set(_tag("manifest:media-type"), _MASTER_MIME)
-                ET.SubElement(manifest, _tag("manifest:file-entry"), {
-                    _tag("manifest:full-path"): logo_resource,
-                    _tag("manifest:media-type"): "image/jpeg",
-                })
+                if logo_resource is not None:
+                    ET.SubElement(manifest, _tag("manifest:file-entry"), {
+                        _tag("manifest:full-path"): logo_resource,
+                        _tag("manifest:media-type"): "image/jpeg",
+                    })
                 declared_paths = {
                     entry.get(_tag("manifest:full-path")) for entry in manifest
                 }
@@ -1054,7 +1070,8 @@ def write_project_master(
                     title.text = fields.get("{{título}}", "")
                 data = ET.tostring(metadata, encoding="utf-8", xml_declaration=True)
             result.writestr(name, data)
-        result.writestr(logo_resource, logo.read_bytes())
+        if logo_resource is not None and logo is not None:
+            result.writestr(logo_resource, logo.read_bytes())
         for path, data in macros.items():
             result.writestr(path, data)
 

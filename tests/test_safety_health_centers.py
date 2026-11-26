@@ -1,11 +1,15 @@
 """Pruebas de entrada SICESS y generación de texto de centros asistenciales."""
 from decimal import Decimal
-import tkinter as tk
+import os
 import unittest
 from unittest.mock import patch
 
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
 from tools.safety_health import restore_project_state, serialize_state
-from tools.safety_health.care_centers import CareCentersEditor, format_centers
+from tools.safety_health.care_centers import format_centers
+from tools.safety_health.qt_window import CareCentersEditorQt
 
 
 class CareCentersTests(unittest.TestCase):
@@ -64,20 +68,21 @@ class CareCentersTests(unittest.TestCase):
 
 class CareCentersEditorTests(unittest.TestCase):
     def setUp(self):
-        """Create an isolated Tk editor with existing manual text."""
-        self.root = tk.Tk()
-        self.root.withdraw()
-        self.addCleanup(self.root.destroy)
-        self.editor = CareCentersEditor(self.root, {"centros_asistenciales": "Texto previo"})
+        """Create an isolated Qt editor with existing manual text."""
+        self.application = QApplication.instance() or QApplication([])
+        self.root = QWidget()
+        self.addCleanup(self.root.close)
+        self.editor = CareCentersEditorQt(self.root, {"centros_asistenciales": "Texto previo"})
 
     def test_add_switch_convert_remove_and_reopen(self):
         """Keep row edits and manual text, then generate a reusable summary."""
         editor = self.editor
-        editor.variables["nombre"].set("Centro de salud")
-        editor.variables["telefono"].set("111")
+        editor.tabs.setCurrentIndex(1)
+        editor.fields["nombre"].setText("Centro de salud")
+        editor.fields["telefono"].setText("111")
         editor.add_center()
-        editor.variables["nombre"].set("Hospital")
-        editor.variables["telefono"].set("222")
+        editor.fields["nombre"].setText("Hospital")
+        editor.fields["telefono"].setText("222")
         state = editor.collect_state()
         self.assertEqual(state["centros_asistenciales_texto"], "Texto previo")
         self.assertEqual(state["centros_asistenciales_modo"], "tabla")
@@ -85,25 +90,43 @@ class CareCentersEditorTests(unittest.TestCase):
             state["centros_asistenciales"],
             "CENTRO DE SALUD\nTeléfono: 111\n\nHOSPITAL\nTeléfono: 222",
         )
-        editor.list.selection_set("0")
-        editor.select_center()
-        self.assertEqual(editor.variables["telefono"].get(), "111")
-        with patch("tools.safety_health.care_centers.messagebox.askyesno", return_value=False):
+        editor.list.setCurrentRow(0)
+        self.assertEqual(editor.fields["telefono"].text(), "111")
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No):
             editor.to_text()
-        self.assertEqual(editor.text.get("1.0", "end-1c"), "Texto previo")
-        with patch("tools.safety_health.care_centers.messagebox.askyesno", return_value=True):
+        self.assertEqual(editor.text.toPlainText(), "Texto previo")
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
             editor.to_text()
         self.assertEqual(editor.collect_state()["centros_asistenciales_modo"], "texto")
-        self.assertEqual(editor.text.get("1.0", "end-1c"), state["centros_asistenciales"])
-        reopened = CareCentersEditor(self.root, state)
+        self.assertEqual(editor.text.toPlainText(), state["centros_asistenciales"])
+        reopened = CareCentersEditorQt(self.root, state)
         self.assertEqual(reopened.collect_state(), state)
-        with patch("tools.safety_health.care_centers.messagebox.askyesno", return_value=True):
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
             reopened.remove_center()
         self.assertEqual(len(reopened.rows), 1)
-        self.assertEqual(reopened.variables["nombre"].get(), "Hospital")
-        with patch("tools.safety_health.care_centers.messagebox.askyesno", return_value=True):
+        self.assertEqual(reopened.fields["nombre"].text(), "Hospital")
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
             reopened.remove_center()
         self.assertEqual(reopened.collect_state()["centros_asistenciales"], "")
+
+    def test_removing_middle_center_preserves_other_rows(self):
+        """Eliminar una fila no debe sobrescribir las fichas adyacentes."""
+        state = {
+            "centros_asistenciales_modo": "tabla",
+            "centros_asistenciales_datos": [
+                {"nombre": "Uno", "telefono": "111"},
+                {"nombre": "Dos", "telefono": "222"},
+                {"nombre": "Tres", "telefono": "333"},
+            ],
+        }
+        editor = CareCentersEditorQt(self.root, state)
+        editor.list.setCurrentRow(1)
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
+            editor.remove_center()
+        rows = editor.collect_state()["centros_asistenciales_datos"]
+        self.assertEqual([(row["nombre"], row["telefono"]) for row in rows],
+                         [("Uno", "111"), ("Tres", "333")])
+        self.assertEqual(editor.fields["nombre"].text(), "Tres")
 
 
 if __name__ == "__main__":

@@ -23,7 +23,7 @@ from .catalog import (
     CATALOG, DOCUMENTATION_PROCEDURE_FIELDS, TEMPLATES, copy_templates,
 )
 from .office import (
-    MASTER_LOGO, MASTER_NAME, MASTER_TEMPLATE, _master_link, renumber_annex,
+    MASTER_NAME, _master_link, renumber_annex,
     write_office_document, write_project_master,
 )
 
@@ -655,13 +655,10 @@ def generate_project_package(
 
             master_fields = _master_fields(app)
             master_fields["{{no_pagina}}"] = ""
-            master_template = (
-                Path(settings.master_template_path)
-                if settings.master_template_path else MASTER_TEMPLATE
-            )
+            master_template = Path(settings.master_template_path) if settings.master_template_path else None
             master_logo = (
                 Path(settings.master_logo_path)
-                if settings.master_logo_path else MASTER_LOGO
+                if master_template is not None and settings.master_logo_path else None
             )
             master_links = [
                 path.relative_to(Path(TECHNICAL_DOCUMENTS_FOLDER))

@@ -1,14 +1,16 @@
 """Consultas independientes con filtrado inmediato sobre los catalogos NTP y UNE."""
 import csv
+import os
 from pathlib import Path
 import tempfile
-import tkinter as tk
-from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock
 
-from localization import set_language
-from reference_search import ReferenceEntry, ReferenceSearchWindow, load_reference_entries
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PySide6.QtWidgets import QApplication, QWidget
+from reference_search import ReferenceEntry, load_reference_entries
+from reference_search_qt import ReferenceSearchWindowQt
 
 
 NTP_ENTRIES = (
@@ -43,7 +45,7 @@ class ReferenceCatalogueTests(unittest.TestCase):
         numbers = [int(entry.code.split()[1]) for entry in ntps]
         self.assertEqual(numbers, sorted(numbers))
         self.assertTrue(any(entry.code == "NTP 495" and entry.pdf_url for entry in ntps))
-        projects = [entry for entry in unes if entry.code == "PNE-EN 1991-3"]
+        projects = [entry for entry in unes if entry.code == "UNE-EN 61076-4-100:2001"]
         self.assertEqual(len(projects), 2)
         self.assertEqual(len({entry.url for entry in projects}), 2)
         self.assertTrue(any(
@@ -73,54 +75,49 @@ class ReferenceSearchTests(unittest.TestCase):
 
     def setUp(self):
         """Crea un escritorio de prueba independiente del proyecto."""
-        set_language("es")
-        self.root = tk.Tk()
-        self.root.withdraw()
-        self.addCleanup(self.root.destroy)
-        self.app = SimpleNamespace(root=self.root, _open_web_page=Mock())
+        self.application = QApplication.instance() or QApplication([])
+        self.app = QWidget()
+        self.app._open_web_page = Mock()
+        self.addCleanup(self.app.close)
 
     def test_typing_filters_code_title_and_metadata_and_clears_hidden_selection(self):
         """Filtra inmediatamente sin tildes y no deja abrir una seleccion que ya no se ve."""
-        window = ReferenceSearchWindow(self.app, "UNE", UNE_ENTRIES)
-        window.query.set("senalizacion 2020 vigente")
-        self.assertEqual(window.tree.get_children(), ("0",))
-        window.tree.selection_set("0")
-        window._show_selected()
-        self.assertIn("Señalización accesible", window.details.get("1.0", "end"))
+        window = ReferenceSearchWindowQt(self.app, "UNE", UNE_ENTRIES)
+        window.query.setText("senalizacion 2020 vigente")
+        self.assertEqual(window.table.rowCount(), 1)
+        window.table.selectRow(0)
+        self.assertIn("Señalización accesible", window.detail.toPlainText())
         window.open_selected()
         self.app._open_web_page.assert_called_once_with(
             UNE_ENTRIES[0].url, "Buscador de UNE", "Referencia abierta en el navegador.",
         )
         self.app._open_web_page.reset_mock()
-        window.query.set("sin coincidencias")
-        self.assertEqual(window.tree.get_children(), ())
-        self.assertEqual(window.tree.selection(), ())
-        self.assertEqual(str(window.open_button.cget("state")), "disabled")
-        self.assertEqual(window.details.get("1.0", "end").strip(), "")
+        window.query.setText("sin coincidencias")
+        self.assertEqual(window.table.rowCount(), 0)
+        self.assertIsNone(window.selected_entry())
+        self.assertFalse(window.open_button.isEnabled())
+        self.assertEqual(window.detail.toPlainText().strip(), "")
         window.open_selected()
         self.app._open_web_page.assert_not_called()
-        window.query.set("anulada accesibilidad")
-        self.assertEqual(window.tree.get_children(), ("1",))
-        window.query.set("")
-        self.assertEqual(window.tree.get_children(), ("0", "1"))
+        window.query.setText("anulada accesibilidad")
+        self.assertEqual(window.table.rowCount(), 1)
+        self.assertEqual(window.table.item(0, 0).text(), UNE_ENTRIES[1].code)
+        window.query.setText("")
+        self.assertEqual(window.table.rowCount(), 2)
 
     def test_ntp_and_une_queries_are_independent_without_a_pdf_button(self):
         """Mantiene ambos buscadores separados y solo ofrece abrir la ficha oficial."""
-        ntp = ReferenceSearchWindow(self.app, "NTP", NTP_ENTRIES)
-        une = ReferenceSearchWindow(self.app, "UNE", UNE_ENTRIES)
-        ntp.query.set("ntp 495")
-        une.query.set("2020")
-        self.assertEqual(ntp.tree.get_children(), ("1",))
-        self.assertEqual(une.tree.get_children(), ("0",))
-        ntp.tree.selection_set("1")
-        ntp._show_selected()
+        ntp = ReferenceSearchWindowQt(self.app, "NTP", NTP_ENTRIES)
+        une = ReferenceSearchWindowQt(self.app, "UNE", UNE_ENTRIES)
+        ntp.query.setText("ntp 495")
+        une.query.setText("2020")
+        self.assertEqual(ntp.table.rowCount(), 1)
+        self.assertEqual(une.table.rowCount(), 1)
+        ntp.table.selectRow(0)
         for window in (ntp, une):
-            self.assertNotIn("Abrir PDF", [
-                child.cget("text") for child in window.open_button.master.winfo_children()
-            ])
-        ntp.query.set("senalizacion 1982")
-        ntp.tree.selection_set("0")
-        ntp._show_selected()
-        ntp.open_button.invoke()
+            self.assertEqual(window.open_button.text(), "Ver ficha oficial")
+        ntp.query.setText("senalizacion 1982")
+        ntp.table.selectRow(0)
+        ntp.open_button.click()
         self.assertEqual(self.app._open_web_page.call_args.args[0], NTP_ENTRIES[0].url)
-        self.assertEqual(une.query.get(), "2020")
+        self.assertEqual(une.query.text(), "2020")

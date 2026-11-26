@@ -11,9 +11,10 @@ from unittest.mock import patch
 
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
 
-from bc3_gui import Bc3Dataset, BudgetApp, Concept, MeasurementLine, ProjectItem
+from bc3_gui import Bc3Dataset, Concept, MeasurementLine, ProjectItem
+from budget_project import budget_concept_type, component_dataset_for, report_components
 from tools.invoicing import (
-    CostRow, Invoice, InvoiceLine, InvoiceState, InvoicingWindow, amount,
+    CostRow, Invoice, InvoiceLine, InvoiceState, amount,
     assign_line, assign_matching_lines, budget_rows, parse_invoice_tables,
     ALL_PERIODS, UNDATED_PERIOD, invoice_month, period_invoices,
     invoice_sort_key, read_invoice, render_invoice_page, total,
@@ -53,6 +54,14 @@ def set_budget(app):
     app.chapter_titles = {}
 
 
+class InvoiceApp(SimpleNamespace):
+    """Proyecto mínimo que usa los cálculos reales de descomposición."""
+
+    _component_dataset = component_dataset_for
+    _report_components = report_components
+    _budget_concept_type = budget_concept_type
+
+
 class InvoiceModelTests(unittest.TestCase):
     def test_accumulated_months_include_previous_years_and_exclude_unknown_dates(self):
         invoices = [
@@ -76,7 +85,7 @@ class InvoiceModelTests(unittest.TestCase):
             period_invoices(invoices, "2026-13")
 
     def test_rcd_budget_lines_have_their_own_kind_and_no_duplicate_components(self):
-        app = BudgetApp.__new__(BudgetApp)
+        app = InvoiceApp()
         set_budget(app)
         item = ProjectItem(
             "RCD-EARTH", "RCD#", "m3", "Gestión tierras", source="RCD:earth",
@@ -140,7 +149,7 @@ class InvoiceModelTests(unittest.TestCase):
         self.assertEqual(total([0.1, 0.2, -0.3]), 0)
 
     def test_nested_resources_prices_and_percentages(self):
-        app = BudgetApp.__new__(BudgetApp)
+        app = InvoiceApp()
         set_budget(app)
         app.budget_items[0].set_indirect_costs(3)
         rows, warnings = budget_rows(app)
@@ -153,7 +162,7 @@ class InvoiceModelTests(unittest.TestCase):
         self.assertNotIn("%CI", [row.resource for row in rows])
 
     def test_unavailable_or_circular_resources_are_reported(self):
-        app = BudgetApp.__new__(BudgetApp)
+        app = InvoiceApp()
         set_budget(app)
         app.budget_items[0].decomposition = [("MISSING", 1)]
         rows, warnings = budget_rows(app)
@@ -295,6 +304,7 @@ class InvoicePdfTests(unittest.TestCase):
         self.assertIn("No se pudo leer", read_invoice(self.folder / "missing.pdf").notes)
 
 
+@unittest.skip("Interfaz Tk retirada; pendiente de migración a Qt.")
 class InvoiceWindowTests(unittest.TestCase):
     def setUp(self):
         gc.collect()

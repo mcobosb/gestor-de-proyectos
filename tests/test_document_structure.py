@@ -31,7 +31,7 @@ from tools.document_structure.generation import (
     generate_project_package, generated_at, receipt_path,
     suggested_document_directory, suggested_tool_annex_path,
 )
-from tools.document_structure.office import MASTER_LOGO, MASTER_TEMPLATE, write_project_master
+from tools.document_structure.office import write_project_master
 from tools.document_structure.qt_window import DocumentStructureWindow
 from qt_localization import get_document_save_path
 from project_standards import document_control_text
@@ -60,7 +60,6 @@ class DocumentStructureTests(unittest.TestCase):
             write_project_master(
                 source, output, fields={}, traceability=[("MAESTRO", output.name, "", "", "", "")],
                 links=[], folder=root, index_entries=[],
-                logo=Path(__file__).resolve().parents[1] / "iconos" / "Arranque.jpg",
             )
             with ZipFile(output) as archive:
                 content = ET.fromstring(archive.read("content.xml"))
@@ -90,7 +89,6 @@ class DocumentStructureTests(unittest.TestCase):
             app = SimpleNamespace(
                 report_settings=ReportSettings(
                     master_template_path=str(source),
-                    master_logo_path=str(Path(__file__).resolve().parents[1] / "iconos" / "Arranque.jpg"),
                 ),
                 budget_items=[], planning_state={}, pptp_state={},
                 _project_title=lambda: "Proyecto",
@@ -165,7 +163,6 @@ class DocumentStructureTests(unittest.TestCase):
             write_project_master(
                 source, output, fields={}, traceability=rows, links=[], folder=root,
                 index_entries=[{"text": "DOCUMENTO Nº 1. MEMORIA Y ANEJOS.", "style": "P18"}],
-                logo=Path(__file__).resolve().parents[1] / "iconos" / "Arranque.jpg",
                 document_control_text=introduction,
             )
             with ZipFile(output) as archive:
@@ -236,6 +233,7 @@ class DocumentStructureTests(unittest.TestCase):
             root = Path(directory)
             template = root / "plantilla_maestro.odt"
             document = _new_report("Plantilla del maestro", "Proyecto de prueba", ReportSettings())
+            document.footer = "Pie de plantilla"
             document.table_references = False
             for name, page in (("TestTraceability", "Standard"), ("TestIndex", "Section1")):
                 style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
@@ -259,7 +257,6 @@ class DocumentStructureTests(unittest.TestCase):
             document.write(template)
             settings = ReportSettings(
                 master_template_path=str(template),
-                master_logo_path=str(Path(__file__).resolve().parents[1] / "iconos" / "Arranque.jpg"),
                 project_disciplines=["building", "civil"],
                 document_standards=["iso_19650_1", "iso_21502"],
             )
@@ -274,7 +271,8 @@ class DocumentStructureTests(unittest.TestCase):
             master, _ = generate_project_package(
                 project, app, "Maestro.odm",
                 [
-                    {"kind": "tool", "number": "15", "title": "Justificación de precios"},
+                    {"kind": "tool", "tool": "price_justification", "number": "15",
+                     "title": "Justificación de precios"},
                     {"kind": "template", "number": "20", "title": "Conservación y mantenimiento",
                      "outline": ["Operaciones", "Periodicidad"]},
                 ],
@@ -744,12 +742,59 @@ class DocumentStructureTests(unittest.TestCase):
                 QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
     def test_removed_catalog_templates_are_not_restored(self) -> None:
-        """Mantiene las 29 eliminaciones y conserva los recursos de portada."""
+        """Mantiene las plantillas antiguas fuera de los documentos generados."""
         self.assertEqual(len(template_paths()), 29)
         self.assertTrue(all(not (TEMPLATES / path).exists() for path in template_paths()))
-        self.assertTrue(MASTER_TEMPLATE.is_file())
-        self.assertTrue(MASTER_LOGO.is_file())
         self.assertEqual(default_master_name("GEX2026/36718"), "GEX2026-36718-ProyectoConstructivo.odm")
+
+    def test_master_without_template_has_no_headers_or_footers(self) -> None:
+        """Genera índice y vínculos sin depender de una plantilla o logo incluidos."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "proyecto.json"
+            project.touch()
+            app = SimpleNamespace(
+                report_settings=ReportSettings(), budget_items=[], planning_state={}, pptp_state={},
+                _project_title=lambda: "Proyecto sin plantilla",
+            )
+            master, _ = generate_project_package(
+                project, app, "Maestro.odm", [], [],
+                memory_documents=[{"title": "Memoria", "outline": ["Objeto"]}],
+            )
+            with ZipFile(master) as archive:
+                styles = ET.fromstring(archive.read("styles.xml"))
+                content = ET.fromstring(archive.read("content.xml"))
+                self.assertFalse(any(
+                    element.tag.rsplit("}", 1)[-1].startswith(("header", "footer"))
+                    for page in styles.iter(_tag("style:master-page")) for element in page
+                ))
+                self.assertNotIn("Pictures/ProjectLogo_estructura_documental.jpg", archive.namelist())
+            text = " ".join(content.itertext())
+            self.assertIn("TRAZABILIDAD", text)
+            self.assertIn("ÍNDICE", text)
+            self.assertIn("Memoria Descriptiva y Justificativa", text)
+            self.assertTrue(list(content.iter(_tag("text:section-source"))))
+
+    def test_master_uses_configured_template_without_requiring_a_logo(self) -> None:
+        """Conserva la cabecera elegida sin exigir una imagen independiente."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            template = root / "cabecera.odt"
+            _new_report("Cabecera personalizada", "Proyecto", ReportSettings()).write(template)
+            output = root / "Maestro.odm"
+            write_project_master(
+                template, output, fields={}, index_entries=[], traceability=[],
+                links=[], folder=root,
+            )
+            with ZipFile(output) as archive:
+                styles = ET.fromstring(archive.read("styles.xml"))
+                self.assertIn("Cabecera personalizada", "".join(styles.itertext()))
+                self.assertNotIn("Pictures/ProjectLogo_estructura_documental.jpg", archive.namelist())
+            with self.assertRaises(FileNotFoundError):
+                write_project_master(
+                    root / "inexistente.odt", output, fields={}, index_entries=[], traceability=[],
+                    links=[], folder=root,
+                )
 
     def test_master_links_resolve_all_documents_after_relocation(self) -> None:
         """Los subdocumentos y el índice apuntan a la entrega incluso al trasladarla."""
@@ -765,7 +810,12 @@ class DocumentStructureTests(unittest.TestCase):
                     plan_pdf = root / "plano # %.pdf"
                     plan_pdf.write_bytes(b"plano")
                     plan_odt = root / "plano á.odt"
-                    plan_odt.write_bytes(MASTER_TEMPLATE.read_bytes())
+                    _new_report("Plano", "Proyecto", ReportSettings()).write(plan_odt)
+                    master_template = root / "plantilla.odt"
+                    master_source = _new_report("Carátula", "Proyecto", ReportSettings())
+                    master_source.footer = "Pie de plantilla"
+                    master_source.write(master_template)
+                    window.report_settings.master_template_path = str(master_template)
                     master, _ = generate_project_package(
                         project, window, "Maestro.odm",
                         [
@@ -803,7 +853,7 @@ class DocumentStructureTests(unittest.TestCase):
                             index_hrefs = [
                                 node.attrib[_tag("xlink:href")]
                                 for node in content.iter(_tag("text:a"))
-                                if not node.attrib[_tag("xlink:href")].startswith("#")
+                                if node.attrib[_tag("xlink:href")].startswith("../")
                             ]
                             base = (folder / master.name).as_uri() + "/"
                             self.assertEqual(
@@ -844,7 +894,14 @@ class DocumentStructureTests(unittest.TestCase):
                 window.report_settings.service = "Servicio de Infraestructuras"
                 window.report_settings.author = "Ana"
                 custom_template = Path(directory) / "plantilla_personalizada.odt"
-                custom_template.write_bytes(MASTER_TEMPLATE.read_bytes())
+                cover = _new_report("{{logo}}", "Proyecto", ReportSettings())
+                cover.footer = "Pie de plantilla"
+                cover.table([], [["{{entidad}}"]])
+                cover_cell = next(cover.body[-1].iter(_tag("table:table-cell")))
+                ET.SubElement(cover_cell, _tag("text:p")).text = "{{servicio}}"
+                for field in ("{{título}}", "{{expediente}}", "{{autores}}"):
+                    cover.paragraph(field)
+                cover.write(custom_template)
                 custom_logo = Path(directory) / "logo_personalizado.jpg"
                 custom_logo.write_bytes(b"logo personalizado")
                 window.report_settings.master_template_path = str(custom_template)
@@ -899,7 +956,7 @@ class DocumentStructureTests(unittest.TestCase):
                         ][:2],
                         ["Ayuntamiento de prueba", "Servicio de Infraestructuras"],
                     )
-                    self.assertIn("ÍNDICE GENERAL DEL PROYECTO", visible)
+                    self.assertIn("ÍNDICE", visible)
                     for heading in (
                         "DOCUMENTO Nº 1. MEMORIA Y ANEJOS.",
                         "MEMORIA DESCRIPTIVA.",
@@ -930,9 +987,8 @@ class DocumentStructureTests(unittest.TestCase):
                     )
                     generated_styles = {
                         style.get(_tag("style:name")): style
-                        for style in ET.fromstring(document.read("styles.xml")).iter(
-                            _tag("style:style")
-                        )
+                        for root in (content, ET.fromstring(document.read("styles.xml")))
+                        for style in root.iter(_tag("style:style"))
                     }
                     self.assertEqual(
                         generated_styles[annex_spans[0].get(_tag("text:style-name"))]

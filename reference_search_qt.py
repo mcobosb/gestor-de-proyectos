@@ -102,6 +102,8 @@ class ReferenceSearchWindowQt(QDialog):
             for index, searchable in enumerate(self.searchable)
             if all(word in searchable for word in words)
         ]
+        self.table.clearSelection()
+        self.table.setCurrentCell(-1, -1)
         self.table.setRowCount(len(visible))
         for row, index in enumerate(visible):
             entry = self.entries[index]

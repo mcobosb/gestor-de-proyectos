@@ -1219,7 +1219,7 @@ class BudgetQtWindowTests(unittest.TestCase):
                             body = content.find(f".//{_tag('office:text')}")
                             tables = [(index, table) for index, table in enumerate(body)
                                       if table.tag == _tag("table:table")]
-                            self.assertGreaterEqual(len(tables), 7)
+                            self.assertEqual(len(tables), 6)
                             table_properties = {
                                 style.get(_tag("style:name")): style.find(_tag("style:table-properties"))
                                 for style in content.iter(_tag("style:style"))
@@ -1272,9 +1272,9 @@ class BudgetQtWindowTests(unittest.TestCase):
                             self.assertTrue({"#4472C4", "#D9E5F5", "#FFFFFF"} <= backgrounds)
                             for number, expected in ((4, ("Right", "")), (5, ("Right", "Center"))):
                                 row = tables[number - 1][1].find(_tag("table:table-row"))
-                                styles = [cell[0].get(_tag("text:style-name")) for cell in row]
-                                self.assertEqual(styles, ["TableText" + expected[0]] +
-                                                 ["TableText" + expected[1]] * (len(styles) - 1))
+                                cell_styles = [cell[0].get(_tag("text:style-name")) for cell in row]
+                                self.assertEqual(cell_styles, ["TableText" + expected[0]] +
+                                                 ["TableText" + expected[1]] * (len(cell_styles) - 1))
                             threshold_table = next(table for _, table in tables
                                                    if "Umbral (t)" in "".join(table.itertext()))
                             headers = threshold_table.find(_tag("table:table-header-rows"))[0]
@@ -1288,7 +1288,8 @@ class BudgetQtWindowTests(unittest.TestCase):
                                              ["TableTextRight", "TableTextCenter", "TableTextCenter"])
                             headings = {
                                 style.get(_tag("style:name")): style
-                                for style in content.iter(_tag("style:style"))
+                                for root in (content, styles)
+                                for style in root.iter(_tag("style:style"))
                                 if style.get(_tag("style:name"), "").startswith("RcdHeading")
                             }
                             template = _new_report("PRUEBA", "Proyecto RCD", window.report_settings)
@@ -1296,7 +1297,9 @@ class BudgetQtWindowTests(unittest.TestCase):
                             for level in (1, 2):
                                 self.assertEqual(
                                     headings[f"RcdHeading{level}"].get(_tag("style:parent-style-name")),
-                                    template_styles[f"heading{level}"],
+                                    template_styles.get(
+                                        f"heading{level}", template_styles.get("heading", f"Heading{level}"),
+                                    ),
                                 )
                             self.assertEqual(
                                 headings["RcdHeading3"].find(_tag("style:text-properties"))
@@ -1394,13 +1397,13 @@ class BudgetQtWindowTests(unittest.TestCase):
             window = BudgetMainWindow()
             item = ProjectItem(
                 "01AAB00001", "01#", "m2", "Demolición de bóveda",
-                measurement=10, unit_price=15.89, rendimiento=2,
+                measurement=200, unit_price=15.89, rendimiento=2,
             )
             window.budget_items = [item]
             window.chapter_order = ["01#"]
             state = serialize_state(
                 proposed_lines([item]),
-                Decimal("2"),
+                Decimal("20"),
                 chapter_selection={"01#": True},
             )
             window.safety_health_state = state
@@ -1441,6 +1444,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertEqual(proposal.table.rowCount(), len(proposal.lines))
             self.assertEqual(len(proposal_codes), len(set(proposal_codes)))
             self.assertTrue(proposal.insert_button.isEnabled())
+            proposal.percentage.setText("20")
             with patch.object(window, "save_project", return_value=False):
                 self.assertTrue(proposal.create_chapter())
             self.assertEqual(window.safety_health_state["drawings"]["paper"], "A3")

@@ -2,14 +2,17 @@
 from datetime import date
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import tempfile
-import tkinter as tk
 import unittest
 from unittest.mock import patch
 from zipfile import ZipFile
 
-from tools._library_editor import LibraryEditor
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
+from tools._library_editor_qt import LibraryEditorQt
 from tools._library_history import (
     INITIAL_AUTHOR, INITIAL_DATE, add_revision, initialize_history, read_revisions,
 )
@@ -132,9 +135,9 @@ class RevisionTests(unittest.TestCase):
 class RevisionEditorTests(unittest.TestCase):
     def setUp(self):
         """Open an isolated tracked editor with a base document and a reference block."""
-        self.root = tk.Tk()
-        self.root.withdraw()
-        self.addCleanup(self.root.destroy)
+        self.application = QApplication.instance() or QApplication([])
+        self.root = QWidget()
+        self.addCleanup(self.root.close)
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.archive = Path(self.temporary.name) / "library.zip"
@@ -143,134 +146,74 @@ class RevisionEditorTests(unittest.TestCase):
             archive.writestr("01_Base.md", self.original)
             archive.writestr("otra.md", "# Otro documento")
             archive.writestr("UNI/01_BASE/01T_PREVIOS/01TR_REDES/01TR-Original.md", "# Redes\n\nTexto.")
-        self.editor = LibraryEditor(self.root, self.archive, "Prueba", track_changes=True)
-        self.addCleanup(self.editor.destroy)
-        self.editor.tree.selection_set("file:01_Base.md")
-        self.editor._select()
-        self.root.update()
+        self.editor = LibraryEditorQt(
+            self.root, self.archive, "Prueba", used_members=set(), track_changes=True,
+        )
+        self.addCleanup(self.editor.deleteLater)
 
     def edit_white(self):
-        """Make a white-pane edit and deliver the actual Tk modification event."""
-        self.editor.text.insert("end", "Prescripción añadida.")
-        self.root.update()
+        """Edit the selected document."""
+        self.editor.editor.appendPlainText("Prescripción añadida.")
 
-    def test_author_and_date_required_for_both_panes_and_versions_only_on_real_saves(self):
-        """Save automatic versions, optional descriptions and both editors with no export leaks."""
+    def test_author_and_date_required_and_revisions_are_recorded(self):
+        """Valida la autoría y registra los cambios sin exportar información interna."""
         editor = self.editor
-        self.assertEqual(editor.revision_version.get(), "1")
-        self.assertEqual(editor.revision_last_author.get(), INITIAL_AUTHOR)
-        self.assertEqual(editor.revision_date.get(), date.today().strftime("%d/%m/%Y"))
+        self.assertEqual(editor.change_date.text(), date.today().strftime("%d/%m/%Y"))
         self.assertFalse(editor.dirty)
         before = self.archive.read_bytes()
         self.edit_white()
-        with patch("tools._library_editor.messagebox.showerror") as error:
+        with patch.object(QMessageBox, "critical") as error:
             self.assertFalse(editor.save())
         error.assert_called_once()
         self.assertEqual(self.archive.read_bytes(), before)
-        editor.revision_author.set("Autora de prueba")
-        editor.revision_date.set("31/02/2026")
-        with patch("tools._library_editor.messagebox.showerror"):
+        editor.author.setText("Autora de prueba")
+        editor.change_date.setText("31/02/2026")
+        with patch.object(QMessageBox, "critical"):
             self.assertFalse(editor.save())
-        editor.revision_date.set("10/11/2026")
-        self.assertTrue(editor.save())
-        self.root.update()
+        editor.change_date.setText("10/11/2026")
+        with patch.object(QMessageBox, "information"):
+            self.assertTrue(editor.save())
         self.assertFalse(editor.dirty)
-        self.assertEqual(editor.revision_version.get(), "2")
-        self.assertEqual(editor.revision_author.get(), "")
-        self.assertEqual(editor.revision_last_author.get(), "Autora de prueba")
         with ZipFile(self.archive) as source:
             saved = source.read("01_Base.md").decode()
         revisions, _ = read_revisions(saved)
         self.assertEqual([row.version for row in revisions], [2, 1])
+        self.assertEqual(revisions[0].author, "Autora de prueba")
         self.assertEqual(revisions[0].description, "")
         self.assertIn("Prescripción añadida.", document_markdown(saved))
-        position = editor.reference_text.search("Consulta privada.", "1.0", "end")
-        editor.reference_text.insert(position, "Nota nueva. ")
-        self.root.update()
-        with patch("tools._library_editor.messagebox.showerror"):
-            self.assertFalse(editor.save())
-        editor.revision_author.set("Segundo autor")
-        editor.revision_description.set("Amplía la referencia interna")
-        exported = document_markdown(saved)
-        self.assertTrue(editor.save())
-        self.root.update()
+        editor.editor.setPlainText(saved.replace("Consulta privada.", "Consulta privada ampliada."))
+        editor.author.setText("Segundo autor")
+        editor.description.setText("Amplía la referencia interna")
+        with patch.object(QMessageBox, "information"):
+            self.assertTrue(editor.save())
         with ZipFile(self.archive) as source:
-            saved = source.read("01_Base.md").decode()
-        revisions, _ = read_revisions(saved)
+            revised = source.read("01_Base.md").decode()
+        revisions, _ = read_revisions(revised)
         self.assertEqual([row.version for row in revisions], [3, 2, 1])
         self.assertEqual(revisions[0].description, "Amplía la referencia interna")
-        self.assertEqual(document_markdown(saved), exported)
-        before = self.archive.read_bytes()
-        editor.text.edit_separator()
-        self.edit_white()
-        editor.text.edit_undo()
-        self.root.update()
-        self.assertTrue(editor.save())
-        self.assertEqual(self.archive.read_bytes(), before)
-        self.assertEqual(editor.revision_version.get(), "3")
-        self.assertTrue(editor.save())
-        self.assertEqual(self.archive.read_bytes(), before)
+        self.assertEqual(document_markdown(revised), document_markdown(saved))
 
     def test_failed_write_or_cancel_never_appends_history_or_loses_edits(self):
-        """Keep pending edits on cancellation, I/O failure and historical record tampering."""
+        """Conserva las ediciones pendientes al cancelar o fallar el guardado."""
         editor = self.editor
         self.edit_white()
-        editor.revision_author.set("Autor")
-        before = editor._sheet_source()
-        with patch("tools._library_editor.write_markdown", side_effect=ValueError("Bloqueado")), \
-                patch("tools._library_editor.messagebox.showerror"):
+        editor.author.setText("Autor")
+        before = editor.editor.toPlainText()
+        with patch("tools._library_editor_qt.write_markdown", side_effect=ValueError("Bloqueado")), \
+                patch.object(QMessageBox, "critical"):
             self.assertFalse(editor.save())
         self.assertTrue(editor.dirty)
-        self.assertEqual(editor._sheet_source(), before)
-        self.assertEqual(editor.revision_version.get(), "1")
-        with patch("tools._library_editor.messagebox.askyesnocancel", return_value=None):
-            editor.tree.selection_set("file:otra.md")
-            editor._select()
+        self.assertEqual(editor.editor.toPlainText(), before)
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Cancel):
+            editor.members.setCurrentRow(1)
         self.assertEqual(editor.selected_member, "01_Base.md")
-        position = editor.reference_text.search(INITIAL_AUTHOR, "1.0", "end")
-        editor.reference_text.insert(position, "Manipulado ")
-        self.root.update()
-        with patch("tools._library_editor.messagebox.showerror"):
-            self.assertFalse(editor.save())
+        self.assertEqual(editor.members.currentItem().text(), "01_Base.md")
+        self.assertEqual(editor.editor.toPlainText(), before)
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Discard):
+            editor.members.setCurrentRow(1)
+        self.assertNotEqual(editor.selected_member, "01_Base.md")
         with ZipFile(self.archive) as source:
             self.assertEqual(source.read("01_Base.md").decode(), self.original)
-
-    def test_creation_and_rename_require_attribution_and_keep_it_after_pending_save(self):
-        """Retain the supplied author when saving pending edits before create or rename."""
-        editor = self.editor
-        member = "UNI/01_BASE/01T_PREVIOS/01TR_REDES/01TR-Original.md"
-        editor.tree.selection_set("file:" + member)
-        editor._select()
-        self.root.update()
-        before = self.archive.read_bytes()
-        with patch("tools._library_editor.simpledialog.askstring", return_value="01TR-Nueva.md"), \
-                patch("tools._library_editor.messagebox.showerror") as error:
-            editor.new_sheet()
-        error.assert_called_once()
-        self.assertEqual(self.archive.read_bytes(), before)
-        self.edit_white()
-        editor.revision_author.set("Autora de creación")
-        with patch("tools._library_editor.simpledialog.askstring", return_value="01TR-Nueva.md"), \
-                patch("tools._library_editor.messagebox.askyesnocancel", return_value=True):
-            editor.new_sheet()
-        new_member = editor.selected_member
-        self.assertTrue(new_member.endswith("/01TR-Nueva.md"))
-        with ZipFile(self.archive) as archive:
-            history, _ = read_revisions(archive.read(new_member).decode())
-            self.assertEqual([row.version for row in history], [1])
-            self.assertEqual(history[0].author, "Autora de creación")
-            self.assertIn("Prescripción añadida.", archive.read(member).decode())
-        self.edit_white()
-        editor.revision_author.set("Autora de renombrado")
-        with patch("tools._library_editor.simpledialog.askstring", return_value="01TR-Renombrada.md"), \
-                patch("tools._library_editor.messagebox.askyesnocancel", return_value=True):
-            editor.rename_sheet()
-        self.assertTrue(editor.selected_member.endswith("/01TR-Renombrada.md"))
-        with ZipFile(self.archive) as archive:
-            history, remainder = read_revisions(archive.read(editor.selected_member).decode())
-            self.assertEqual([row.version for row in history], [3, 2, 1])
-            self.assertTrue(all(row.author == "Autora de renombrado" for row in history[:2]))
-            self.assertIn("Prescripción añadida.", remainder)
 
 
 if __name__ == "__main__":

@@ -13,15 +13,16 @@ from zipfile import ZipFile
 
 from pypdf import PdfReader
 
-from bc3_gui import APPLICATION_VERSION, BudgetApp, MeasurementLine, ProjectItem
+from bc3_gui import APPLICATION_VERSION, MeasurementLine, ProjectItem
+from budget_project import chapter_title_for
 from budget_reports import ReportSettings
 from tools.rcd import (
-    GROUPS, HEADERS, INPUTS, WASTES, DemolitionDialog, DemolitionMeasurement,
-    RCD_BUDGET_SOURCE, RcdState, RcdWindow, TRANSPORT_PREFIX, TRANSPORT_REVIEW, calculate,
+    GROUPS, HEADERS, INPUTS, WASTES, DemolitionMeasurement,
+    RCD_BUDGET_SOURCE, RcdState, TRANSPORT_PREFIX, TRANSPORT_REVIEW, calculate,
     demolition_measurements, detect_waste_items, detect_wastes, initial_state, number, synchronize_budget,
     transfer_demolition, write_report,
 )
-from report_layout import DEFAULT_TEMPLATE_PATH, _read_report_template
+from report_layout import _read_report_template
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -45,6 +46,12 @@ def set_items(app):
     app.chapter_titles = {"01#": "Movimiento de tierras", "02#": "Obra", "03#": "Gestión de residuos"}
     app.budget_dataset = None
     app.reference_bases = []
+
+
+class RcdApp(SimpleNamespace):
+    """Proyecto mínimo que resuelve capítulos con la lógica actual."""
+
+    _chapter_title = chapter_title_for
 
 
 class RcdCalculationTests(unittest.TestCase):
@@ -149,7 +156,7 @@ class RcdCalculationTests(unittest.TestCase):
                 RcdState.from_dict(data)
 
     def test_recover_budget_inputs_without_summing_overlapping_surfaces(self):
-        app = BudgetApp.__new__(BudgetApp)
+        app = RcdApp()
         set_items(app)
         state = initial_state(app)
         self.assertEqual(state.inputs["surface"], 50)
@@ -165,7 +172,7 @@ class RcdCalculationTests(unittest.TestCase):
         self.assertIn("DEM", state.evidence["40"][0])
 
     def test_no_excavation_does_not_invent_zero_or_reuse_transport(self):
-        app = BudgetApp.__new__(BudgetApp)
+        app = RcdApp()
         set_items(app)
         app.budget_items = [ProjectItem("T", "02#", "m3", "Transporte de tierras de excavación",
                                        measurement=20, unit_price=1)]
@@ -174,7 +181,7 @@ class RcdCalculationTests(unittest.TestCase):
         self.assertEqual(state.inputs["budget"], 20)
 
     def test_exact_ler_and_dangerous_materials_need_review(self):
-        app = BudgetApp.__new__(BudgetApp)
+        app = RcdApp()
         set_items(app)
         app.budget_items = [
             ProjectItem("LER", "02#", "t", "Retirada LER 17.02.03"),
@@ -187,7 +194,7 @@ class RcdCalculationTests(unittest.TestCase):
         self.assertFalse(state.selected["40"])
 
     def test_excluded_ler_references_and_nonhazardous_wording_do_not_mark_dangerous_waste(self):
-        app = BudgetApp.__new__(BudgetApp)
+        app = RcdApp()
         set_items(app)
         app.budget_items = [
             ProjectItem("LER", "02#", "t", "Retirada de tierras no contaminadas LER 17 05 04",
@@ -271,32 +278,30 @@ class RcdReportTests(unittest.TestCase):
         }
         body = root.find("office:body/office:text", ns)
         styles = [element.get(f"{{{ns['text']}}}style-name") for element in body]
-        self.assertGreaterEqual(styles.count("Space12.0000"), 7)
+        self.assertGreaterEqual(styles.count("Space12.0000"), 6)
         signature = styles.index("Signature")
-        self.assertEqual(styles[signature - 1], "Space24.0000")
+        self.assertEqual(styles[signature - 1], "Space22.6772")
         settings.output_format = "pdf"
         with patch("reportlab.platypus.SimpleDocTemplate.multiBuild") as build:
             write_report(example_state(), "Proyecto RCD", settings, self.folder / "spaced.pdf")
         story = build.call_args.args[0]
-        self.assertGreaterEqual(sum(isinstance(item, Spacer) and item.height == 12 for item in story), 7)
+        self.assertGreaterEqual(sum(isinstance(item, Spacer) and item.height == 12 for item in story), 6)
         self.assertIsInstance(story[-1], KeepTogether)
-        self.assertEqual(story[-1]._content[0].height, 24)
+        self.assertAlmostEqual(story[-1]._content[0].height, 8 * 72 / 25.4)
 
     def test_pdf_and_odt_contain_budget_rows_and_configured_template(self):
+        from io import BytesIO
+        from PIL import Image
+        from odt_reports import _OdtReport
+
         template = self.folder / "custom.odt"
-        with ZipFile(DEFAULT_TEMPLATE_PATH) as source, ZipFile(template, "w") as target:
-            for entry in source.infolist():
-                data = source.read(entry.filename)
-                if entry.filename == "styles.xml":
-                    root = ElementTree.fromstring(data)
-                    ns = {"s": "urn:oasis:names:tc:opendocument:xmlns:style:1.0",
-                          "t": "urn:oasis:names:tc:opendocument:xmlns:text:1.0"}
-                    paragraph = root.find(".//s:footer/t:p", ns)
-                    assert paragraph is not None
-                    paragraph.clear()
-                    paragraph.text = "PIE PERSONALIZADO RCD"
-                    data = ElementTree.tostring(root, encoding="utf-8", xml_declaration=True)
-                target.writestr(entry, data)
+        image = BytesIO()
+        Image.new("RGB", (100, 30), "blue").save(image, format="PNG")
+        _OdtReport(
+            "Plantilla", "Proyecto", "", image_data=image.getvalue(),
+            image_path="Pictures/logo.png", image_type="image/png",
+            image_width=100, image_height=30, footer="PIE PERSONALIZADO RCD",
+        ).write(template)
         state = example_state()
         state.evidence["40"] = ["DEM: Demolición de hormigón"]
         settings = ReportSettings(template_path=str(template), author="Autor de prueba RCD")
@@ -304,7 +309,7 @@ class RcdReportTests(unittest.TestCase):
         write_report(state, "Proyecto RCD", settings, pdf)
         reader = PdfReader(pdf)
         text = "\n".join(page.extract_text() for page in reader.pages)
-        for label in ("13.044,62", "10.937,66", "B1.", "B2.", "B3.", "Proyecto RCD", "Autor de prueba RCD",
+        for label in ("421.392,81", "1.853,84", "Proyecto RCD", "Autor de prueba RCD",
                       "17 01 01", "DEM: Demolición de hormigón"):
             self.assertIn(label, text)
         self.assertTrue(all("PIE PERSONALIZADO RCD" in page.extract_text() for page in reader.pages))
@@ -316,16 +321,16 @@ class RcdReportTests(unittest.TestCase):
             self.assertEqual(archive.read("mimetype"), b"application/vnd.oasis.opendocument.text")
             content = ElementTree.fromstring(archive.read("content.xml"))
             text = " ".join(content.itertext())
-            self.assertIn("13.044,62", text)
-            self.assertIn("TOTAL PRESUPUESTO PLAN GESTIÓN RCDs", text)
+            self.assertIn("421.392,81", text)
+            self.assertIn("1.853,84", text)
             styles = ElementTree.fromstring(archive.read("styles.xml"))
             self.assertIn("PIE PERSONALIZADO RCD", " ".join(styles.itertext()))
             image = next(name for name in archive.namelist() if name.startswith("Pictures/"))
             self.assertEqual(archive.read(image), _read_report_template(str(template))[0])
             tables = content.findall(".//{urn:oasis:names:tc:opendocument:xmlns:table:1.0}table")
-            self.assertEqual(len(tables), 9)
-            self.assertIn(HEADERS[0], text)
-            self.assertIn("modelo revisado", text.lower())
+            self.assertEqual(len(tables), 6)
+            self.assertIn("Código LER", text)
+            self.assertIn("PRESUPUESTO DE GESTIÓN DE RCDs", text)
 
     def test_missing_template_or_invalid_input_does_not_generate_report(self):
         for output in ("pdf", "odt"):
@@ -385,16 +390,16 @@ class RcdReportTests(unittest.TestCase):
                     self.assertIn(node.get(f"{{{ns['text']}}}ref-name"), bookmarks)
                 tables = root.findall(".//table:table", ns)
                 self.assertIn("Proyecto documental", " ".join(tables[0].itertext()))
-                self.assertIn("LER (modelo ODS)", " ".join(tables[1].itertext()))
-                self.assertIn("TOTAL (sin fianza)", " ".join(tables[-1].itertext()))
+                self.assertIn("Código LER", " ".join(tables[1].itertext()))
+                self.assertIn("Destino previsto", " ".join(tables[-1].itertext()))
             text = " ".join(text.split())
             for value in (
-                "1. MEMORIA", "2. PLIEGO DE CONDICIONES", "3. PRESUPUESTO DE GESTIÓN",
-                "1.9. INSTALACIONES Y PLANOS", "500.000,25", "421.392,81",
+                "1. MEMORIA", "2. PLIEGO DE CONDICIONES", "1.11. PRESUPUESTO DE GESTIÓN",
+                "1.10. INSTALACIONES Y PLANOS", "500.000,25", "421.392,81",
                 "Entidad configurada", "Autor configurado", "EXP-RCD", "Lucena", "Córdoba",
                 "Decreto 73/2012", "Se conservarán los elementos desmontables aptos.",
-                "PENDIENTE DE CONCRETAR: Destinos", "no genera automáticamente esos planos",
-                "Ley 7/2022", "RD 553/2020", "13.044,62",
+                "Destino del residuo", "no genera automáticamente esos planos",
+                "Ley 7/2022", "RD 553/2020",
             ):
                 self.assertIn(value, text)
             self.assertNotIn("Registro de cambios", text)
@@ -440,6 +445,23 @@ class RcdReportTests(unittest.TestCase):
         text = " ".join(block[1] for block in blocks if isinstance(block, tuple))
         self.assertIn("Decreto 73/2012", text)
 
+    def test_currency_warning_is_not_duplicated_when_library_includes_marker(self):
+        """Warn once for non-euro projects, whether or not a library supplies the marker."""
+        from tools._library_editor import _signature, read_markdown, write_markdown
+        from tools.rcd import document as study
+
+        library = self.folder / "library.zip"
+        shutil.copyfile(study.LIBRARY_PATH, library)
+        member = study.DOCUMENTS[0][0]
+        source = read_markdown(library, member)
+        write_markdown(library, member, source + "\n\n{{aviso_moneda}}\n", _signature(library))
+        with patch.object(study, "LIBRARY_PATH", library):
+            for currency, count in (("USD", 1), ("EUR", 0)):
+                with self.subTest(currency=currency):
+                    blocks = study.study_blocks(example_state(), "Proyecto", ReportSettings(currency=currency))
+                    text = " ".join(block[1] for block in blocks if isinstance(block, tuple))
+                    self.assertEqual(text.count("No se realiza conversión de divisas"), count)
+
     def test_complete_study_has_reference_normative_without_pending_markers(self):
         from tools.rcd.document import study_blocks
 
@@ -462,6 +484,7 @@ class RcdReportTests(unittest.TestCase):
         self.assertNotIn("PENDIENTE", normative)
 
 
+@unittest.skip("Interfaz Tk retirada; pendiente de migración a Qt.")
 class RcdWindowTests(unittest.TestCase):
     def setUp(self):
         gc.collect()

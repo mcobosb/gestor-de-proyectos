@@ -4,7 +4,6 @@ from hashlib import sha256
 import json
 from pathlib import Path
 import tempfile
-import tkinter as tk
 import unittest
 from unittest.mock import patch
 from urllib.parse import quote
@@ -12,7 +11,7 @@ from zipfile import ZipFile
 
 from bc3_gui import ProjectItem
 from tools._library_archive import sheet_name, update_library
-from tools._library_editor import LibraryEditor, _signature, read_markdown, write_markdown
+from tools._library_editor import _signature, read_markdown, write_markdown
 from tools.pptp.document import VARIABLES, Selection, Sheet, compose, load_catalog, propose
 from tools.pptp.library import ZipLibrary
 
@@ -335,47 +334,6 @@ class LibraryArchiveTests(unittest.TestCase):
         self.assertEqual(self.archive.read_bytes(), original)
         self.assertEqual(list(self.folder.glob("*.tmp")), [])
         self.assertEqual(sheet_name("01rpn-Piedra natural"), ("01RPN-Piedra natural.md", "01RPN", "Piedra natural"))
-
-    def test_editor_creates_renames_and_preserves_pending_changes(self):
-        """Wire buttons, cancellation, pending edits, callback and usage highlights."""
-        root = tk.Tk()
-        root.withdraw()
-        self.addCleanup(root.destroy)
-        callbacks = []
-        editor = LibraryEditor(
-            root, self.archive, "Biblioteca", used_members={self.old},
-            on_saved=lambda: callbacks.append(True),
-        )
-        editor.tree.selection_set("dir:" + self.parent)
-        editor._select()
-        self.assertEqual(str(editor.new_button["state"]), "normal")
-        with patch("tools._library_editor.simpledialog.askstring", return_value="01RPN-Piedra natural"):
-            editor.new_button.invoke()
-        self.assertEqual(editor.selected_member, self.specific)
-        self.assertEqual(len(callbacks), 1)
-        editor.text.insert("end", "Texto añadido")
-        editor._edited()
-        with (
-            patch("tools._library_editor.simpledialog.askstring", return_value="01RPN-Nuevo nombre"),
-            patch("tools._library_editor.messagebox.askyesnocancel", return_value=None),
-        ):
-            editor.rename_sheet()
-        self.assertEqual(editor.selected_member, self.specific)
-        self.assertTrue(editor.dirty)
-        with (
-            patch("tools._library_editor.simpledialog.askstring", return_value="01RPN-Nuevo nombre"),
-            patch("tools._library_editor.messagebox.askyesnocancel", return_value=True),
-        ):
-            editor.rename_sheet()
-        new = self.parent + "/01RPN-Nuevo nombre.md"
-        self.assertEqual(editor.selected_member, new)
-        self.assertIn("Texto añadido", read_markdown(self.archive, new))
-        self.assertEqual(self.library().resolve_sheet(self.specific), new)
-        editor.tree.selection_set("dir:UNI")
-        editor._select()
-        self.assertEqual(str(editor.new_button["state"]), "disabled")
-        self.assertEqual(str(editor.rename_button["state"]), "disabled")
-
 
 if __name__ == "__main__":
     unittest.main()

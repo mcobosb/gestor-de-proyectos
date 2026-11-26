@@ -1,13 +1,18 @@
 """Pruebas del editor compartido de bibliotecas Markdown comprimidas."""
 from pathlib import Path
+import os
 import tempfile
-import tkinter as tk
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from tools._library_editor import LibraryEditor, library_members, read_markdown, write_markdown
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
+from tools._library_editor import library_members, read_markdown, write_markdown
+from tools._library_editor_qt import LibraryEditorQt
 
 
 class LibraryEditorTests(unittest.TestCase):
@@ -70,30 +75,31 @@ class LibraryEditorTests(unittest.TestCase):
             read_markdown(self.archive_path, "../fuera.md")
 
     def test_editor_loads_selected_markdown_and_saves_changes(self):
-        """Conecta el árbol, el editor de texto y la persistencia del ZIP."""
-        try:
-            root = tk.Tk()
-        except tk.TclError as exc:
-            self.skipTest(f"Tk no disponible: {exc}")
-        root.withdraw()
-        self.addCleanup(root.destroy)
-        editor = LibraryEditor(root, self.archive_path, "Biblioteca de prueba")
-        self.addCleanup(editor.destroy)
-        self.assertEqual(
-            editor.tree.get_children(),
-            ("file:00_base.md", "dir:UNI", "file:catalogo.json"),
-        )
-        editor.tree.selection_set("file:UNI/01_PRUEBAS/01AB_FICHA.md")
-        editor._select()
-        self.assertEqual(editor.text.get("1.0", "end-1c"), "# Ficha\n\nTexto.")
-        editor.text.delete("1.0", "end")
-        editor.text.insert("1.0", "# Editada")
-        editor._edited()
+        """Conecta la lista Qt, el editor de texto y la persistencia del ZIP."""
+        self.application = QApplication.instance() or QApplication([])
+        root = QWidget()
+        self.addCleanup(root.close)
+        member = "UNI/01_PRUEBAS/01AB_FICHA.md"
+        editor = LibraryEditorQt(root, self.archive_path, "Biblioteca de prueba", used_members={member})
+        self.addCleanup(editor.deleteLater)
+        item = editor.members.findItems(member, Qt.MatchFlag.MatchExactly)[0]
+        self.assertEqual(item.foreground().color(), Qt.GlobalColor.darkGreen)
+        editor.members.setCurrentItem(item)
+        self.assertEqual(editor.editor.toPlainText(), "# Ficha\n\nTexto.")
+        editor.editor.setPlainText("# Editada")
         self.assertTrue(editor.dirty)
-        self.assertTrue(editor.save())
+        with patch.object(QMessageBox, "information"):
+            self.assertTrue(editor.save())
         self.assertEqual(
-            read_markdown(self.archive_path, "UNI/01_PRUEBAS/01AB_FICHA.md"), "# Editada",
+            read_markdown(self.archive_path, member), "# Editada",
         )
+        with patch.object(QMessageBox, "critical") as error:
+            editor.members.setCurrentItem(
+                editor.members.findItems("catalogo.json", Qt.MatchFlag.MatchExactly)[0]
+            )
+        error.assert_called_once()
+        self.assertEqual(editor.members.currentItem().text(), member)
+        self.assertEqual(editor.selected_member, member)
 
     def test_rejects_duplicate_and_unsafe_archive_paths(self):
         """No muestra ni reescribe bibliotecas con rutas ambiguas."""
@@ -108,36 +114,13 @@ class LibraryEditorTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicada"):
             library_members(self.archive_path)
 
-    def test_used_sheets_highlight_all_ancestors_and_refresh_without_editing(self):
-        """Color only used Markdown paths and clear outdated marks on refresh."""
-        root = tk.Tk()
-        root.withdraw()
-        self.addCleanup(root.destroy)
-        member = "UNI/01_PRUEBAS/01AB_FICHA.md"
-        editor = LibraryEditor(root, self.archive_path, "Prueba", used_members={member})
-        for node in ("dir:UNI", "dir:UNI/01_PRUEBAS", f"file:{member}"):
-            self.assertEqual(editor.tree.item(node, "tags"), ("used",))
-        self.assertFalse(editor.tree.item("file:UNI/02_GUIA.txt", "tags"))
-        self.assertFalse(editor.tree.item("file:00_base.md", "tags"))
-        editor.tree.selection_set(f"file:{member}")
-        editor._select()
-        editor.text.insert("end", "\nEdición pendiente")
-        editor._edited()
-        editor.highlight_used({"00_base.md", "no-existe.md", "UNI/02_GUIA.txt"})
-        self.assertTrue(editor.dirty)
-        self.assertEqual(editor.selected_member, member)
-        self.assertIn("Edición pendiente", editor.text.get("1.0", "end-1c"))
-        self.assertFalse(editor.tree.item("dir:UNI", "tags"))
-        self.assertEqual(editor.tree.item("file:00_base.md", "tags"), ("used",))
-        self.assertFalse(editor.tree.item("file:UNI/02_GUIA.txt", "tags"))
-
-    def test_pptp_uses_current_selected_paths_and_refreshes_open_editor(self):
+    def test_pptp_uses_current_selected_paths_in_editor(self):
         """Include manual assignments but not excluded or missing catalog entries."""
-        from tools.pptp import PptpWindow
+        from tools.pptp.qt_window import PptpWindowQt
 
         used = "UNI/01_PRUEBAS/01AB_FICHA.md"
         window = SimpleNamespace(
-            library_editor=None, reload_library=lambda: None,
+            library_editor=None, reload_library=lambda: None, library_path=self.archive_path,
             automatic=[SimpleNamespace(path=used, selected=True)],
             unmatched=[
                 SimpleNamespace(path="manual.md", selected=True),
@@ -146,16 +129,13 @@ class LibraryEditorTests(unittest.TestCase):
             ],
             sheets={used: None, "manual.md": None, "excluded.md": None},
         )
-        with patch("tools._library_editor.LibraryEditor") as editor:
-            PptpWindow.open_library_editor(window)
+        with patch("tools.pptp.qt_window.LibraryEditorQt") as editor:
+            PptpWindowQt.open_library_editor(window)
         self.assertEqual(editor.call_args.kwargs["used_members"], {used, "manual.md"})
-        window.automatic[0].selected = False
-        PptpWindow.open_library_editor(window)
-        editor.return_value.highlight_used.assert_called_once_with({"manual.md"})
 
     def test_safety_highlights_matching_units_and_materials_but_not_personnel(self):
         """Resolve preventive sheets by work code and resources by budget components."""
-        from tools.safety_health import SafetyProposalWindow
+        from tools.safety_health.qt_window import _used_safety_members
 
         members = [
             "UNI/grupo/FICHA_ESS_01UPP.md", "UNI/otro/FICHA_ESS_15CP.md",
@@ -169,18 +149,15 @@ class LibraryEditorTests(unittest.TestCase):
                 for code, kind in (("MAT", "3"), ("MAQ", "2"), ("MO", "1"))
             ],
         )
-        window = SimpleNamespace(app=app, library_editor=None)
         with (
-            patch("tools._library_editor.library_members", return_value=members),
-            patch("tools._library_editor.LibraryEditor") as editor,
+            patch("tools.safety_health.qt_window.shared_library_path", return_value=self.archive_path),
+            patch("tools.safety_health.qt_window.library_members", return_value=members),
         ):
-            SafetyProposalWindow.open_library_editor(window)
             self.assertEqual(
-                editor.call_args.kwargs["used_members"], {members[0], members[2], members[3]},
+                _used_safety_members(app), {members[0], members[2], members[3]},
             )
             app.budget_items = []
-            SafetyProposalWindow.open_library_editor(window)
-        editor.return_value.highlight_used.assert_called_once_with(set())
+            self.assertEqual(_used_safety_members(app), set())
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -96,14 +96,20 @@ class LibraryEditorQt(QDialog):
             self.members.setCurrentRow(0)
 
     def _change_member(
-        self, current: QListWidgetItem | None, _previous: QListWidgetItem | None
+        self, current: QListWidgetItem | None, previous: QListWidgetItem | None
     ) -> None:
         """Carga el documento seleccionado tras proteger cambios pendientes."""
-        if not current or not self._confirm_pending():
+        if not current:
+            return
+        if not self._confirm_pending():
+            with QSignalBlocker(self.members):
+                self.members.setCurrentItem(previous)
             return
         try:
             source = read_markdown(self.archive_path, current.text())
         except ValueError as exc:
+            with QSignalBlocker(self.members):
+                self.members.setCurrentItem(previous)
             QMessageBox.critical(self, "Biblioteca", str(exc))
             return
         self._loading = True

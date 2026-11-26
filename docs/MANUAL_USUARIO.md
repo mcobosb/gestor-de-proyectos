@@ -122,10 +122,12 @@ crea las subcarpetas de los planos seleccionados y copia en ellas los archivos
 asociados. Los anejos se renombran y renumeran según la selección. Los archivos
 ajenos a la entrega no se sobrescriben.
 
-La carátula de **plantilla.odt** se conserva en el maestro, con los datos del
-proyecto, presupuesto, plazo, fecha y logo incorporados. En **Configuración →
-Plantillas** puedes elegir otra plantilla ODT y un logo JPEG; si dejas las rutas
-vacías, se utilizan los recursos incluidos en el módulo. La plantilla alternativa
+En **Configuración → Plantillas** puedes elegir una plantilla ODT y un logo JPEG.
+Si no seleccionas una plantilla para el maestro, se genera sin carátula,
+cabecera ni pie; el índice, la trazabilidad y los vínculos se crean igualmente.
+Si eliges una plantilla, se conserva su carátula con los datos del proyecto,
+presupuesto, plazo y fecha. El logo de la plantilla se conserva salvo que
+selecciones otro. La plantilla elegida
 debe aportar la carátula, sus marcadores, cabeceras, pies, estilos y formato.
 No necesita contener una tabla de trazabilidad, filas de ejemplo ni un índice:
 la aplicación genera ambos con los documentos incluidos, en páginas propias que
@@ -388,8 +390,9 @@ Abre **Archivo → Configuración…** y completa:
   elegir PDF. El diálogo utiliza el idioma seleccionado en las preferencias.
 - La ruta de una plantilla ODT que aporta la cabecera y el pie de todos los
   informes de presupuesto y certificaciones. Pulsa **Examinar…** para elegir
-  el archivo. Si se deja vacía, se emplea la plantilla incluida con la
-  aplicación. Esta plantilla no afecta a exportaciones Excel, CSV ni al
+  el archivo. Si se deja vacía, no se añade ninguna cabecera ni pie de plantilla;
+  se conservan los títulos, rótulos de columnas y números de página generados
+  por cada informe. Esta opción no afecta a exportaciones Excel, CSV ni al
   diagrama de Gantt.
 
 Las líneas horizontales definidas como bordes de párrafo en la cabecera o el

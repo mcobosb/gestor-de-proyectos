@@ -85,9 +85,7 @@ foreach ($requiredResource in @(
     "quality_assurance\BIBLIOTECA.zip",
     "quality_assurance\Plan_Aseguramiento_Calidad_CTE_CE_PG3-v2.xlsx",
     "rcd\Codigos_LER_BCCA2023.csv",
-    "BCCA2023_V02.bc3",
-    "document_structure\plantillas\maestro\plantilla.odt",
-    "document_structure\plantillas\maestro\logo.jpg"
+    "BCCA2023_V02.bc3"
 )) {
     $resourcePath = Join-Path $toolsSource $requiredResource
     if (-not (Test-Path -LiteralPath $resourcePath -PathType Leaf)) {

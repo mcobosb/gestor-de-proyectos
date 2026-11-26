@@ -372,11 +372,11 @@ class SettingsDialog(QDialog):
         form = QFormLayout(page)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.template_path = QLineEdit(self.settings.template_path)
-        self.template_path.setPlaceholderText("Usar la plantilla de cabecera y pie incluida")
+        self.template_path.setPlaceholderText("Sin plantilla de cabecera y pie")
         self.master_template_path = QLineEdit(self.settings.master_template_path)
-        self.master_template_path.setPlaceholderText("Usar plantilla.odt incluida en el módulo")
+        self.master_template_path.setPlaceholderText("Sin plantilla de portada")
         self.master_logo_path = QLineEdit(self.settings.master_logo_path)
-        self.master_logo_path.setPlaceholderText("Usar el logo predeterminado de la plantilla")
+        self.master_logo_path.setPlaceholderText("Conservar el logo de la plantilla")
         self.drawing_title_block_path = QLineEdit(self.settings.drawing_title_block_path)
         self.drawing_title_block_path.setPlaceholderText("Carpeta con cajetin_A4.svg y cajetin_A3.svg")
         report_help = (
@@ -390,19 +390,19 @@ class SettingsDialog(QDialog):
             "el logo llena el marco, manteniendo su proporción y recortando desde el centro "
             "el sobrante. "
             "Sin marco, se mantiene el ancho predeterminado de 2,314 cm.\n\n"
-            "Si se deja vacía la ruta, se intenta usar la plantilla incluida. Si no está "
-            "disponible, se genera el contenido que pueda sin esa plantilla."
+            "Si se deja vacía la ruta, no se añade una cabecera ni un pie de plantilla."
         )
         master_help = (
             "Plantilla ODT de portada y diseño para el documento maestro ODM. El programa "
             "genera el índice, la trazabilidad y los vínculos a los documentos seleccionados; "
             "la plantilla aporta su estructura y presentación.\n\n"
-            "Debe conservar una estructura ODT válida, con texto, estilos y páginas maestras, "
-            "y una imagen en la cabecera o el marcador {{logo}}. Marcadores que se sustituyen "
+            "Debe conservar una estructura ODT válida, con texto, estilos y páginas maestras. "
+            "Para sustituir el logo debe tener una imagen en la cabecera o el marcador {{logo}}. "
+            "Marcadores que se sustituyen "
             "si están presentes: {{entidad}}, {{servicio}}, {{expediente}}, {{tipo_proyecto}}, "
             "{{título}}, {{autores}}, {{PBL}}, {{PBL+IVA}}, {{plazo_ejecucion}}, {{fecha}} y "
             "{{capítulo}}. {{no_pagina}} se convierte en el número de página.\n\n"
-            "Si se deja vacía la ruta, se usa la plantilla incluida en el módulo."
+            "Si se deja vacía la ruta, se genera el maestro sin portada, cabecera ni pie."
         )
         logo_help = (
             "Imagen JPEG usada para los marcadores {{logo}} de las plantillas de informes y del "
@@ -464,7 +464,8 @@ class SettingsDialog(QDialog):
             label_row.addWidget(info_button)
             form.addRow(label_container, row)
         note = QLabel(
-            "Deja vacías las rutas de informes, maestro o logo para utilizar los recursos incluidos. "
+            "Las plantillas son opcionales; sin ellas no se añaden sus cabeceras ni pies. "
+            "Si no eliges otro logo, se conserva el de la plantilla seleccionada. "
             "La carpeta de cajetines es opcional; se busca A4 o A3 en los nombres de los SVG según el formato del plano. "
             "La plantilla del documento maestro debe conservar la estructura ODT "
             "con marcadores de proyecto, índice, trazabilidad y logo."

@@ -36,13 +36,13 @@ MEASUREMENT_COLUMN_RATIOS = (4, 1, 1, 1, 1, 0.8, 1.2, 0.5)
 
 
 def _report_template_path(template_path: str) -> Path | None:
-    """Resuelve la plantilla y permite continuar si falta el recurso predeterminado."""
+    """Resuelve únicamente una plantilla de informes seleccionada por el usuario."""
     configured = template_path.strip()
-    path = Path(configured).expanduser() if configured else DEFAULT_TEMPLATE_PATH
+    if not configured:
+        return None
+    path = Path(configured).expanduser()
     if path.suffix.lower() != ".odt":
         raise ValueError(f"La plantilla de informes debe ser un archivo ODT: {path}.")
-    if not configured and not path.is_file():
-        return None
     return path
 
 
@@ -202,44 +202,6 @@ def _read_default_report_logo(
         image_width = _template_length_to_points("2.314cm")
         image_height = image_width * pixel_height / pixel_width
         return image_data, str(path), image_width, image_height
-
-    namespaces = {
-        "style": "urn:oasis:names:tc:opendocument:xmlns:style:1.0",
-        "draw": "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0",
-        "svg": "urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0",
-        "xlink": "http://www.w3.org/1999/xlink",
-    }
-    if DEFAULT_TEMPLATE_PATH.is_file():
-        try:
-            with ZipFile(DEFAULT_TEMPLATE_PATH) as archive:
-                styles = ElementTree.fromstring(archive.read("styles.xml"))
-                master_page = styles.find(".//style:master-page", namespaces)
-                header = master_page.find("style:header", namespaces) if master_page is not None else None
-                frame = header.find(".//draw:frame", namespaces) if header is not None else None
-                image = frame.find(".//draw:image", namespaces) if frame is not None else None
-                if image is not None:
-                    image_path = image.get(f"{{{namespaces['xlink']}}}href", "")
-                    if not image_path or image_path.startswith("/") or ".." in Path(image_path).parts:
-                        raise ValueError("La ruta del logo de la plantilla incluida no es válida.")
-                    image_data = archive.read(image_path)
-                    image_width = _template_length_to_points(
-                        frame.get(f"{{{namespaces['svg']}}}width", "")
-                    )
-                    image_height = _template_length_to_points(
-                        frame.get(f"{{{namespaces['svg']}}}height", "")
-                    )
-                    if image_width <= 0 or image_height <= 0:
-                        raise ValueError("El logo de la plantilla incluida debe tener dimensiones positivas.")
-                    if max_size is not None:
-                        image_data = _crop_logo_to_aspect(
-                            image_data, max_size[0] / max_size[1],
-                        )
-                        image_width, image_height = max_size
-                    return image_data, image_path, image_width, image_height
-        except (OSError, KeyError, BadZipFile, ElementTree.ParseError) as exc:
-            raise ValueError(
-                f"No se pudo leer el logo de la plantilla incluida {DEFAULT_TEMPLATE_PATH}: {exc}"
-            ) from exc
 
     return None
 

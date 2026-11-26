@@ -199,9 +199,8 @@ class CareCentersEditorQt(QWidget):
         self.tabs.addTab(table_page, "Tabla SICESS")
         if state.get("centros_asistenciales_modo") == "tabla":
             self.tabs.setCurrentIndex(1)
-        self.current = 0
+        self.current = -1
         self.list.setCurrentRow(0)
-        self.select_center(0)
 
     def commit_center(self) -> None:
         """Guarda los campos activos en la fila actual."""
@@ -235,14 +234,17 @@ class CareCentersEditorQt(QWidget):
             self, "Centros Asistenciales", "¿Eliminar el centro seleccionado?"
         ) != QMessageBox.StandardButton.Yes:
             return
-        self.list.takeItem(self.current)
-        del self.rows[self.current]
-        if not self.rows:
-            self.rows.append({key: "" for key, _ in FIELDS})
-            self.list.addItem("—")
-        self.current = min(self.current, len(self.rows) - 1)
-        self.list.setCurrentRow(self.current)
-        self.select_center(self.current)
+        row = self.current
+        with QSignalBlocker(self.list):
+            self.list.takeItem(row)
+            del self.rows[row]
+            if not self.rows:
+                self.rows.append({key: "" for key, _ in FIELDS})
+                self.list.addItem("—")
+            row = min(row, len(self.rows) - 1)
+            self.list.setCurrentRow(row)
+        self.current = -1
+        self.select_center(row)
 
     def to_text(self) -> None:
         """Convierte la tabla al texto final."""

@@ -12,10 +12,36 @@ from budget_reports import (
     amount_in_words, budget_totals, certification_deviation_rows,
     certification_totals, report_output_format, write_certification_pdf, write_pdf,
 )
+from budget_project import (
+    budget_concept_type, chapter_title_for, component_dataset_for, project_title_for,
+    report_components,
+)
 from odt_reports import write_certification_odt, write_report_odt
 
 
+class ReportApp(SimpleNamespace):
+    """Proyecto mínimo para probar informes sin interfaz gráfica."""
+
+    _chapter_title = chapter_title_for
+    _component_dataset = component_dataset_for
+    _budget_concept_type = budget_concept_type
+    _project_title = project_title_for
+    _report_components = report_components
+
+
 class ReportCalculationsTests(unittest.TestCase):
+    def test_existing_default_template_is_not_used_implicitly(self):
+        """Ignore old bundled templates unless the user explicitly selects one."""
+        from report_layout import _read_report_template, _report_template_path
+
+        with tempfile.TemporaryDirectory() as folder:
+            old_template = Path(folder) / "old-template.odt"
+            old_template.write_bytes(b"not an ODT")
+            with patch("report_layout.DEFAULT_TEMPLATE_PATH", old_template):
+                self.assertIsNone(_report_template_path(""))
+                self.assertEqual(_read_report_template(""), (None, "", 0, 0, ""))
+                self.assertEqual(_report_template_path(str(old_template)), old_template)
+
     def test_reports_generate_without_template_or_unrequested_logo_and_expediente(self):
         """Generate PDF and ODT content without a template, logo or expediente marker."""
         from bc3_gui import ProjectItem
@@ -515,12 +541,12 @@ class ReportCalculationsTests(unittest.TestCase):
 class ReportLayoutTests(unittest.TestCase):
     def setUp(self):
         """Create isolated fixtures and register cleanup for this test case."""
-        from bc3_gui import BudgetApp, ProjectItem
+        from bc3_gui import ProjectItem
 
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.folder = Path(self.temporary.name)
-        self.app = BudgetApp.__new__(BudgetApp)
+        self.app = ReportApp()
         self.app.budget_items = [ProjectItem(
             code="P1", unit="m", summary="Resumen singular", chapter="01#",
             text="Descripcion singular para verificar la sangria.",

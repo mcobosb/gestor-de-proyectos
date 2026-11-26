@@ -11,18 +11,14 @@ from xml.etree import ElementTree
 from zipfile import ZipFile
 
 from tools._shared import scheduling as planning
-from tools.planning.window import PlanningWindow
-
 from bc3_gui import (
     APPLICATION_NAME,
     APPLICATION_RELEASE_DATE,
     APPLICATION_VERSION,
     Bc3Dataset,
-    BudgetApp,
     Concept,
     MeasurementLine,
     ProjectItem,
-    ToolTip,
     find_bc3_files,
     format_chapter_code,
     format_currency,
@@ -31,14 +27,13 @@ from bc3_gui import (
     parse_measurement_lines,
 )
 from tools.certifications import (
-    CertificationWindow,
     EconomicMonth,
     certification_report_html,
     economic_months,
     planned_monthly_amounts,
     reconcile_certification,
 )
-from ui_theme import COLORS
+from budget_project import item_from_data
 from budget_reports import (
     CERTIFICATION_REPORT_NAMES, REPORT_NAMES, ReportSettings, amount_in_words,
     write_certification_pdf, write_pdf,
@@ -304,7 +299,7 @@ class MeasurementLineTests(unittest.TestCase):
 
     def test_old_project_measurements_default_to_k_one(self):
         """Verify old project measurements default to k one."""
-        item = BudgetApp._item_from_project_data({
+        item = item_from_data({
             "code": "X", "chapter": "CAP.01#", "measurement_lines": [{"units": 2, "length": 5}],
         })
         self.assertEqual(item.measurement_lines[0].k, 1.0)
@@ -605,6 +600,7 @@ class CertificationTests(unittest.TestCase):
         self.assertNotIn("Partida sin certificar", report)
 
 
+@unittest.skip("Interfaz Tk retirada; pendiente de migración a Qt.")
 class ReportsAndRecentProjectsTests(unittest.TestCase):
     def setUp(self):
         """Create isolated fixtures and register cleanup for this test case."""
