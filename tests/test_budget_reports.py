@@ -30,6 +30,104 @@ class ReportApp(SimpleNamespace):
 
 
 class ReportCalculationsTests(unittest.TestCase):
+    def test_economic_reports_have_no_table_captions_and_measurements_follow_descriptions(self):
+        """Mantiene los listados económicos sin rótulos, incluso al insertarlos en un anejo."""
+        from bc3_gui import Concept, MeasurementLine, ProjectItem
+        from budget_reports import build_pdf_report
+        from odt_reports import _new_report, _tag, append_report_odt
+        from pypdf import PdfReader
+        from report_layout import ReportLayout
+        from reportlab.platypus import SimpleDocTemplate
+        from tools._shared.document_layout import TABLE_ALTERNATE_BACKGROUND
+
+        material = Concept("MAT", "ud", "Material de prueba", 10, "3")
+        measured = ProjectItem(
+            "P1", "01#", "ud", "Unidad medida", 2, 10, text="Definición de la unidad.",
+            decomposition=[("MAT", 1)],
+            measurement_lines=[MeasurementLine(comment="Zona de medición", units=2)],
+            certifications={"2026-10-01": 10}, certification_plans={"2026-10-01": 8},
+        )
+        manual = ProjectItem("P2", "01#", "ud", "Unidad sin desglose", 1, 5)
+        app = SimpleNamespace(
+            budget_items=[measured, manual], chapter_order=["01#"], report_settings=ReportSettings(),
+            _project_title=lambda: "Proyecto", _chapter_title=lambda code: "Preparación",
+            _report_components=lambda item: [(material, 1, 10)],
+            _component_dataset=lambda item: None, _budget_concept_type=lambda item, code=None: "3",
+        )
+        with tempfile.TemporaryDirectory() as folder:
+            for report in (*REPORT_NAMES, "Precios elementales"):
+                for embedded in (False, True):
+                    if report == "Precios elementales" and not embedded:
+                        continue
+                    for extension in ("pdf", "odt"):
+                        with self.subTest(report=report, embedded=embedded, format=extension):
+                            target = Path(folder) / f"listado.{extension}"
+                            if extension == "pdf":
+                                if embedded:
+                                    layout = ReportLayout()
+                                    story, header = build_pdf_report(app, report, layout, embedded=True)
+                                    SimpleDocTemplate(str(target), pagesize=layout.page_size).build(
+                                        story, onFirstPage=header, onLaterPages=header,
+                                    )
+                                else:
+                                    write_pdf(app, report, target)
+                                text = " ".join(page.extract_text() or "" for page in PdfReader(target).pages)
+                            else:
+                                if embedded:
+                                    document = _new_report("Anejo", "Proyecto", app.report_settings)
+                                    append_report_odt(app, report, document, embedded=True)
+                                    document.write(target)
+                                else:
+                                    write_report_odt(app, report, target)
+                                with ZipFile(target) as archive:
+                                    xml = ElementTree.fromstring(archive.read("content.xml"))
+                                    styles = ElementTree.fromstring(archive.read("styles.xml"))
+                                text = " ".join(xml.itertext())
+                                header_style = next(
+                                    node for node in styles.iter(_tag("style:style"))
+                                    if node.get(_tag("style:name")) == "HeaderCell"
+                                )
+                                self.assertEqual(
+                                    header_style.find(_tag("style:table-cell-properties")).get(
+                                        _tag("fo:background-color")
+                                    ), TABLE_ALTERNATE_BACKGROUND,
+                                )
+                                self.assertFalse(any(
+                                    element.get(_tag("text:style-name")) in {"DataTableCaption", "TableReference"}
+                                    for element in xml.iter(_tag("text:p"))
+                                ))
+                            self.assertNotRegex(text, r"(?:Véase la Tabla|Tabla\s+\d+\.)")
+                            if report in {"Mediciones", "Presupuesto mediciones"}:
+                                self.assertLess(text.index("Definición de la unidad."),
+                                                text.index("Zona de medición"))
+                                self.assertIn("Unidad sin desglose", text)
+            for report in (*CERTIFICATION_REPORT_NAMES, DEVIATION_REPORT_NAME):
+                for writer, extension in ((write_certification_pdf, "pdf"), (write_certification_odt, "odt")):
+                    with self.subTest(report=report, format=extension):
+                        target = Path(folder) / f"certificado.{extension}"
+                        writer(app.budget_items, app._chapter_title, "Proyecto", app.report_settings,
+                               report, target, "2026-10-01", 1, "Octubre", planned_amounts=[8, 0])
+                        if extension == "pdf":
+                            text = " ".join(page.extract_text() or "" for page in PdfReader(target).pages)
+                        else:
+                            with ZipFile(target) as archive:
+                                text = " ".join(ElementTree.fromstring(archive.read("content.xml")).itertext())
+                        self.assertNotRegex(text, r"(?:Véase la Tabla|Tabla\s+\d+\.)")
+
+    def test_table_header_background_preserves_blue_headers_and_unheaded_rows(self):
+        """Rellena solo las cabeceras comunes y conserva las azules ya definidas."""
+        from report_layout import ReportLayout
+        from tools._shared.document_layout import TABLE_ALTERNATE_BACKGROUND, TABLE_HEADER_BACKGROUND
+
+        layout = ReportLayout()
+        for blue_header, expected in ((False, TABLE_ALTERNATE_BACKGROUND), (True, TABLE_HEADER_BACKGROUND)):
+            block = layout.table(["RESUMEN", "IMPORTE"], [["Unidad", "10,00"]], [4, 1],
+                                 blue_header=blue_header)
+            header_fill = next(command for command in block._bkgrndcmds if command[0] == "BACKGROUND")
+            self.assertEqual(header_fill[1:3], ((0, 0), (-1, 0)))
+            self.assertEqual("#" + header_fill[3].hexval()[2:].upper(), expected)
+        self.assertEqual(layout.table([], [["Unidad", "10,00"]], [4, 1])._bkgrndcmds, [])
+
     def test_existing_default_template_is_not_used_implicitly(self):
         """Ignore old bundled templates unless the user explicitly selects one."""
         from report_layout import _read_report_template, _report_template_path

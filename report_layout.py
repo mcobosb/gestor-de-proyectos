@@ -1483,7 +1483,10 @@ class ReportLayout:
 
             style = pdf_blue_table_style()
         elif headers:
+            from tools._shared.document_layout import TABLE_ALTERNATE_BACKGROUND
+
             style.extend([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(TABLE_ALTERNATE_BACKGROUND)),
                 ("LINEABOVE", (0, 0), (-1, 0), 0.6, colors.black),
                 ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.black),
             ])

@@ -28,8 +28,8 @@ from tools.safety_health import (
     synchronize_budget, write_study_report,
 )
 from tools.safety_health.document import (
-    _Block, _StudyContent, _build_study_content, _markdown_blocks, _numbered_blocks,
-    _pdf_blue_table, study_technical_review, study_work_units,
+    _Block, _StudyContent, _add_safety_budget_documents, _build_study_content, _markdown_blocks,
+    _numbered_blocks, _pdf_blue_table, _write_pdf, study_technical_review, study_work_units,
 )
 from tools.safety_health.regulations import (
     REGULATIONS, WorkUnit, general_une_references, initially_selected, law_proposals, load_ntps,
@@ -106,12 +106,23 @@ class SafetyHealthStudyTests(unittest.TestCase):
                         if full_study:
                             safety.measurement = 6
                             safety.unit_price = 3.11
+                            safety.text = "Descripción técnica completa de la protección."
                             safety.measurement_lines = [
-                                MeasurementLine(comment="Dos tramos", units=2, length=3),
+                                MeasurementLine(comment="Dos tramos", units=2, length=3, width=2, k=0.5),
                             ]
                             app.budget_items.append(ProjectItem(
                                 "MANUAL-SS", safety.chapter, "ud", "Partida manual preventiva",
-                                measurement=2, unit_price=4,
+                                measurement=2, unit_price=4, text="Descripción redactada por el técnico.",
+                            ))
+                            app.chapter_order.append("77#")
+                            app.chapter_titles["77#"] = "Seguridad complementaria"
+                            app.budget_items.append(ProjectItem(
+                                "SS-EXTRA", "77#", "ud", "Protección adicional",
+                                measurement=1, unit_price=2, source="SS:extra",
+                                text="Partida propuesta por la matriz de Seguridad y Salud. Revisar por técnico competente.",
+                                measurement_lines=[MeasurementLine(
+                                    comment="Propuesta SS (2 % del presupuesto previo)", units=1,
+                                )],
                             ))
                             self.assertNotIn("MANUAL-SS", [item.code for item in study_items(app)])
                         else:
@@ -129,7 +140,39 @@ class SafetyHealthStudyTests(unittest.TestCase):
                         else:
                             with ZipFile(target) as archive:
                                 root = ET.fromstring(archive.read("content.xml"))
+                                styles = ET.fromstring(archive.read("styles.xml"))
                                 text = "".join(root.itertext())
+                            if full_study:
+                                body = root.find(".//{urn:oasis:names:tc:opendocument:xmlns:office:1.0}text")
+                                table_tag = "{urn:oasis:names:tc:opendocument:xmlns:table:1.0}table"
+                                sections = {}
+                                current = None
+                                for element in body:
+                                    value = "".join(element.itertext())
+                                    if value == "DOCUMENTO IV. MEDICIONES":
+                                        current = "measurements"
+                                    elif value == "DOCUMENTO V. PRESUPUESTO":
+                                        current = "budget"
+                                    if current and element.tag == table_tag:
+                                        sections.setdefault(current, []).append(element)
+                                self.assertEqual({name: len(tables) for name, tables in sections.items()},
+                                                 {"measurements": 1, "budget": 1})
+                                table_ns = "{urn:oasis:names:tc:opendocument:xmlns:table:1.0}"
+                                for tables in sections.values():
+                                    rows = tables[0].findall(table_ns + "table-row")
+                                    self.assertEqual(rows[0][0].get(table_ns + "style-name"), "ChapterCell")
+                                    self.assertEqual(rows[1][0].get(table_ns + "style-name"), "TotalCell")
+                                from odt_reports import _tag
+
+                                chapter_style = next(
+                                    style for style in styles.iter(_tag("style:style"))
+                                    if style.get(_tag("style:name")) == "ChapterCell"
+                                )
+                                background = chapter_style.find(_tag("style:table-cell-properties")).get(
+                                    _tag("fo:background-color")
+                                )
+                                common_color = ReportLayout().chapter("01", "CAPÍTULO")._bkgrndcmds[0][3]
+                                self.assertEqual(background.lower(), "#" + common_color.hexval()[2:].lower())
                         text = " ".join(text.split())
                         documents = (
                             "DOCUMENTO I. MEMORIA", "DOCUMENTO II. PLANOS",
@@ -141,6 +184,30 @@ class SafetyHealthStudyTests(unittest.TestCase):
                             self.assertEqual(positions, sorted(positions))
                             for value in ("Dos tramos", "MANUAL-SS", "Partida manual preventiva", "26,66"):
                                 self.assertIn(value, text)
+                            self.assertEqual(text.count("Descripción técnica completa de la protección."), 2)
+                            self.assertEqual(text.count("Descripción redactada por el técnico."), 2)
+                            self.assertNotIn("La relación siguiente es orientativa", text)
+                            self.assertNotIn("Propuesta de vinculación", text)
+                            self.assertIn("MEDICIÓN TOTAL", text)
+                            self.assertIn("TOTAL EJECUCIÓN MATERIAL", text)
+                            self.assertNotIn("Medición total:", text)
+                            measurements = text[positions[3]:positions[4]]
+                            budget = text[positions[4]:]
+                            for listing in (measurements, budget):
+                                self.assertIn("MANUAL-SS", listing)
+                                self.assertNotRegex(listing, r"(?:Véase la Tabla|Tabla\s+\d+\.)")
+                                self.assertNotIn("OBRA001", listing)
+                                self.assertLess(listing.index("MANUAL-SS"), listing.index("SS-EXTRA"))
+                                self.assertNotIn("Propuesta SS", listing)
+                                self.assertNotIn("Partida propuesta por la matriz", listing)
+                            self.assertIn("Dos tramos", measurements)
+                            self.assertIn("0,500", measurements)
+                            self.assertNotIn("Dos tramos", budget)
+                            self.assertIn("26,66", budget)
+                            self.assertIn("28,66", budget)
+                            legacy = next(item for item in app.budget_items if item.code == "SS-EXTRA")
+                            self.assertTrue(legacy.text.startswith("Partida propuesta"))
+                            self.assertTrue(legacy.measurement_lines[0].comment.startswith("Propuesta SS"))
                             self.assertTrue(any("plano específico de implantación" in warning for warning in warnings))
                         else:
                             for title in documents:
@@ -156,6 +223,31 @@ class SafetyHealthStudyTests(unittest.TestCase):
                                     element.get(href) == "https://www.boe.es/eli/es/l/1995/11/08/31/con"
                                     for element in root.iter()
                                 ))
+
+    def test_safety_tables_repeat_headers_when_pdf_spans_pages(self):
+        """Las tablas continuas se repiten con su cabecera al dividirse entre páginas."""
+        app = self.make_app("pdf")
+        chapter = next(item.chapter for item in app.budget_items if item.source.startswith("SS:"))
+        items = [
+            ProjectItem(
+                f"SS-{index:03}", chapter, "ud", f"Protección {index:03}",
+                measurement=2, unit_price=3,
+                measurement_lines=[MeasurementLine(comment="Dos elementos", units=2)],
+            )
+            for index in range(60)
+        ]
+        blocks = []
+        _add_safety_budget_documents(blocks, items, app)
+        content = _StudyContent("Seguridad y Salud", "Proyecto de prueba", chapter, "EUR",
+                                _numbered_blocks(blocks))
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "seguridad.pdf"
+            _write_pdf(app, target, content, [], [], "A4")
+            text = [" ".join((page.extract_text() or "").split()) for page in PdfReader(target).pages]
+        self.assertGreaterEqual(sum("RESUMEN / COMENTARIO" in page for page in text), 2)
+        self.assertGreaterEqual(sum("CANTIDAD PRECIO IMPORTE" in page for page in text), 2)
+        self.assertIn("SS-059", " ".join(text))
+        self.assertNotRegex(" ".join(text), r"(?:Véase la Tabla|Tabla\s+\d+\.)")
 
     def test_basic_drawings_are_opt_in_and_missing_disabled_sheet_is_ignored(self):
         """No consulta fichas ausentes si el EBSS no lleva planos."""
@@ -214,6 +306,16 @@ class SafetyHealthStudyTests(unittest.TestCase):
         content = _build_study_content(app)
         self.assertNotIn(manual, study_items(app))
         self.assertTrue(any("EXTERNA" in row for block in content.blocks for row in block.rows))
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "seguridad.odt"
+            write_study_report(app, target)
+            with ZipFile(target) as archive:
+                text = "".join(ET.fromstring(archive.read("content.xml")).itertext())
+            measurements, budget = text.split("DOCUMENTO IV. MEDICIONES", 1)[1].split(
+                "DOCUMENTO V. PRESUPUESTO", 1,
+            )
+            self.assertIn("EXTERNA", measurements)
+            self.assertIn("EXTERNA", budget)
         self.assertEqual((manual.measurement, manual.unit_price), (2, 7))
 
     def test_pdf_and_odt_use_project_setting_and_assemble_selected_templates(self):
@@ -1065,8 +1167,8 @@ class SafetyHealthStudyTests(unittest.TestCase):
                 "3 CONDICIONES DE NATURALEZA FACULTATIVA",
                 "4 CONDICIONES DE NATURALEZA TÉCNICA",
                 "5 CONDICIONES DE NATURALEZA ECONÓMICA",
-                "1 CAP. 03 - SEGURIDAD Y SALUD",
-                "1 CAP. 03 - SEGURIDAD Y SALUD",
+                "1 MEDICIONES POR CAPÍTULOS",
+                "1 PRESUPUESTO POR CAPÍTULOS",
             ],
         )
         self.assertTrue(all(

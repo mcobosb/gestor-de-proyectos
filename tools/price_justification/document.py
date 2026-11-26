@@ -538,7 +538,6 @@ def _write_odt(app, target: Path, blocks: list[tuple[int, str | NarrativeTable |
             _odt_inline(item, label)
         else:
             _odt_inline(paragraph("PricesTableReference" if _TABLE_CITATION.search(text) else "PricesBody"), text)
-    document.table_caption_suffix = " (importe en €)"
     for title, report in LISTINGS:
         document.heading(title, 1, style="PricesListingHeading", bookmark=f"PPTPHeading{bookmark}")
         bookmark += 1
@@ -657,7 +656,6 @@ def _write_pdf(app, target: Path, blocks: list[tuple[int, str | NarrativeTable |
             story.append(paragraph)
             report = reports.get(text)
             if report:
-                layout.table_caption_suffix = " (importe en €)"
                 listing, _ = build_pdf_report(app, report, layout, embedded=True)
                 story.extend(listing)
         elif isinstance(text, Equation):

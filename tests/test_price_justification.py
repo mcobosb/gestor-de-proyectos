@@ -126,9 +126,12 @@ class PriceDocumentTests(unittest.TestCase):
                     self.assertEqual(props.get(_tag("fo:font-family")), "Arial Narrow")
                     self.assertEqual(props.get(_tag("fo:font-size")), "8pt")
                     self.assertEqual(props.get(_tag("fo:font-weight")), "bold")
+                    text = " ".join(content.itertext())
                 else:
                     runs = []
-                    for page in PdfReader(target).pages:
+                    pages = PdfReader(target).pages
+                    text = " ".join(page.extract_text() or "" for page in pages)
+                    for page in pages:
                         def collect(text, cm, tm, font, size):
                             """Comprueba la fuente incrustada y su tamaño efectivo."""
                             if "CAPTION_MARCA" in text:
@@ -138,6 +141,8 @@ class PriceDocumentTests(unittest.TestCase):
                     for name, size in runs:
                         self.assertTrue(name.endswith(expected_font))
                         self.assertAlmostEqual(size, 8, places=1)
+                self.assertEqual(re.findall(r"Tabla\s+\d+\.", text), ["Tabla 1."])
+                self.assertIn("CAPTION_MARCA", text)
 
     def test_listing_headings_and_blue_rows_preserve_template_and_table_layout(self):
         """Conserva títulos de plantilla y resalta solo las filas solicitadas."""
@@ -791,7 +796,7 @@ class PriceDocumentTests(unittest.TestCase):
                 self.assertNotIn("i=0%", condensed)
                 self.assertIn("Jornadaanualefectivadereferencia1736horas", condensed)
                 self.assertNotIn("Jornadaanualefectivadereferencia:1736horas.", condensed)
-                self.assertEqual(len(re.findall(r"Tabla\d+\.(?:PreciosAuxiliares|Descompuestos)\(importeen€\)", condensed)), 2)
+                self.assertNotRegex(condensed, r"Tabla\d+\.(?:PreciosAuxiliares|Descompuestos)\(importeen€\)")
                 self.assertNotIn("PreciodescompuestodeP1", condensed)
                 self.assertNotIn("Componentesdelprecioauxiliar", condensed)
                 self.assertIn("Segundoauxiliar", condensed)

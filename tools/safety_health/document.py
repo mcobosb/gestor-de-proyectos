@@ -17,7 +17,7 @@ from zipfile import BadZipFile, ZipFile
 from budget_reports import budget_totals, money, report_output_format
 from cpv_catalog import resolve_cpv_codes
 from .care_centers import format_centers, format_sicess_centers, restore_centers, restore_sicess_centers
-from .chapter_selection import safety_budget_chapters, study_chapters, study_items
+from .chapter_selection import SAFETY_BUDGET_SOURCE, safety_budget_chapters, study_chapters, study_items
 from .external_conditions import APPLICABILITY, EXTERNAL_CONDITIONS, restore_external_conditions
 from .drawings import (
     group_sheets_by_page, render_drawings, restore_drawings, selected_sheets,
@@ -91,10 +91,21 @@ _CATALOGUE_HEADERS = ("Tipo", "Referencia", "Descripción")
 _PPE_HEADERS = ("EPI", "USOS PREVISIBLES", "OBSERVACIONES")
 _WORK_UNIT_HEADERS = (
     "Unidad de obra / ficha o familia BCCA",
-    "Riesgos propuestos",
-    "Medidas preventivas propuestas",
+    "Riesgos",
+    "Medidas preventivas",
 )
 _NTP_HEADERS = ("Capítulo del presupuesto", "NTP confirmadas")
+_MEASUREMENT_HEADERS = (
+    "CÓDIGO", "UD", "RESUMEN / COMENTARIO", "UDS", "LONGITUD", "ANCHURA", "ALTURA", "K", "PARCIAL",
+)
+_BUDGET_HEADERS = ("CÓDIGO", "UD", "RESUMEN", "CANTIDAD", "PRECIO", "IMPORTE")
+_LEGACY_SAFETY_DESCRIPTIONS = {
+    "Unidad vinculada a partidas del presupuesto; cantidad mínima propuesta. Revisar por técnico competente.",
+    "Partida propuesta por la matriz de Seguridad y Salud. Revisar por técnico competente.",
+}
+_LEGACY_PPE_DISCLAIMER = (
+    " La relación siguiente es orientativa y no sustituye la selección específica para el proyecto."
+)
 
 
 @dataclass(frozen=True)
@@ -107,6 +118,9 @@ class _Block:
     project_summary: bool = False
     section_rows: tuple[int, ...] = ()
     blue_table: bool = False
+    bold_rows: tuple[int, ...] = ()
+    highlighted_rows: tuple[int, ...] = ()
+    economic_table: bool = False
 
 
 @dataclass
@@ -606,53 +620,77 @@ def _basic_sections(template: str, titles: tuple[str, ...], pending: list[str]) 
 
 
 def _add_safety_budget_documents(blocks: list[_Block], items: list[ProjectItem], app) -> None:
-    """Incorpora las mediciones y el presupuesto reales de los capítulos preventivos."""
-    from budget_core import fmt_number
+    """Construye una tabla de mediciones y otra de presupuesto con las partidas reales."""
+    from budget_core import fmt_number, format_chapter_code
 
-    chapters = list(dict.fromkeys(item.chapter for item in items))
-    blocks.append(_Block("document", _MEASUREMENTS_DOCUMENT_TITLE))
-    for chapter in chapters:
-        _add_heading(blocks, _chapter_label(app, chapter), 1)
-        for item in (item for item in items if item.chapter == chapter):
-            _add_heading(blocks, f"{item.code} — {item.summary}", 2)
-            if item.measurement_lines:
-                rows = tuple(
-                    (
-                        line.comment,
-                        *("" if value is None else fmt_number(value, 3) for value in (
-                            line.units, line.length, line.width, line.height,
-                        )),
-                        fmt_number(line.k, 3), fmt_number(line.partial, 3),
-                    )
-                    for line in item.measurement_lines
-                )
-                blocks.append(_Block(
-                    "table", headers=("Comentario", "Uds.", "Longitud", "Anchura", "Altura", "K", "Parcial"),
-                    rows=rows,
-                ))
-            blocks.append(_Block(
-                "paragraph", f"Medición total: {fmt_number(item.measurement, 3)} {item.unit}",
-            ))
-    blocks.append(_Block("document", _BUDGET_DOCUMENT_TITLE))
-    for chapter in chapters:
-        chapter_items = [item for item in items if item.chapter == chapter]
-        _add_heading(blocks, _chapter_label(app, chapter), 1)
-        blocks.append(_Block(
-            "table",
-            headers=("Código", "Unidad", "Descripción", "Cantidad", "Precio", "Importe"),
-            rows=tuple(
-                (item.code, item.unit, item.summary, fmt_number(item.measurement, 3),
-                 _format_number(money(item.unit_price)), _format_number(money(item.import_total)))
-                for item in chapter_items
-            ),
+    chapters = list(dict.fromkeys([*app.chapter_order, *(item.chapter for item in items)]))
+    for report in ("measurements", "budget"):
+        measurements = report == "measurements"
+        headers = _MEASUREMENT_HEADERS if measurements else _BUDGET_HEADERS
+        rows: list[tuple[str, ...]] = []
+        bold_rows: list[int] = []
+        chapter_rows: list[int] = []
+
+        def add_row(values: tuple[str, ...], *, bold: bool = False, chapter: bool = False) -> None:
+            """Registra filas destacadas sin dividir el listado en varias tablas."""
+            if bold or chapter:
+                bold_rows.append(len(rows))
+            if chapter:
+                chapter_rows.append(len(rows))
+            rows.append(values + ("",) * (len(headers) - len(values)))
+
+        for chapter in chapters:
+            chapter_items = [item for item in items if item.chapter == chapter]
+            if not chapter_items:
+                continue
+            code = format_chapter_code(chapter)
+            add_row((code, "", app._chapter_title(chapter)), chapter=True)
+            for item in chapter_items:
+                generated = item.source.startswith(SAFETY_BUDGET_SOURCE)
+                description = item.text
+                if generated and description in _LEGACY_SAFETY_DESCRIPTIONS:
+                    description = ""
+                if measurements:
+                    add_row((item.code, item.unit, item.summary), bold=True)
+                else:
+                    add_row((
+                        item.code, item.unit, item.summary, fmt_number(item.measurement),
+                        fmt_number(float(money(item.unit_price))), fmt_number(float(money(item.import_total))),
+                    ), bold=True)
+                if description:
+                    add_row(("", "", description))
+                if measurements:
+                    for line in item.measurement_lines:
+                        comment = line.comment
+                        if generated and (
+                            comment == "Propuesta vinculada al presupuesto (1 unidad mínima)"
+                            or re.fullmatch(r"Propuesta SS \(.+ % del presupuesto previo\)", comment)
+                        ):
+                            comment = ""
+                        add_row((
+                            "", "", comment,
+                            *("" if value is None else fmt_number(value, 3) for value in (
+                                line.units, line.length, line.width, line.height,
+                            )),
+                            fmt_number(line.k, 3), fmt_number(line.partial, 3),
+                        ))
+                    add_row(("", "", "MEDICIÓN TOTAL", "", "", "", "", "",
+                             fmt_number(item.measurement, 3)), bold=True)
+            if not measurements:
+                total = sum((money(item.import_total) for item in chapter_items), Decimal())
+                add_row(("", "", f"TOTAL {code}", "", "", fmt_number(float(total))), bold=True)
+        if not measurements:
+            total = sum((money(item.import_total) for item in items), Decimal())
+            add_row(("", "", "TOTAL EJECUCIÓN MATERIAL", "", "", fmt_number(float(total))), bold=True)
+        title = _MEASUREMENTS_DOCUMENT_TITLE if measurements else _BUDGET_DOCUMENT_TITLE
+        heading = "Mediciones por capítulos" if measurements else "Presupuesto por capítulos"
+        blocks.extend((
+            _Block("document", title),
+            _Block("heading", heading, 1),
+            _Block("table", headers=headers, rows=tuple(rows),
+                   bold_rows=tuple(bold_rows), highlighted_rows=tuple(chapter_rows),
+                   economic_table=True),
         ))
-        total = sum((money(item.import_total) for item in chapter_items), Decimal())
-        blocks.append(_Block("paragraph", f"Total capítulo: {_format_amount(total, _currency_label(app.report_settings))}"))
-    total = sum((money(item.import_total) for item in items), Decimal())
-    blocks.append(_Block(
-        "paragraph", f"TOTAL EJECUCIÓN MATERIAL DE SEGURIDAD Y SALUD: "
-        f"{_format_amount(total, _currency_label(app.report_settings))}",
-    ))
 
 
 def _build_study_content(app) -> _StudyContent:
@@ -681,7 +719,7 @@ def _build_study_content(app) -> _StudyContent:
     ]
     if family_only_items:
         pending.append(
-            "[VALIDAR] Confirmar la propuesta de riesgos y medidas por familia BCCA "
+            "[VALIDAR] Revisar los riesgos y medidas asignados por familia BCCA "
             "según el procedimiento, los equipos y las condiciones reales de cada tajo."
         )
     catalogues = _parse_catalogues(templates["catalogues"])
@@ -992,8 +1030,9 @@ def _build_study_content(app) -> _StudyContent:
             blocks.append(_Block("paragraph", "[VALIDAR] No hay disposiciones confirmadas para esta obra."))
 
     _add_heading(blocks, "Memoria descriptiva", 1)
-    memory = templates["memory"] if full_study else _basic_sections(
-        templates["memory"], ("Criterios preventivos generales",), pending,
+    memory = templates["memory"].replace(_LEGACY_PPE_DISCLAIMER, "")
+    memory = memory if full_study else _basic_sections(
+        memory, ("Criterios preventivos generales",), pending,
     )
     _add_markdown(blocks, memory, replacements)
     _add_heading(blocks, "Instalaciones provisionales y emergencias", 2)
@@ -1014,7 +1053,7 @@ def _build_study_content(app) -> _StudyContent:
         normalized_code = re.sub(r"\s+", "", item.code).upper()
         work_unit_rows.append((
             f"{item.code} — {item.summary}\nFicha BCCA: {codes}" if paths else (
-                f"{item.code} — {item.summary}\nPropuesta por familia BCCA: "
+                f"{item.code} — {item.summary}\nFamilia BCCA: "
                 f"{normalized_code[:5]}" if family_link is not None else
                 f"{item.code} — {item.summary}\n"
                 "[VALIDAR] Ficha y vínculo de riesgos específicos pendientes."
@@ -1026,15 +1065,14 @@ def _build_study_content(app) -> _StudyContent:
         _Block(
             "paragraph",
             "Las partidas con ficha ESS incorporan sus referencias específicas. Para las demás, "
-            "se propone una vinculación inicial por familia BCCA (dos cifras y tres letras), "
-            "basada en las categorías preventivas disponibles; confirmar su aplicación según "
-            "el procedimiento, los equipos y las condiciones reales de cada tajo. La propuesta "
-            "actual cubre los capítulos disponibles entre el 01 y el 17; el capítulo 18 y "
+            "se utiliza la vinculación por familia BCCA (dos cifras y tres letras), "
+            "basada en las categorías preventivas disponibles. Esta vinculación "
+            "cubre los capítulos disponibles entre el 01 y el 17; el capítulo 18 y "
             "los códigos fuera de ese patrón quedan pendientes de una revisión específica.",
         ),
         _Block(
             "caption",
-            "Tabla 5. Propuesta de vinculación por unidad de obra: riesgos y medidas preventivas.",
+            "Tabla 5. Vinculación por unidad de obra: riesgos y medidas preventivas.",
         ),
         _Block("table", headers=_WORK_UNIT_HEADERS, rows=tuple(work_unit_rows), blue_table=True),
     ))
@@ -1170,6 +1208,10 @@ def _column_ratios(headers: tuple[str, ...]) -> tuple[float, ...]:
         return (0.18, 0.28, 0.54)
     if headers == _NTP_HEADERS:
         return (0.30, 0.70)
+    if headers == _MEASUREMENT_HEADERS:
+        return (52, 18, 188, 35, 40, 40, 35, 27, 45)
+    if headers == _BUDGET_HEADERS:
+        return (50, 20, 220, 55, 55, 60)
     if len(headers) == 2:
         return (1.2, 4.8)
     if len(headers) == 3:
@@ -1229,7 +1271,7 @@ def _tables_with_labels(blocks: list[_Block]):
     for index, block in enumerate(blocks):
         if block.kind == "caption" and index + 1 < len(blocks) and blocks[index + 1].kind == "table":
             continue
-        if block.kind == "table":
+        if block.kind == "table" and not block.economic_table:
             previous = blocks[index - 1] if index else None
             match = caption_pattern.fullmatch(previous.text) if previous and previous.kind == "caption" else None
             if match:
@@ -1805,16 +1847,20 @@ def _write_pdf(
                 ))
             elif block.kind == "caption":
                 story.append(layout.text(block.text, caption_style))
-            elif label is not None:
-                number, title = label
-                layout.table_caption(
-                    story, title, number=number, body=body, caption=caption_style, include_reference=False,
-                )
+            elif block.kind == "table":
+                if label is not None:
+                    number, title = label
+                    layout.table_caption(
+                        story, title, number=number, body=body, caption=caption_style, include_reference=False,
+                    )
                 if block.project_summary or block.blue_table:
                     story.append(_pdf_blue_table(block, layout))
                 else:
                     ratios = _column_ratios(block.headers)
-                    story.append(layout.table(block.headers, block.rows, ratios))
+                    story.append(layout.table(
+                        block.headers, block.rows, ratios, bold_rows=block.bold_rows,
+                        highlighted_rows=block.highlighted_rows,
+                    ))
 
     if drawings and not plans_inserted:
         append_plans_section(following_document=False)
@@ -2016,16 +2062,18 @@ def _write_odt(
                 ET.SubElement(paragraph, _tag("text:tab")).tail = value
             elif block.kind == "caption":
                 document.paragraph(block.text, style="ESSCaption")
-            elif label is not None:
-                number, title = label
-                document.table_caption(
-                    title, number=number, body="ESSBody", caption="ESSCaption", include_reference=False,
-                )
+            elif block.kind == "table":
+                if label is not None:
+                    number, title = label
+                    document.table_caption(
+                        title, number=number, body="ESSBody", caption="ESSCaption", include_reference=False,
+                    )
                 if block.project_summary or block.blue_table:
                     _write_odt_blue_table(document, block)
                 else:
                     document.table(
                         block.headers, block.rows, ratios=_column_ratios(block.headers),
+                        bold_rows=block.bold_rows, highlighted_rows=block.highlighted_rows,
                     )
     if drawings and not plans_inserted:
         plan_bookmark_offset = bookmark_index

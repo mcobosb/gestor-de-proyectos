@@ -546,7 +546,7 @@ class _OdtReport:
         if self.template_header is not None:
             for style in self.template_header["automatic_styles"]:
                 automatic.append(deepcopy(style))
-        for name, background in (("HeaderCell", "#FFFFFF"), ("BodyCell", "#FFFFFF"),
+        for name, background in (("HeaderCell", TABLE_ALTERNATE_BACKGROUND), ("BodyCell", "#FFFFFF"),
                                  ("BlueHeaderCell", TABLE_HEADER_BACKGROUND),
                                  ("BlueChapterCell", TABLE_HEADER_BACKGROUND),
                                  ("TintedHeaderCell", TABLE_ALTERNATE_BACKGROUND),
@@ -907,7 +907,6 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
     )
     if not embedded:
         document.header_columns, document.header_ratios = column_headers, column_ratios
-    listing_caption = report if embedded else ""
     contents_headings = []
     codes = list(dict.fromkeys([*app.chapter_order, *(item.chapter for item in app.budget_items)]))
     groups = [
@@ -964,7 +963,6 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
         document.table(
             ["CAPÍTULO", "RESUMEN", "IMPORTE", "%"], rows,
             ratios=[65, 328, 75, COLUMN_REFERENCE_WIDTH - 468],
-            caption="Resumen del presupuesto por capítulos",
         )
         totals = budget_totals(float(pem), settings)
         for label, amount in (
@@ -1017,7 +1015,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                     ratios=[50, 45, 18, 290, 50, 57],
                     bold_rows=[i for i, row in enumerate(rows) if str(row[3]).startswith("Grupo ")],
                     highlighted_rows=[i for i, row in enumerate(rows) if str(row[3]).startswith("Grupo ")],
-                    caption=report, tinted_rows=embedded,
+                    tinted_rows=embedded,
                     blue_header=embedded and report == "Precios elementales",
                 )
             else:
@@ -1040,9 +1038,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                     ratios=[50, 15, CONTENT_WIDTH - 65], bold_rows=(0,),
                     bold_text_style="AuxiliaryTitle", keep_next=True,
                     cell_style="AuxiliaryBandCell" if embedded else "",
-                    caption=listing_caption,
                 )
-                listing_caption = ""
                 if concept.text:
                     document.paragraph(concept.text, style="ItemDescription")
                 rows = [[
@@ -1053,7 +1049,6 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                     document.table(
                         column_headers if embedded else [], rows,
                         ratios=auxiliary_widths, right_columns=(2, 4, 5, 6),
-                        caption="" if embedded else f"Componentes del precio auxiliar {concept.code}",
                         tinted_rows=embedded,
                     )
                 total("COSTE UNITARIO TOTAL", price)
@@ -1080,8 +1075,6 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                 document.section(f"CUADRO DE PRECIOS {section}")
             for chapter_index, (code, items) in enumerate(groups):
                 chapter(code, new_page=chapter_index > 0)
-                if section == 1:
-                    document.table_caption(f"Precios unitarios de {format_chapter_code(code)}")
                 for item in items:
                     shown_amount = (
                         item.unit_price if section == 1 else
@@ -1097,9 +1090,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                                 [50, 15, CONTENT_WIDTH - 65]),
                         right_columns=(3,) if shown_amount is not None else (),
                         keep_next=True,
-                        caption=listing_caption if report == "Descompuestos" else "",
                     )
-                    listing_caption = ""
                     if item.text:
                         document.paragraph(item.text, style="ItemDescription")
                     if section == 1:
@@ -1121,7 +1112,6 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                                 ["RESUMEN", "IMPORTE"],
                                 [[label, fmt_number(float(amount))] for label, amount in grouped.items()],
                                 ratios=[8, 2],
-                                caption=f"Resumen de costes de {item.code}",
                             )
                             difference = money(item.unit_price) - sum(grouped.values(), money(0))
                             if difference:
@@ -1140,7 +1130,6 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                                     fmt_number(float(money(quantity * price))), "",
                                 ] for concept, quantity, price in components],
                                 ratios=component_widths, right_columns=(3, 4, 5, 6),
-                                caption="" if embedded else f"Precio descompuesto de {item.code}",
                                 tinted_rows=embedded,
                             )
                             difference = money(item.unit_price) - sum(
@@ -1171,7 +1160,6 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                                  for line in item.measurement_lines],
                                 ratios=MEASUREMENT_COLUMN_RATIOS if report == "Mediciones" else
                                 [4, 1, 1, 1, 1, 0.8, 1.2],
-                                caption=f"Detalle de mediciones de {item.code}",
                             )
                         if report == "Mediciones":
                             document.table(
@@ -1180,7 +1168,6 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                                   fmt_number(item.measurement, 3), item.unit]],
                                 ratios=MEASUREMENT_COLUMN_RATIOS, bold_rows=(0,),
                                 right_columns=(6,),
-                                caption="" if item.measurement_lines else f"Medición de {item.code}",
                             )
                         else:
                             document.table(
@@ -1188,7 +1175,6 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                                 [[fmt_number(item.measurement), fmt_number(item.unit_price),
                                   fmt_number(item.import_total)]],
                                 ratios=[CONTENT_WIDTH - 100, 50, 50],
-                                caption=f"Importe de {item.code}",
                             )
                     document.space(3 * 72 / 25.4)
                 if report == "Presupuesto mediciones":
@@ -1296,7 +1282,6 @@ def write_certification_odt(
              for row in [*deviation_rows, deviation_total]],
             ratios=DEVIATION_COLUMN_RATIOS, right_columns=(3, 4, 5),
             bold_rows=(len(deviation_rows),),
-            caption="Desviaciones respecto al plan original",
         )
         document.paragraph(
             "Desviación = certificado - plan original del mes. "
@@ -1324,7 +1309,6 @@ def write_certification_odt(
                     [["", "", "", "", "", "", fmt_number(quantity, 6),
                       money_text(item.unit_price), money_text(amount)]],
                     ratios=certification_widths, right_columns=(6, 7, 8),
-                    caption=f"Medición certificada de {item.code}",
                 )
                 justification = item.certification_justifications.get(month_key, "")
                 if justification:
@@ -1355,7 +1339,6 @@ def write_certification_odt(
         document.table(
             ["CAPÍTULO", "RESUMEN", "IMPORTE", "% CERTIFICADO"], rows,
             ratios=CERTIFICATION_SUMMARY_RATIOS,
-            caption="Certificación por capítulos",
         )
         document.paragraph(
             "% certificado respecto al presupuesto de cada capítulo.",

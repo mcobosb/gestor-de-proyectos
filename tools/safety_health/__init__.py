@@ -576,19 +576,8 @@ def synchronize_budget(
         item = ProjectItem(
             f"SS-{line.code}", chapter, line.unit, line.summary.upper(),
             unit_price=float(line.price), source=SAFETY_BUDGET_SOURCE + line.code,
-            text=(
-                "Unidad vinculada a partidas del presupuesto; cantidad mínima propuesta. "
-                "Revisar por técnico competente."
-                if line.quantity is not None else
-                "Partida propuesta por la matriz de Seguridad y Salud. Revisar por técnico competente."
-            ),
         )
         item.measurement_lines = [MeasurementLine(
-            comment=(
-                "Propuesta vinculada al presupuesto (1 unidad mínima)"
-                if line.quantity is not None else
-                f"Propuesta SS ({percentage.normalize()} % del presupuesto previo)"
-            ),
             units=float(quantity),
         )]
         item.recalculate_measurement()

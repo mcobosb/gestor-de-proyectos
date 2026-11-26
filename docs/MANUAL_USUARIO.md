@@ -717,7 +717,11 @@ por defecto y no borra las fichas seleccionadas para un estudio completo.
 El tipo de estudio depende de los criterios revisados en la primera pestaña.
 El ESS incluye memoria, planos, pliego, mediciones y presupuesto, utilizando las
 partidas reales del capítulo de Seguridad y Salud del presupuesto, incluidas las
-añadidas manualmente. Si ya existe un capítulo reconocido, generar el informe no
+añadidas manualmente. Las mediciones y el presupuesto usan el estilo de los
+documentos presupuestarios generales, con una tabla por documento y únicamente
+los capítulos de Seguridad y Salud. El detalle de medición figura en la primera
+tabla; la segunda recoge cantidades, precios e importes. Si ya existe un capítulo
+reconocido, generar el informe no
 recalcula sus partidas; si no existe, se debe crear uno. Si no se han seleccionado
 fichas, el documento de planos se señala como pendiente. Las fichas tipo no
 sustituyen el plano específico de implantación y señalización: debe incorporarse
@@ -813,11 +817,15 @@ Los títulos de RCDs siguen la jerarquía estándar: 16 pt para el documento,
 
 En los documentos generados, las viñetas y las listas numeradas comparten
 tabuladores y sangría francesa. Los pies se escriben en mayúsculas sin perder
-la numeración de página. Antes de cada tabla de datos se incluye una referencia
-en el texto («Véase la Tabla X.»), seguida del título «Tabla X. …». Los elementos
-de maquetación (por ejemplo, las columnas de firma) no se numeran. Los estudios
-de Seguridad y Salud y de RCD conservan los títulos de tabla, sin esas referencias
-automáticas.
+la numeración de página. Las tablas integradas en textos narrativos conservan
+su título «Tabla X. …» y, cuando corresponde, la referencia «Véase la Tabla X.».
+Los listados económicos (mediciones, presupuestos, precios, certificaciones y
+desviaciones), incluidos los de Seguridad y Salud y los listados del anejo de
+Justificación de precios, no llevan esas referencias ni captions. El detalle de
+medición se sitúa bajo la definición de cada unidad de obra. Los elementos de
+maquetación (por ejemplo, las columnas de firma) tampoco se numeran.
+Las cabeceras comunes de los listados económicos llevan fondo azul claro;
+se conservan las cabeceras azul oscuro que ya tienen su formato específico.
 
 En **Justificación de precios**, los títulos de las secciones 3, 4 y 5 heredan
 el estilo **TemplateHeading** de la plantilla ODT, no **Heading 1**, y mantienen

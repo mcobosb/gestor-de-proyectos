@@ -342,6 +342,8 @@ class SafetyHealthTests(unittest.TestCase):
         )
         generated = [item for item in app.budget_items if item.source.startswith(SAFETY_BUDGET_SOURCE)]
         self.assertTrue(generated)
+        self.assertTrue(all(not item.text and all(not line.comment for line in item.measurement_lines)
+                            for item in generated))
         self.assertEqual({item.chapter for item in generated}, {"CAP.02#"})
         self.assertEqual(app.chapter_titles["CAP.02#"], "SEGURIDAD Y SALUD")
         safety_total = sum(
@@ -362,7 +364,7 @@ class SafetyHealthTests(unittest.TestCase):
             self.assertIn("ESTUDIO BÁSICO DE SEGURIDAD Y SALUD", text)
             self.assertIn("ÍNDICE", text)
             self.assertIn("01AAB00001", text)
-            self.assertIn("Propuesta por familia BCCA", text)
+            self.assertIn("Familia BCCA", text)
             self.assertIn("R-DERRUMBE", text)
             self.assertIn("MP-LOCALIZAR-SERVICIOS", text)
             self.assertNotIn("Ficha específica pendiente.", text)
