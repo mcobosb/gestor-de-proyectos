@@ -16,7 +16,7 @@ from budget_project import build_project_payload, decode_project_payload
 from budget_qt_window import BudgetMainWindow
 from odt_reports import _tag
 from tools._library_history import read_revisions
-from tools.quality_assurance.catalog import load_catalog
+from tools.quality_assurance.catalog import get_catalog_entry, load_catalog
 from tools.quality_assurance.document import LIBRARY_PATH, write_document
 from tools.quality_assurance.plan import SOURCE, applicable_trials, insert_budget, suggested_quantity
 from tools.quality_assurance.pricing import estimate_empty_price, price_candidates, price_catalog
@@ -156,6 +156,79 @@ class QualityAssuranceTests(unittest.TestCase):
             (row, "USD"),
         ):
             self.assertEqual(estimate_empty_price(changed, currency), changed)
+
+    def test_bc3_packages_preserve_values_and_document_scope(self):
+        """Suma partidas unitarias identificadas sin atribuirles un control completo."""
+        name = get_catalog_entry("PAC-39").label
+        row = {"trial": "PAC-39", "name": name, "price": ""}
+        estimated = estimate_empty_price(row, "EUR")
+        source = estimated["price_source"]
+        self.assertEqual(estimated["price"], "274.15")
+        self.assertIn("CM1C08S110", source["summary"])
+        self.assertIn("88.72 EUR/ud", source["summary"])
+        self.assertIn("C06S060", source["summary"])
+        self.assertIn("185.43 EUR/ud", source["summary"])
+        self.assertIn("área 1", source["summary"])
+        self.assertIn("no incluye", source["summary"])
+        for unchanged, currency in (
+            (row | {"price": "120"}, "EUR"),
+            (row | {"name": "Otro control"}, "EUR"),
+            (row, "USD"),
+        ):
+            self.assertEqual(estimate_empty_price(unchanged, currency), unchanged)
+        name = get_catalog_entry("ENS-04").label
+        self.assertEqual(estimate_empty_price(
+            {"trial": "ENS-04", "name": name, "price": ""}, "EUR"
+        )["price"], "180.00")
+        name = get_catalog_entry("ENS-22").label
+        bcca = estimate_empty_price({"trial": "ENS-22", "name": name, "price": ""}, "EUR")
+        self.assertEqual(bcca["price"], "50.00")
+        self.assertIn("BCCA Andalucía 2023", bcca["price_source"]["summary"])
+        self.assertIn("no incluye cuadrícula", bcca["price_source"]["summary"])
+        name = get_catalog_entry("ENS-25").label
+        self.assertEqual(estimate_empty_price(
+            {"trial": "ENS-25", "name": name, "price": ""}, "EUR"
+        )["price"], "")
+
+    def test_bc3_estimate_is_preserved_in_project_budget_and_report(self):
+        """Propaga las partidas, sus bases y limitaciones tras la revisión."""
+        qt = QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as folder, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(folder)
+        ), patch("budget_qt_window.apply_theme"), patch.object(
+            QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes
+        ):
+            window = BudgetMainWindow()
+            try:
+                window.budget_items = [ProjectItem("S", "01#", "m", "Colector de saneamiento", 25)]
+                window._open_tool("quality_assurance")
+                tool = window._project_windows[-1]
+                index = next(i for i, row in enumerate(tool.rows()) if row.get("trial") == "PAC-39")
+                self.assertEqual(tool.rows()[index]["price"], "274.15")
+                self.assertIn("área 1", tool.table.item(index, 6).toolTip())
+                tool.table.item(index, 0).setCheckState(Qt.CheckState.Checked)
+                tool.table.item(index, 4).setText("1")
+                tool.review()
+                row = tool.rows()[index]
+                restored = decode_project_payload(build_project_payload(window), Path(folder) / "p.json",
+                                                  window.report_settings)
+                self.assertEqual(restored.quality_assurance["rows"][index]["price_source"], row["price_source"])
+                report = Path(folder) / "bc3.odt"
+                write_document(window, report, [row])
+                with ZipFile(report) as archive:
+                    text = " ".join(ET.fromstring(archive.read("content.xml")).itertext())
+                for expected in ("CM1C08S110", "C06S060", "área 1", "ovalización"):
+                    self.assertIn(expected, text)
+                tool.insert()
+                item = next(item for item in window.budget_items if item.source == SOURCE)
+                self.assertEqual(item.unit_price, 274.15)
+                self.assertIn("CM1C08S110", item.text)
+                self.assertIn("C06S060", item.text)
+                self.assertIn("ovalización", item.text)
+            finally:
+                window.is_dirty = False
+                window.close()
+                qt.processEvents()
 
     def test_estimated_prices_restore_review_and_follow_exports(self):
         """Rellena huecos sin pisar precios ni revisiones ya insertadas y conserva el alcance."""
