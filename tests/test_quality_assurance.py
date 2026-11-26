@@ -97,6 +97,15 @@ class QualityAssuranceTests(unittest.TestCase):
                             xml = ET.fromstring(document.read("content.xml"))
                         text = " ".join(xml.itertext())
                         links = {node.get(_tag("xlink:href")) for node in xml.iter(_tag("text:a"))}
+                        table_links = {
+                            node.get(_tag("xlink:href"))
+                            for table in xml.iter(_tag("table:table"))
+                            for node in table.iter(_tag("text:a"))
+                        }
+                        self.assertIn(
+                            "https://www.une.org/encuentra-tu-norma/busca-tu-norma/norma/?c=N0063378",
+                            table_links,
+                        )
                     else:
                         pages = PdfReader(target).pages
                         text = " ".join(page.extract_text() for page in pages)
@@ -112,6 +121,7 @@ class QualityAssuranceTests(unittest.TestCase):
                                      "Registros"):
                         self.assertIn(expected, text)
                     self.assertIn(concrete["price_source"]["url"], links)
+                    self.assertIn("https://www.une.org/encuentra-tu-norma/busca-tu-norma/norma/?c=N0063378", links)
                     pending_text = text.split("8. PROPUESTAS DE CONTROL PENDIENTES DE REVISIÓN")[-1]
                     pending_text = pending_text.split("9. FICHAS TÉCNICAS DE ENSAYOS", 1)[0]
                     for expected in ("PAC-50", "Estado: propuesta pendiente", "Frecuencia propuesta:",

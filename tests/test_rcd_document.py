@@ -26,6 +26,31 @@ from tools.rcd.document import (
 class RcdDocumentTests(unittest.TestCase):
     """Comprueba las tablas y el texto real de los dos formatos de salida."""
 
+    def test_links_in_narrative_and_table_cells(self):
+        """Mantiene enlaces normativos en párrafos y celdas PDF y ODT."""
+        from odt_reports import _tag
+        from tools.rcd.document import _write_odt, _write_pdf
+
+        blocks = [(1, "Normativa"), (0, "Ley 7/2022 y NTP 223."),
+                  StudyTable("Referencias", ["Norma"], [["UNE-EN 12350-2:2020"]], [1])]
+        with TemporaryDirectory() as folder:
+            for kind, writer in (("odt", _write_odt), ("pdf", _write_pdf)):
+                target = Path(folder) / f"normativa.{kind}"
+                writer(blocks, "Proyecto", ReportSettings(output_format=kind), target)
+                if kind == "odt":
+                    with ZipFile(target) as archive:
+                        tree = ET.fromstring(archive.read("content.xml"))
+                    links = {node.get(_tag("xlink:href")) for node in tree.iter(_tag("text:a"))}
+                else:
+                    links = {
+                        str(action.get("/URI"))
+                        for page in PdfReader(target).pages for annotation in page.get("/Annots", [])
+                        if (action := annotation.get_object().get("/A")) and action.get("/URI")
+                    }
+                self.assertIn("https://www.boe.es/eli/es/l/2022/04/08/7/con", links)
+                self.assertIn("https://www.une.org/encuentra-tu-norma/busca-tu-norma/norma/?c=N0063378", links)
+                self.assertTrue(any("ntp-223-" in link for link in links if link))
+
     def setUp(self):
         """Prepara residuos revisados y una partida de gestión ya incorporada."""
         self.state = RcdState()

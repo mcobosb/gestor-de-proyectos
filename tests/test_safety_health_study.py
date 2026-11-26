@@ -1271,6 +1271,8 @@ class SafetyHealthStudyTests(unittest.TestCase):
 
     def test_confirmed_norms_and_manual_ntps_survive_budget_sync_and_export(self):
         """Exporta solo decisiones confirmadas con codigos reales y conserva asignaciones manuales."""
+        from odt_reports import _tag
+
         with tempfile.TemporaryDirectory() as folder:
             for output_format in ("pdf", "odt"):
                 with self.subTest(format=output_format):
@@ -1308,11 +1310,21 @@ class SafetyHealthStudyTests(unittest.TestCase):
                     target = Path(folder) / f"normativa.{output_format}"
                     write_study_report(app, target)
                     if output_format == "pdf":
-                        text = "\n".join(page.extract_text() for page in PdfReader(target).pages)
+                        pages = PdfReader(target).pages
+                        text = "\n".join(page.extract_text() for page in pages)
+                        links = {
+                            str(action.get("/URI"))
+                            for page in pages for annotation in page.get("/Annots", [])
+                            if (action := annotation.get_object().get("/A")) and action.get("/URI")
+                        }
                     else:
                         with ZipFile(target) as archive:
                             tree = ET.fromstring(archive.read("content.xml"))
                         text = "".join(tree.itertext())
+                        links = {node.get(_tag("xlink:href")) for node in tree.iter(_tag("text:a"))}
+                    self.assertIn("https://www.boe.es/eli/es/l/1995/11/08/31/con", links)
+                    self.assertTrue(any("ntp-278-" in link for link in links if link))
+                    self.assertTrue(any("www.une.org/encuentra-tu-norma" in link for link in links if link))
                     text = " ".join(text.split())
                     for label in (
                         "1 OBJETO DEL PRESENTE PLIEGO", "Tabla 6.", "NTP 278",

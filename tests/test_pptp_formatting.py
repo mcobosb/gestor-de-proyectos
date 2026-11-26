@@ -14,6 +14,31 @@ from tools.pptp.document import text_blocks, write_document
 
 
 class PptpFormattingTests(unittest.TestCase):
+    def test_regulatory_links_remain_clickable_in_both_formats(self):
+        """Conserva enlaces explícitos y vincula normas por edición identificable."""
+        source = ("# Normativa\n\n- **UNE-EN 12350-2:2020** y NTP 223.\n"
+                  "- [Referencia personalizada](https://example.org/norma).\n")
+        with tempfile.TemporaryDirectory() as directory:
+            for extension in ("pdf", "odt"):
+                with self.subTest(format=extension):
+                    target = Path(directory) / f"enlaces.{extension}"
+                    write_document(source, target, {"titulo_proyecto": "Proyecto"},
+                                   ReportSettings(output_format=extension))
+                    if extension == "odt":
+                        with ZipFile(target) as archive:
+                            tree = ET.fromstring(archive.read("content.xml"))
+                        links = {node.get(_tag("xlink:href")) for node in tree.iter(_tag("text:a"))}
+                    else:
+                        links = {
+                            str(action.get("/URI"))
+                            for page in PdfReader(target).pages
+                            for annotation in page.get("/Annots", [])
+                            if (action := annotation.get_object().get("/A")) and action.get("/URI")
+                        }
+                    self.assertIn("https://www.une.org/encuentra-tu-norma/busca-tu-norma/norma/?c=N0063378", links)
+                    self.assertTrue(any("ntp-223-" in link for link in links if link))
+                    self.assertIn("https://example.org/norma", links)
+
     def test_project_typography_is_rendered_in_pdf_and_editable_odt(self):
         """La misma personalización llega a la fuente visible y al estilo de Writer."""
         overrides = {"heading1": {"font": "Courier New", "size": 19, "bold": False,

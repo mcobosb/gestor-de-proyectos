@@ -11,7 +11,8 @@ from budget_reports import report_output_format
 from collaborative_storage import shared_library_path
 from document_styles import ROLES
 from tools._library_editor import read_markdown
-from tools._library_markdown import document_markdown, informational_ranges, link_runs, text_blocks
+from tools._library_markdown import document_markdown, informational_ranges, text_blocks
+from tools._shared.normative_links import link_odt_tree, normative_runs
 from tools._shared.document_layout import (
     DEFAULT_TOC_DEPTH, add_odt_blue_table_cells, add_odt_blue_table_headers, add_odt_list_style,
     add_odt_narrative_styles,
@@ -324,7 +325,7 @@ def _write_odt(target, project, settings, blocks, data) -> None:
 
     def add_inline(parent, text):
         """Conserva enlaces externos como elementos editables de Writer."""
-        for value, url in link_runs(text):
+        for value, url in normative_runs(text):
             if value:
                 node = ET.SubElement(parent, _tag("text:a" if url else "text:span"), {
                     _tag("xlink:href"): url, _tag("xlink:type"): "simple",
@@ -357,6 +358,7 @@ def _write_odt(target, project, settings, blocks, data) -> None:
             doc.table_caption(caption, include_reference=False)
             doc.table(headers, data[text], ratios=ratios, right_columns=numeric)
             style_odt_blue_table(doc.body[-1], "QualityTable")
+            link_odt_tree(doc.body[-1])
         elif level > 0:
             doc.heading(
                 text, level, style=f"QualityHeading{level}", bookmark=f"PPTPHeading{bookmark}",
@@ -394,7 +396,7 @@ def _write_pdf(target, project, settings, blocks, data) -> None:
         return "".join(
             f'<link href="{escape(url, quote=True)}" color="#174B83"><u>{escape(value)}</u></link>'
             if url else escape(value)
-            for value, url in link_runs(text)
+            for value, url in normative_runs(text)
         )
 
     layout = ReportLayout(template_path=settings.template_path, logo_path=settings.master_logo_path,
@@ -424,7 +426,13 @@ def _write_pdf(target, project, settings, blocks, data) -> None:
         if text in TABLES:
             caption, headers, ratios, numeric = TABLES[text]
             layout.table_caption(story, caption, body=body, include_reference=False)
-            story.extend([layout.table(headers, data[text], ratios, blue_header=True,
+            rows = [
+                [layout.paragraph(inline(str(value)), layout.right if index in numeric else layout.normal,
+                                  role="table")
+                 for index, value in enumerate(row)]
+                for row in data[text]
+            ]
+            story.extend([layout.table(headers, rows, ratios, blue_header=True,
                                        right_columns=numeric), Spacer(1, 10)])
         elif level > 0:
             heading = layout.text(text, headings[f"heading{level}"])

@@ -55,6 +55,23 @@ def narrative_text(app, state):
 
 
 class PriceDocumentTests(unittest.TestCase):
+    def test_inline_regulatory_links_in_pdf_and_odt(self):
+        """Vincula las citas sin alterar los enlaces personalizados existentes."""
+        from odt_reports import _tag
+        from tools.price_justification.document import _odt_inline, _pdf_inline
+
+        text = ("Ley 31/1995, UNE-EN 12350-2:2020 y "
+                "[texto propio](https://example.org/norma).")
+        root = ET.Element(_tag("text:p"))
+        _odt_inline(root, text)
+        urls = {node.get(_tag("xlink:href")) for node in root.iter(_tag("text:a"))}
+        pdf = _pdf_inline(text)
+        for url in ("https://www.boe.es/eli/es/l/1995/11/08/31/con",
+                    "https://www.une.org/encuentra-tu-norma/busca-tu-norma/norma/?c=N0063378",
+                    "https://example.org/norma"):
+            self.assertIn(url, urls)
+            self.assertIn(url, pdf)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

@@ -31,6 +31,7 @@ from localization import translate
 from municipalities import resolve_municipalities
 from report_layout import LEFT_MARGIN, PAGE_MARGIN, RIGHT_MARGIN, ReportLayout, report_project_label
 from tools._library_history import read_revisions
+from tools._shared.normative_links import append_odt_links, normative_runs
 from tools._shared.document_layout import (
     DEFAULT_TOC_DEPTH, TABLE_HEADER_BACKGROUND, add_odt_blue_table_cells, add_odt_list_style,
     add_odt_narrative_styles, number_headings, pdf_blue_table_style, pdf_list_style,
@@ -172,9 +173,10 @@ def _budget_resources(
     return list(auxiliaries.values()), list(machinery.values())
 
 
-def _inline_text(value: str) -> str:
+def _inline_text(value: str, *, preserve_links: bool = False) -> str:
     """Elimina la sintaxis Markdown que no aporta formato al informe final."""
-    value = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", value)
+    if not preserve_links:
+        value = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", value)
     return value.replace("`", "").replace("**", "").replace("__", "")
 
 
@@ -247,9 +249,9 @@ def _markdown_blocks(
                 index += 1
             table_lines = [row for row in table_lines if not _is_table_separator(row)]
             if table_lines:
-                headers = tuple(_inline_text(cell) for cell in table_lines[0])
+                headers = tuple(_inline_text(cell, preserve_links=True) for cell in table_lines[0])
                 rows = tuple(
-                    tuple(_inline_text(cell) for cell in row)
+                    tuple(_inline_text(cell, preserve_links=True) for cell in row)
                     for row in table_lines[1:]
                 )
                 result.append(_Block(
@@ -270,12 +272,12 @@ def _markdown_blocks(
             expanded = lines[index].expandtabs(4)
             indentation = len(expanded) - len(expanded.lstrip())
             result.append(_Block(
-                "list_item", _inline_text(line), min(indentation // 2, 3),
+                "list_item", _inline_text(line, preserve_links=True), min(indentation // 2, 3),
             ))
             index += 1
             continue
         kind = "caption" if re.match(r"^Tabla\s+\d+\.", line) else "paragraph"
-        result.append(_Block(kind, _inline_text(line)))
+        result.append(_Block(kind, _inline_text(line, preserve_links=True)))
         index += 1
     return result
 
@@ -1151,10 +1153,18 @@ def _catalogue_targets(content: _StudyContent) -> dict[str, str]:
 
 def _pdf_reference_markup(text: str, targets: dict[str, str]) -> str:
     """Escapa el texto y convierte las referencias conocidas en enlaces internos."""
+    def external(value: str) -> str:
+        """Conserva las citas normativas y enlaces externos del fragmento."""
+        return "".join(
+            f'<link href="{escape(url, quote=True)}" color="#174B83"><u>{escape(label)}</u></link>'
+            if url else escape(label)
+            for label, url in normative_runs(value)
+        )
+
     fragments = []
     offset = 0
     for match in _REFERENCE_RE.finditer(text):
-        fragments.append(escape(text[offset:match.start()]))
+        fragments.append(external(text[offset:match.start()]))
         label = escape(match.group())
         target = targets.get(_normalized_text(match.group()).upper())
         fragments.append(
@@ -1162,7 +1172,7 @@ def _pdf_reference_markup(text: str, targets: dict[str, str]) -> str:
             if target else label
         )
         offset = match.end()
-    fragments.append(escape(text[offset:]))
+    fragments.append(external(text[offset:]))
     return "".join(fragments).replace("\n", "<br/>")
 
 
@@ -1419,21 +1429,13 @@ def _append_odt_reference_text(parent, text: str, targets: dict[str, str]) -> No
         target = targets.get(_normalized_text(match.group()).upper())
         if target is None:
             continue
-        prefix = text[offset:match.start()]
-        if len(parent):
-            parent[-1].tail = (parent[-1].tail or "") + prefix
-        else:
-            parent.text = (parent.text or "") + prefix
+        append_odt_links(parent, text[offset:match.start()])
         ET.SubElement(parent, _tag("text:a"), {
             _tag("xlink:type"): "simple", _tag("xlink:href"): f"#{target}",
             _tag("text:style-name"): "ESSReferenceLink",
         }).text = match.group()
         offset = match.end()
-    suffix = text[offset:]
-    if len(parent):
-        parent[-1].tail = (parent[-1].tail or "") + suffix
-    else:
-        parent.text = (parent.text or "") + suffix
+    append_odt_links(parent, text[offset:])
 
 
 def _link_odt_references(document, targets: dict[str, str]) -> None:

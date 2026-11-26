@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -37,6 +37,45 @@ UNE_ENTRIES = (
 
 class ReferenceCatalogueTests(unittest.TestCase):
     """Valida las fuentes reales sin perder revisiones ni enlaces distintos."""
+
+    def test_document_links_do_not_guess_ambiguous_editions(self):
+        """Respeta enlaces propios y no atribuye una edición ambigua o inexistente."""
+        from tools._shared import normative_links
+
+        entries = (
+            *UNE_ENTRIES,
+            ReferenceEntry("UNE 2:2020", "Una edición", "", "Vigente", "", "https://www.une.org/a"),
+            ReferenceEntry("UNE 2:2021", "Otra edición", "", "Vigente", "", "https://www.une.org/b"),
+            ReferenceEntry("UNE 1:2020/AC:2022", "Corrección", "", "Vigente", "", "https://www.une.org/c"),
+        )
+        normative_links._une_links.cache_clear()
+        try:
+            with patch.object(normative_links, "load_reference_entries", return_value=entries):
+                text = ("UNE 1, UNE 1:1990, UNE 1:2020/AC:2022, UNE 2, UNE 2:2020 y UNE 3:2024. "
+                        "[UNE 1](https://example.org/propio)")
+                runs = list(normative_links.normative_runs(text))
+                self.assertEqual([(value, url) for value, url in runs if url], [
+                    ("UNE 1", "https://www.une.org/norma-1"),
+                    ("UNE 1:1990", "https://www.une.org/norma-2"),
+                    ("UNE 1:2020/AC:2022", "https://www.une.org/c"),
+                    ("UNE 2:2020", "https://www.une.org/a"),
+                    ("UNE 1", "https://example.org/propio"),
+                ])
+                self.assertIn("UNE 2, ", "".join(value for value, url in runs if not url))
+                self.assertIn("UNE 3:2024", "".join(value for value, url in runs if not url))
+        finally:
+            normative_links._une_links.cache_clear()
+
+    def test_unknown_law_links_to_an_official_search_not_a_guessed_document(self):
+        """Las disposiciones no catalogadas abren la búsqueda por título del BOE."""
+        from urllib.parse import parse_qs, urlsplit
+        from tools._shared.normative_links import normative_runs
+
+        link = next(url for _value, url in normative_runs("RD 57/2005") if url)
+        parsed = urlsplit(link)
+        self.assertEqual((parsed.scheme, parsed.netloc, parsed.path),
+                         ("https", "www.boe.es", "/buscar/legislacion.php"))
+        self.assertEqual(parse_qs(parsed.query)["dato[2]"], ['"Real Decreto 57/2005"'])
 
     def test_real_catalogues_keep_official_metadata_and_same_code_different_entries(self):
         """Lee NTP numericamente y conserva las dos fichas del proyecto UNE repetido."""

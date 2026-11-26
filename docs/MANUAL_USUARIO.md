@@ -178,6 +178,14 @@ expresamente las referencias aplicables: UNE 157001, ISO 21502, ISO 10006,
 ISO 19650-1 (información BIM), ISO/IEC/IEEE 15288 e ISO/IEC/IEEE 29148.
 Cada opción indica su edición y permite abrir la ficha oficial de UNE o ISO;
 comprueba su aplicabilidad y las posibles actualizaciones antes de seleccionarla.
+En los PDF y ODT de RCD, seguridad y salud, calidad, justificación de precios y
+el PPTP se conservan los enlaces editados y se
+vinculan las citas identificadas de legislación, UNE y NTP a sus fuentes
+oficiales. Para una UNE sin año se usa la ficha de la única edición principal
+vigente en el catálogo local; las referencias ambiguas o desconocidas no se
+vinculan automáticamente. Para legislación sin ficha identificada se enlaza
+una búsqueda por título en el BOE, no una disposición concreta. El catálogo no acredita vigencia ni obligatoriedad:
+comprueba la edición, sus correcciones y el acceso al documento en la fuente.
 En **Estructura documental**, el botón **Tipo de proyecto y normas…**, junto
 al nombre del maestro, abre directamente esta pestaña sin perder la selección de documentos.
 

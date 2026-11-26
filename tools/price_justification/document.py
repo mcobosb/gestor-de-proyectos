@@ -18,6 +18,7 @@ from .formula import PdfFormula, odt_formula
 from .indirect import normalize_rows
 from collaborative_storage import shared_library_path
 from tools.document_structure.catalog import PRICE_JUSTIFICATION_NUMBER
+from tools._shared.normative_links import normative_runs
 from tools._shared.document_layout import (
     LIST_INDENT, TABLE_HEADER_BACKGROUND, add_odt_blue_table_cells, add_odt_list_style,
     add_odt_narrative_styles,
@@ -248,7 +249,8 @@ def _plain_runs(text: str):
     """Separa enlaces, variables y saltos del texto, sin interpretar etiquetas HTML."""
     cursor = 0
     for match in _INLINE.finditer(text):
-        yield text[cursor:match.start()], "", ""
+        for value, url in normative_runs(text[cursor:match.start()]):
+            yield value, "link" if url else "", url
         if match[1]:
             yield match[1], "link", match[2]
         elif match[3]:
@@ -259,7 +261,8 @@ def _plain_runs(text: str):
         else:
             yield "", "break", ""
         cursor = match.end()
-    yield text[cursor:], "", ""
+    for value, url in normative_runs(text[cursor:]):
+        yield value, "link" if url else "", url
 
 
 def _inline_runs(text: str):

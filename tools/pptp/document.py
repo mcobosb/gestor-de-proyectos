@@ -18,6 +18,7 @@ from .sheet_index import (
     write_odt_index,
 )
 from tools._library_markdown import document_markdown, text_blocks
+from tools._shared.normative_links import append_odt_links, normative_runs
 from tools._shared.document_layout import (
     DEFAULT_TOC_DEPTH, add_odt_list_style, add_odt_narrative_styles,
     number_headings, pdf_list_style, split_list_item,
@@ -714,7 +715,7 @@ def write_document(
     """Emite PDF u ODT con la misma plantilla de cabecera y pie del proyecto."""
     toc_depth = validate_toc_depth(toc_depth)
     source, sheet_rows = extract_index(number_headings(source))
-    blocks = text_blocks(source, preserve_bold=True)
+    blocks = text_blocks(source, preserve_bold=True, preserve_links=True)
     index_label = ("1", "Fichas del proyecto por capítulo")
     if sheet_rows:
         index_position = blocks.index((0, INDEX_TOKEN))
@@ -802,9 +803,8 @@ def write_document(
                     span = ET.SubElement(paragraph, _tag("text:span"), attributes)
                     for index, part in enumerate(value.split("\t")):
                         if index:
-                            ET.SubElement(span, _tag("text:tab")).tail = part
-                        else:
-                            span.text = part
+                            ET.SubElement(span, _tag("text:tab"))
+                        append_odt_links(span, part)
         style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
             _tag("style:name"): "PPTPTitle", _tag("style:family"): "paragraph",
             _tag("style:parent-style-name"): "ReportTitle",
@@ -862,11 +862,16 @@ def write_document(
 
         def pdf_paragraph(text: str, style, marker=None):
             """Crea un párrafo PDF con negritas explícitas y sin interpretar HTML del usuario."""
-            markup = "".join(
-                f'<font name="{escape(layout.bold_font, quote=True)}">{escape(value)}</font>'
-                if bold else escape(value)
-                for value, bold in bold_runs(text)
-            )
+            parts = []
+            for value, bold in bold_runs(text):
+                for label, url in normative_runs(value):
+                    rendered = escape(label)
+                    if url:
+                        rendered = f'<link href="{escape(url, quote=True)}" color="#174B83"><u>{rendered}</u></link>'
+                    if bold:
+                        rendered = f'<font name="{escape(layout.bold_font, quote=True)}">{rendered}</font>'
+                    parts.append(rendered)
+            markup = "".join(parts)
             return layout.paragraph(markup, style, bulletText=marker)
 
         tabular_rows = []

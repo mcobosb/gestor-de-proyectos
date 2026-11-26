@@ -14,6 +14,7 @@ from budget_reports import amount_in_words, money, report_output_format
 from tools._shared.budget_sources import RCD_BUDGET_SOURCE, matches_tool_chapter
 from tools._library_editor import library_members, read_markdown
 from tools._library_markdown import document_markdown, text_blocks
+from tools._shared.normative_links import append_odt_links, link_odt_tree, normative_runs
 from tools.document_structure.catalog import RCD_NUMBER
 from document_styles import ROLES, odt_typography
 from tools._shared.document_layout import (
@@ -38,30 +39,6 @@ FOOTER_CHAPTER = re.compile(r"\{\{cap[ií]tulo\}\}")
 DESCRIPTION_HEADING = "1.2. DESCRIPCIÓN DE LA ACTUACIÓN"
 DESCRIPTION_MARKER = "{{descripcion_actuacion}}"
 COMPACT_TABLE_WIDTH = 0.80
-LAW_URLS = {
-    "Ley 7/2022": "https://www.boe.es/eli/es/l/2022/04/08/7/con",
-    "Ley 31/1995": "https://www.boe.es/eli/es/l/1995/11/08/31/con",
-    "Ley 21/2013": "https://www.boe.es/eli/es/l/2013/12/09/21/con",
-    "Ley 37/2003": "https://www.boe.es/eli/es/l/2003/11/17/37/con",
-    "Real Decreto 105/2008": "https://www.boe.es/eli/es/rd/2008/02/01/105/con",
-    "Real Decreto 553/2020": "https://www.boe.es/eli/es/rd/2020/06/02/553/con",
-    "Real Decreto 646/2020": "https://www.boe.es/eli/es/rd/2020/07/07/646/con",
-    "Real Decreto 396/2006": "https://www.boe.es/eli/es/rd/2006/03/31/396/con",
-    "Real Decreto 108/1991": "https://www.boe.es/eli/es/rd/1991/02/01/108/con",
-    "Real Decreto 180/2015": "https://www.boe.es/eli/es/rd/2015/02/17/180/con",
-    "Real Decreto 110/2015": "https://www.boe.es/eli/es/rd/2015/02/20/110/con",
-    "Real Decreto 1055/2022": "https://www.boe.es/eli/es/rd/2022/12/27/1055/con",
-    "Real Decreto 9/2005": "https://www.boe.es/eli/es/rd/2005/01/14/9/con",
-    "Real Decreto 1627/1997": "https://www.boe.es/eli/es/rd/1997/10/24/1627/con",
-    "Real Decreto 486/1997": "https://www.boe.es/eli/es/rd/1997/04/14/486/con",
-    "Real Decreto 1432/2008": "https://www.boe.es/eli/es/rd/2008/08/29/1432/con",
-    "Orden APM/1007/2017": "https://www.boe.es/eli/es/o/2017/10/10/apm1007/con",
-    "Decisión 2000/532/CE": "https://eur-lex.europa.eu/eli/dec/2000/532/oj?locale=es",
-}
-LAW_URLS.update({name.replace("Real Decreto", "RD"): url
-                 for name, url in tuple(LAW_URLS.items()) if name.startswith("Real Decreto")})
-LAW_CITATION = re.compile(r"\b(" + "|".join(map(re.escape, LAW_URLS)) + r")(?![\w/])", re.IGNORECASE)
-LAW_URLS = {name.casefold(): url for name, url in LAW_URLS.items()}
 LIBRARY_PATH = Path(__file__).resolve().parent / "BIBLIOTECA.zip"
 DOCUMENTS = (
     ("01_memoria.md", "1. Memoria y antecedentes"),
@@ -417,7 +394,7 @@ def study_blocks(
                 else:
                     blocks.append((0, "No se han encontrado vínculos por código exacto en el presupuesto."))
         else:
-            for level, text in text_blocks(_pending_lines(part, values)):
+            for level, text in text_blocks(_pending_lines(part, values), preserve_links=True):
                 if level == 0 and text == DESCRIPTION_MARKER:
                     blocks.extend(text_blocks(summary or ""))
                     continue
@@ -524,19 +501,7 @@ def _management_tables(state: RcdState, excluded_codes: set[str]) -> dict[str, l
 
 def _odt_law_links(paragraph: ET.Element, text: str) -> None:
     """Inserta enlaces externos nativos conservando el texto y sus tabulaciones."""
-    from odt_reports import _tag
-
-    last = paragraph[-1] if len(paragraph) else None
-    for index, part in enumerate(LAW_CITATION.split(text)):
-        if index % 2:
-            last = ET.SubElement(paragraph, _tag("text:a"), {
-                _tag("xlink:href"): LAW_URLS[part.casefold()], _tag("xlink:type"): "simple",
-            })
-            last.text = part
-        elif last is not None:
-            last.tail = part
-        else:
-            paragraph.text = part
+    append_odt_links(paragraph, text)
 
 
 def _odt_link_paragraph_spans(paragraph: ET.Element) -> None:
@@ -544,16 +509,18 @@ def _odt_link_paragraph_spans(paragraph: ET.Element) -> None:
     from odt_reports import _tag
 
     for span in paragraph.findall(_tag("text:span")):
-        if span.text and LAW_CITATION.search(span.text):
-            _odt_law_links(span, span.text)
+        if span.text:
+            text = span.text
+            span.text = None
+            _odt_law_links(span, text)
 
 
 def _pdf_law_links(text: str) -> str:
     """Escapa el texto y añade vínculos únicamente a las citas conocidas."""
     return "".join(
-        f'<link href="{escape(LAW_URLS[part.casefold()])}" color="#174B83"><u>{escape(part)}</u></link>'
-        if index % 2 else escape(part)
-        for index, part in enumerate(LAW_CITATION.split(text))
+        f'<link href="{escape(url, quote=True)}" color="#174B83"><u>{escape(part)}</u></link>'
+        if url else escape(part)
+        for part, url in normative_runs(text)
     )
 
 
@@ -664,6 +631,7 @@ def _write_odt(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
                            center_columns=center, infer_right_columns=number not in (4, 5),
                            width_fraction=width, centered=width < 1)
             style_odt_blue_table(document.body[-1], "RcdTable")
+            link_odt_tree(document.body[-1])
             document.space(12)
             continue
         level, text = block
@@ -706,7 +674,14 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
     from tools._shared.pdf_contents import contents_table, contents_title
     from report_layout import LEFT_MARGIN, RIGHT_MARGIN, ReportLayout
 
-    layout = ReportLayout(
+    class RcdLayout(ReportLayout):
+        """Enlaza citas también dentro de las tablas del informe."""
+
+        def text(self, value, style=None, *, role=""):
+            """Crea párrafos seguros con referencias normativas."""
+            return self.paragraph(_pdf_law_links(str(value)).replace("\n", "<br/>"), style, role=role)
+
+    layout = RcdLayout(
         text_styles=settings.text_styles,
         template_path=settings.template_path, logo_path=settings.master_logo_path,
         expediente=settings.expediente,
@@ -749,7 +724,7 @@ def _write_pdf(blocks: list[StudyBlock], title: str, settings: ReportSettings, t
     for block in blocks:
         if isinstance(block, StudyTable):
             layout.table_caption(story, block.caption, body=body, include_reference=False)
-            if LAW_CITATION.search(block.caption):
+            if any(url for _value, url in normative_runs(block.caption)):
                 caption = story[-1]
                 story[-1] = layout.paragraph(_pdf_law_links(caption.getPlainText()), caption.style)
             number = layout.data_table_number
