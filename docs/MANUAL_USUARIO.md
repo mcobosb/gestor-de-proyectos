@@ -564,6 +564,14 @@ está en m², se propone un ensayo por cada 500 m² o fracción; cuando faltan d
 de lotes, tongadas o elementos, se deja el número pendiente. Las propuestas
 deben contrastarse con el pliego y la normativa aplicable.
 
+Algunas filas con precio vacío reciben una estimación orientativa en euros
+basada en tarifas públicas. Pasa el cursor por el precio para consultar la
+fuente, fecha, componentes y exclusiones: ciertos paquetes cubren solo parte
+del control. Son referencias históricas o sin fecha; confirma tributación,
+desplazamientos, alcance y precio actual. Las demás filas quedan pendientes.
+No se sustituyen precios existentes ni se modifican partidas ya insertadas;
+una revisión guardada que reciba una estimación deberá confirmarse de nuevo.
+
 **Confirmar revisión** registra el plan para guardarlo con el proyecto. El botón
 **+ Insertar ensayos en el presupuesto** exige precios directos positivos, usa el
 capítulo existente de **Control de Calidad** o lo crea, y se desactiva tras insertar.

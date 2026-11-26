@@ -1,7 +1,7 @@
 """
 ## Registro de cambios
-- Versión: 1 | Autor: Biblioteca distribuida con el programa | Fecha: 19/11/2026 | Cambio: Edición inicial.
 - Versión: 2 | Autor: Biblioteca distribuida con el programa | Fecha: 26/11/2026 | Cambio: Revisión de referencias y enlaces oficiales.
+- Versión: 1 | Autor: Biblioteca distribuida con el programa | Fecha: 19/11/2026 | Cambio: Edición inicial.
 """
 
 # 2. NORMATIVA DE APLICACIÓN

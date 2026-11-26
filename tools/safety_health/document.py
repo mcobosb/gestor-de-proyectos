@@ -1783,7 +1783,9 @@ def _write_odt(
         template_title=content.project_title,
     )
     document.project_title = project
-    if document.template_footer is not None:
+    if document.template_footer is None and not document.footer:
+        document.footer = content.title
+    elif document.template_footer is not None:
         from report_layout import replace_footer_fields
 
         footer = replace_footer_fields(document.template_footer, content.title)

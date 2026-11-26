@@ -1,6 +1,7 @@
 """Exportación del anejo de calidad a PDF y ODT."""
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 import re
 from xml.etree import ElementTree as ET
@@ -19,7 +20,7 @@ from tools._shared.document_layout import (
 from tools.document_structure.catalog import QUALITY_ASSURANCE_NUMBER
 
 from .catalog import get_catalog_entry
-from .plan import SOURCE, TRIALS, validate_rows, work_units
+from .plan import SOURCE, TRIALS, describe_price_source, validate_rows, work_units
 
 LIBRARY_PATH = Path(__file__).with_name("BIBLIOTECA.zip")
 DOCUMENTS = (
@@ -49,6 +50,7 @@ TABLES = {
 def write_document(app, target: Path, rows: list[dict]) -> None:
     """Genera ambos formatos a partir de las mismas fichas y la revisión vigente."""
     settings = app.report_settings
+    currency = currency_label(settings.currency, settings.custom_currency)
     units = work_units(app.budget_items)
     rows = validate_rows(rows, units)
     library = shared_library_path(app, "quality_assurance", LIBRARY_PATH)
@@ -61,7 +63,6 @@ def write_document(app, target: Path, rows: list[dict]) -> None:
         total = sum(item.import_total for item in generated)
         pem = sum(item.import_total for item in app.budget_items)
         chapters = ", ".join(sorted({app._chapter_title(item.chapter) for item in generated}))
-        currency = currency_label(settings.currency, settings.custom_currency)
         budget = f"Las partidas incorporadas figuran en «{chapters}» y suman {fmt_number(total)} {currency}."
         if pem > 0:
             budget += f" Representan el {fmt_number(100 * total / pem)} % del PEM actual."
@@ -80,12 +81,22 @@ def write_document(app, target: Path, rows: list[dict]) -> None:
             entry = get_catalog_entry(identifier)
             references.append(
                 f"Ficha relacionada para consulta: {entry.label}\n\n"
-                f"Referencia: {entry.reference}\n\nCriterios orientativos: {entry.criteria}\n\n{entry.details}"
+                f"Referencia: {entry.reference}\n\nFrecuencia orientativa: {entry.frequency}\n\n"
+                f"Criterios orientativos: {entry.criteria}\n\n{entry.details}"
             )
-        if detail or references:
+        price_detail = ""
+        if row["price"]:
+            price = Decimal(row["price"])
+            price_detail = (f"Precio directo por ensayo: {fmt_number(float(price))} {currency}. "
+                            f"Importe directo previsto: {fmt_number(float(price * row['count']))} {currency}.")
+            source = row.get("price_source")
+            if source:
+                price_detail += f" Precio de referencia: {describe_price_source(source)}"
+        if detail or references or price_detail:
             unit = units[row["unit_id"]]
             detail_sections.append(
-                f"### {unit.code} — {row['name']}\n\n" + "\n\n".join(filter(None, (detail, *references)))
+                f"### {unit.code} — {row['name']}\n\n"
+                + "\n\n".join(filter(None, (price_detail, detail, *references)))
             )
     details = "\n\n".join(detail_sections) or "No hay fichas ampliadas asociadas a los controles incluidos."
     markdown = markdown.replace("{{detalles_catalogo}}", details)

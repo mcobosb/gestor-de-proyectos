@@ -19,8 +19,9 @@ from pypdf.generic import ContentStream
 from bc3_gui import Concept, ProjectItem
 from budget_project import budget_concept_type
 from budget_reports import ReportSettings, budget_totals
-from report_layout import DEFAULT_TEMPLATE_PATH, ReportLayout
+from report_layout import ReportLayout
 from reference_search import load_reference_entries
+from tests._report_template import write_report_template
 from tools.safety_health import (
     SAFETY_BUDGET_SOURCE, SafetyLine, restore_project_state,
     synchronize_budget, write_study_report,
@@ -1040,7 +1041,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
         blocks = _numbered_blocks(_build_study_content(self.make_app("odt")).blocks)
         document_start = next(
             index for index, block in enumerate(blocks)
-            if block.kind == "document" and block.text.startswith("DOCUMENTO II.")
+            if block.kind == "document" and block.text.startswith("DOCUMENTO III.")
         )
         specification = blocks[document_start + 1:]
         texts = [block.text for block in specification]
@@ -1095,7 +1096,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
         blocks = _numbered_blocks(_build_study_content(self.make_app("odt")).blocks)
         document_start = next(
             index for index, block in enumerate(blocks)
-            if block.kind == "document" and block.text.startswith("DOCUMENTO II.")
+            if block.kind == "document" and block.text.startswith("DOCUMENTO III.")
         )
         specification = blocks[document_start + 1:]
         texts = [block.text for block in specification]
@@ -1149,7 +1150,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
         blocks = _numbered_blocks(_build_study_content(self.make_app("odt")).blocks)
         start = next(
             index for index, block in enumerate(blocks)
-            if block.kind == "document" and block.text.startswith("DOCUMENTO II.")
+            if block.kind == "document" and block.text.startswith("DOCUMENTO III.")
         )
         specification = blocks[start + 1:]
         texts = [block.text for block in specification]
@@ -2387,7 +2388,8 @@ class SafetyHealthStudyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             template = root / "plantilla.odt"
-            with ZipFile(DEFAULT_TEMPLATE_PATH) as source, ZipFile(template, "w") as target:
+            base = write_report_template(root / "base.odt")
+            with ZipFile(base) as source, ZipFile(template, "w") as target:
                 for member in source.infolist():
                     data = source.read(member.filename)
                     if member.filename == "styles.xml":
@@ -2493,6 +2495,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
             self.assertEqual(
                 len(toc.findall(f".//{{{text_ns}}}index-entry-page-number")), 2,
             )
+            footers = []
             for master in styles.findall(f".//{{{style_ns}}}master-page"):
                 header = master.find(f"{{{style_ns}}}header")
                 self.assertNotIn(
@@ -2500,8 +2503,10 @@ class SafetyHealthStudyTests(unittest.TestCase):
                 )
                 self.assertNotIn("Proyecto de prueba", "".join(header.itertext()))
                 footer = master.find(f"{{{style_ns}}}footer")
-                self.assertIsNotNone(footer.find(f".//{{{text_ns}}}page-number"))
-                self.assertIn(content.title, "".join(footer.itertext()))
+                if footer is not None:
+                    footers.append(footer)
+            self.assertTrue(any(footer.find(f".//{{{text_ns}}}page-number") is not None
+                                and content.title in "".join(footer.itertext()) for footer in footers))
             named = {
                 style.get(f"{{{style_ns}}}name"): style
                 for style in styles.findall(f".//{{{style_ns}}}style")

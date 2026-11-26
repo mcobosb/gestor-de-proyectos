@@ -169,6 +169,17 @@ def has_inserted(items: list[ProjectItem]) -> bool:
     return any(item.source == SOURCE for item in items)
 
 
+def describe_price_source(source: dict) -> str:
+    """Describe el origen y las limitaciones conservadas de un precio."""
+    text = (f"{source['source']}: {source['code']} — {source['summary']} "
+            f"({source['price']} EUR/{source['unit']}).")
+    if source.get("url"):
+        text += f" Fuente: {source['url']} (consulta: {source['consulted']})."
+    if source.get("limitations"):
+        text += f" {source['limitations']}"
+    return text
+
+
 def insert_budget(app, rows: list[dict]) -> None:
     """Incorpora una partida por ensayo y UO, con código único y precio revisado."""
     if has_inserted(app.budget_items):
@@ -176,7 +187,7 @@ def insert_budget(app, rows: list[dict]) -> None:
     units = work_units(app.budget_items)
     valid = validate_rows(rows, units, require_prices=True)
     if app.report_settings.currency != "EUR" and any(row.get("price_source") for row in valid):
-        raise ValueError("Los precios BCCA están en euros; revisa la moneda y los precios antes de insertar.")
+        raise ValueError("Los precios de referencia están en euros; revisa la moneda y los precios antes de insertar.")
     chapters = set(app.chapter_order) | set(app.chapter_titles) | {item.chapter for item in app.budget_items}
     matching = [chapter for chapter in chapters if re.search(
         r"\b(?:control|aseguramiento)(?:\s+y\s+control)?\s+de\s+(?:la\s+)?calidad\b",
@@ -202,8 +213,7 @@ def insert_budget(app, rows: list[dict]) -> None:
             description += f" Detalle del control: {row['details']}."
         if row.get("price_source"):
             source = row["price_source"]
-            description += (f" Precio seleccionado de {source['source']}: {source['code']} — "
-                            f"{source['summary']} ({source['price']} EUR/{source['unit']}).")
+            description += f" Precio de referencia: {describe_price_source(source)}"
         item = ProjectItem(f"CC-{next_code:03d}", chapter, "ud", row["name"], source=SOURCE,
                            text=description)
         next_code += 1

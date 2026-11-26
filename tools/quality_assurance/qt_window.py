@@ -19,10 +19,10 @@ from . import TOOL_LABEL
 from .catalog import get_catalog_entry, load_catalog
 from .document import DOCUMENTS, LIBRARY_PATH, write_document
 from .plan import (
-    TRIALS, applicable_trials, has_inserted, insert_budget, suggested_quantity, unit_snapshot,
+    TRIALS, applicable_trials, describe_price_source, has_inserted, insert_budget, suggested_quantity, unit_snapshot,
     validate_rows, work_units,
 )
-from .pricing import price_candidates
+from .pricing import estimate_empty_price, price_candidates
 
 FIELDS = ("name", "frequency", "count", "criteria", "price", "reference")
 ROLE = Qt.ItemDataRole.UserRole
@@ -44,6 +44,7 @@ class QualityWindow(QDialog):
             "Revisa las UO, la frecuencia, el número de ensayos y los criterios del pliego. "
             "Los precios se introducen sin costes indirectos y solo son obligatorios para insertar. "
             "Las coincidencias del catálogo aparecen desmarcadas; confirma su aplicabilidad. "
+            "Los precios orientativos pueden cubrir solo parte del control; consulta su alcance en la celda. "
             "Las frecuencias y tolerancias del libro son orientativas y no acreditan cumplimiento normativo."
         )
         note.setWordWrap(True)
@@ -118,17 +119,21 @@ class QualityWindow(QDialog):
         saved = app.quality_assurance_state.get("rows", [])
         if saved:
             self.table.blockSignals(True)
+            estimated = False
             for row in saved:
-                self.append_row(row)
+                estimated = self.append_row(row) or estimated
             self.table.blockSignals(False)
-            self.reviewed = True
+            self.reviewed = not estimated
         else:
             self.suggest()
         self.refresh_actions()
         app.budget_refreshed.connect(self.refresh_actions)
 
-    def append_row(self, row: dict) -> None:
+    def append_row(self, row: dict) -> bool:
         """Añade una fila con referencia estable a la partida de origen."""
+        original = row
+        if not has_inserted(self.app.budget_items):
+            row = estimate_empty_price(row, self.app.report_settings.currency)
         index = self.table.rowCount()
         self.table.insertRow(index)
         check = QTableWidgetItem()
@@ -148,8 +153,9 @@ class QualityWindow(QDialog):
                 cell.setToolTip(str(row.get("details", "")))
             if name == "price" and row.get("price_source"):
                 source = row["price_source"]
-                cell.setToolTip(f"{source['code']} — {source['summary']} · {source['source']}")
+                cell.setToolTip(describe_price_source(source))
             self.table.setItem(index, column, cell)
+        return row is not original
 
     def rows(self) -> list[dict]:
         """Recoge todas las filas, preservando las exclusiones para futuras revisiones."""

@@ -19,7 +19,7 @@ from tools._library_history import read_revisions
 from tools.quality_assurance.catalog import load_catalog
 from tools.quality_assurance.document import LIBRARY_PATH, write_document
 from tools.quality_assurance.plan import SOURCE, applicable_trials, insert_budget, suggested_quantity
-from tools.quality_assurance.pricing import price_candidates, price_catalog
+from tools.quality_assurance.pricing import estimate_empty_price, price_candidates, price_catalog
 
 
 class QualityAssuranceTests(unittest.TestCase):
@@ -49,12 +49,13 @@ class QualityAssuranceTests(unittest.TestCase):
             with self.subTest(summary=summary):
                 self.assertIn(expected, applicable_trials(item))
         with ZipFile(LIBRARY_PATH) as archive:
-            for name in ("08_catalogo_pac.md", "09_ensayos_clave.md"):
+            for name in ("02_normativa.md", "05_ensayos.md", "06_no_conformidades.md",
+                         "07_presupuesto.md", "08_catalogo_pac.md", "09_ensayos_clave.md"):
                 source = (LIBRARY_PATH.parent / name).read_bytes().replace(b"\r\n", b"\n")
                 content = archive.read(name)
                 self.assertEqual(content, source)
                 revisions, _remainder = read_revisions(content.decode("utf-8-sig"))
-                self.assertEqual(len(revisions), 1)
+                self.assertEqual(len(revisions), 1 if name.startswith(("08_", "09_")) else 2)
 
     def test_manual_catalog_add(self):
         """Añade una ficha seleccionada con su referencia y detalle."""
@@ -121,6 +122,12 @@ class QualityAssuranceTests(unittest.TestCase):
                 restored = decode_project_payload(build_project_payload(window), Path(folder) / "p.json",
                                                   window.report_settings)
                 self.assertEqual(restored.quality_assurance["rows"][0]["price_source"]["code"], "18ALF00010")
+                report = Path(folder) / "precio.odt"
+                write_document(window, report, [row for row in tool.rows() if row["included"]])
+                with ZipFile(report) as archive:
+                    text = " ".join(ET.fromstring(archive.read("content.xml")).itertext())
+                self.assertIn("18ALF00010", text)
+                self.assertIn("Precio directo por ensayo", text)
                 window.report_settings.currency = "USD"
                 with self.assertRaisesRegex(ValueError, "euros"):
                     insert_budget(window, [tool.rows()[0]])
@@ -129,6 +136,100 @@ class QualityAssuranceTests(unittest.TestCase):
                 inserted = next(item for item in window.budget_items if item.source == SOURCE)
                 self.assertIn("18ALF00010", inserted.text)
             finally:
+                window.is_dirty = False
+                window.close()
+                qt.processEvents()
+
+    def test_estimates_only_for_known_unedited_empty_prices(self):
+        """No extrapola precios a controles desconocidos, modificados o en otra moneda."""
+        from tools.quality_assurance.plan import TRIALS
+
+        row = {"trial": "concrete", "name": TRIALS["concrete"].name, "price": ""}
+        estimated = estimate_empty_price(row, "EUR")
+        self.assertEqual(estimated["price"], "168.29")
+        self.assertIn("151,26", estimated["price_source"]["summary"])
+        self.assertIn("borm.es", estimated["price_source"]["url"])
+        for changed, currency in (
+            (row | {"price": "25"}, "EUR"),
+            (row | {"name": "Otro control"}, "EUR"),
+            (row | {"trial": "PAC-61"}, "EUR"),
+            (row, "USD"),
+        ):
+            self.assertEqual(estimate_empty_price(changed, currency), changed)
+
+    def test_estimated_prices_restore_review_and_follow_exports(self):
+        """Rellena huecos sin pisar precios ni revisiones ya insertadas y conserva el alcance."""
+        qt = QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as folder, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(folder)
+        ), patch("budget_qt_window.apply_theme"), patch.object(
+            QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes
+        ):
+            window = BudgetMainWindow()
+            try:
+                work = ProjectItem("ZAH", "01#", "m²", "Subbase de zahorra", 50)
+                window.budget_items = [work]
+                window._open_tool("quality_assurance")
+                tool = window._project_windows[-1]
+                row = tool.rows()[0]
+                self.assertEqual((row["trial"], row["price"]), ("plate", "120.00"))
+                self.assertIn("desplazamiento", tool.table.item(0, 6).toolTip())
+                tool.table.item(0, 4).setText("1")
+                tool.review()
+                saved = window.quality_assurance_state["rows"]
+                restored = decode_project_payload(build_project_payload(window), Path(folder) / "p.json",
+                                                  window.report_settings)
+                self.assertEqual(restored.quality_assurance["rows"][0]["price_source"], saved[0]["price_source"])
+                report = Path(folder) / "estimacion.odt"
+                write_document(window, report, [row for row in tool.rows() if row["included"]])
+                with ZipFile(report) as archive:
+                    text = " ".join(ET.fromstring(archive.read("content.xml")).itertext())
+                self.assertIn("Estimación orientativa", text)
+                self.assertIn("geocesa.com", text)
+                self.assertIn("elemento reactivo", text)
+                tool.insert()
+                inserted = next(item for item in window.budget_items if item.source == SOURCE)
+                self.assertIn("Estimación orientativa", inserted.text)
+                self.assertIn("geocesa.com", inserted.text)
+                self.assertIn("desplazamiento", inserted.text)
+            finally:
+                window.is_dirty = False
+                window.close()
+                qt.processEvents()
+
+    def test_saved_review_gains_estimate_only_before_insertion(self):
+        """Pide confirmar de nuevo las revisiones antiguas y respeta precios editados."""
+        from tools.quality_assurance.qt_window import QualityWindow
+
+        qt = QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as folder, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(folder)
+        ), patch("budget_qt_window.apply_theme"):
+            window = BudgetMainWindow()
+            dialogs = []
+            try:
+                work = ProjectItem("ZAH", "01#", "m²", "Subbase de zahorra", 50)
+                window.budget_items = [work]
+                dialog = QualityWindow(window)
+                dialogs.append(dialog)
+                saved = dialog.rows()
+                saved[0]["price"] = ""
+                saved[0].pop("price_source")
+                saved[1]["price"] = "33"
+                window.quality_assurance_state = {"rows": saved}
+                reopened = QualityWindow(window)
+                dialogs.append(reopened)
+                self.assertEqual(reopened.rows()[0]["price"], "120.00")
+                self.assertEqual(reopened.rows()[1]["price"], "33")
+                self.assertFalse(reopened.reviewed)
+                window.budget_items.append(ProjectItem("CC-001", "CALIDAD#", "ud", "Ensayo", source=SOURCE))
+                inserted = QualityWindow(window)
+                dialogs.append(inserted)
+                self.assertEqual(inserted.rows()[0]["price"], "")
+                self.assertEqual(inserted.rows()[1]["price"], "33")
+            finally:
+                for dialog in dialogs:
+                    dialog.close()
                 window.is_dirty = False
                 window.close()
                 qt.processEvents()
@@ -158,7 +259,7 @@ class QualityAssuranceTests(unittest.TestCase):
                 self.assertFalse(tool.insert_button.isEnabled())
                 tool.review()
                 self.assertTrue(tool.export_button.isEnabled())
-                self.assertFalse(tool.insert_button.isEnabled())
+                self.assertTrue(tool.insert_button.isEnabled())
                 tool.table.item(0, 6).setText("120,50")
                 tool.table.item(2, 0).setCheckState(Qt.CheckState.Checked)
                 tool.table.item(2, 4).setText("1")

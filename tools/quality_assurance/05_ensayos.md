@@ -1,7 +1,7 @@
 """
 ## Registro de cambios
-- Versión: 1 | Autor: Biblioteca distribuida con el programa | Fecha: 19/11/2026 | Cambio: Edición inicial.
 - Versión: 2 | Autor: Biblioteca distribuida con el programa | Fecha: 26/11/2026 | Cambio: Corrección y mejora del texto.
+- Versión: 1 | Autor: Biblioteca distribuida con el programa | Fecha: 19/11/2026 | Cambio: Edición inicial.
 """
 
 # 5. PLAN DE ENSAYOS DE LABORATORIO
