@@ -1389,6 +1389,60 @@ class BudgetQtWindowTests(unittest.TestCase):
             window.close()
             self.application.processEvents()
 
+    def test_safety_report_does_not_recalculate_existing_or_create_basic_chapter(self) -> None:
+        """Generar conserva las mediciones y permite el EBSS sin capítulo preventivo."""
+        for full_study in (False, True):
+            with self.subTest(full_study=full_study), tempfile.TemporaryDirectory() as directory, patch(
+                "budget_qt_window.user_data_directory", return_value=Path(directory)
+            ):
+                window = BudgetMainWindow()
+                work = ProjectItem("01AAB00001", "01#", "ud", "Obra", unit_price=100)
+                window.budget_items = [work]
+                window.chapter_order = ["01#"]
+                if full_study:
+                    preventive = ProjectItem(
+                        "PREV", "02#", "ud", "Protección externa", measurement=7, unit_price=3,
+                    )
+                    window.budget_items.append(preventive)
+                    window.chapter_order.append("02#")
+                    window.chapter_titles["02#"] = "Seguridad y Salud"
+                window.safety_health_state = serialize_state(
+                    proposed_lines([work]), Decimal("2"),
+                    study_criteria=(False, False, False, full_study),
+                )
+                tool = SafetyHealthWindowQt(window)
+                proposal = tool.open_proposal()
+                original = list(window.budget_items)
+                with patch.object(proposal, "create_chapter") as create, patch(
+                    "tools.safety_health.qt_window.study_work_units", return_value=[]
+                ), patch(
+                    "tools.safety_health.qt_window.review_context", return_value="context"
+                ), patch(
+                    "tools.safety_health.qt_window.restore_review", return_value={"context": "context"}
+                ), patch(
+                    "tools.safety_health.qt_window.study_technical_review",
+                    return_value=("context", {}, [])
+                ), patch(
+                    "tools.safety_health.qt_window.technical_review_confirmed", return_value=True
+                ), patch(
+                    "tools.safety_health.qt_window.get_document_save_path", return_value=(Path(directory) / "test.odt", "odt")
+                ), patch(
+                    "tools.safety_health.qt_window.write_study_report", return_value=()
+                ) as write, patch(
+                    "tools.safety_health.qt_window.QMessageBox.information"
+                ):
+                    proposal.generate_report()
+                create.assert_not_called()
+                write.assert_called_once()
+                self.assertEqual(window.budget_items, original)
+                if full_study:
+                    self.assertEqual((preventive.measurement, preventive.unit_price), (7, 3))
+                proposal.reject()
+                tool.reject()
+                with patch.object(window, "_confirm_project_change", return_value=True):
+                    window.close()
+                self.application.processEvents()
+
     def test_safety_health_qt_reviews_chapter_criteria_centers_and_conditions(self) -> None:
         """Migra el asistente preventivo conservando estado y propuesta."""
         with tempfile.TemporaryDirectory() as directory, patch(
@@ -1423,6 +1477,8 @@ class BudgetQtWindowTests(unittest.TestCase):
             ))
             tool.pages.setCurrentIndex(1)
             self.assertEqual(window.safety_health_state["drawings"]["paper"], "A4")
+            self.assertFalse(tool.drawings_include_basic.isChecked())
+            tool.drawings_include_basic.setChecked(True)
             tool.drawings_format.setCurrentText("A3")
             first = tool.drawings_table.item(0, 0)
             first.setCheckState(Qt.CheckState.Checked)
@@ -1460,6 +1516,7 @@ class BudgetQtWindowTests(unittest.TestCase):
             self.assertEqual(reopened.sicess_centers_tab.table.item(0, 0).checkState(), Qt.CheckState.Checked)
             self.assertEqual(reopened.centers_editor.text.toPlainText(), "Centro manual conservado")
             self.assertEqual(reopened.drawings_format.currentText(), "A3")
+            self.assertTrue(reopened.drawings_include_basic.isChecked())
             self.assertEqual(reopened.drawings_table.item(0, 0).checkState(), Qt.CheckState.Checked)
             self.assertTrue(
                 window.safety_health_state["drawings"]["selected"]["A3-AUX09"]

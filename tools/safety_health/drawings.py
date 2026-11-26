@@ -230,7 +230,12 @@ def restore_drawings(value: object) -> dict | None:
         or type(enabled) is not bool for code, enabled in selected.items()
     ):
         raise ValueError("La selección de fichas de Seguridad y Salud no es válida.")
-    return {"paper": value["paper"], "selected": dict(selected)}
+    result = {"paper": value["paper"], "selected": dict(selected)}
+    if "include_basic" in value:
+        if type(value["include_basic"]) is not bool:
+            raise ValueError("La opción de planos del estudio básico no es válida.")
+        result["include_basic"] = value["include_basic"]
+    return result
 
 
 def selected_sheets(state: object) -> list[DrawingSheet]:

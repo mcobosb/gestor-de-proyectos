@@ -17,6 +17,7 @@ from pypdf import PdfReader
 from pypdf.generic import ContentStream
 
 from bc3_gui import Concept, ProjectItem
+from budget_core import MeasurementLine
 from budget_project import budget_concept_type
 from budget_reports import ReportSettings, budget_totals
 from report_layout import ReportLayout
@@ -31,7 +32,7 @@ from tools.safety_health.document import (
     _pdf_blue_table, study_technical_review, study_work_units,
 )
 from tools.safety_health.regulations import (
-    WorkUnit, general_une_references, initially_selected, law_proposals, load_ntps,
+    REGULATIONS, WorkUnit, general_une_references, initially_selected, law_proposals, load_ntps,
     ntp_proposals, review_context,
 )
 from tools.safety_health.chapter_selection import study_chapters, study_items
@@ -89,9 +90,131 @@ class SafetyHealthStudyTests(unittest.TestCase):
             app,
             [SafetyLine("SS0001", "ud", "Protecciones colectivas", Decimal("3.11"), Decimal(1))],
             Decimal("2"),
-            study_criteria=(False, False, False, False),
+            study_criteria=(False, False, False, True),
         )
         return app
+
+    def test_ess_and_ebss_export_required_sections_and_real_budget(self):
+        """El ESS utiliza el presupuesto real; el EBSS no necesita capítulo propio."""
+        with tempfile.TemporaryDirectory() as folder:
+            for output_format in ("pdf", "odt"):
+                for full_study in (False, True):
+                    with self.subTest(format=output_format, full=full_study):
+                        app = self.make_app(output_format)
+                        app.safety_health_state["study_criteria"]["criterion_4_met"] = full_study
+                        safety = next(item for item in app.budget_items if item.source.startswith("SS:"))
+                        if full_study:
+                            safety.measurement = 6
+                            safety.unit_price = 3.11
+                            safety.measurement_lines = [
+                                MeasurementLine(comment="Dos tramos", units=2, length=3),
+                            ]
+                            app.budget_items.append(ProjectItem(
+                                "MANUAL-SS", safety.chapter, "ud", "Partida manual preventiva",
+                                measurement=2, unit_price=4,
+                            ))
+                            self.assertNotIn("MANUAL-SS", [item.code for item in study_items(app)])
+                        else:
+                            app.budget_items.remove(safety)
+                            units = study_work_units(app)
+                            app.safety_health_state["regulatory_review"] = {
+                                "context": review_context(units),
+                                "laws": {REGULATIONS[0].code: True},
+                                "ntps": {},
+                            }
+                        target = Path(folder) / f"{full_study}.{output_format}"
+                        warnings = write_study_report(app, target)
+                        if output_format == "pdf":
+                            text = " ".join(page.extract_text() or "" for page in PdfReader(target).pages)
+                        else:
+                            with ZipFile(target) as archive:
+                                root = ET.fromstring(archive.read("content.xml"))
+                                text = "".join(root.itertext())
+                        text = " ".join(text.split())
+                        documents = (
+                            "DOCUMENTO I. MEMORIA", "DOCUMENTO II. PLANOS",
+                            "DOCUMENTO III. PLIEGO DE CONDICIONES",
+                            "DOCUMENTO IV. MEDICIONES", "DOCUMENTO V. PRESUPUESTO",
+                        )
+                        if full_study:
+                            positions = [text.index(title) for title in documents]
+                            self.assertEqual(positions, sorted(positions))
+                            for value in ("Dos tramos", "MANUAL-SS", "Partida manual preventiva", "26,66"):
+                                self.assertIn(value, text)
+                            self.assertTrue(any("plano específico de implantación" in warning for warning in warnings))
+                        else:
+                            for title in documents:
+                                self.assertNotIn(title, text)
+                            for value in ("NORMATIVA DE APLICACIÓN", "SERVICIOS OCULTOS",
+                                          "RECURSOS PREVENTIVOS", "TRABAJOS POSTERIORES"):
+                                self.assertIn(value, text)
+                            self.assertIn(REGULATIONS[0].title, text)
+                            self.assertNotIn("NTP CONFIRMADAS", text)
+                            if output_format == "odt":
+                                href = "{http://www.w3.org/1999/xlink}href"
+                                self.assertTrue(any(
+                                    element.get(href) == "https://www.boe.es/eli/es/l/1995/11/08/31/con"
+                                    for element in root.iter()
+                                ))
+
+    def test_basic_drawings_are_opt_in_and_missing_disabled_sheet_is_ignored(self):
+        """No consulta fichas ausentes si el EBSS no lleva planos."""
+        from io import BytesIO
+        from PIL import Image
+        from tools.safety_health.drawings import SHEETS
+
+        app = self.make_app("odt")
+        app.safety_health_state["study_criteria"]["criterion_4_met"] = False
+        app.report_settings.author = "Firma de prueba"
+        app.report_settings.role = "Técnico"
+        app.safety_health_state["drawings"] = {
+            "paper": "A4", "selected": {"CUSTOM-" + "a" * 64: True},
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "basic.odt"
+            write_study_report(app, target)
+            with ZipFile(target) as archive:
+                self.assertNotIn("DOCUMENTO II. PLANOS", archive.read("content.xml").decode("utf-8"))
+            app.safety_health_state["drawings"]["include_basic"] = True
+            with self.assertRaisesRegex(ValueError, "Faltan fichas"):
+                write_study_report(app, target)
+            app.safety_health_state["drawings"]["selected"] = {SHEETS[0].code: True}
+            image = BytesIO()
+            Image.new("RGB", (10, 10), "white").save(image, format="PNG")
+            with patch("tools.safety_health.document.render_drawings", return_value=[image.getvalue()]):
+                write_study_report(app, target)
+            with ZipFile(target) as archive:
+                root = ET.fromstring(archive.read("content.xml"))
+                body = root.find("{urn:oasis:names:tc:opendocument:xmlns:office:1.0}body/"
+                                 "{urn:oasis:names:tc:opendocument:xmlns:office:1.0}text")
+                nodes = list(body)
+                index = next(i for i, node in enumerate(nodes)
+                             if node.get("{urn:oasis:names:tc:opendocument:xmlns:text:1.0}name") == "ESSPlansContents")
+                self.assertIn("PLANO Nº", "".join(nodes[index + 1].itertext()))
+                self.assertEqual(
+                    nodes[index + 2].get("{urn:oasis:names:tc:opendocument:xmlns:text:1.0}style-name"),
+                    "ESSAfterDrawings",
+                )
+                self.assertIn("Pictures/ESSDrawing1.png", archive.namelist())
+            app.report_settings.output_format = "pdf"
+            target = Path(folder) / "basic.pdf"
+            with patch("tools.safety_health.document.render_drawings", return_value=[image.getvalue()]):
+                write_study_report(app, target)
+            text = " ".join(page.extract_text() or "" for page in PdfReader(target).pages)
+            self.assertIn("DOCUMENTO II. PLANOS", text)
+            self.assertNotIn("DOCUMENTO III. PLIEGO DE CONDICIONES", text)
+
+    def test_external_safety_chapter_is_included_without_treating_it_as_work(self):
+        """El capítulo externo se usa para mediciones y presupuesto, sin recalcularlo."""
+        app = self.make_app("odt")
+        app.budget_items = [item for item in app.budget_items if not item.source.startswith("SS:")]
+        app.chapter_titles["EXTERNO"] = "Seguridad y Salud"
+        manual = ProjectItem("EXTERNA", "EXTERNO", "ud", "Partida externa", measurement=2, unit_price=7)
+        app.budget_items.append(manual)
+        content = _build_study_content(app)
+        self.assertNotIn(manual, study_items(app))
+        self.assertTrue(any("EXTERNA" in row for block in content.blocks for row in block.rows))
+        self.assertEqual((manual.measurement, manual.unit_price), (2, 7))
 
     def test_pdf_and_odt_use_project_setting_and_assemble_selected_templates(self):
         """Genera ambos formatos con ficha BCCA, fallback, riesgos y datos pendientes."""
@@ -169,7 +292,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
                     text = " ".join(text.split())
                     self.assertNotIn("Registro de cambios", text)
                     self.assertNotIn("Biblioteca distribuida con el programa", text)
-                    self.assertIn("ESTUDIO BÁSICO DE SEGURIDAD Y SALUD", text)
+                    self.assertIn("ESTUDIO DE SEGURIDAD Y SALUD", text)
                     self.assertIn("ÍNDICE", text)
                     self.assertIn("LUCENA (CÓRDOBA); MADRID (MADRID)", text)
                     self.assertIn("ANDALUCÍA; MADRID, COMUNIDAD DE", text)
@@ -228,7 +351,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
                     self.assertRegex(
                         text, r"\b2\.\d+ INSTALACIONES PROVISIONALES Y EMERGENCIAS",
                     )
-                    self.assertNotIn("PRESUPUESTO DE SEGURIDAD Y SALUD", text)
+                    self.assertIn("DOCUMENTO V. PRESUPUESTO", text)
                     self.assertNotIn("{{", text)
                     self.assertIn("La actuación de ACME mejora la red.", text)
                     self.assertNotIn("véase la tabla", text.casefold())
@@ -237,7 +360,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
                     self.assertNotIn("Resumen automatico segun las partidas presupuestarias", text)
                     self.assertNotIn("DATOS DEL PROYECTO", text)
                     self.assertIn(
-                        "Por tanto, se define un ESTUDIO BÁSICO DE SEGURIDAD Y SALUD.", text,
+                        "Por tanto, se define un ESTUDIO DE SEGURIDAD Y SALUD.", text,
                     )
 
     def test_pdf_uses_the_configured_master_logo(self):
@@ -350,6 +473,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
             item for item in app.budget_items
             if item.unit.strip() not in ("m²", "m2")
         ]
+        app.safety_health_state["study_criteria"]["criterion_4_met"] = False
         content = _build_study_content(app)
         summary = next(block for block in content.blocks if block.project_summary)
         self.assertIn("[VALIDAR]", dict(summary.rows)["Superficie (m²)"])
@@ -941,6 +1065,8 @@ class SafetyHealthStudyTests(unittest.TestCase):
                 "3 CONDICIONES DE NATURALEZA FACULTATIVA",
                 "4 CONDICIONES DE NATURALEZA TÉCNICA",
                 "5 CONDICIONES DE NATURALEZA ECONÓMICA",
+                "1 CAP. 03 - SEGURIDAD Y SALUD",
+                "1 CAP. 03 - SEGURIDAD Y SALUD",
             ],
         )
         self.assertTrue(all(
@@ -957,8 +1083,9 @@ class SafetyHealthStudyTests(unittest.TestCase):
         document_starts = [index for index, block in enumerate(blocks) if block.kind == "document"]
         self.assertEqual([blocks[index].text for index in document_starts], [
             "DOCUMENTO I. MEMORIA", "DOCUMENTO III. PLIEGO DE CONDICIONES",
+            "DOCUMENTO IV. MEDICIONES", "DOCUMENTO V. PRESUPUESTO",
         ])
-        specification = blocks[document_starts[1] + 1:]
+        specification = blocks[document_starts[1] + 1:document_starts[2]]
         self.assertEqual(
             [block.text for block in specification if block.kind == "heading" and block.level == 1],
             [
@@ -1152,7 +1279,9 @@ class SafetyHealthStudyTests(unittest.TestCase):
             index for index, block in enumerate(blocks)
             if block.kind == "document" and block.text.startswith("DOCUMENTO III.")
         )
-        specification = blocks[start + 1:]
+        end = next(index for index in range(start + 1, len(blocks))
+                   if blocks[index].kind == "document")
+        specification = blocks[start + 1:end]
         texts = [block.text for block in specification]
         for heading in (
             "3.7.1 ACTA O RESOLUCIÓN DE APROBACIÓN DEL PLAN",
@@ -1291,6 +1420,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
                     synchronize_budget(
                         app, [SafetyLine("SS0001", "ud", "Protección", Decimal("3.11"), Decimal(1))],
                         Decimal(2),
+                        study_criteria=(False, False, False, True),
                     )
                     self.assertEqual(app.safety_health_state["regulatory_review"], review)
                     content = _build_study_content(app)

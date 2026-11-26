@@ -14,10 +14,10 @@ from typing import TYPE_CHECKING
 import unicodedata
 from zipfile import BadZipFile, ZipFile
 
-from budget_reports import budget_totals, report_output_format
+from budget_reports import budget_totals, money, report_output_format
 from cpv_catalog import resolve_cpv_codes
 from .care_centers import format_centers, format_sicess_centers, restore_centers, restore_sicess_centers
-from .chapter_selection import study_chapters, study_items
+from .chapter_selection import safety_budget_chapters, study_chapters, study_items
 from .external_conditions import APPLICABILITY, EXTERNAL_CONDITIONS, restore_external_conditions
 from .drawings import (
     group_sheets_by_page, render_drawings, restore_drawings, selected_sheets,
@@ -37,7 +37,7 @@ from tools._shared.document_layout import (
     add_odt_narrative_styles, number_headings, pdf_blue_table_style, pdf_list_style,
 )
 from tools.safety_health import (
-    LIBRARY_PATH, SAFETY_BUDGET_SOURCE, _study_criteria_values, evaluate_study_criteria,
+    LIBRARY_PATH, _study_criteria_values, evaluate_study_criteria,
     study_work_summary,
 )
 from collaborative_storage import shared_library_path
@@ -58,6 +58,13 @@ _TEMPLATE_MEMBERS = {
     "general_conditions": "UNI/CONDICIONES_GENERALES_ESS.md",
 }
 _PLIEGO_DOCUMENT_TITLE = "DOCUMENTO III. PLIEGO DE CONDICIONES"
+_PLANS_DOCUMENT_TITLE = "DOCUMENTO II. PLANOS"
+_MEASUREMENTS_DOCUMENT_TITLE = "DOCUMENTO IV. MEDICIONES"
+_BUDGET_DOCUMENT_TITLE = "DOCUMENTO V. PRESUPUESTO"
+_IMPLEMENTATION_WARNING = (
+    "[VALIDAR] Revisar e incorporar al proyecto el plano específico de implantación y "
+    "señalización de obra; las fichas tipo no lo sustituyen."
+)
 _REFERENCE_RE = re.compile(
     r"\b(?:R|MP|PC|EPI|EQ)-[^\W_]+(?:-[^\W_]+)*\b", re.IGNORECASE,
 )
@@ -580,13 +587,86 @@ def _add_normative_chapter(blocks, template, units, state, pending, chapters) ->
     ))
 
 
+def _basic_sections(template: str, titles: tuple[str, ...], pending: list[str]) -> str:
+    """Conserva las secciones editables seleccionadas o la plantilla completa si faltan."""
+    sections = re.split(r"(?m)(?=^## )", template)
+    chosen = [
+        section for section in sections
+        if section.splitlines() and section.splitlines()[0].removeprefix("## ").strip() in titles
+    ]
+    found = {section.splitlines()[0][3:].strip() for section in chosen}
+    if found != set(titles):
+        notice = (
+            "[VALIDAR] La plantilla personalizada no contiene todos los apartados previstos "
+            "para el estudio básico; se ha conservado completa."
+        )
+        pending.append(notice)
+        return f"{template}\n\n{notice}\n"
+    return "\n".join(chosen)
+
+
+def _add_safety_budget_documents(blocks: list[_Block], items: list[ProjectItem], app) -> None:
+    """Incorpora las mediciones y el presupuesto reales de los capítulos preventivos."""
+    from budget_core import fmt_number
+
+    chapters = list(dict.fromkeys(item.chapter for item in items))
+    blocks.append(_Block("document", _MEASUREMENTS_DOCUMENT_TITLE))
+    for chapter in chapters:
+        _add_heading(blocks, _chapter_label(app, chapter), 1)
+        for item in (item for item in items if item.chapter == chapter):
+            _add_heading(blocks, f"{item.code} — {item.summary}", 2)
+            if item.measurement_lines:
+                rows = tuple(
+                    (
+                        line.comment,
+                        *("" if value is None else fmt_number(value, 3) for value in (
+                            line.units, line.length, line.width, line.height,
+                        )),
+                        fmt_number(line.k, 3), fmt_number(line.partial, 3),
+                    )
+                    for line in item.measurement_lines
+                )
+                blocks.append(_Block(
+                    "table", headers=("Comentario", "Uds.", "Longitud", "Anchura", "Altura", "K", "Parcial"),
+                    rows=rows,
+                ))
+            blocks.append(_Block(
+                "paragraph", f"Medición total: {fmt_number(item.measurement, 3)} {item.unit}",
+            ))
+    blocks.append(_Block("document", _BUDGET_DOCUMENT_TITLE))
+    for chapter in chapters:
+        chapter_items = [item for item in items if item.chapter == chapter]
+        _add_heading(blocks, _chapter_label(app, chapter), 1)
+        blocks.append(_Block(
+            "table",
+            headers=("Código", "Unidad", "Descripción", "Cantidad", "Precio", "Importe"),
+            rows=tuple(
+                (item.code, item.unit, item.summary, fmt_number(item.measurement, 3),
+                 _format_number(money(item.unit_price)), _format_number(money(item.import_total)))
+                for item in chapter_items
+            ),
+        ))
+        total = sum((money(item.import_total) for item in chapter_items), Decimal())
+        blocks.append(_Block("paragraph", f"Total capítulo: {_format_amount(total, _currency_label(app.report_settings))}"))
+    total = sum((money(item.import_total) for item in items), Decimal())
+    blocks.append(_Block(
+        "paragraph", f"TOTAL EJECUCIÓN MATERIAL DE SEGURIDAD Y SALUD: "
+        f"{_format_amount(total, _currency_label(app.report_settings))}",
+    ))
+
+
 def _build_study_content(app) -> _StudyContent:
     """Combina los datos del proyecto con las secciones y reglas de las plantillas ESS."""
     work_items = study_items(app)
-    safety_items = [
-        item for item in app.budget_items if item.source.startswith(SAFETY_BUDGET_SOURCE)
-    ]
-    if not safety_items:
+    safety_chapters = safety_budget_chapters(app)
+    safety_items = [item for item in app.budget_items if item.chapter in safety_chapters]
+    assessment = evaluate_study_criteria(app)
+    state = app.safety_health_state if isinstance(app.safety_health_state, dict) else {}
+    selected_criteria = _study_criteria_values(state.get("study_criteria"))
+    if selected_criteria is None:
+        selected_criteria = assessment.fulfilled
+    full_study = any(selected_criteria)
+    if full_study and not safety_items:
         raise ValueError("Crea primero el capítulo CAP. XX integrado en el presupuesto.")
     if not work_items:
         raise ValueError("El presupuesto no contiene partidas de obra para clasificar en el ESS.")
@@ -610,18 +690,13 @@ def _build_study_content(app) -> _StudyContent:
         if paths or family_risk_link_for_code(item.code, family_risk_links) is not None
     ]
     all_references = _merge_references(*fiche_references.values())
-    assessment = evaluate_study_criteria(app)
-    state = app.safety_health_state if isinstance(app.safety_health_state, dict) else {}
-    selected_criteria = _study_criteria_values(state.get("study_criteria"))
-    if selected_criteria is None:
-        selected_criteria = assessment.fulfilled
-    full_study = any(selected_criteria)
     title = (
         "ESTUDIO DE SEGURIDAD Y SALUD" if full_study
         else "ESTUDIO BÁSICO DE SEGURIDAD Y SALUD"
     )
-    safety_chapter = safety_items[0].chapter
-    chapter_label = _chapter_label(app, safety_chapter)
+    chapter_label = _chapter_label(app, safety_items[0].chapter) if safety_items else ""
+    if full_study:
+        pending.append(_IMPLEMENTATION_WARNING)
     settings = app.report_settings
     project_title = app._project_title().upper()
     currency = _currency_label(settings)
@@ -736,8 +811,9 @@ def _build_study_content(app) -> _StudyContent:
         "Fecha de emision": date.today().strftime("%d/%m/%Y"),
         "Presupuesto de ejecucion material": _format_amount(totals["pem"], currency),
         "Presupuesto de licitacion": _format_amount(totals["total"], currency),
-        "Presupuesto de Seguridad y Salud integrado": _format_amount(
-            sum(float(item.import_total) for item in safety_items), currency,
+        "Presupuesto de Seguridad y Salud integrado": (
+            _format_amount(sum((money(item.import_total) for item in safety_items), Decimal()), currency)
+            if safety_items else "No se ha incorporado un capítulo de Seguridad y Salud."
         ),
         "Plazo de ejecucion": duration_text,
         "Numero maximo simultaneo de trabajadores": workers_text,
@@ -789,10 +865,6 @@ def _build_study_content(app) -> _StudyContent:
     machinery = "\n".join(f"• {code} — {label}" for code, label in machinery_rows) or (
         "No se ha identificado maquinaria en el presupuesto disponible."
     )
-    technical_context, _proposals = technical_review_data(
-        _work_units(app, item_fiches, fiche_references), all_references,
-        auxiliary_rows + machinery_rows, state.get("external_conditions"), templates["specification"],
-    )
     replacements = {
         "titulo_proyecto": data_values["Titulo del proyecto"],
         "tipo_actuacion": data_values["Tipo de actuacion"],
@@ -825,7 +897,7 @@ def _build_study_content(app) -> _StudyContent:
         "tipo_estudio": title,
     }
     criteria_labels = (
-        "a) Presupuesto de ejecución por contrata con IVA superior a 450.759,08 EUR.",
+        "a) Presupuesto de ejecución por contrata con IVA igual o superior a 450.759,08 EUR.",
         "b) Duración superior a 30 días laborables y más de 20 trabajadores simultáneos.",
         "c) Volumen de mano de obra superior a 500 jornadas.",
         "d) Obra de túneles, galerías, conducciones subterráneas o presas.",
@@ -902,8 +974,28 @@ def _build_study_content(app) -> _StudyContent:
         section_rows=tuple(section_rows),
     ))
 
+    if not full_study:
+        _add_heading(blocks, "Normativa de aplicación", 2)
+        units = _work_units(app, item_fiches, fiche_references)
+        review = restore_review(state.get("regulatory_review"))
+        confirmed = review.get("context") == review_context(units)
+        laws = [law.title for law in REGULATIONS if confirmed and review["laws"].get(law.code, False)]
+        if not confirmed:
+            pending.append("[VALIDAR] Confirmar normativa para las unidades de obra actuales.")
+        if laws:
+            blocks.append(_Block(
+                "paragraph", "Se aplicarán las disposiciones vigentes correspondientes a los trabajos "
+                "y sus modificaciones, tras su revisión para las condiciones reales de la obra.",
+            ))
+            blocks.extend(_Block("list_item", f"• {law}", 1) for law in laws)
+        else:
+            blocks.append(_Block("paragraph", "[VALIDAR] No hay disposiciones confirmadas para esta obra."))
+
     _add_heading(blocks, "Memoria descriptiva", 1)
-    _add_markdown(blocks, templates["memory"], replacements)
+    memory = templates["memory"] if full_study else _basic_sections(
+        templates["memory"], ("Criterios preventivos generales",), pending,
+    )
+    _add_markdown(blocks, memory, replacements)
     _add_heading(blocks, "Instalaciones provisionales y emergencias", 2)
     _add_markdown(blocks, templates["emergencies"], replacements, heading_offset=1)
 
@@ -956,18 +1048,29 @@ def _build_study_content(app) -> _StudyContent:
         _add_markdown(blocks, text, heading_offset=1)
 
     _add_heading(blocks, "Seguimiento, control, coordinación, formación y documentación", 1)
-    _add_markdown(blocks, templates["monitoring"], replacements)
+    monitoring = templates["monitoring"] if full_study else _basic_sections(
+        templates["monitoring"],
+        ("Localización y control de servicios ocultos", "Presencia de recursos preventivos",
+         "Previsiones para trabajos posteriores"), pending,
+    )
+    _add_markdown(blocks, monitoring, replacements)
 
-    blocks.append(_Block("document", _PLIEGO_DOCUMENT_TITLE))
-    _add_normative_chapter(
-        blocks, templates["normative"], _work_units(app, item_fiches, fiche_references), state, pending,
-        [(chapter.code, _chapter_label(app, chapter.code))
-         for chapter in study_chapters(app) if chapter.selected],
-    )
-    specification = selected_technical_template(
-        templates["specification"], state.get("technical_review"), technical_context, pending,
-    )
-    _add_markdown(blocks, specification, replacements, heading_offset=-1)
+    if full_study:
+        technical_context, _proposals = technical_review_data(
+            _work_units(app, item_fiches, fiche_references), all_references,
+            auxiliary_rows + machinery_rows, state.get("external_conditions"), templates["specification"],
+        )
+        blocks.append(_Block("document", _PLIEGO_DOCUMENT_TITLE))
+        _add_normative_chapter(
+            blocks, templates["normative"], _work_units(app, item_fiches, fiche_references), state, pending,
+            [(chapter.code, _chapter_label(app, chapter.code))
+             for chapter in study_chapters(app) if chapter.selected],
+        )
+        specification = selected_technical_template(
+            templates["specification"], state.get("technical_review"), technical_context, pending,
+        )
+        _add_markdown(blocks, specification, replacements, heading_offset=-1)
+        _add_safety_budget_documents(blocks, safety_items, app)
 
     all_references = _merge_references(all_references, _reference_groups("\n".join(
         value for block in blocks
@@ -1041,7 +1144,7 @@ def _build_study_content(app) -> _StudyContent:
             raise ValueError("La memoria general no contiene la tabla de grupos de riesgo prevista.")
         blocks[insertion:insertion] = catalogue_blocks
 
-    blocks.insert(0, _Block("document", "DOCUMENTO I. MEMORIA"))
+    blocks.insert(0, _Block("document", "DOCUMENTO I. MEMORIA" if full_study else "MEMORIA"))
     for block in blocks:
         values = [block.text, *block.headers, *(value for row in block.rows for value in row)]
         if any(_PLACEHOLDER_RE.search(value) for value in values):
@@ -1073,6 +1176,8 @@ def _column_ratios(headers: tuple[str, ...]) -> tuple[float, ...]:
         return (1.1, 1.8, 4.1)
     if len(headers) == 6:
         return (1.0, 0.6, 3.2, 0.8, 1.5, 1.2)
+    if len(headers) == 7:
+        return (3.0, 0.7, 0.9, 0.9, 0.9, 0.7, 1.0)
     return tuple(1.0 for _ in headers)
 
 
@@ -1530,7 +1635,7 @@ def _append_odt_plans_index(document, title_groups: list[list[str]], bookmark_of
             _tag("fo:font-size"): "1pt", _tag("fo:color"): "#FFFFFF",
         })
 
-    document.paragraph("DOCUMENTO Nº 2: PLANOS", "ESSPlansTitle")
+    document.paragraph(_PLANS_DOCUMENT_TITLE, "ESSPlansTitle")
     headings = [
         (1, f"PLANO Nº {index:02}. {title}")
         for index, title in enumerate(
@@ -1632,7 +1737,7 @@ def _write_pdf(
         plan_contents.dotsMinLevel = 0
         story.extend((
             PageBreak(),
-            layout.text("DOCUMENTO Nº 2: PLANOS", layout.title_style),
+            layout.text(_PLANS_DOCUMENT_TITLE, layout.title_style),
             contents_title(layout),
             plan_contents,
             NextPageTemplate("ESSDrawings"),
@@ -1827,7 +1932,12 @@ def _write_odt(
     document_styles = {}
     if scoped_contents:
         for index, (_title, _blocks) in enumerate(documents):
-            document_number = 3 if _title == _PLIEGO_DOCUMENT_TITLE else index + 1
+            document_number = {
+                _PLANS_DOCUMENT_TITLE: 2,
+                _PLIEGO_DOCUMENT_TITLE: 3,
+                _MEASUREMENTS_DOCUMENT_TITLE: 4,
+                _BUDGET_DOCUMENT_TITLE: 5,
+            }.get(_title, index + 1)
             for level in range(1, 5):
                 name = f"ESSDocument{index}Heading{level}"
                 ET.SubElement(document.automatic_styles, _tag("style:style"), {
@@ -1941,12 +2051,13 @@ def _write_odt(
     if drawings:
         _append_odt_drawings(
             target, drawings, title_groups, paper, plan_bookmark_offset,
+            following_document=plan_insert_at < len(documents),
         )
 
 
 def _append_odt_drawings(
     target: Path, drawings: list[bytes], title_groups: list[list[str]],
-    paper: str, bookmark_offset: int,
+    paper: str, bookmark_offset: int, *, following_document: bool,
 ) -> None:
     """Añade páginas de plano con maestro propio e imágenes integradas en el ODT."""
     from xml.etree import ElementTree as ET
@@ -1986,11 +2097,12 @@ def _append_odt_drawings(
                 _tag("style:name"): "ESSDrawingPage",
                 _tag("style:page-layout-name"): "ESSDrawingLayout",
             })
-            insertion_index = next((
-                index for index, node in enumerate(body)
-                if node.tag in (_tag("text:p"), _tag("text:h"))
-                and _PLIEGO_DOCUMENT_TITLE in "".join(node.itertext())
-            ), len(body))
+            insertion_index = next(
+                index + 1 for index, node in enumerate(body)
+                if node.tag == _tag("text:table-of-content")
+                and node.get(_tag("text:name")) == "ESSPlansContents"
+            )
+            needs_standard_page = not following_document and insertion_index < len(body)
             image_names = []
             existing_names = set(source.namelist())
             title_index = 0
@@ -2032,6 +2144,18 @@ def _append_odt_drawings(
                 ET.SubElement(manifest, _tag("manifest:file-entry"), {
                     _tag("manifest:full-path"): name, _tag("manifest:media-type"): "image/png",
                 })
+            if needs_standard_page:
+                style = ET.SubElement(automatic, _tag("style:style"), {
+                    _tag("style:name"): "ESSAfterDrawings", _tag("style:family"): "paragraph",
+                    _tag("style:parent-style-name"): "ESSBody",
+                    _tag("style:master-page-name"): "Standard",
+                })
+                ET.SubElement(style, _tag("style:paragraph-properties"), {
+                    _tag("fo:break-before"): "page",
+                })
+                body.insert(insertion_index, ET.Element(_tag("text:p"), {
+                    _tag("text:style-name"): "ESSAfterDrawings",
+                }))
             with tempfile.NamedTemporaryFile(dir=target.parent, suffix=".odt", delete=False) as handle:
                 temporary = Path(handle.name)
             replacements = {
@@ -2054,18 +2178,35 @@ def write_study_report(app, target) -> tuple[str, ...]:
     """Genera el ESS como PDF u ODT y devuelve los avisos, que no se imprimen."""
     target = Path(target)
     content = _build_study_content(app)
-    content.blocks = _numbered_blocks(content.blocks)
     output_format = report_output_format(
         target, app.report_settings.output_format,
     )
     drawing_state = restore_drawings(app.safety_health_state.get("drawings"))
-    selected = selected_sheets(drawing_state) if drawing_state else []
+    full_study = any(
+        block.kind == "document" and block.text == _PLIEGO_DOCUMENT_TITLE
+        for block in content.blocks
+    )
+    include_drawings = bool(drawing_state) and (
+        full_study or drawing_state.get("include_basic", False)
+    )
+    selected = selected_sheets(drawing_state) if include_drawings else []
     paper = drawing_state["paper"] if drawing_state else "A4"
     title_groups = [
         [sheet.title for sheet in group]
         for group in group_sheets_by_page(selected, paper)
     ]
-    drawings = render_drawings(app, drawing_state) if drawing_state else []
+    drawings = render_drawings(app, drawing_state) if selected else []
+    if full_study and not drawings:
+        index = next(
+            index for index, block in enumerate(content.blocks)
+            if block.kind == "document" and block.text == _PLIEGO_DOCUMENT_TITLE
+        )
+        content.blocks[index:index] = [
+            _Block("document", _PLANS_DOCUMENT_TITLE),
+            _Block("heading", "Planos pendientes de incorporación", 1),
+            _Block("paragraph", _IMPLEMENTATION_WARNING),
+        ]
+    content.blocks = _numbered_blocks(content.blocks)
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(

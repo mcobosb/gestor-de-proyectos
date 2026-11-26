@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import re
 
 from municipalities import municipality_search_key
+from tools._shared.budget_sources import matches_tool_chapter
 
 
 SAFETY_BUDGET_SOURCE = "SS:"
@@ -37,11 +38,21 @@ def restore_chapter_selection(value: object) -> dict[str, bool]:
     return dict(value)
 
 
+def safety_budget_chapters(app) -> set[str]:
+    """Identifica los capítulos preventivos generados o reconocidos por su título."""
+    return {
+        item.chapter for item in app.budget_items
+        if item.source.startswith(SAFETY_BUDGET_SOURCE)
+        or matches_tool_chapter("safety", item.chapter, app._chapter_title(item.chapter))
+    }
+
+
 def study_chapters(app) -> list[StudyChapter]:
     """Presenta capitulos con partidas de obra, excluyendo SS y respetando el presupuesto."""
     counts: dict[str, int] = {}
+    safety_chapters = safety_budget_chapters(app)
     for item in app.budget_items:
-        if not item.source.startswith(SAFETY_BUDGET_SOURCE):
+        if item.chapter not in safety_chapters:
             counts[item.chapter] = counts.get(item.chapter, 0) + 1
     choices = restore_chapter_selection(
         getattr(app, "safety_health_state", {}).get("chapter_selection")

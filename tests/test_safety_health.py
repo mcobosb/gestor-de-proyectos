@@ -90,8 +90,8 @@ class SafetyHealthTests(unittest.TestCase):
         ]}
         self.assertEqual(evaluate_study_criteria(app).peak_workers, Decimal(3))
 
-    def test_study_criteria_use_strict_budget_and_workday_thresholds(self):
-        """Do not mark thresholds as met when the estimated values equal their limits."""
+    def test_study_criteria_use_inclusive_budget_and_strict_workday_thresholds(self):
+        """El umbral económico es inclusivo; el de jornadas sigue siendo estricto."""
         item = ProjectItem(
             "01", "01#", "ud", "Partida de prueba",
             unit_price=450759.08, rendimiento=4000,
@@ -108,8 +108,10 @@ class SafetyHealthTests(unittest.TestCase):
 
         self.assertEqual(result.contract_budget, Decimal("450759.08"))
         self.assertEqual(result.worker_days, Decimal("500"))
-        self.assertEqual(result.fulfilled, (False, False, False, False))
-        self.assertFalse(result.requires_full_study)
+        self.assertEqual(result.fulfilled, (True, False, False, False))
+        self.assertTrue(result.requires_full_study)
+        item.unit_price = 450759.07
+        self.assertFalse(evaluate_study_criteria(app).criterion_1_met)
 
     def test_study_criteria_calculate_schedule_workforce_and_special_work(self):
         """Use the saved crew count, labor workload and work descriptions."""
@@ -321,7 +323,7 @@ class SafetyHealthTests(unittest.TestCase):
             refresh_budget_tree=lambda: None,
             _mark_dirty=lambda: None,
             _project_title=lambda: "Proyecto de prueba",
-            _chapter_title=lambda chapter: "SEGURIDAD Y SALUD",
+            _chapter_title=lambda chapter: app.chapter_titles.get(chapter, "OBRA"),
             _report_components=lambda item: [],
             _component_dataset=lambda item: None,
             _budget_concept_type=lambda item, code=None: "0",
@@ -367,7 +369,7 @@ class SafetyHealthTests(unittest.TestCase):
             self.assertNotIn("UO-", text)
             self.assertNotIn("DATOS DEL PROYECTO", text)
             self.assertIn("Tabla 1.", text)
-            self.assertIn("PLIEGO DE CONDICIONES", text)
+            self.assertNotIn("PLIEGO DE CONDICIONES", text)
             self.assertNotIn("DESCOMPUESTOS", text)
             self.assertNotIn("PARTIDAS DEL PRESUPUESTO GENERAL", text)
             self.assertNotRegex(text, r"\b3\.11\b(?!\s+OBLIGACIONES\b)")

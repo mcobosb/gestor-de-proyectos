@@ -703,6 +703,25 @@ selecciona una fila para ver su vista previa y marca las que quieras incluir.
 Los proyectos nuevos no preseleccionan fichas: corresponde al técnico revisar y
 elegir las adecuadas. Se respetan las selecciones de proyectos guardados con
 versiones anteriores. Las decisiones y el formato se guardan con el proyecto.
+En un estudio básico (EBSS), los planos solo se exportan si marcas **Incluir los
+planos seleccionados también en el estudio básico**; esta opción está desactivada
+por defecto y no borra las fichas seleccionadas para un estudio completo.
+
+El tipo de estudio depende de los criterios revisados en la primera pestaña.
+El ESS incluye memoria, planos, pliego, mediciones y presupuesto, utilizando las
+partidas reales del capítulo de Seguridad y Salud del presupuesto, incluidas las
+añadidas manualmente. Si ya existe un capítulo reconocido, generar el informe no
+recalcula sus partidas; si no existe, se debe crear uno. Si no se han seleccionado
+fichas, el documento de planos se señala como pendiente. Las fichas tipo no
+sustituyen el plano específico de implantación y señalización: debe incorporarse
+al proyecto y revisarse técnicamente.
+
+El EBSS genera una memoria más breve con normativa revisada, riesgos y medidas
+por unidad, emergencias, servicios ocultos, recursos preventivos y previsiones
+para trabajos posteriores, sin pliego ni documentos propios de mediciones y
+presupuesto. Puede generarse sin crear un capítulo presupuestario de Seguridad y
+Salud. En ambos casos corresponde al técnico completar y verificar el estudio y
+su adecuación a la obra y a la normativa aplicable.
 
 Con **Añadir ficha SVG…** puedes incorporar una copia a tu biblioteca personal,
 disponible para otros proyectos. El título se toma del nombre del archivo. El
@@ -710,8 +729,8 @@ SVG debe ser autónomo, sin recursos enlazados externos, y no superar 16 MB;
 no se modifica el original. En la versión instalada la biblioteca se guarda
 en la carpeta de datos de la aplicación del usuario, y en desarrollo en
 `tools/safety_health/fichas_planos`. Si trasladas el proyecto a otro equipo,
-copia también esa biblioteca: si falta una ficha seleccionada, el programa lo
-indicará y no generará un estudio incompleto.
+copia también esa biblioteca: si falta una ficha que debe exportarse, el programa
+lo indicará y no generará un estudio incompleto.
 
 Al generar el estudio en PDF u ODT se añaden los planos como imágenes de página
 completa: una ficha en cada A4 vertical o hasta dos fichas A4 en cada A3

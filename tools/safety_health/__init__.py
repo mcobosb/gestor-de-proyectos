@@ -231,7 +231,7 @@ def evaluate_study_criteria(app: BudgetApp) -> StudyCriteria:
     )
     special_work = bool(_SPECIAL_WORK_RE.search(_normalized_text(project_text)))
     fulfilled = (
-        contract_budget > _ESS_BUDGET_THRESHOLD,
+        contract_budget >= _ESS_BUDGET_THRESHOLD,
         duration_days > 30 and peak_workers > 20,
         worker_days > _ESS_WORKDAY_THRESHOLD,
         special_work,

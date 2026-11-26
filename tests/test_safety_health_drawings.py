@@ -81,9 +81,13 @@ class SafetyDrawingsTests(unittest.TestCase):
             {"paper": "A2", "selected": {}},
             {"paper": "A4", "selected": {"ZAN13": "yes"}},
             {"paper": "A4", "selected": {"CUSTOM-../../file": True}},
+            {"paper": "A4", "selected": {}, "include_basic": "yes"},
         ):
             with self.assertRaises(ValueError):
                 restore_drawings(value)
+        decisions["include_basic"] = True
+        state = serialize_state([], Decimal("2"), drawings=decisions)
+        self.assertEqual(restore_project_state(state)["drawings"], decisions)
 
     def test_added_sheet_is_copied_reused_and_exported(self):
         with TemporaryDirectory() as directory:
@@ -499,7 +503,7 @@ class SafetyDrawingsTests(unittest.TestCase):
                     pages = reader.pages
                     plan_toc_page = next(
                         page for page in pages
-                        if "DOCUMENTO Nº 2: PLANOS" in " ".join(page.extract_text().split())
+                        if "DOCUMENTO II. PLANOS" in " ".join(page.extract_text().split())
                     )
                     plan_destinations = [
                         annotation.get_object()["/Dest"][0]
@@ -589,7 +593,7 @@ class SafetyDrawingsTests(unittest.TestCase):
                         text = [" ".join(page.extract_text().split()) for page in pages]
                         plans_page_index = next(
                             index for index, page in enumerate(text)
-                            if "DOCUMENTO Nº 2: PLANOS" in page and "ÍNDICE" in page
+                            if "DOCUMENTO II. PLANOS" in page and "ÍNDICE" in page
                         )
                         index_page = text[plans_page_index]
                         pliego_page_index = next(
@@ -674,16 +678,16 @@ class SafetyDrawingsTests(unittest.TestCase):
                                 )
                                 for label in (
                                     "DOCUMENTO I. MEMORIA",
-                                    "DOCUMENTO Nº 2: PLANOS",
+                                    "DOCUMENTO II. PLANOS",
                                     "DOCUMENTO III. PLIEGO DE CONDICIONES",
                                 )
                             }
                             self.assertLess(
                                 positions["DOCUMENTO I. MEMORIA"],
-                                positions["DOCUMENTO Nº 2: PLANOS"],
+                                positions["DOCUMENTO II. PLANOS"],
                             )
                             self.assertLess(
-                                positions["DOCUMENTO Nº 2: PLANOS"],
+                                positions["DOCUMENTO II. PLANOS"],
                                 positions["DOCUMENTO III. PLIEGO DE CONDICIONES"],
                             )
                             named_styles = {
@@ -751,7 +755,7 @@ class SafetyDrawingsTests(unittest.TestCase):
                                 len(image_positions),
                                 sum(index in anchor_positions for index in image_positions),
                             )
-                            self.assertGreater(min(anchor_positions), positions["DOCUMENTO Nº 2: PLANOS"])
+                            self.assertGreater(min(anchor_positions), positions["DOCUMENTO II. PLANOS"])
                             self.assertLess(max(image_positions), positions["DOCUMENTO III. PLIEGO DE CONDICIONES"])
 
     def test_selected_drawings_require_a_configured_cajetin(self):

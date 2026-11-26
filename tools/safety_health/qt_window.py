@@ -59,7 +59,9 @@ from . import (
 )
 from .care_centers import FIELDS, format_centers, restore_centers
 from .care_centers_qt import SicessCentersTab
-from .chapter_selection import restore_chapter_selection, study_chapters, study_items
+from .chapter_selection import (
+    restore_chapter_selection, safety_budget_chapters, study_chapters, study_items,
+)
 from .external_conditions import APPLICABILITY, EXTERNAL_CONDITIONS, restore_external_conditions
 from .drawings import (
     add_user_sheet, available_sheets, prepare_svg_for_qt, read_sheet, restore_drawings,
@@ -320,11 +322,11 @@ class SafetyHealthWindowQt(QDialog):
         content_layout = QVBoxLayout(basic_content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         basic_layout.addWidget(self.basic_scroll, 1)
-        criteria = QGroupBox("Criterios del artículo 4.1 de la LPRL")
+        criteria = QGroupBox("Criterios del artículo 4.1 del RD 1627/1997")
         criteria_layout = QVBoxLayout(criteria)
         values = saved or self.study_criteria.fulfilled
         descriptions = (
-            f"Presupuesto con IVA > 450.759,08 €: {_format_euros(self.study_criteria.contract_budget)}.",
+            f"Presupuesto con IVA ≥ 450.759,08 €: {_format_euros(self.study_criteria.contract_budget)}.",
             "Duración > 30 días y más de 20 trabajadores simultáneos: "
             f"{self.study_criteria.duration_days} días; máximo "
             f"{_format_decimal(self.study_criteria.peak_workers)} trabajadores/día.",
@@ -404,6 +406,16 @@ class SafetyHealthWindowQt(QDialog):
         )
         note.setWordWrap(True)
         layout.addWidget(note)
+        self.drawings_include_basic = QCheckBox("Incluir los planos seleccionados también en el estudio básico (EBSS)")
+        self.drawings_include_basic.setChecked(saved.get("include_basic", False) if saved else False)
+        self.drawings_include_basic.toggled.connect(self._save_drawings)
+        layout.addWidget(self.drawings_include_basic)
+        warning = QLabel(
+            "Para un ESS, las fichas tipo no sustituyen el plano específico de implantación "
+            "y señalización de la obra; comprueba su incorporación al proyecto."
+        )
+        warning.setWordWrap(True)
+        layout.addWidget(warning)
         row = QHBoxLayout()
         row.addWidget(QLabel("Formato de los planos:"))
         self.drawings_format = QComboBox()
@@ -541,6 +553,7 @@ class SafetyHealthWindowQt(QDialog):
         state["drawings"] = restore_drawings({
             "paper": self.drawings_format.currentText(),
             "selected": selected,
+            "include_basic": self.drawings_include_basic.isChecked(),
         })
         self.app.safety_health_state = state
         self.app._mark_dirty()
@@ -1161,7 +1174,7 @@ class SafetyProposalDialogQt(QDialog):
         self.tabs.addTab(self._build_related_units_tab(), "Vínculos con obra")
         layout.addWidget(self.tabs, 1)
         actions = QHBoxLayout()
-        report = QPushButton("Generar estudio completo")
+        report = QPushButton("Generar estudio")
         report.clicked.connect(self.generate_report)
         actions.addWidget(report)
         actions.addStretch()
@@ -1379,7 +1392,7 @@ class SafetyProposalDialogQt(QDialog):
         self.library_editor.show()
 
     def generate_report(self) -> None:
-        """Confirma revisión y genera el estudio completo."""
+        """Confirma la revisión y genera el estudio seleccionado."""
         if self.library_editor is not None and self.library_editor.dirty:
             QMessageBox.critical(
                 self,
@@ -1387,8 +1400,12 @@ class SafetyProposalDialogQt(QDialog):
                 "Guarda los cambios de biblioteca antes de generar.",
             )
             return
-        if not self.create_chapter():
-            return
+        full_study = any(self.owner.selected_study_criteria)
+        if full_study and not safety_budget_chapters(self.app):
+            if not self.create_chapter():
+                return
+        else:
+            self.owner.commit_basic_state()
         try:
             units = study_work_units(self.app)
             if restore_review(
@@ -1397,13 +1414,14 @@ class SafetyProposalDialogQt(QDialog):
                 dialog = self.owner.open_regulatory_review()
                 if dialog is None or dialog.exec() != QDialog.DialogCode.Accepted:
                     return
-            context, _proposals, _pending = study_technical_review(self.app)
-            if not technical_review_confirmed(
-                self.app.safety_health_state.get("technical_review"), context
-            ):
-                dialog = self.owner.open_technical_review()
-                if dialog is None or dialog.exec() != QDialog.DialogCode.Accepted:
-                    return
+            if full_study:
+                context, _proposals, _pending = study_technical_review(self.app)
+                if not technical_review_confirmed(
+                    self.app.safety_health_state.get("technical_review"), context
+                ):
+                    dialog = self.owner.open_technical_review()
+                    if dialog is None or dialog.exec() != QDialog.DialogCode.Accepted:
+                        return
             selection = get_document_save_path(
                 self,
                 "Generar Estudio de Seguridad y Salud",
@@ -1419,9 +1437,13 @@ class SafetyProposalDialogQt(QDialog):
             QMessageBox.critical(self, "No se pudo generar el informe", str(exc))
             return
         self.app._set_status(f"Estudio de Seguridad y Salud guardado en {path}")
-        QMessageBox.information(
-            self, "Seguridad y salud", f"Estudio completo generado:\n{path}"
-        )
+        message = f"Estudio generado:\n{path}"
+        if full_study:
+            message += (
+                "\n\nRevisa e incorpora al proyecto el plano específico de implantación y "
+                "señalización de obra. Las fichas tipo no lo sustituyen."
+            )
+        QMessageBox.information(self, "Seguridad y salud", message)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """Protege ediciones pendientes de biblioteca."""
