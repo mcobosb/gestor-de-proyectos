@@ -53,6 +53,8 @@ def write_document(app, target: Path, rows: list[dict]) -> None:
     currency = currency_label(settings.currency, settings.custom_currency)
     units = work_units(app.budget_items)
     rows = validate_rows(rows, units)
+    if settings.currency != "EUR" and any(row.get("price_source") for row in rows):
+        raise ValueError("Los precios de referencia están en euros; revisa la moneda y los precios antes de exportar.")
     library = shared_library_path(app, "quality_assurance", LIBRARY_PATH)
     markdown = "\n\n".join(document_markdown(read_markdown(library, name)) for name in DOCUMENTS)
     for token in (*TABLES, "{{presupuesto_control}}", "{{detalles_catalogo}}"):

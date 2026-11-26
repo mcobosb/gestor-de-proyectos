@@ -187,6 +187,12 @@ class QualityAssuranceTests(unittest.TestCase):
                 self.assertIn("Estimación orientativa", text)
                 self.assertIn("geocesa.com", text)
                 self.assertIn("elemento reactivo", text)
+                window.report_settings.currency = "USD"
+                with self.assertRaisesRegex(ValueError, "euros"):
+                    write_document(window, report, [row for row in tool.rows() if row["included"]])
+                with self.assertRaisesRegex(ValueError, "euros"):
+                    insert_budget(window, [row for row in tool.rows() if row["included"]])
+                window.report_settings.currency = "EUR"
                 tool.insert()
                 inserted = next(item for item in window.budget_items if item.source == SOURCE)
                 self.assertIn("Estimación orientativa", inserted.text)
