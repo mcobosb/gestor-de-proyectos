@@ -414,14 +414,17 @@ class QualityWindow(QDialog):
             self.app._mark_dirty()
             self.refresh_actions()
 
-    def insert(self) -> None:
+    def insert(self) -> bool:
         """Incorpora exclusivamente la revisión vigente y con precios."""
         if not self.insert_button.isEnabled():
-            return
+            return False
         try:
             insert_budget(self.app, [row for row in self.rows() if row["included"]])
         except ValueError as exc:
             QMessageBox.warning(self, TOOL_LABEL, str(exc))
+            return False
+        self.refresh_actions()
+        return True
 
     def open_library(self) -> None:
         """Abre las fichas editables con registro de revisiones."""
@@ -454,15 +457,73 @@ class QualityWindow(QDialog):
         if selection is None:
             return
         target, _output_format = selection
-        try:
+
+        def write_export() -> None:
+            """Sustituye el anejo únicamente después de generar una copia completa."""
             with tempfile.TemporaryDirectory(dir=target.parent) as folder:
                 pending = Path(folder) / target.name
                 write_document(self.app, pending, self.rows())
                 pending.replace(target)
+
+        try:
+            write_export()
         except (ImportError, OSError, ValueError) as exc:
             QMessageBox.warning(self, TOOL_LABEL, str(exc))
             return
-        QMessageBox.information(self, TOOL_LABEL, f"Anejo guardado:\n{target}")
+        if has_inserted(self.app.budget_items):
+            QMessageBox.information(self, TOOL_LABEL, f"Anejo guardado:\n{target}")
+            return
+        if not self.insert_button.isEnabled():
+            missing = [
+                (index, row) for index, row in enumerate(self.rows())
+                if row["included"] and not row["price"].strip()
+            ]
+            if not missing:
+                QMessageBox.warning(
+                    self, TOOL_LABEL, f"Anejo guardado:\n{target}\n\n"
+                    "No se han incorporado los controles al presupuesto. "
+                    "Actualiza y confirma de nuevo la revisión antes de insertarlos.",
+                )
+                return
+            details = "\n".join(
+                f"• {row['snapshot'][0]} — {row['name']}" for _, row in missing[:10]
+            )
+            if len(missing) > 10:
+                details += f"\n• Y {len(missing) - 10} controles más."
+            QMessageBox.information(
+                self, TOOL_LABEL, f"Anejo guardado:\n{target}\n\n"
+                "No se han incorporado los controles al presupuesto porque faltan precios "
+                f"en estas filas marcadas:\n{details}\n\n"
+                "Completa los precios en la tabla o consulta BCCA, confirma de nuevo la revisión "
+                "y utiliza «Insertar ensayos en el presupuesto». Después vuelve a generar el "
+                "anejo y guarda el proyecto.",
+            )
+            self.table.setCurrentCell(missing[0][0], 6)
+            self.table.setFocus()
+            return
+        if QMessageBox.question(
+            self, TOOL_LABEL,
+            f"Anejo guardado:\n{target}\n\n"
+            "¿Deseas incorporar al presupuesto los controles marcados? "
+            "Se utilizará el capítulo de control de calidad existente o se creará uno nuevo.",
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        if not self.insert():
+            return
+        try:
+            write_export()
+        except (ImportError, OSError, ValueError) as exc:
+            QMessageBox.warning(
+                self, TOOL_LABEL,
+                "Los controles se han incorporado al presupuesto, pero no se ha podido actualizar "
+                f"el anejo guardado. Vuelve a generarlo y guarda el proyecto.\n\n{exc}",
+            )
+            return
+        QMessageBox.information(
+            self, TOOL_LABEL,
+            f"Anejo actualizado:\n{target}\n\nControles incorporados al presupuesto. "
+            "Guarda el proyecto para conservar los cambios.",
+        )
 
     def closeEvent(self, event) -> None:
         """Respeta la protección de cambios pendientes del editor de fichas."""

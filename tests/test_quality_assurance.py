@@ -744,7 +744,9 @@ class QualityAssuranceTests(unittest.TestCase):
                 for kind in ("odt", "pdf"):
                     target = Path(folder) / f"pac.{kind}"
                     with patch("tools.quality_assurance.qt_window.get_document_save_path",
-                               return_value=(target, kind)):
+                               return_value=(target, kind)), patch.object(
+                        QMessageBox, "question", return_value=QMessageBox.StandardButton.No
+                    ):
                         tool.export()
                     if kind == "odt":
                         with ZipFile(target) as archive:
@@ -772,6 +774,162 @@ class QualityAssuranceTests(unittest.TestCase):
                     self.assertNotIn("Detalle_Ensayos_Clave", text)
                     self.assertNotIn("Plan_Aseguramiento_Calidad_CTE_CE_PG3-v2.xlsx", text)
                 self.assertFalse(any(item.source == SOURCE for item in window.budget_items))
+            finally:
+                window.is_dirty = False
+                window.close()
+                qt.processEvents()
+
+    def test_export_offers_budget_insertion_and_updates_document(self):
+        """Solo inserta con consentimiento y refleja el capítulo en el anejo guardado."""
+        qt = QApplication.instance() or QApplication([])
+        for choice, output_format in (("accept", "odt"), ("accept", "pdf"),
+                                      ("decline", "odt"), ("missing", "odt")):
+            with self.subTest(choice=choice, format=output_format), TemporaryDirectory() as folder, patch(
+                "budget_qt_window.user_data_directory", return_value=Path(folder)
+            ), patch("budget_qt_window.apply_theme"), patch.object(
+                QMessageBox, "information"
+            ) as information, patch.object(QMessageBox, "warning") as warning:
+                window = BudgetMainWindow()
+                try:
+                    work = ProjectItem("ASF", "01#", "m²", "Mezcla bituminosa", 750, 20)
+                    window.budget_items = [work]
+                    window.chapter_order = ["01#"]
+                    window._open_tool("quality_assurance")
+                    tool = window._project_windows[-1]
+                    tool.table.item(0, 6).setText("" if choice == "missing" else "120")
+                    with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
+                        tool.review()
+                    target = Path(folder) / f"calidad.{output_format}"
+                    answer = (QMessageBox.StandardButton.Yes if choice == "accept"
+                              else QMessageBox.StandardButton.No)
+                    with patch("tools.quality_assurance.qt_window.get_document_save_path",
+                               return_value=(target, output_format)), patch.object(
+                        QMessageBox, "question", return_value=answer
+                    ) as question:
+                        tool.export()
+                    inserted = [item for item in window.budget_items if item.source == SOURCE]
+                    self.assertEqual(bool(inserted), choice == "accept")
+                    if choice == "missing":
+                        question.assert_not_called()
+                        self.assertIn("faltan precios", information.call_args.args[2])
+                    else:
+                        question.assert_called_once()
+                    if output_format == "odt":
+                        with ZipFile(target) as archive:
+                            text = "".join(ET.fromstring(archive.read("content.xml")).itertext())
+                    else:
+                        text = " ".join(page.extract_text() or "" for page in PdfReader(target).pages)
+                    if inserted:
+                        self.assertEqual({item.chapter for item in inserted}, {"CALIDAD#"})
+                        self.assertEqual((inserted[0].measurement, inserted[0].unit_price), (2, 120))
+                        self.assertIn("Las partidas incorporadas figuran", text)
+                        self.assertFalse(tool.insert_button.isEnabled())
+                    else:
+                        self.assertIn("aún no se han incorporado", text)
+                    warning.assert_not_called()
+                finally:
+                    window.is_dirty = False
+                    window.close()
+                    qt.processEvents()
+
+    def test_missing_price_is_identified_and_can_be_completed_before_insertion(self):
+        """Identifica solo las filas marcadas sin precio y permite completar la inserción."""
+        qt = QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as folder, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(folder)
+        ), patch("budget_qt_window.apply_theme"), patch.object(
+            QMessageBox, "information"
+        ) as information, patch.object(
+            QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes
+        ), patch.object(QMessageBox, "warning") as warning:
+            window = BudgetMainWindow()
+            try:
+                work = ProjectItem("ASF", "01#", "m²", "Mezcla bituminosa", 750, 20)
+                window.budget_items = [work]
+                window.chapter_order = ["01#"]
+                window._open_tool("quality_assurance")
+                tool = window._project_windows[-1]
+                tool.table.item(0, 6).setText("120")
+                tool.table.item(1, 6).setText("")
+                tool.table.item(2, 0).setCheckState(Qt.CheckState.Checked)
+                tool.table.item(2, 4).setText("1")
+                tool.table.item(2, 6).setText("")
+                missing_name = tool.table.item(2, 2).text()
+                excluded_name = tool.table.item(1, 2).text()
+                tool.review()
+                target = Path(folder) / "calidad.odt"
+                with patch("tools.quality_assurance.qt_window.get_document_save_path",
+                           return_value=(target, "odt")):
+                    tool.export()
+                message = information.call_args.args[2]
+                self.assertIn("No se han incorporado", message)
+                self.assertIn(missing_name, message)
+                self.assertNotIn(excluded_name, message)
+                self.assertEqual((tool.table.currentRow(), tool.table.currentColumn()), (2, 6))
+                self.assertFalse(any(item.source == SOURCE for item in window.budget_items))
+
+                tool.table.item(2, 6).setText("80")
+                tool.review()
+                self.assertTrue(tool.insert())
+                inserted = [item for item in window.budget_items if item.source == SOURCE]
+                self.assertEqual(len(inserted), 2)
+                chapter = next(
+                    window.budget_tree.topLevelItem(index)
+                    for index in range(window.budget_tree.topLevelItemCount())
+                    if window.budget_tree.topLevelItem(index).text(2) == "Control de Calidad"
+                )
+                self.assertEqual(chapter.childCount(), 2)
+                restored = decode_project_payload(build_project_payload(window), Path(folder) / "proyecto.json",
+                                                  window.report_settings)
+                self.assertEqual(len([item for item in restored.items if item.source == SOURCE]), 2)
+                with patch("tools.quality_assurance.qt_window.get_document_save_path",
+                           return_value=(target, "odt")):
+                    tool.export()
+                with ZipFile(target) as archive:
+                    text = "".join(ET.fromstring(archive.read("content.xml")).itertext())
+                self.assertIn("Las partidas incorporadas figuran", text)
+                warning.assert_not_called()
+            finally:
+                window.is_dirty = False
+                window.close()
+                qt.processEvents()
+
+    def test_export_reports_failure_to_refresh_after_budget_insertion(self):
+        """Si falla la segunda generación, conserva el anejo anterior y avisa del estado real."""
+        qt = QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as folder, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(folder)
+        ), patch("budget_qt_window.apply_theme"), patch.object(
+            QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes
+        ), patch.object(QMessageBox, "warning") as warning:
+            window = BudgetMainWindow()
+            try:
+                window.budget_items = [ProjectItem("ASF", "01#", "m²", "Mezcla bituminosa", 750, 20)]
+                window.chapter_order = ["01#"]
+                window._open_tool("quality_assurance")
+                tool = window._project_windows[-1]
+                tool.table.item(0, 6).setText("120")
+                tool.review()
+                target = Path(folder) / "calidad.odt"
+                calls = []
+
+                def write_once(*args):
+                    """Falla únicamente al actualizar el documento tras insertar."""
+                    calls.append(args)
+                    if len(calls) == 2:
+                        raise OSError("Disco no disponible")
+                    return write_document(*args)
+
+                with patch("tools.quality_assurance.qt_window.get_document_save_path",
+                           return_value=(target, "odt")), patch(
+                    "tools.quality_assurance.qt_window.write_document", side_effect=write_once
+                ):
+                    tool.export()
+                self.assertTrue(any(item.source == SOURCE for item in window.budget_items))
+                with ZipFile(target) as archive:
+                    text = "".join(ET.fromstring(archive.read("content.xml")).itertext())
+                self.assertIn("aún no se han incorporado", text)
+                self.assertIn("no se ha podido actualizar", warning.call_args.args[2])
             finally:
                 window.is_dirty = False
                 window.close()

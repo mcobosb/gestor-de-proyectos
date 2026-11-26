@@ -629,6 +629,13 @@ Las bibliotecas anteriores sin ese bloque utilizan los datos distribuidos.
 obra, con identificadores propios del proyecto, criterios, frecuencias, cantidades,
 registros y fuentes disponibles. La matriz reúne filas marcadas y no marcadas
 sin distinguir su estado; solo las marcadas se incorporan al presupuesto.
+Tras generar el anejo, puedes aceptar la incorporación de las filas marcadas
+al presupuesto; se reutiliza el capítulo de control de calidad existente o se
+crea uno nuevo y el anejo se actualiza con el importe incorporado. Si faltan
+precios en filas marcadas, se indican los controles afectados y se selecciona
+el primero: complétalos, confirma de nuevo la revisión y utiliza **Insertar
+ensayos en el presupuesto**. Después vuelve a generar el anejo para reflejar el
+importe y guarda el proyecto.
 Los controles y sus cantidades deben contrastarse y aprobarse técnicamente.
 Si cambia una unidad, la matriz indica que deben actualizarse sus datos.
 Las fichas técnicas relacionadas se incluyen únicamente para los controles
