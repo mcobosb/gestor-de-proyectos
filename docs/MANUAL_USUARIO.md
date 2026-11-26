@@ -247,6 +247,17 @@ seguridad de ambos antes de trabajar sobre información importante.
 Los BC3 y JSON no se incluyen en la descarga del programa. Si al abrirlo no hay
 datos, utiliza **Nuevo proyecto** o **Importar presupuesto BC3**.
 
+## 2 bis. Abrir modelos BIM
+
+En **Motor BIM → Abrir archivo IFC…** selecciona un archivo IFC. El cálculo de
+las mallas se ejecuta en un proceso separado: si el motor geométrico falla,
+se muestra un error y la aplicación permanece abierta.
+
+El visor representa mallas trianguladas, pero todavía no dibuja ejes ni curvas
+de alineaciones. El árbol permite consultar las alineaciones IFC 4.3; se avisa
+si existen curvas no representadas o geometrías sin asociar a objetos. En ese
+caso revisa la exportación IFC; un modelo sin mallas aparecerá vacío en 3D.
+
 ## 3. Trabajar con capítulos y partidas
 
 El panel del proyecto contiene capítulos y partidas. El panel de referencia

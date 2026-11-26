@@ -4,6 +4,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 from pathlib import Path
+import pickle
+import subprocess
+import sys
+import tempfile
 from typing import Any
 
 import ifcopenshell
@@ -62,6 +66,7 @@ class BimModel:
     spatial_tree: tuple[SpatialNode, ...]
     meshes: dict[int, TriangleMesh]
     triangle_count: int
+    warnings: tuple[str, ...] = ()
 
     def properties(self, entity_id: int) -> ElementProperties:
         """Lee las propiedades sin duplicar en memoria los datos de todo el IFC."""
@@ -118,21 +123,22 @@ def _face_colors(geometry) -> NDArray[np.uint8]:
     return np.asarray(palette, dtype=np.uint8)[indices + 1]
 
 
-def load_ifc(path: Path) -> BimModel:
-    """Abre un IFC STEP y triangula sus representaciones con el iterador paralelo."""
-    if path.suffix.casefold() != ".ifc":
-        raise IfcReadError("Selecciona un archivo con extensión .ifc.")
-    try:
-        source = ifcopenshell.open(path, format=".ifc")
-    except ifcopenshell.Error as exc:
-        raise IfcReadError(f"No se pudo leer el archivo IFC: {exc}") from exc
-    if not isinstance(source, ifcopenshell.file):
-        raise IfcReadError("El archivo no contiene un modelo IFC STEP.")
-    projects = source.by_type("IfcProject")
-    if not projects:
-        raise IfcReadError("El archivo no contiene ninguna entidad IfcProject.")
-    spatial_tree = tuple(_spatial_node(project) for project in projects)
+def _surface_products(source: ifcopenshell.file) -> list:
+    """Excluye productos exclusivamente lineales que el visor de mallas no representa."""
+    return [
+        product for product in source.by_type("IfcProduct")
+        if product.Representation and any(
+            representation.RepresentationType not in {"Curve2D", "Curve3D"}
+            for representation in product.Representation.Representations
+        )
+    ]
 
+
+def _triangulate(source: ifcopenshell.file) -> dict[int, TriangleMesh]:
+    """Triangula en el proceso auxiliar los productos que pueden tener superficies."""
+    products = _surface_products(source)
+    if not products:
+        return {}
     settings = ifcopenshell.geom.settings()
     settings.set("use-world-coords", False)
     num_threads = max(2, min(8, (os.cpu_count() or 2) - 1))
@@ -141,7 +147,7 @@ def load_ifc(path: Path) -> BimModel:
     meshes: dict[int, TriangleMesh] = {}
     shared: dict[str, TriangleMesh] = {}
     for shape in ifcopenshell.geom.iterator(
-        settings, source, num_threads=num_threads, geometry_library=kernel
+        settings, source, num_threads=num_threads, geometry_library=kernel, include=products
     ):
         geometry = shape.geometry
         template = shared.get(geometry.id)
@@ -160,5 +166,70 @@ def load_ifc(path: Path) -> BimModel:
                 geometry.id, _face_colors(geometry),
             )
             meshes[shape.id] = shared[geometry.id] = mesh
+    return meshes
+
+
+def _isolated_meshes(path: Path) -> dict[int, TriangleMesh]:
+    """Aísla los fallos nativos de geometría para no cerrar la aplicación."""
+    with tempfile.TemporaryDirectory(prefix="gestor-ifc-") as directory:
+        output = Path(directory) / "meshes.pickle"
+        main_module = sys.modules.get("__main__")
+        if main_module is not None and hasattr(main_module, "__compiled__"):
+            command = [sys.executable, "--ifc-geometry-worker", str(path.resolve()), str(output)]
+        else:
+            command = [sys.executable, "-m", "tools.bim._geometry_worker", str(path.resolve()), str(output)]
+        process = subprocess.run(
+            command, cwd=Path(__file__).resolve().parents[2],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
+        if process.returncode:
+            detail = process.stderr.decode("utf-8", errors="replace").strip()
+            message = f"El motor de geometría IFC terminó inesperadamente (código {process.returncode})."
+            if detail:
+                message += f"\n{detail[-2000:]}"
+            raise IfcReadError(message)
+        try:
+            with output.open("rb") as stream:
+                return pickle.load(stream)
+        except (OSError, EOFError, pickle.UnpicklingError) as exc:
+            raise IfcReadError(f"No se pudo recuperar la geometría IFC: {exc}") from exc
+
+
+def load_ifc(path: Path) -> BimModel:
+    """Abre un IFC STEP y triangula sus superficies en un proceso independiente."""
+    if path.suffix.casefold() != ".ifc":
+        raise IfcReadError("Selecciona un archivo con extensión .ifc.")
+    try:
+        source = ifcopenshell.open(path, format=".ifc")
+    except ifcopenshell.Error as exc:
+        raise IfcReadError(f"No se pudo leer el archivo IFC: {exc}") from exc
+    if not isinstance(source, ifcopenshell.file):
+        raise IfcReadError("El archivo no contiene un modelo IFC STEP.")
+    projects = source.by_type("IfcProject")
+    if not projects:
+        raise IfcReadError("El archivo no contiene ninguna entidad IfcProject.")
+    spatial_tree = tuple(_spatial_node(project) for project in projects)
+    products = source.by_type("IfcProduct")
+    curves = [
+        product for product in products if product.Representation
+        and any(rep.RepresentationType in {"Curve2D", "Curve3D"}
+                for rep in product.Representation.Representations)
+    ]
+    warnings = []
+    if curves:
+        warnings.append(
+            f"El archivo contiene {len(curves)} productos con ejes o curvas que el visor aún no representa."
+        )
+    orphaned = sum(
+        1 for representation in source.by_type("IfcProductDefinitionShape")
+        if representation.Representations and not source.get_inverse(representation)
+    )
+    if orphaned:
+        warnings.append(
+            f"Hay {orphaned} representaciones geométricas sin asociar a ningún objeto IFC; "
+            "revisa la exportación del modelo."
+        )
+    meshes = _isolated_meshes(path) if _surface_products(source) else {}
     triangle_count = sum(len(mesh.faces) for mesh in meshes.values())
-    return BimModel(path, source, spatial_tree, meshes, triangle_count)
+    return BimModel(path, source, spatial_tree, meshes, triangle_count, tuple(warnings))

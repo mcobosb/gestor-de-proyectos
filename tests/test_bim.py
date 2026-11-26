@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import subprocess
+import sys
 from tempfile import TemporaryDirectory
 from threading import Event
 import unittest
@@ -20,9 +22,9 @@ from budget_core import Bc3Dataset, Concept
 from budget_project import _item_payload, item_from_data
 from tool_loader import discover_tools
 from tools.bim import translation
-from tools.bim.engine import IfcReadError, load_ifc
+from tools.bim.engine import IfcReadError, _isolated_meshes, load_ifc
 from tools.bim.measurements import incorporate
-from tools.bim.qt import BimController
+from tools.bim.qt import BimController, _LoadIfc
 from tools.bim.scene import prepare_scene
 from tools.bim.viewer import BimViewer
 
@@ -302,6 +304,67 @@ class BimTests(unittest.TestCase):
             with self.assertRaises(IfcReadError):
                 load_ifc(path)
 
+    def test_native_geometry_failure_is_reported_without_killing_parent(self) -> None:
+        """Un fallo fatal del proceso auxiliar se convierte en error de lectura."""
+        run = subprocess.run
+
+        def crash(_command, **kwargs):
+            """Simula un proceso nativo que termina sin una excepción Python."""
+            return run([sys.executable, "-c", "import os; os._exit(7)"], **kwargs)
+
+        with patch("tools.bim.engine.subprocess.run", side_effect=crash):
+            with self.assertRaisesRegex(IfcReadError, "código 7"):
+                _isolated_meshes(Path("modelo.ifc"))
+
+    def test_worker_emits_geometry_failure(self) -> None:
+        """El error del proceso llega al controlador para mostrarlo al usuario."""
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "edificio.ifc"
+            _write_ifc(path)
+            worker = _LoadIfc(path)
+            errors = []
+            worker.signals.failed.connect(errors.append)
+            with patch("tools.bim.engine.subprocess.run", return_value=subprocess.CompletedProcess(
+                [], 7, b"", b"fallo de geometria"
+            )):
+                worker.run()
+            self.assertEqual(len(errors), 1)
+            self.assertIn("código 7", errors[0])
+            self.assertIn("fallo de geometria", errors[0])
+
+    def test_alignment_curves_are_reported_and_do_not_enter_triangulation(self) -> None:
+        """Abre alineaciones lineales y avisa de geometrías sin producto asociado."""
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "alineaciones.ifc"
+            source = ifcopenshell.file(schema="IFC4X3_ADD2")
+            source.create_entity("IfcProject", GlobalId=ifcopenshell.guid.new(), Name="Proyecto")
+            point = source.create_entity("IfcCartesianPoint", Coordinates=(0., 0., 0.))
+            origin = source.create_entity("IfcAxis2Placement3D", Location=point)
+            context = source.create_entity(
+                "IfcGeometricRepresentationContext", ContextType="Model",
+                CoordinateSpaceDimension=3, Precision=1e-5, WorldCoordinateSystem=origin,
+            )
+            points = [source.create_entity("IfcCartesianPoint", Coordinates=coords)
+                      for coords in ((0., 0., 0.), (10., 0., 0.))]
+            line = source.create_entity("IfcPolyline", Points=points)
+            curve = source.create_entity(
+                "IfcShapeRepresentation", ContextOfItems=context, RepresentationIdentifier="Axis",
+                RepresentationType="Curve3D", Items=[line],
+            )
+            shape = source.create_entity("IfcProductDefinitionShape", Representations=[curve])
+            source.create_entity("IfcAlignmentVertical", GlobalId=ifcopenshell.guid.new(), Representation=shape)
+            alignment = source.create_entity("IfcAlignment", GlobalId=ifcopenshell.guid.new(), Name="Eje")
+            source.create_entity("IfcProductDefinitionShape", Representations=[curve])
+            source.write(str(path))
+            with patch("tools.bim.engine._isolated_meshes") as triangulate:
+                model = load_ifc(path)
+                triangulate.assert_not_called()
+            scene = prepare_scene(model)
+            self.assertIn(alignment.id(), scene.elements)
+            self.assertFalse(model.meshes)
+            self.assertTrue(any("curvas" in warning for warning in model.warnings))
+            self.assertTrue(any("sin asociar" in warning for warning in model.warnings))
+
     def test_bim_loads_in_background_and_publishes_result(self) -> None:
         """Seleccionar un IFC en el desplegable no bloquea el bucle de Qt."""
         application = QApplication.instance() or QApplication([])
@@ -339,7 +402,7 @@ class BimTests(unittest.TestCase):
                 self.assertIsNone(controller.model)
                 self.assertIn("procesando", status.currentMessage())
                 QTimer.singleShot(0, release_worker.set)
-                QTimer.singleShot(5000, loop.quit)
+                QTimer.singleShot(15000, loop.quit)
                 loop.exec()
                 warning.assert_not_called()
             self.assertIsNotNone(controller.model)

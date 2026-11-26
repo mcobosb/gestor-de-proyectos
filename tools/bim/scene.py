@@ -65,6 +65,8 @@ def _quaternion(rotation: NDArray[np.float64]) -> list[float]:
 def prepare_scene(model: BimModel) -> Scene:
     """Desplaza el origen y prepara mallas combinadas e instancias de GPU."""
     ids = set(model.meshes) | {entity.id() for entity in model.source.by_type("IfcElement")}
+    if model.source.schema_identifier.startswith("IFC4X3"):
+        ids.update(entity.id() for entity in model.source.by_type("IfcAlignment"))
     nodes = list(model.spatial_tree)
     while nodes:
         node = nodes.pop()

@@ -37,7 +37,13 @@ from budget_core import (
 
 
 def main() -> int:
-    """Inicia exclusivamente la aplicación PySide6."""
+    """Inicia la aplicación PySide6 o el proceso auxiliar de geometría IFC."""
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "--ifc-geometry-worker":
+        from tools.bim._geometry_worker import main as geometry_main
+
+        return geometry_main(sys.argv[2:])
     from bc3_qt import main as qt_main
 
     return qt_main()

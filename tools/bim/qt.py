@@ -103,6 +103,8 @@ class BimController(QObject):
             f"Motor BIM: {model.path.name} ({model.source.schema_identifier}) · {geometry}",
             12000,
         )
+        if model.warnings:
+            QMessageBox.warning(self._window, "Motor BIM", "\n\n".join(model.warnings))
 
     @Slot()
     def _viewer_closed(self) -> None:
