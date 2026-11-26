@@ -1689,8 +1689,12 @@ class BudgetQtWindowTests(unittest.TestCase):
                 proposed_lines([item]), Decimal("2"), chapter_selection={"01#": True},
             )
             tool = SafetyHealthWindowQt(window)
-            tool.resize(800, 550)
+            tool.resize(800, 750)
             tool.show()
+            self.application.processEvents()
+            basics = tool.summary_text.parentWidget()
+            self.assertLessEqual(basics.height(), basics.sizeHint().height() + 10)
+            tool.resize(800, 550)
             self.application.processEvents()
             self.assertLessEqual(tool.width(), 800)
             self.assertLessEqual(tool.height(), 550)

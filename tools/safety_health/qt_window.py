@@ -354,7 +354,8 @@ class SafetyHealthWindowQt(QDialog):
         self.summary_text.setMaximumHeight(100)
         self.summary_text.textChanged.connect(self.commit_basic_state)
         basics_layout.addWidget(self.summary_text)
-        content_layout.addWidget(basics, 1)
+        content_layout.addWidget(basics)
+        content_layout.addStretch(1)
         self.basic_scroll.setWidget(basic_content)
         actions = QGridLayout()
         for index, (text, slot) in enumerate((
