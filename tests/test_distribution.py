@@ -248,6 +248,8 @@ class DistributionTests(unittest.TestCase):
             self.assertIn(f'"{resource.lower()}"', build_script)
         for resource in (
             r"safety_health\datos\ntps.csv", r"pptp\docs\unes.csv",
+            r"safety_health\datos\municipios_geonames.csv",
+            r"safety_health\centros_SICESS.sicess.sqlite3",
             r"safety_health\datos\vinculos_familia_bcca2023.csv",
             r"safety_health\datos\catalogo_ss_vinculado_bcca2023.csv",
             r"safety_health\datos\riesgos_familia_bcca2023.csv",

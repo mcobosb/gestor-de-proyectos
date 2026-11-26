@@ -2228,6 +2228,35 @@ class SafetyHealthStudyTests(unittest.TestCase):
         self.assertIn("CENTRO MANUAL, CALLE MAYOR, 5. TELÉFONO: 900123456", rows[label])
         self.assertNotIn("HOSPITAL DE REFERENCIA", rows[label])
 
+    def test_selected_sicess_centers_and_manual_text_in_both_formats(self):
+        """Incorpora las copias seleccionadas sin perder el contacto manual."""
+        with tempfile.TemporaryDirectory() as folder:
+            for output_format in ("pdf", "odt"):
+                with self.subTest(output_format=output_format):
+                    app = self.make_app(output_format)
+                    app.safety_health_state.update(
+                        centros_asistenciales_modo="texto",
+                        centros_asistenciales_texto="Contacto manual 600123456",
+                        centros_sicess_seleccionados=[{
+                            "url": "https://example.test/1", "nombre": "Centro seleccionado",
+                            "tipo": "CENTRO DE SALUD", "domicilio": "Calle Mayor",
+                            "municipio": "Almería", "telefono": "950123456",
+                        }],
+                    )
+                    restored = restore_project_state(app.safety_health_state)
+                    self.assertEqual(restored["centros_sicess_seleccionados"][0]["telefono"], "950123456")
+                    target = Path(folder) / f"centros.{output_format}"
+                    write_study_report(app, target)
+                    if output_format == "pdf":
+                        text = " ".join(page.extract_text() or "" for page in PdfReader(target).pages)
+                    else:
+                        with ZipFile(target) as archive:
+                            text = " ".join(ET.fromstring(archive.read("content.xml")).itertext())
+                    text = " ".join(text.upper().split())
+                    for expected in ("CONTACTO MANUAL 600123456", "CENTRO SELECCIONADO",
+                                     "CENTRO DE SALUD", "CALLE MAYOR", "950123456"):
+                        self.assertIn(expected, text)
+
     def test_auxiliary_means_warn_about_missing_data_and_reject_circular_resources(self):
         """No confunde datos ausentes con una lista completa ni recorre ciclos indefinidamente."""
         app = self.make_app("odt")

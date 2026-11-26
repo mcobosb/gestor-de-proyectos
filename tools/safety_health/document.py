@@ -16,7 +16,7 @@ from zipfile import BadZipFile, ZipFile
 
 from budget_reports import budget_totals, report_output_format
 from cpv_catalog import resolve_cpv_codes
-from .care_centers import format_centers, restore_centers
+from .care_centers import format_centers, format_sicess_centers, restore_centers, restore_sicess_centers
 from .chapter_selection import study_chapters, study_items
 from .external_conditions import APPLICABILITY, EXTERNAL_CONDITIONS, restore_external_conditions
 from .drawings import (
@@ -659,6 +659,10 @@ def _build_study_content(app) -> _StudyContent:
         centers = str(state.get(
             "centros_asistenciales_texto", state.get("centros_asistenciales", ""),
         )).strip()
+    selected_centers = format_sicess_centers(
+        restore_sicess_centers(state.get("centros_sicess_seleccionados", []))
+    )
+    centers = "\n\n".join(filter(None, (centers, selected_centers)))
     center_condition = saved_conditions.get("centro_asistencial", {})
     center_default = next(
         default for key, _label, default in EXTERNAL_CONDITIONS if key == "centro_asistencial"

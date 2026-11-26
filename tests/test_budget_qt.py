@@ -1410,6 +1410,12 @@ class BudgetQtWindowTests(unittest.TestCase):
             tool = SafetyHealthWindowQt(window)
             self.assertEqual(len(tool.criteria_checks), 4)
             self.assertEqual(len(tool.lines), 3)
+            self.assertFalse(tool.basic_scroll.isAncestorOf(tool.centers_editor))
+            self.assertTrue(tool.centers_scroll.isAncestorOf(tool.centers_editor))
+            tool.centers_editor.text.setPlainText("Centro manual conservado")
+            self.assertGreater(tool.sicess_centers_tab.table.rowCount(), 0)
+            tool.sicess_centers_tab.table.item(0, 0).setCheckState(Qt.CheckState.Checked)
+            selected_center = window.safety_health_state["centros_sicess_seleccionados"][0]
             self.assertNotIn("drawings", window.safety_health_state)
             self.assertTrue(all(
                 tool.drawings_table.item(row, 0).checkState() == Qt.CheckState.Unchecked
@@ -1449,7 +1455,10 @@ class BudgetQtWindowTests(unittest.TestCase):
                 self.assertTrue(proposal.create_chapter())
             self.assertEqual(window.safety_health_state["drawings"]["paper"], "A3")
             self.assertTrue(window.safety_health_state["drawings"]["selected"]["A3-AUX09"])
+            self.assertEqual(window.safety_health_state["centros_sicess_seleccionados"][0], selected_center)
             reopened = SafetyHealthWindowQt(window)
+            self.assertEqual(reopened.sicess_centers_tab.table.item(0, 0).checkState(), Qt.CheckState.Checked)
+            self.assertEqual(reopened.centers_editor.text.toPlainText(), "Centro manual conservado")
             self.assertEqual(reopened.drawings_format.currentText(), "A3")
             self.assertEqual(reopened.drawings_table.item(0, 0).checkState(), Qt.CheckState.Checked)
             self.assertTrue(
@@ -1691,17 +1700,21 @@ class BudgetQtWindowTests(unittest.TestCase):
             )
             self.assertTrue(button.isVisible())
             self.assertTrue(tool.rect().contains(button.mapTo(tool, button.rect().bottomRight())))
+            tool.pages.setCurrentIndex(tool.pages.count() - 1)
+            tool.centers_tabs.setCurrentIndex(1)
             tool.centers_editor.tabs.setCurrentIndex(1)
             self.application.processEvents()
             last_field = list(tool.centers_editor.fields.values())[-1]
-            tool.basic_scroll.ensureWidgetVisible(last_field)
+            tool.centers_scroll.ensureWidgetVisible(last_field)
             self.application.processEvents()
-            viewport = tool.basic_scroll.viewport()
-            self.assertGreater(tool.basic_scroll.verticalScrollBar().value(), 0)
+            viewport = tool.centers_scroll.viewport()
+            self.assertGreater(tool.centers_scroll.verticalScrollBar().value(), 0)
             self.assertLessEqual(
                 last_field.mapTo(viewport, last_field.rect().bottomRight()).y(),
                 viewport.height(),
             )
+            tool.pages.setCurrentIndex(0)
+            self.application.processEvents()
             self.assertTrue(tool.rect().contains(button.mapTo(tool, button.rect().bottomRight())))
             QTest.mouseClick(button, Qt.MouseButton.LeftButton)
             self.assertIsNotNone(tool._proposal)

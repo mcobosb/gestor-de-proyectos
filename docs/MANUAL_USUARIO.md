@@ -667,9 +667,25 @@ muestran las partidas generadas ya guardadas en el presupuesto, sin consultar
 de nuevo la matriz. Para aplicar cambios hay que aceptarlos o guardarlos
 expresamente en la herramienta.
 
-En la primera ventana de Seguridad y Salud, **Centros Asistenciales** enlaza al
-registro SICESS. Incluye al menos Hospitales Generales y Centros de Salud.
-Puedes elegir **Texto libre** para pegar la información directamente, o
+En la pestaña **Centros asistenciales**, **Selección SICESS** permite buscar y marcar centros del
+catálogo SICESS local. La selección se guarda como copia en el proyecto y se
+añade al texto o a la tabla asistencial ya elegidos, sin sustituirlos. Usa
+**Actualizar catálogo** para leer de nuevo la base y guarda el proyecto.
+El catálogo distribuido puede ser parcial; la ausencia de un centro no indica
+que no exista. Verifica dirección, teléfono, disponibilidad y capacidad de
+atención urgente antes de incorporarlo al estudio.
+
+La ordenación prioriza el municipio de la obra y, cuando hay datos, muestra
+distancias aproximadas entre municipios a partir de las coordenadas de las
+instalaciones del catálogo local RCD y, si no hay, de coordenadas municipales
+de GeoNames. No son distancias al centro ni rutas; los municipios sin
+coordenadas aparecen como **Sin datos**. Configura los municipios del proyecto.
+Las coordenadas de reserva son una adaptación del extracto de España de
+[GeoNames](https://www.geonames.org/), descargado el 26/11/2026 y cruzado con
+los códigos municipales de la aplicación; se distribuyen bajo
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), sin garantía.
+En **Datos manuales** puedes abrir el registro SICESS y elegir **Texto libre**
+para pegar la información directamente, o
 **Tabla SICESS** para rellenar los campos de cada centro. El botón **+** añade
 otro centro; selecciónalo en la lista para editarlo y utiliza **Eliminar** para
 quitarlo.

@@ -12,7 +12,7 @@ import unicodedata
 from budget_reports import budget_totals
 from localization import translate
 from tools._shared.scheduling import PlanParams, apply_saved_plan_state, build_activities, schedule
-from .care_centers import restore_centers
+from .care_centers import restore_centers, restore_sicess_centers
 from .chapter_selection import (
     SAFETY_BUDGET_SOURCE, restore_chapter_selection,
     study_chapters, study_items,
@@ -52,6 +52,7 @@ def restore_project_state(data: dict) -> dict:
             "centros_asistenciales_texto", data.get("centros_asistenciales", ""),
         ),
         centros_asistenciales_datos=restore_centers(data),
+        centros_sicess_seleccionados=restore_sicess_centers(data.get("centros_sicess_seleccionados", [])),
         study_criteria=data.get("study_criteria"),
         external_conditions=data.get("external_conditions"),
         resumen_actuacion=data.get("resumen_actuacion"),
@@ -304,6 +305,7 @@ def serialize_state(
     centros_asistenciales_modo: str = "texto",
     centros_asistenciales_texto: str | None = None,
     centros_asistenciales_datos: list[dict[str, str]] | None = None,
+    centros_sicess_seleccionados: list[dict[str, str]] | None = None,
     study_criteria: tuple[bool, bool, bool, bool] | list[bool] | dict[str, bool] | None = None,
     external_conditions: dict[str, dict[str, str]] | None = None,
     resumen_actuacion: str | None = None,
@@ -325,6 +327,8 @@ def serialize_state(
         ],
         "lines": [],
     }
+    if centros_sicess_seleccionados is not None:
+        state["centros_sicess_seleccionados"] = restore_sicess_centers(centros_sicess_seleccionados)
     for line in lines:
         row = {
             "code": line.code, "unit": line.unit, "summary": line.summary,
@@ -369,6 +373,7 @@ def restore_state(data: object) -> tuple[list[SafetyLine], Decimal]:
             and not isinstance(data["centros_asistenciales"], str)):
         raise ValueError("Los centros asistenciales deben ser texto.")
     restore_centers(data)
+    restore_sicess_centers(data.get("centros_sicess_seleccionados", []))
     lines = []
     codes = set()
     try:
@@ -596,6 +601,7 @@ def synchronize_budget(
         centros_asistenciales_modo=centros_asistenciales_modo,
         centros_asistenciales_texto=centros_asistenciales_texto,
         centros_asistenciales_datos=centros_asistenciales_datos,
+        centros_sicess_seleccionados=app.safety_health_state.get("centros_sicess_seleccionados"),
         study_criteria=study_criteria,
         external_conditions=conditions or None,
         resumen_actuacion=work_summary,

@@ -58,6 +58,7 @@ from . import (
     write_study_report,
 )
 from .care_centers import FIELDS, format_centers, restore_centers
+from .care_centers_qt import SicessCentersTab
 from .chapter_selection import restore_chapter_selection, study_chapters, study_items
 from .external_conditions import APPLICABILITY, EXTERNAL_CONDITIONS, restore_external_conditions
 from .drawings import (
@@ -353,11 +354,6 @@ class SafetyHealthWindowQt(QDialog):
         self.summary_text.setMaximumHeight(100)
         self.summary_text.textChanged.connect(self.commit_basic_state)
         basics_layout.addWidget(self.summary_text)
-        register = QPushButton("Centros Asistenciales — abrir registro SICESS")
-        register.clicked.connect(self.open_care_centers_registry)
-        basics_layout.addWidget(register, alignment=Qt.AlignmentFlag.AlignLeft)
-        self.centers_editor = CareCentersEditorQt(basics, app.safety_health_state)
-        basics_layout.addWidget(self.centers_editor)
         content_layout.addWidget(basics, 1)
         self.basic_scroll.setWidget(basic_content)
         actions = QGridLayout()
@@ -375,6 +371,24 @@ class SafetyHealthWindowQt(QDialog):
                 actions.addWidget(button, index - 1, 0, 1, 2)
         basic_layout.addLayout(actions)
         self._create_drawings_page()
+        centers_page = QWidget()
+        centers_layout = QVBoxLayout(centers_page)
+        self.centers_tabs = QTabWidget()
+        centers_layout.addWidget(self.centers_tabs)
+        self.sicess_centers_tab = SicessCentersTab(self)
+        self.centers_tabs.addTab(self.sicess_centers_tab, "Selección SICESS")
+        self.centers_scroll = QScrollArea()
+        self.centers_scroll.setWidgetResizable(True)
+        centers_content = QWidget()
+        manual_layout = QVBoxLayout(centers_content)
+        register = QPushButton("Centros Asistenciales — abrir registro SICESS")
+        register.clicked.connect(self.open_care_centers_registry)
+        manual_layout.addWidget(register, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.centers_editor = CareCentersEditorQt(centers_content, app.safety_health_state)
+        manual_layout.addWidget(self.centers_editor)
+        self.centers_scroll.setWidget(centers_content)
+        self.centers_tabs.addTab(self.centers_scroll, "Datos manuales")
+        self.pages.addTab(centers_page, "Centros asistenciales")
 
     def _create_drawings_page(self) -> None:
         """Presenta la selección manual, el visor y el formato de los planos."""
