@@ -94,6 +94,77 @@ class CollaborativeStorageTests(unittest.TestCase):
             window.close()
             self.application.processEvents()
 
+    def test_stale_save_does_not_remove_new_remote_item(self) -> None:
+        """Conserva las partidas creadas por otra sesión después de abrir."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "obra"
+            first = self.make_window()
+            second = self.make_window()
+            self.addCleanup(first.close)
+            self.addCleanup(second.close)
+            store = CollaborativeProjectStore.create_from_payload(
+                root, first, ReportSettings()
+            )
+            stale = CollaborativeProjectStore(root, ReportSettings())
+            loaded = stale.load()
+            second.budget_items = loaded.items
+            second.chapter_order = loaded.chapter_order
+            second.chapter_titles = loaded.chapter_titles
+            second.chapter_ids = loaded.chapter_ids
+            new_item = ProjectItem("P3", "01#", "ud", "Partida remota", 1, 10)
+            first.budget_items.append(new_item)
+            store.save(first)
+            second.budget_items[0].summary = "Cambio local independiente"
+
+            with self.assertRaises(StorageConflictError):
+                stale.save(second)
+
+            self.assertTrue(store.item_path(new_item.storage_id).is_file())
+            self.assertIn("P3", [item.code for item in store.load().items])
+
+    def test_stale_save_does_not_remove_new_remote_chapter(self) -> None:
+        """Conserva los capítulos creados por otra sesión después de abrir."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "obra"
+            first = self.make_window()
+            second = self.make_window()
+            self.addCleanup(first.close)
+            self.addCleanup(second.close)
+            store = CollaborativeProjectStore.create_from_payload(
+                root, first, ReportSettings()
+            )
+            stale = CollaborativeProjectStore(root, ReportSettings())
+            loaded = stale.load()
+            second.budget_items = loaded.items
+            second.chapter_order = loaded.chapter_order
+            second.chapter_titles = loaded.chapter_titles
+            second.chapter_ids = loaded.chapter_ids
+            first.chapter_order.append("02#")
+            first.chapter_titles["02#"] = "Capítulo remoto"
+            store.save(first)
+            new_chapter = store.chapter_path(first.chapter_ids["02#"])
+            second.budget_items[0].summary = "Cambio local independiente"
+
+            with self.assertRaises(StorageConflictError):
+                stale.save(second)
+
+            self.assertTrue(new_chapter.is_file())
+            self.assertIn("02#", store.load().chapter_order)
+
+    def test_save_removes_unchanged_known_item(self) -> None:
+        """Permite eliminar una partida que no ha cambiado externamente."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "obra"
+            window = self.make_window()
+            self.addCleanup(window.close)
+            store = CollaborativeProjectStore.create_from_payload(
+                root, window, ReportSettings()
+            )
+            removed = store.item_path(window.budget_items[0].storage_id)
+            window.budget_items.pop(0)
+            store.save(window)
+            self.assertFalse(removed.exists())
+
     def test_disjoint_item_fields_merge_without_expanding_lock_scope(self) -> None:
         """Dos ediciones distintas de una partida se fusionan por campo."""
         with tempfile.TemporaryDirectory() as directory:

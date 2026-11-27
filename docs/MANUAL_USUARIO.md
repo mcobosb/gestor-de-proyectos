@@ -312,7 +312,12 @@ existente no cambia sus textos.
 
 1. Añade una base desde **Archivo → Añadir base de referencia BCCA…**.
    Las tres últimas bases usadas se conservan en **Archivo → Bases de
-   referencia recientes** para poder abrirlas de nuevo.
+   referencia recientes** para poder abrirlas de nuevo. La lectura se realiza
+   en segundo plano y conserva una copia en `%LOCALAPPDATA%\Gestor de
+   Proyectos\bases_referencia`. Si no se puede leer el original, puedes elegir
+   abrir la última copia local; se identifica como tal y puede estar
+   desactualizada. Reabre la base cuando se restablezca el acceso para
+   actualizarla.
 2. Localiza una partida en la referencia y añádela al presupuesto con la flecha
    hacia la izquierda o arrastrándola al proyecto. Si seleccionas un capítulo,
    la flecha o el arrastre incorporan el capítulo con todas sus partidas.
@@ -533,6 +538,11 @@ La ventana principal muestra el número de personas activas y sus apodos.
 
 El indicador solo aparece cuando hay dos o más personas activas. Usa un icono
 de usuarios y muestra los apodos; al situar el cursor se añade el equipo.
+
+Si otra sesión ha añadido partidas o capítulos desde que abriste el proyecto,
+un guardado desactualizado puede detenerse con un aviso de cambios externos para
+evitar eliminarlos. Recargar desde ese aviso descarta los cambios locales no
+guardados; cancela la recarga si necesitas conservarlos.
 
 Las bibliotecas no obligan a copiarse al proyecto: en **Colaboración →
 Fuentes de bibliotecas…** puedes usar la incluida o indicar un ZIP externo. Para

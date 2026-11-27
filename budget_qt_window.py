@@ -13,7 +13,7 @@ import unicodedata
 import webbrowser
 from uuid import uuid4
 
-from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, QRunnable, QSize, Qt, QThreadPool, QTimer, Signal, Slot
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QResizeEvent
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
@@ -83,6 +83,7 @@ from budget_project import (
     write_project,
 )
 from budget_reports import REPORT_NAMES, ReportSettings, write_pdf
+from budget_reference_cache import load_reference_copy, reference_cache_path
 from budget_qt_settings import SettingsDialog
 from tools._shared.budget_sources import matches_tool_chapter
 from budget_qt_theme import (
@@ -113,6 +114,41 @@ from collaborative_crypto import InvalidProjectPasswordError, ProjectCrypto
 
 ROW_KIND = Qt.ItemDataRole.UserRole
 ROW_DATA = Qt.ItemDataRole.UserRole + 1
+REFERENCE_PENDING = Qt.ItemDataRole.UserRole + 2
+
+
+class _ReferenceLoadSignals(QObject):
+    """Comunica el resultado de una lectura de referencia."""
+
+    loaded = Signal(object, object, bool)
+    failed = Signal(object, str, bool, bool)
+
+
+class _ReferenceLoad(QRunnable):
+    """Copia y analiza una base sin bloquear el hilo de la interfaz."""
+
+    def __init__(self, path: Path, cache_root: Path, cached_only: bool) -> None:
+        """Prepara la ruta original y la copia que se va a leer."""
+        super().__init__()
+        self.path = path
+        self.cache_root = cache_root
+        self.cached_only = cached_only
+        self.signals = _ReferenceLoadSignals()
+
+    @Slot()
+    def run(self) -> None:
+        """Entrega la base validada o comunica el fallo de lectura."""
+        try:
+            dataset = load_reference_copy(
+                self.path, self.cache_root, cached_only=self.cached_only
+            )
+        except (OSError, UnicodeError, ValueError, TypeError) as exc:
+            available = reference_cache_path(self.path, self.cache_root).is_file()
+            self.signals.failed.emit(
+                self.path, str(exc), self.cached_only, available
+            )
+        else:
+            self.signals.loaded.emit(self.path, dataset, self.cached_only)
 
 
 class _PanelTitle(QLabel):
@@ -160,6 +196,11 @@ class BudgetMainWindow(QMainWindow):
             QIcon(str(application_directory(__file__) / "iconos" / "logo.ico"))
         )
         self.reference_bases: list[Bc3Dataset] = []
+        local_data = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+        self.reference_cache_root = local_data / "Gestor de Proyectos" / "bases_referencia"
+        self._reference_loads: dict[Path, _ReferenceLoad] = {}
+        self._cached_reference_paths: set[Path] = set()
+        self._reference_order: list[Path] = []
         self.budget_dataset: Bc3Dataset | None = None
         self.certification_read_only = False
         self.budget_items: list[ProjectItem] = []
@@ -712,6 +753,7 @@ class BudgetMainWindow(QMainWindow):
         self.reference_tree.setAlternatingRowColors(True)
         self.reference_tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.reference_tree.itemDoubleClicked.connect(self.add_selected_reference)
+        self.reference_tree.itemExpanded.connect(self._expand_reference_branch)
         header = self.reference_tree.header()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         for column in range(1, 5):
@@ -1099,30 +1141,87 @@ class BudgetMainWindow(QMainWindow):
             for index, base in enumerate(self.reference_bases)
             if index not in removed
         ]
+        self._cached_reference_paths.intersection_update(
+            base.path for base in self.reference_bases
+        )
+        self._reference_order = [
+            path for path in self._reference_order
+            if any(base.path == path for base in self.reference_bases)
+            or path in self._reference_loads
+        ]
         self.refresh_reference_tree()
         self._set_status(f"Quitadas {len(removed)} base(s) de referencia.")
 
     def _load_reference_file(self, path: Path) -> None:
-        """Carga una base, sustituyendo cualquier copia previa de la misma ruta."""
-        try:
-            dataset = Bc3Dataset(path)
-        except (OSError, UnicodeError, ValueError, TypeError) as exc:
-            QMessageBox.critical(self, "No se pudo cargar la base", str(exc))
+        """Inicia la lectura de la base y de su copia local en segundo plano."""
+        path = Path(os.path.abspath(path))
+        for base in self.reference_bases:
+            if base.path not in self._reference_order:
+                self._reference_order.append(base.path)
+        if path not in self._reference_order:
+            self._reference_order.append(path)
+        self._start_reference_load(path, cached_only=False)
+
+    def _start_reference_load(self, path: Path, *, cached_only: bool) -> None:
+        """Evita solicitudes duplicadas mientras se carga una referencia."""
+        if path in self._reference_loads:
+            self._set_status(f"Ya se está cargando la base {path.name}.")
             return
-        resolved = path.resolve()
+        worker = _ReferenceLoad(path, self.reference_cache_root, cached_only)
+        self._reference_loads[path] = worker
+        worker.signals.loaded.connect(self._reference_loaded, Qt.ConnectionType.QueuedConnection)
+        worker.signals.failed.connect(self._reference_failed, Qt.ConnectionType.QueuedConnection)
+        self._set_status(f"Cargando base de referencia: {path.name}…")
+        QThreadPool.globalInstance().start(worker)
+
+    @Slot(object, object, bool)
+    def _reference_loaded(self, path: Path, dataset: Bc3Dataset, cached: bool) -> None:
+        """Incorpora la base validada en el hilo de interfaz."""
+        self._reference_loads.pop(path, None)
         for index, base in enumerate(self.reference_bases):
-            if base.path.resolve() == resolved:
+            if os.path.normcase(os.path.abspath(base.path)) == os.path.normcase(str(path)):
                 self.reference_bases[index] = dataset
                 break
         else:
             self.reference_bases.append(dataset)
-        self.recent_reference_bases = [path.resolve()] + [
-            value for value in self.recent_reference_bases if value != path.resolve()
+        order = {value: index for index, value in enumerate(self._reference_order)}
+        self.reference_bases.sort(key=lambda base: order.get(base.path, len(order)))
+        if cached:
+            self._cached_reference_paths.add(path)
+        else:
+            self._cached_reference_paths.discard(path)
+        self.recent_reference_bases = [path] + [
+            value for value in self.recent_reference_bases if value != path
         ][:2]
         self._write_recent_paths(self.recent_reference_bases_path, self.recent_reference_bases)
         self._refresh_recent_reference_menu()
         self.refresh_reference_tree()
-        self._set_status(f"BCCA cargada: {path.name}")
+        if cached:
+            self._set_status(f"BCCA cargada desde copia local; puede estar desactualizada: {path.name}")
+        else:
+            self._set_status(f"BCCA cargada: {path.name}")
+
+    @Slot(object, str, bool, bool)
+    def _reference_failed(
+        self, path: Path, error: str, cached_only: bool, cache_available: bool
+    ) -> None:
+        """Ofrece explícitamente la última copia si falla el origen."""
+        self._reference_loads.pop(path, None)
+        if not cached_only and cache_available:
+            answer = QMessageBox.question(
+                self, "No se pudo cargar la base",
+                f"{error}\n\n¿Abrir la última copia local? Puede estar desactualizada.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer == QMessageBox.StandardButton.Yes:
+                self._start_reference_load(path, cached_only=True)
+            elif not any(base.path == path for base in self.reference_bases):
+                self._reference_order.remove(path)
+            return
+        if not any(base.path == path for base in self.reference_bases):
+            self._reference_order.remove(path)
+        QMessageBox.critical(self, "No se pudo cargar la base", error)
 
     def refresh_reference_tree(self) -> None:
         """Reconstruye el árbol de referencia respetando el filtro actual."""
@@ -1135,7 +1234,10 @@ class BudgetMainWindow(QMainWindow):
         for base_index, base in enumerate(self.reference_bases):
             parent: QTreeWidgetItem = self.reference_tree.invisibleRootItem()
             if grouped:
-                parent = QTreeWidgetItem([base.path.stem, "", "", "", base.path.name])
+                title = base.path.stem
+                if base.path in self._cached_reference_paths:
+                    title += " (copia local)"
+                parent = QTreeWidgetItem([title, "", "", "", base.path.name])
                 parent.setExpanded(True)
                 self.reference_tree.addTopLevelItem(parent)
             if term:
@@ -1151,7 +1253,10 @@ class BudgetMainWindow(QMainWindow):
                 continue
             for code in base.root_codes:
                 self._insert_reference_branch(parent, base_index, base, code)
-        label = ", ".join(base.path.stem for base in self.reference_bases) or "Sin cargar"
+        label = ", ".join(
+            base.path.stem + (" (copia local)" if base.path in self._cached_reference_paths else "")
+            for base in self.reference_bases
+        ) or "Sin cargar"
         self.reference_heading.set_title(label)
 
     def _refresh_reference_resources(self, term: str) -> None:
@@ -1214,14 +1319,12 @@ class BudgetMainWindow(QMainWindow):
                         matches,
                     )
 
-            roots = [
-                code for code in base.concepts
-                if not any(
-                    child == code
-                    for concept in base.concepts.values()
-                    for child, _quantity in concept.children
-                )
-            ]
+            referenced = {
+                child
+                for concept in base.concepts.values()
+                for child, _quantity in concept.children
+            }
+            roots = [code for code in base.concepts if code not in referenced]
             for root in (*base.root_codes, *roots, *base.concepts):
                 if root not in reached:
                     visit(root)
@@ -1241,17 +1344,32 @@ class BudgetMainWindow(QMainWindow):
     def _insert_reference_branch(
         self, parent: QTreeWidgetItem, base_index: int, base: Bc3Dataset, code: str
     ) -> QTreeWidgetItem:
-        """Inserta un concepto y sus descendientes de capítulo."""
+        """Inserta un concepto y prepara sus descendientes para desplegarlos."""
         item = self._reference_item(parent, base_index, code, None)
-        if is_chapter_code(code):
-            for child in base.get_children(code):
-                if is_chapter_code(child):
-                    self._insert_reference_branch(item, base_index, base, child)
-                else:
-                    concept = base.concepts.get(child)
-                    if concept and concept.ctype == "0":
-                        self._reference_item(item, base_index, child, None)
+        if is_chapter_code(code) and any(
+            is_chapter_code(child)
+            or (child in base.concepts and base.concepts[child].ctype == "0")
+            for child in base.get_children(code)
+        ):
+            item.setData(0, REFERENCE_PENDING, True)
+            item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.ShowIndicator)
         return item
+
+    def _expand_reference_branch(self, item: QTreeWidgetItem) -> None:
+        """Carga una única vez los hijos visibles de un capítulo de referencia."""
+        if not item.data(0, REFERENCE_PENDING):
+            return
+        base_index, code = item.data(0, ROW_DATA)
+        base = self.reference_bases[base_index]
+        item.setData(0, REFERENCE_PENDING, False)
+        item.setChildIndicatorPolicy(QTreeWidgetItem.ChildIndicatorPolicy.DontShowIndicatorWhenChildless)
+        for child in base.get_children(code):
+            if is_chapter_code(child):
+                self._insert_reference_branch(item, base_index, base, child)
+            else:
+                concept = base.concepts.get(child)
+                if concept and concept.ctype == "0":
+                    self._reference_item(item, base_index, child, None)
 
     def _reference_item(
         self,
@@ -1296,6 +1414,10 @@ class BudgetMainWindow(QMainWindow):
         self.selected_reference = (base_index, code)
         lines = [
             f"Base: {base.path.stem}",
+            *(
+                ["Origen: copia local; puede estar desactualizada."]
+                if base.path in self._cached_reference_paths else []
+            ),
             f"Código: {concept.code}",
             f"Unidad: {concept.unit or '-'}",
             f"Precio: {self._format_currency(concept.price)}",
@@ -2998,11 +3120,10 @@ class BudgetMainWindow(QMainWindow):
             menu.addAction("(No hay bases de referencia recientes)").setEnabled(False)
             return
         for path in self.recent_reference_bases:
-            if path.is_file():
-                action = menu.addAction(str(path))
-                action.triggered.connect(
-                    lambda checked=False, selected=path: self._load_reference_file(selected)
-                )
+            action = menu.addAction(str(path))
+            action.triggered.connect(
+                lambda checked=False, selected=path: self._load_reference_file(selected)
+            )
 
     def _open_recent_project(self, path: Path) -> None:
         """Abre un proyecto reciente tras proteger cambios pendientes."""

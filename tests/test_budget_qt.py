@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import shutil
 import tempfile
+from threading import Event
+import time
 import unittest
 from unittest.mock import patch
 from zipfile import ZipFile
@@ -25,6 +27,7 @@ from budget_core import Bc3Dataset, Concept
 from budget_core import ProjectItem
 from budget_qt_settings import SettingsDialog
 from budget_qt_window import BudgetMainWindow
+from budget_reference_cache import load_reference_copy, reference_cache_path
 from budget_qt_theme import apply_theme
 from budget_reports import ReportSettings
 from collaborative_storage import CollaborativeProjectStore
@@ -2908,6 +2911,189 @@ class BudgetQtWindowTests(unittest.TestCase):
             window.close()
             self.application.processEvents()
 
+    def test_reference_cache_preserves_last_copy_on_failed_update(self) -> None:
+        """Una copia incompleta nunca sustituye a la última base válida."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "base.bc3"
+            shutil.copyfile(ROOT / "tests" / "test.bc3", source)
+            cache = root / "cache"
+            original = load_reference_copy(source, cache)
+            cached = reference_cache_path(source, cache)
+            before = cached.read_bytes()
+            with patch("budget_reference_cache.shutil.copyfileobj", side_effect=OSError("corte")):
+                with self.assertRaises(OSError):
+                    load_reference_copy(source, cache)
+            self.assertEqual(cached.read_bytes(), before)
+            source.unlink()
+            restored = load_reference_copy(source, cache, cached_only=True)
+            self.assertEqual(restored.path, source)
+            self.assertEqual(restored.concepts, original.concepts)
+
+    def test_reference_load_runs_in_background_and_offers_cached_copy(self) -> None:
+        """Mantiene la interfaz activa y pide permiso antes de usar datos antiguos."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            window = BudgetMainWindow()
+            self.addCleanup(window.close)
+            root = Path(directory)
+            window.reference_cache_root = root / "cache"
+            source = root / "base.bc3"
+            shutil.copyfile(ROOT / "tests" / "test.bc3", source)
+            started, release = Event(), Event()
+            copy = shutil.copyfileobj
+
+            def slow_copy(input_file, output_file):
+                """Simula una lectura de red que espera sin bloquear Qt."""
+                started.set()
+                if not release.wait(10):
+                    raise OSError("Tiempo de espera de la prueba")
+                copy(input_file, output_file)
+
+            try:
+                with patch("budget_reference_cache.shutil.copyfileobj", side_effect=slow_copy):
+                    window._load_reference_file(source)
+                    self.assertTrue(started.wait(5))
+                    fired = []
+                    QTimer.singleShot(0, lambda: fired.append(True))
+                    QTest.qWait(30)
+                    self.assertTrue(fired)
+                    self.assertFalse(window.reference_bases)
+                    release.set()
+                    deadline = time.monotonic() + 10
+                    while window._reference_loads and time.monotonic() < deadline:
+                        QTest.qWait(20)
+                    self.assertFalse(window._reference_loads)
+            finally:
+                release.set()
+            self.assertEqual(window.reference_bases[0].path, source)
+            source.unlink()
+            window.reference_bases.clear()
+            with patch.object(
+                QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes
+            ) as question:
+                window._load_reference_file(source)
+                deadline = time.monotonic() + 10
+                while window._reference_loads and time.monotonic() < deadline:
+                    QTest.qWait(20)
+                self.assertFalse(window._reference_loads)
+                question.assert_called_once()
+            self.assertEqual(window.reference_bases[0].path, source)
+            self.assertIn("desactualizada", window.statusBar().currentMessage())
+            self.assertIn("copia local", window.reference_heading.toolTip()
+                          or window.reference_heading.text())
+
+    def test_reference_load_keeps_selection_order_when_reads_finish_out_of_order(self) -> None:
+        """Respeta el orden elegido aunque una lectura tarde más que otra."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            window = BudgetMainWindow()
+            self.addCleanup(window.close)
+            root = Path(directory)
+            window.reference_cache_root = root / "cache"
+            first, second = root / "primera.bc3", root / "segunda.bc3"
+            shutil.copyfile(ROOT / "tests" / "test.bc3", first)
+            shutil.copyfile(ROOT / "tests" / "test.bc3", second)
+            started, release = Event(), Event()
+
+            def delayed_load(path, cache_root, *, cached_only=False):
+                """Retrasa solo la primera lectura."""
+                if path == first:
+                    started.set()
+                    if not release.wait(10):
+                        raise OSError("Tiempo de espera de la prueba")
+                return load_reference_copy(path, cache_root, cached_only=cached_only)
+
+            try:
+                with patch("budget_qt_window.load_reference_copy", side_effect=delayed_load):
+                    window._load_reference_file(first)
+                    self.assertTrue(started.wait(5))
+                    window._load_reference_file(second)
+                    deadline = time.monotonic() + 10
+                    while second in window._reference_loads and time.monotonic() < deadline:
+                        QTest.qWait(20)
+                    self.assertNotIn(second, window._reference_loads)
+                    release.set()
+                    deadline = time.monotonic() + 10
+                    while window._reference_loads and time.monotonic() < deadline:
+                        QTest.qWait(20)
+                    self.assertFalse(window._reference_loads)
+            finally:
+                release.set()
+            self.assertEqual([base.path for base in window.reference_bases], [first, second])
+
+    def test_reference_branches_load_on_expansion_and_allow_copying(self) -> None:
+        """Despliega solo la rama solicitada y conserva la selección al copiar."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            window = BudgetMainWindow()
+            self.addCleanup(window.close)
+            self.addCleanup(setattr, window, "is_dirty", False)
+            path = Path(directory) / "base.bc3"
+            path.touch()
+            base = Bc3Dataset(path)
+            base.root_codes = ["A#", "X#"]
+            base.concepts = {
+                "A#": Concept("A#", summary="Capítulo", children=[("B#", 1)]),
+                "B#": Concept("B#", summary="Subcapítulo", children=[("P1", 1)]),
+                "X#": Concept("X#", summary="Otra rama", children=[("P2", 1)]),
+                "P1": Concept("P1", "ud", "Partida uno", 12),
+                "P2": Concept("P2", "ud", "Partida dos", 20),
+            }
+            base.chapter_children = {"A#": ["B#"], "B#": ["P1"], "X#": ["P2"]}
+            window.reference_bases = [base]
+            window.refresh_reference_tree()
+            chapter = window.reference_tree.topLevelItem(0)
+            untouched = window.reference_tree.topLevelItem(1)
+            self.assertEqual(chapter.childCount(), 0)
+            chapter.setExpanded(True)
+            self.assertEqual(chapter.childCount(), 1)
+            subchapter = chapter.child(0)
+            self.assertEqual(subchapter.childCount(), 0)
+            subchapter.setExpanded(True)
+            self.assertEqual(subchapter.childCount(), 1)
+            self.assertEqual(untouched.childCount(), 0)
+            subchapter.setExpanded(False)
+            subchapter.setExpanded(True)
+            self.assertEqual(subchapter.childCount(), 1)
+            window.reference_tree.setCurrentItem(subchapter.child(0))
+            window.add_selected_reference()
+            self.assertEqual([item.code for item in window.budget_items], ["P1"])
+            self.assertIn("Partida uno", window.reference_details.toPlainText())
+
+    def test_reference_resource_filter_scans_edges_linearly(self) -> None:
+        """Evita búsquedas cuadráticas de raíces al filtrar una base de recursos."""
+        class CountingChildren(list):
+            """Cuenta cada lectura de una lista de descomposición."""
+            iterations = 0
+
+            def __iter__(self):
+                """Registra la iteración sin alterar los hijos."""
+                CountingChildren.iterations += 1
+                return super().__iter__()
+
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            window = BudgetMainWindow()
+            self.addCleanup(window.close)
+            path = Path(directory) / "base.bc3"
+            path.touch()
+            base = Bc3Dataset(path)
+            base.root_codes = []
+            base.concepts = {
+                f"R{index}": Concept(f"R{index}", "h", f"Recurso {index}", 1, "2",
+                                     children=CountingChildren())
+                for index in range(100)
+            }
+            window.reference_bases = [base]
+            window.toggle_reference_resource_filter("2")
+            self.assertEqual(window.reference_tree.topLevelItemCount(), 100)
+            self.assertLessEqual(CountingChildren.iterations, 2 * len(base.concepts))
+
     def test_reference_details_follow_the_selected_concept_and_clear_with_the_tree(self) -> None:
         """Muestra el concepto de la base seleccionada sin conservar detalles obsoletos."""
         with tempfile.TemporaryDirectory() as directory, patch(
@@ -2974,7 +3160,12 @@ class BudgetQtWindowTests(unittest.TestCase):
                 return_value=(False, True),
             ):
                 window._load_budget_file(source)
+            window.reference_cache_root = Path(directory) / "cache"
             window._load_reference_file(source)
+            deadline = time.monotonic() + 10
+            while window._reference_loads and time.monotonic() < deadline:
+                QTest.qWait(20)
+            self.assertFalse(window._reference_loads)
             self.assertEqual(
                 set(window.budget_filter_buttons), {"2", "1", "3"}
             )

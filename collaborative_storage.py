@@ -533,7 +533,7 @@ class CollaborativeProjectStore:
         )
         for path in removed:
             current = self.canonical_payload_bytes(path)
-            if path in self.baseline and current != self.baseline[path]:
+            if path not in self.baseline or current != self.baseline[path]:
                 conflicts.append(path)
         if conflicts:
             raise StorageConflictError(list(dict.fromkeys(conflicts)))
