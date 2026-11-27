@@ -19,6 +19,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QAbstractItemView,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -2630,17 +2631,19 @@ class BudgetMainWindow(QMainWindow):
             LIBRARY_PATH as PRICE_LIBRARY,
         )
         from tools.rcd.document import LIBRARY_PATH as RCD_LIBRARY
-        from tools.quality_assurance.document import LIBRARY_PATH as QUALITY_LIBRARY
         from tools.safety_health import LIBRARY_PATH as SAFETY_LIBRARY
         from tools.pptp import DOCS_ROOT, LIBRARY_PATH as PPTP_LIBRARY
 
         libraries = {
             "price_justification": PRICE_LIBRARY,
             "rcd": RCD_LIBRARY,
-            "quality_assurance": QUALITY_LIBRARY,
             "safety_health": SAFETY_LIBRARY,
             "pptp": PPTP_LIBRARY,
         }
+        if "quality_assurance" in self.tools_by_name:
+            from tools.quality_assurance.document import LIBRARY_PATH as QUALITY_LIBRARY
+
+            libraries["quality_assurance"] = QUALITY_LIBRARY
         dialog = QDialog(self)
         dialog.setWindowTitle("Fuentes de bibliotecas")
         layout = QVBoxLayout(dialog)
@@ -2711,7 +2714,11 @@ class BudgetMainWindow(QMainWindow):
 
         def save_preferences() -> None:
             """Persiste biblioteca incluida o ruta externa por módulo."""
-            sources = {}
+            sources = {
+                "quality_assurance": self.library_sources["quality_assurance"],
+            } if (
+                "quality_assurance" not in libraries and "quality_assurance" in self.library_sources
+            ) else {}
             for module in libraries:
                 selector, field = dialog.property(f"library_{module}")
                 if selector.currentIndex() == 1:

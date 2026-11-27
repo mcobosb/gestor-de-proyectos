@@ -2690,6 +2690,82 @@ class BudgetQtWindowTests(unittest.TestCase):
             window.close()
             self.application.processEvents()
 
+    def test_library_preferences_survive_uninstalled_quality_tool(self) -> None:
+        """No importa el módulo ausente ni borra su ruta externa al guardar."""
+        import builtins
+
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            window = BudgetMainWindow()
+            try:
+                window.tools_by_name.pop("quality_assurance", None)
+                window.library_sources["quality_assurance"] = "biblioteca-calidad.zip"
+                real_import = builtins.__import__
+
+                def import_without_quality(name, *args, **kwargs):
+                    """Simula que el instalador no incluyó el módulo de calidad."""
+                    if name.startswith("tools.quality_assurance"):
+                        raise ModuleNotFoundError(name)
+                    return real_import(name, *args, **kwargs)
+
+                def save_dialog():
+                    """Guarda las preferencias de los módulos visibles."""
+                    dialog = next(
+                        dialog for dialog in window.findChildren(QDialog)
+                        if dialog.windowTitle() == "Fuentes de bibliotecas"
+                    )
+                    self.assertIsNone(dialog.property("library_quality_assurance"))
+                    button = next(
+                        button for button in dialog.findChildren(QPushButton)
+                        if button.text() == "Guardar preferencias"
+                    )
+                    button.click()
+                    return QDialog.DialogCode.Accepted
+
+                with patch("builtins.__import__", side_effect=import_without_quality), patch.object(
+                    QDialog, "exec", side_effect=save_dialog,
+                ):
+                    window.open_shared_libraries()
+                saved = json.loads(window.library_preferences_path.read_text(encoding="utf-8"))
+                self.assertEqual(saved["quality_assurance"], "biblioteca-calidad.zip")
+            finally:
+                window.close()
+                self.application.processEvents()
+
+    def test_quality_library_is_selectable_when_installed(self) -> None:
+        """Permite guardar una biblioteca externa cuando el módulo está disponible."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            window = BudgetMainWindow()
+            try:
+                archive = Path(directory) / "calidad.zip"
+                archive.touch()
+
+                def save_dialog():
+                    """Selecciona y guarda la biblioteca del módulo de calidad."""
+                    dialog = next(
+                        dialog for dialog in window.findChildren(QDialog)
+                        if dialog.windowTitle() == "Fuentes de bibliotecas"
+                    )
+                    selector, field = dialog.property("library_quality_assurance")
+                    selector.setCurrentIndex(1)
+                    field.setText(str(archive))
+                    next(
+                        button for button in dialog.findChildren(QPushButton)
+                        if button.text() == "Guardar preferencias"
+                    ).click()
+                    return QDialog.DialogCode.Accepted
+
+                with patch.object(QDialog, "exec", side_effect=save_dialog):
+                    window.open_shared_libraries()
+                saved = json.loads(window.library_preferences_path.read_text(encoding="utf-8"))
+                self.assertEqual(saved["quality_assurance"], str(archive))
+            finally:
+                window.close()
+                self.application.processEvents()
+
     def test_collaborator_nickname_preference_is_saved_globally(self) -> None:
         """El apodo se conserva aparte del documento colaborativo."""
         with tempfile.TemporaryDirectory() as directory, patch(

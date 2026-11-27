@@ -286,6 +286,28 @@ class DistributionTests(unittest.TestCase):
         self.assertIn(r"quality_assurance\Plan_Aseguramiento_Calidad_CTE_CE_PG3-v2.xlsx".lower(),
                       build_script)
 
+    def test_quality_installer_component_includes_resources_and_preserves_edits(self):
+        """Incluye calidad en la instalación completa y conserva sus datos al desmarcarla."""
+        script = (ROOT / "installer" / "GestorDeProyectos.iss").read_text(encoding="utf-8-sig")
+        components = script.split("[Components]", 1)[1].split("[Tasks]", 1)[0]
+        self.assertIn(
+            'Name: "quality_assurance"; Description: "Aseguramiento de la calidad"; Types: full;',
+            components,
+        )
+        files = script.split("[Files]", 1)[1].split("[Icons]", 1)[0]
+        self.assertIn(
+            'Source: "{#AppDist}\\tools\\quality_assurance\\*"; '
+            'DestDir: "{app}\\tools\\quality_assurance"; '
+            'Flags: ignoreversion recursesubdirs; Components: quality_assurance',
+            files,
+        )
+        cleanup = script.split("[InstallDelete]", 1)[1].split("[Files]", 1)[0]
+        self.assertIn(
+            'Name: "{app}\\tools\\quality_assurance\\__init__*.pyd"; Components: not quality_assurance',
+            cleanup,
+        )
+        self.assertEqual(sum("quality_assurance" in line for line in cleanup.splitlines()), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

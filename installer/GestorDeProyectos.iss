@@ -1,5 +1,5 @@
 ﻿#define AppName "Gestor de Proyectos"
-#define AppVersion "2.2.0"
+#define AppVersion "2.3.0"
 #define AppPublisher "Manuel Cobos Budia"
 #define AppExecutable "GestorDeProyectos.exe"
 
@@ -31,6 +31,7 @@ Name: "custom"; Description: "Instalación personalizada"; Flags: iscustom
 
 [Components]
 Name: "core"; Description: "Programa base y catálogos de consulta"; Types: full compact custom; Flags: fixed
+Name: "quality_assurance"; Description: "Aseguramiento de la calidad"; Types: full; Flags: disablenouninstallwarning
 Name: "price_justification"; Description: "Justificación de precios"; Types: full; Flags: disablenouninstallwarning
 Name: "rcd"; Description: "RCDs (cruce LER–BCCA2023 opcional)"; Types: full; Flags: disablenouninstallwarning
 Name: "safety_health"; Description: "Seguridad y Salud (correspondencias automáticas: usar BCCA)"; Types: full; Flags: disablenouninstallwarning
@@ -44,6 +45,7 @@ Name: "desktopicon"; Description: "Crear un acceso directo en el escritorio"; Gr
 
 [InstallDelete]
 ; Retira solo la entrada compilada de módulos desmarcados en una actualización.
+Type: files; Name: "{app}\tools\quality_assurance\__init__*.pyd"; Components: not quality_assurance
 Type: files; Name: "{app}\tools\price_justification\__init__*.pyd"; Components: not price_justification
 Type: files; Name: "{app}\tools\rcd\__init__*.pyd"; Components: not rcd
 Type: files; Name: "{app}\tools\safety_health\__init__*.pyd"; Components: not safety_health
@@ -62,6 +64,7 @@ Source: "{#AppDist}\tools\document_structure\*"; DestDir: "{app}\tools\document_
 ; Consultas utiliza estos CSV aun cuando no estén instalados PPTP o Seguridad y Salud.
 Source: "{#AppDist}\tools\pptp\docs\unes.csv"; DestDir: "{app}\tools\pptp\docs"; Flags: ignoreversion; Components: core
 Source: "{#AppDist}\tools\safety_health\datos\ntps.csv"; DestDir: "{app}\tools\safety_health\datos"; Flags: ignoreversion; Components: core
+Source: "{#AppDist}\tools\quality_assurance\*"; DestDir: "{app}\tools\quality_assurance"; Flags: ignoreversion recursesubdirs; Components: quality_assurance
 Source: "{#AppDist}\tools\price_justification\*"; DestDir: "{app}\tools\price_justification"; Flags: ignoreversion recursesubdirs; Components: price_justification
 Source: "{#AppDist}\tools\rcd\*"; DestDir: "{app}\tools\rcd"; Flags: ignoreversion recursesubdirs; Components: rcd
 Source: "{#AppDist}\tools\safety_health\*"; DestDir: "{app}\tools\safety_health"; Excludes: "\datos\ntps.csv"; Flags: ignoreversion recursesubdirs; Components: safety_health

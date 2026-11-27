@@ -4,6 +4,20 @@ Aplicación de escritorio para Windows que permite trabajar con presupuestos
 FIEBDC-3 (BC3), editar mediciones y descomposiciones, planificar obras y gestionar
 certificaciones mensuales.
 
+## Versión 2.3.0 — 27/11/2026
+
+El instalador incorpora Aseguramiento de la calidad en la instalación completa
+y permite seleccionarlo en la personalizada.
+
+La estructura documental incluye un reportaje fotográfico vacío y una ficha
+técnica editable con datos actuales del proyecto. La entrega debe regenerarse
+para actualizar estos datos, tras guardar una copia de las ediciones manuales.
+El informe de planificación usa A3 horizontal; la vista gráfica de Gantt se
+guarda por separado en PNG o PDF. Las tablas emplean Arial Narrow por defecto
+y las cabeceras dimensionales de medición, 10 pt en negrita, salvo ajustes
+específicos del proyecto. Consulta el [manual](MANUAL_USUARIO.md#2-crear-o-abrir-un-proyecto)
+y el [historial de cambios](../CHANGELOG.md#230--2026-11-27).
+
 ## Versión 2.2.0 — 25/11/2026
 
 - **Seguridad y Salud:** catálogo de planos A3, generación reforzada sin
@@ -137,8 +151,8 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
 - El pie rellena el marcador de capítulo con **Planificación** y el de página
   con la numeración correspondiente. No se anteponen el nombre del proyecto
   ni el título Plan de trabajo.
-- **Detalle de la figura** conserva la salida detallada anterior en PNG/PDF
-  como opción secundaria, sin sustituir el guardado estándar en plantilla.
+- **Ver detalle completo** abre la salida gráfica en PNG/PDF como opción
+  secundaria, sin sustituir el guardado estándar en plantilla.
 
 ### Seguridad y salud
 
@@ -572,7 +586,7 @@ Esperamos que os sea muy útil. ¡Esto es solo el comienzo!
 ## Instalación y arranque
 
 En Windows se puede crear e instalar una versión compilada con Nuitka. Una vez
-generado, el instalador `GestorDeProyectos-Setup-2.2.0.exe` no requiere Python.
+generado, el instalador `GestorDeProyectos-Setup-2.3.0.exe` no requiere Python.
 Incluye los componentes necesarios, pero no los archivos fuente `.py`. La
 compilación Nuitka dificulta recuperar el código, aunque no puede impedir
 completamente la ingeniería inversa.
@@ -716,7 +730,10 @@ El archivo [requirements.txt](../requirements.txt) contiene las dependencias de 
 | ReportLab | Informes PDF |
 | Matplotlib | Diagramas de Gantt |
 | pdfplumber | Lectura local de tablas de facturas PDF |
+| pdfminer.six | Análisis de contenido PDF |
 | pypdfium2 | Visor PDF integrado de facturas |
+| cryptography | Cifrado de proyectos colaborativos |
+| ifcopenshell, numpy y vtk | Lectura y visualización de modelos IFC |
 
 Los informes también se generan como ODT editable con los módulos estándar de Python.
 El formato se elige al guardar cada informe: ODT editable aparece seleccionado
@@ -780,6 +797,8 @@ proyecto colaborativo…** para migrarlos sin perder compatibilidad histórica.
 | [tool_loader.py](../tool_loader.py) | Descubrimiento y validación de herramientas opcionales |
 | [tools/](../tools/) | Módulos opcionales y sus auxiliares |
 | [tools/bim/](../tools/bim/) | Visor IFC y mediciones BCCA |
+| [tools/document_structure/](../tools/document_structure/) | Catálogo, anejos y maestro documental |
+| [tools/quality_assurance/](../tools/quality_assurance/) | Plan de aseguramiento y control de calidad |
 | [tools/rcd/](../tools/rcd/) | Estimación, revisión y presupuesto de gestión de RCDs |
 | [tools/safety_health/](../tools/safety_health/) | Seguridad y Salud y su matriz CSV en `datos/` |
 | [tools/planning/](../tools/planning/) | Planificación, ventana, conversor XLSX y dibujo del Gantt |
@@ -805,8 +824,7 @@ proyecto colaborativo…** para migrarlos sin perder compatibilidad histórica.
 | [ui_theme.py](../ui_theme.py) | Tema de la interfaz |
 | [tools/planning/figura_gantt.py](../tools/planning/figura_gantt.py) | Dibujo del Gantt; utilizado por planificación |
 | [tools/planning/bc3_to_xlsx_plan.py](../tools/planning/bc3_to_xlsx_plan.py) | Conversor independiente de planificación a XLSX |
-| [iconos/](../iconos/) | Icono de la aplicación y logo institucional de los informes |
-| [plantillas/plantilla.odt](../plantillas/plantilla.odt) | Cabecera y pie personal de los informes de certificación |
+| [iconos/](../iconos/) | Icono e imagen de arranque de la aplicación |
 | [Manual de usuario](MANUAL_USUARIO.md) | Procedimientos paso a paso |
 
 Los conversores antiguos de imágenes y las imágenes que no utiliza la aplicación
@@ -815,8 +833,9 @@ se han trasladado a una carpeta externa; no son necesarios para ejecutarla.
 ### Herramientas opcionales
 
 Al arrancar, el programa lee la carpeta `tools` situada junto a la aplicación,
-independientemente del directorio de trabajo. Solo los módulos encontrados y
-válidos se añaden a **Herramientas**. Si la carpeta falta o está vacía, la
+independientemente del directorio de trabajo. Los módulos Qt encontrados y
+válidos se añaden a **Herramientas**, salvo Motor BIM, que tiene su propio menú.
+Si la carpeta falta o está vacía, la
 aplicación sigue funcionando sin herramientas. Los errores de carga se muestran
 con un aviso, sin ocultar las herramientas válidas.
 
@@ -829,8 +848,8 @@ TOOL_LABEL = "Mi herramienta"
 TOOL_ORDER = 100  # Opcional; orden ascendente en el menú.
 
 
-def open_tool(app):
-    """Abre la herramienta usando la instancia de BudgetApp."""
+def open_tool_qt(app):
+    """Abre la herramienta usando la ventana principal Qt."""
     # Construir aquí la ventana o ejecutar la acción.
 ```
 
@@ -839,11 +858,12 @@ entradas en el primer nivel de `tools`: los scripts internos de una herramienta
 no se convierten en opciones adicionales del menú.
 
 Los nombres que empiezan por `_` se reservan para auxiliares y no aparecen en el
-menú. En Qt, `open_tool_qt(app)` abre la herramienta y el punto de entrada
+menú. El punto de entrada
 opcional `install_toolbar_qt(app, toolbar)` permite añadir un botón propio a la
-barra principal. También se admiten `is_available(app) -> bool`, para desactivar la opción,
-`restore_project_state(data) -> dict`, para validar el estado de las herramientas
-integradas, y `before_project_save(app)`, para su sincronización antes de guardar.
+barra principal. También se admiten `is_available(app) -> bool`, para desactivar
+la opción, y `before_project_save_qt(app)`, para sincronizar antes de guardar.
+Las herramientas integradas usan `restore_project_state(data) -> dict` para
+validar sus estados al abrir un proyecto.
 El núcleo conserva los estados JSON existentes aunque falte su herramienta y
 avisa al abrir un proyecto con datos de módulos no disponibles; no los recalcula.
 Los cálculos compartidos están en `tools/_shared/scheduling.py`, por lo que
@@ -953,11 +973,11 @@ plantillas PDF originales, historial ni configuración personal**.
 El programa funciona con los archivos que aporte cada usuario.
 
 Los informes se reconstruyen mediante código; no requieren abrir los PDF
-originales de ejemplo. El recurso gráfico del logo se encuentra en
-[iconos/logo_odt.jpg](../iconos/logo_odt.jpg).
-Los informes de certificación pueden usar la cabecera y el pie de
-[plantillas/plantilla.odt](../plantillas/plantilla.odt), opción que se controla
-desde **Archivo → Configuración…**. La plantilla se incluye en el instalador.
+originales de ejemplo. Las plantillas ODT y el logo JPEG son opcionales y se
+seleccionan en **Archivo → Configuración… → Plantillas**. Si no se configura
+un logo, se conserva el de la plantilla, si existe; no se usa el icono de la
+aplicación como sustituto. La plantilla y el logo no están incluidos en el
+repositorio.
 
 La aplicación arranca siempre vacía, aunque haya BC3 o proyectos JSON en su
 carpeta. Abre un proyecto desde **Archivo → Recientes** o **Abrir proyecto (JSON)**,
@@ -1003,13 +1023,21 @@ Después, desde PowerShell en la carpeta del proyecto:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-build.txt
+New-Item -ItemType Directory -Force plantillas | Out-Null
 .\build_installer.ps1
 ```
 
-El instalador generado aparece en `dist\GestorDeProyectos-Setup-2.2.0.exe`.
-Permite instalar todos los módulos, solo el programa base o una selección
-personalizada. Los catálogos de **Consultas** están disponibles en las tres
-modalidades. En la selección se advierte que las correspondencias automáticas de
+El script exige los recursos indicados en su lista de comprobación, incluidos
+`tools\BCCA2023_V02.bc3` y
+`tools\quality_assurance\Plan_Aseguramiento_Calidad_CTE_CE_PG3-v2.xlsx`;
+estos dos archivos no están versionados y deben aportarse antes de compilar.
+La carpeta `plantillas` puede contener plantillas propias o estar vacía.
+
+El instalador generado aparece en `dist\GestorDeProyectos-Setup-2.3.0.exe`.
+Permite instalar los módulos opcionales ofrecidos o una selección personalizada.
+El programa base incluye Motor BIM, Estructura documental y los catálogos de
+**Consultas**. Aseguramiento de la calidad se incluye en la instalación
+completa y se puede seleccionar por separado. En la selección se advierte que las correspondencias automáticas de
 **PPTP** y **Seguridad y Salud** están diseñadas para códigos BCCA; en **RCDs**
 el cruce LER–BCCA2023 es complementario y no impide usar otras bases.
 

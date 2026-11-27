@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.3.0 — 2026-11-27
+
+- **Estructura documental.** Añadidos el reportaje fotográfico en blanco y una
+  ficha técnica editable con datos actuales del proyecto. Los títulos de anejos
+  distinguen el número sin negrita y el nombre en negrita; los índices del maestro
+  se delimitan a sus documentos y sus referencias apuntan a las páginas correspondientes.
+- **Informes.** El informe de planificación se genera en A3 horizontal; las
+  tablas usan Arial Narrow por defecto y las cabeceras dimensionales de medición
+  emplean 10 pt en negrita, respetando los ajustes de estilo del proyecto.
+- **BIM y PPTP.** Los identificadores IFC duplicados se señalan y sus mediciones
+  no se incorporan mientras sean ambiguas. Corregido un error al guardar el PPTP.
+- **Calidad.** Los ensayos revisados pueden incorporarse al presupuesto desde el
+  plan de aseguramiento y control de la calidad. El instalador incluye ahora la
+  herramienta en la instalación completa y permite seleccionarla por separado.
+
 ## 2.2.0 — 2026-11-25
 
 - **Seguridad y Salud.** Añadido el catálogo de planos A3 y mejorada la

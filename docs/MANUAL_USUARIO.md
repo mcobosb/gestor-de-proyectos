@@ -1,6 +1,6 @@
 # Manual de usuario
 
-## Gestor de Proyectos (v2.2.0)
+## Gestor de Proyectos (v2.3.0)
 
 Herramienta para preparar presupuestos, mediciones, planificación de obra y
 certificaciones. Los ejemplos de rutas de este manual son ficticios.
@@ -69,18 +69,22 @@ PPTP conserva la profundidad elegida y Seguridad y Salud el índice de cada
 documento. En ODT los índices son editables y se pueden actualizar en Writer.
 
 Al arrancar, el programa examina `tools` junto a la aplicación y añade al menú
-**Herramientas** los módulos disponibles. En el instalador de Windows, la
-**Instalación personalizada** permite marcar cada módulo por separado. También
-puedes instalar **Solo el programa base**, con los catálogos de Consultas.
+**Herramientas** los módulos disponibles; Motor BIM tiene su propio menú.
+En el instalador de Windows, la
+**Instalación personalizada** permite marcar los módulos opcionales ofrecidos.
+**Solo el programa base** incluye los catálogos de Consultas, Motor BIM y
+Estructura documental. **Aseguramiento de la calidad** se incluye en la
+instalación completa y puede seleccionarse en la personalizada.
 La lista señala que **PPTP** y **Seguridad y Salud** usan códigos BCCA para las
 correspondencias automáticas, y que en **RCDs** el cruce con BCCA2023 es opcional.
 Al actualizar, desmarcar un módulo previamente instalado lo retira del menú sin
 borrar sus bibliotecas editadas ni los datos del proyecto.
 
 Para añadir o retirar una herramienta manualmente desde el código fuente,
-coloca o mueve su carpeta completa y reinicia: `tools/pptp`, `tools/planning`,
-`tools/rcd`, `tools/safety_health`, `tools/certifications`, `tools/invoicing` o
-`tools/price_justification`.
+coloca o mueve su carpeta completa y reinicia: `tools/document_structure`,
+`tools/quality_assurance`, `tools/price_justification`, `tools/planning`,
+`tools/pptp`, `tools/rcd`, `tools/safety_health`, `tools/certifications`,
+`tools/invoicing` o `tools/bim`.
 Cada carpeta contiene la entrada de la herramienta y sus scripts y recursos.
 En código fuente son archivos `.py`; en la versión instalada son extensiones
 `.pyd`. Conserva `tools/_shared`, que contiene cálculos y constantes comunes.
@@ -109,8 +113,10 @@ anejo con una tabla rellenable que enumera los ficheros, autorizaciones,
 tramitación ambiental, visado, replanteo y supervisión.
 El **Reportaje fotográfico** se genera en blanco. La **Ficha técnica de la
 obra** incluye una tabla editable: al generarla se completan los datos disponibles
-del proyecto, el plazo, los presupuestos y la fecha de generación; los demás
-campos quedan vacíos. Los datos no se actualizan automáticamente en un ODT ya
+del proyecto, el plazo, los presupuestos y la fecha de generación. El plazo
+calculado de planificación tiene prioridad sobre el guardado en PPTP; fecha de
+redacción, ámbito, características y motivación quedan vacíos para completarlos.
+Los datos no se actualizan automáticamente en un ODT ya
 generado: vuelve a generar la entrega para obtener los valores actuales. La
 regeneración reemplaza los documentos generados, incluidas sus ediciones manuales.
 Los demás ODT se crean como archivos base vacíos, con sus nombres, cabeceras, estructura
@@ -441,9 +447,10 @@ Si el logo está anclado al título pero desplazado sobre otra celda vacía,
 se coloca dentro de esa celda para evitar que estreche el título o se salga
 de la tabla. La plantilla ODT original no se modifica.
 
-Los informes PDF y ODT se generan en A4, salvo el informe de planificación,
-que utiliza A3 horizontal, con márgenes exteriores de **2,5 cm en los cuatro
-lados**. La cabecera y el pie quedan dentro de esos límites;
+Los informes de presupuesto y certificación se generan en A4. El informe de
+planificación utiliza A3 horizontal, con márgenes exteriores de **2,5 cm en los
+cuatro lados**; los planos de Seguridad y Salud admiten A4 o A3 según la selección.
+La cabecera y el pie quedan dentro de esos límites;
 el cuerpo reserva espacio adicional para no invadirlos. Las columnas se
 ajustan al ancho disponible.
 
@@ -631,7 +638,8 @@ La acción no guarda el archivo del proyecto: utiliza **Guardar** para conservar
 los cambios. Para rehacer la inserción, retira primero las partidas generadas.
 
 **Consultar precios BCCA para la fila…** permite buscar y seleccionar una partida
-del capítulo 18 de la BCCA 2023 distribuida. Las coincidencias son orientativas:
+del capítulo 18 de la BCCA 2023. El instalador la incluye; al ejecutar desde el
+código fuente debe estar disponible en `tools/BCCA2023_V02.bc3`. Las coincidencias son orientativas:
 comprueba su alcance y precio, especialmente si una propuesta solo cubre parte
 del control. Si no hay propuestas, puedes buscar por palabras o código. Solo se
 ofrecen partidas positivas por unidad (`u` o `ud`), no precios por superficie o volumen; los
@@ -1026,10 +1034,9 @@ y la partida que motivó la detección:
   sin presentar esa agrupación como una clasificación legal actualizada.
 - La vista inferior recalcula el presupuesto al cambiar las marcas.
 
-El **disquete** o **Ctrl+S** guarda los datos, coeficientes, precios, selecciones
-y evidencias dentro del JSON del proyecto. El disquete negro indica cambios
-pendientes. Cerrar conserva las ediciones aceptadas en memoria; guarda el
-proyecto para persistirlas.
+**Guardar RCDs en el proyecto** sincroniza el capítulo de residuos y guarda los
+datos, coeficientes, precios, selecciones y evidencias en el proyecto. Cerrar
+conserva las ediciones aceptadas en memoria; guarda el proyecto para persistirlas.
 
 ### Previsiones de gestión y destinos
 
@@ -1362,7 +1369,10 @@ En **Secuencia y plan de trabajo**:
   **CF**: comienzo-fin.
 - Marca las actividades que deban abarcar toda la obra.
 - El encadenado automático enlaza las actividades en secuencia.
-- Genera el diagrama de Gantt y guarda su PNG o PDF.
+- Usa **Guardar planificación en plantilla** para exportar el informe en ODT
+  editable o PDF en A3 horizontal.
+- Pulsa **Ver detalle completo** para generar la vista gráfica y guardarla como
+  PNG o PDF; esta salida es independiente del informe A3.
 
 En la columna **Reparto por fases**, asigna a cada partida porcentajes que sumen
 100 %. Si no indicas reparto, se ejecuta en la primera fase. Las actividades de
@@ -1373,7 +1383,7 @@ cada fase, y dos tramos de la misma partida nunca se solapan. El Gantt detallado
 muestra un tramo por fase, y Certificaciones no imputa avance en las pausas.
 
 Revisa que la secuencia sea coherente y no tenga dependencias circulares.
-El botón del disquete guarda la planificación mediante el proyecto.
+El botón **Guardar** guarda la planificación mediante el proyecto.
 
 ## 10. Registrar certificaciones
 
@@ -1403,7 +1413,7 @@ guardarse en el proyecto.
 2. Haz doble clic en una celda de certificación para introducir el importe del mes.
 3. Confirma la edición con **Enter**.
 4. Consulta la desviación respecto al plan y escribe su justificación.
-5. Guarda con el botón del disquete.
+5. Guarda con el botón **Guardar**.
 
 Las diferencias se redistribuyen sobre la previsión futura disponible. Si no
 hay saldo suficiente para compensar un exceso, revisa la advertencia y justifícalo.
@@ -1556,9 +1566,9 @@ sus importes permanecen como asignaciones manuales y se avisa para revisar
 la diferencia. Si falla la relectura, se notificará y conservará la factura anterior.
 Los documentos retirados de la carpeta no se eliminan de la tabla automáticamente.
 
-Pulsa el **disquete** o **Ctrl+S** para conservar carpeta, filas, facturas,
-asignaciones y ediciones dentro del JSON del proyecto. El disquete aparece con
-fondo negro mientras hay cambios pendientes y recupera su color al guardar.
+Pulsa **Guardar** para conservar carpeta, filas, facturas, asignaciones y
+ediciones dentro del proyecto. El botón aparece con fondo negro mientras hay
+cambios pendientes y recupera su color al guardar.
 Si aún no se ha guardado el proyecto, se solicita su ruta. Espera a que termine
 la lectura de PDF antes de guardar. Cerrar la ventana conserva los cambios
 en memoria, pero debes guardar el proyecto para persistirlos. Las filas son una
@@ -1573,8 +1583,8 @@ no se deducen ni se añaden impuestos automáticamente.
 | --- | --- |
 | No se abre el programa | Ejecuta desde PowerShell y revisa el mensaje; instala las dependencias con el Python del entorno |
 | No se abre PySide6 | Reinstala dependencias con `pip install -r requirements.txt` |
-| Falla la entrada heredada | Comprueba `python -m tkinter` y repara la instalación de Python |
-| No se ve el icono o el logo del PDF | Conserva `iconos` junto a los módulos de la aplicación |
+| No se ve el icono de la aplicación | Conserva `iconos` junto a los módulos de la aplicación |
+| No aparece el logo en el informe | Comprueba la plantilla y el logo JPEG seleccionados en Configuración → Plantillas |
 | No puedo editar una medición | Selecciona una partida, no el capítulo; pulsa una celda distinta de Parcial |
 | Un informe pide precios | Carga la base de origen o completa los precios del proyecto |
 | El PDF no se abre | Ábrelo manualmente desde la ruta de guardado y comprueba la asociación de PDF en Windows |
