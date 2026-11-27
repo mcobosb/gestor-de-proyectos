@@ -305,6 +305,19 @@ class BimTests(unittest.TestCase):
             with self.assertRaises(IfcReadError):
                 load_ifc(path)
 
+    def test_warns_when_surface_products_cannot_be_triangulated(self) -> None:
+        """Avisa cuando el motor devuelve un modelo sin mallas para sus superficies."""
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "sin_malla.ifc"
+            _write_ifc(path)
+            with patch("tools.bim.engine._isolated_meshes", return_value={}):
+                model = load_ifc(path)
+            self.assertFalse(model.meshes)
+            self.assertTrue(any(
+                "No se ha podido generar geometría para 1" in warning
+                for warning in model.warnings
+            ))
+
     def test_native_geometry_failure_is_reported_without_killing_parent(self) -> None:
         """Un fallo fatal del proceso auxiliar se convierte en error de lectura."""
         run = subprocess.run

@@ -16,7 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import (
     QApplication, QDialog, QDialogButtonBox, QFileDialog, QFileSystemModel, QHeaderView,
-    QLabel, QLineEdit, QMainWindow, QMessageBox,
+    QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox,
     QPushButton, QScrollArea, QSplashScreen, QSplitter, QTreeView, QVBoxLayout,
 )
 from PySide6.QtCore import QCoreApplication, QEvent, Qt, QTimer, QUrl
@@ -225,6 +225,54 @@ class BudgetQtWindowTests(unittest.TestCase):
             previous_width = header.sectionSize(2)
             header.resizeSection(2, previous_width + 80)
             self.assertEqual(header.sectionSize(2), previous_width + 80)
+
+    def test_reference_columns_can_be_resized_horizontally(self) -> None:
+        """Permite ajustar manualmente las cinco columnas de las bases."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            self.addCleanup(window.close)
+            header = window.reference_tree.header()
+            for column in range(header.count()):
+                self.assertEqual(header.sectionResizeMode(column), QHeaderView.ResizeMode.Interactive)
+                width = header.sectionSize(column)
+                header.resizeSection(column, width + 40)
+                self.assertEqual(header.sectionSize(column), width + 40)
+
+    def test_project_folder_picker_rename_editor_fits_row(self) -> None:
+        """El editor de nombres de carpeta cabe en su fila del selector."""
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory) / "Obra"
+            folder.mkdir()
+            apply_theme(self.application, "light")
+            picker = QFileDialog()
+            picker.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+            picker.setFileMode(QFileDialog.FileMode.Directory)
+            picker.setDirectory(directory)
+            picker.setViewMode(QFileDialog.ViewMode.Detail)
+            self.addCleanup(picker.close)
+            picker.show()
+            tree = picker.findChild(QTreeView, "treeView")
+            model = picker.findChild(QFileSystemModel)
+            deadline = time.monotonic() + 10
+            index = model.index(str(folder))
+            while time.monotonic() < deadline:
+                view_index = tree.model().mapFromSource(index) if hasattr(
+                    tree.model(), "mapFromSource"
+                ) else index
+                if view_index.isValid() and tree.visualRect(view_index).height() > 0:
+                    break
+                QTest.qWait(20)
+            self.assertTrue(view_index.isValid())
+            tree.setCurrentIndex(view_index)
+            tree.setFocus()
+            QTest.keyClick(tree, Qt.Key.Key_F2)
+            self.application.processEvents()
+            editor = tree.findChild(QLineEdit)
+            self.assertIsNotNone(editor)
+            self.assertGreaterEqual(editor.geometry().height(), editor.sizeHint().height())
+            QTest.keyClick(editor, Qt.Key.Key_Escape)
 
     def test_drag_drop_loads_bc3_json_and_collaborative_folder(self) -> None:
         """Acepta arrastre de los tres formatos compatibles y rechaza otros."""
@@ -2128,7 +2176,9 @@ class BudgetQtWindowTests(unittest.TestCase):
                 def open_row(index: int) -> None:
                     """Abre una fila mediante el mismo doble clic que usa el usuario."""
                     row = window.budget_tree.topLevelItem(index)
-                    rect = window.budget_tree.visualItemRect(row)
+                    rect = window.budget_tree.visualRect(
+                        window.budget_tree.indexFromItem(row, 0)
+                    )
                     QTest.mouseClick(
                         window.budget_tree.viewport(), Qt.MouseButton.LeftButton,
                         pos=rect.center(),
@@ -2198,6 +2248,81 @@ class BudgetQtWindowTests(unittest.TestCase):
                 self.application.sendPostedEvents(None, QEvent.Type.DeferredDelete)
                 self.application.processEvents()
 
+    def test_budget_text_edits_inline_without_changing_codes(self) -> None:
+        """Edita capítulos, subcapítulos y partidas sin abrir diálogos ni alterar códigos."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            try:
+                window.chapter_order = ["01#"]
+                window.chapter_titles = {"01#": "Capítulo", "SUB#": "Subcapítulo"}
+                window.budget_items = [
+                    ProjectItem("P1", "01#", "ud", "Partida", 1, 10, subchapter="SUB#"),
+                ]
+                window.refresh_budget_tree()
+                window._reset_history()
+                window.show()
+                self.application.processEvents()
+
+                def edit_text(row, text: str, key=Qt.Key.Key_Return) -> None:
+                    """Abre la celda con doble clic y confirma o cancela."""
+                    rect = window.budget_tree.visualRect(
+                        window.budget_tree.indexFromItem(row, 2)
+                    )
+                    QTest.mouseClick(
+                        window.budget_tree.viewport(), Qt.MouseButton.LeftButton, pos=rect.center()
+                    )
+                    QTest.mouseDClick(
+                        window.budget_tree.viewport(), Qt.MouseButton.LeftButton, pos=rect.center()
+                    )
+                    self.application.processEvents()
+                    editor = QApplication.focusWidget()
+                    self.assertIsInstance(editor, QLineEdit)
+                    self.assertGreaterEqual(editor.geometry().height(), editor.sizeHint().height())
+                    editor.selectAll()
+                    QTest.keyClicks(editor, text)
+                    QTest.keyClick(editor, key)
+                    self.application.processEvents()
+
+                chapter = window.budget_tree.topLevelItem(0)
+                subchapter = chapter.child(0)
+                item = subchapter.child(0)
+                chapter.setExpanded(True)
+                subchapter.setExpanded(True)
+                self.application.processEvents()
+                with patch.object(window, "edit_selection") as dialog:
+                    edit_text(chapter, "Nuevo capitulo")
+                    edit_text(subchapter, "Nuevo subcapitulo")
+                    edit_text(item, "Nuevo resumen")
+                    dialog.assert_not_called()
+                self.assertEqual(window.chapter_order, ["01#"])
+                self.assertEqual(window.chapter_titles["01#"], "Nuevo capitulo")
+                self.assertEqual(window.chapter_titles["SUB#"], "Nuevo subcapitulo")
+                self.assertEqual(window.budget_items[0].code, "P1")
+                self.assertEqual(window.budget_items[0].summary, "Nuevo resumen")
+                self.assertTrue(window.is_dirty)
+                edit_text(item, "Cancelado", Qt.Key.Key_Escape)
+                self.assertEqual(window.budget_items[0].summary, "Nuevo resumen")
+                edit_text(item, " ")
+                self.assertEqual(window.budget_items[0].summary, "Nuevo resumen")
+                self.assertIn("vacío", window.statusBar().currentMessage())
+                with patch.object(window, "_acquire_item_lock", return_value=True), patch.object(
+                    window, "_release_item_lock"
+                ) as release_lock:
+                    edit_text(item, "Edicion bloqueada", Qt.Key.Key_Escape)
+                    release_lock.assert_called_once_with(window.budget_items[0].storage_id)
+                    self.application.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                    release_lock.assert_called_once()
+                window.undo_last_action()
+                self.assertEqual(window.budget_items[0].summary, "Partida")
+            finally:
+                window.is_dirty = False
+                window.close()
+                window.deleteLater()
+                self.application.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                self.application.processEvents()
+
     def test_budget_level_insert_and_edit_follow_item_location(self) -> None:
         """Las acciones de edición conservan una selección visible por niveles."""
         with tempfile.TemporaryDirectory() as directory, patch(
@@ -2232,6 +2357,143 @@ class BudgetQtWindowTests(unittest.TestCase):
                 window.close()
                 window.deleteLater()
                 self.application.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                self.application.processEvents()
+
+    def test_budget_context_menu_inserts_after_and_deletes_selected_rows(self) -> None:
+        """Las acciones contextuales se aplican a la fila pulsada y conservan el orden."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            try:
+                window.chapter_order = ["01#", "02#"]
+                window.chapter_titles = {"01#": "Primero", "02#": "Segundo"}
+                window.budget_items = [
+                    ProjectItem("P1", "01#", "ud", "Primera", 1, 10),
+                    ProjectItem("P2", "01#", "ud", "Segunda", 1, 10),
+                    ProjectItem("P3", "02#", "ud", "Tercera", 1, 10),
+                ]
+                window.refresh_budget_tree()
+                window.show()
+                self.application.processEvents()
+
+                def invoke(row, label: str) -> None:
+                    """Selecciona la acción contextual correspondiente a la fila."""
+                    rect = window.budget_tree.visualRect(
+                        window.budget_tree.indexFromItem(row, 0)
+                    )
+
+                    errors = []
+
+                    def trigger():
+                        """Ejecuta la acción sin mostrar un menú modal en la prueba."""
+                        menu = QApplication.activePopupWidget()
+                        try:
+                            if not isinstance(menu, QMenu):
+                                raise AssertionError("No se abrió el menú contextual.")
+                            action = next(action for action in menu.actions() if action.text() == label)
+                            menu.setActiveAction(action)
+                            QTest.keyClick(menu, Qt.Key.Key_Return)
+                        except (AssertionError, StopIteration) as exc:
+                            errors.append(exc)
+                        finally:
+                            if errors and isinstance(menu, QMenu):
+                                menu.close()
+
+                    QTimer.singleShot(0, trigger)
+                    window._budget_context_menu(rect.center())
+                    if errors:
+                        raise errors[0]
+                    self.application.processEvents()
+
+                chapter = window.budget_tree.topLevelItem(0)
+                chapter.setExpanded(True)
+                self.application.processEvents()
+                values = {
+                    "chapter": "01#", "subchapter": "", "code": "PN",
+                    "unit": "ud", "summary": "Nueva", "measurement": 1,
+                    "price": 5, "rendimiento": 0,
+                }
+                with patch("budget_qt_window.ItemEditor") as editor:
+                    editor.return_value.exec.return_value = QDialog.DialogCode.Accepted
+                    editor.return_value.values.return_value = values
+                    invoke(chapter.child(0), "Añadir partida…")
+                    editor.return_value.chapter.setText.assert_called_once_with("01#")
+                self.assertEqual([item.code for item in window.budget_items], ["P1", "PN", "P2", "P3"])
+
+                with patch("PySide6.QtWidgets.QInputDialog.getText",
+                           side_effect=[("03", True), ("Nuevo capítulo", True)]):
+                    invoke(window.budget_tree.topLevelItem(0), "Añadir capítulo…")
+                self.assertEqual(window.chapter_order, ["01#", "03#", "02#"])
+                chapter = window.budget_tree.topLevelItem(0)
+                chapter.setExpanded(True)
+                self.application.processEvents()
+                with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
+                    invoke(chapter.child(1), "Eliminar partida…")
+                    invoke(window.budget_tree.topLevelItem(1), "Eliminar capítulo…")
+                self.assertEqual([item.code for item in window.budget_items], ["P1", "P2", "P3"])
+                self.assertEqual(window.chapter_order, ["01#", "02#"])
+            finally:
+                window.is_dirty = False
+                window.close()
+                window.deleteLater()
+                self.application.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                self.application.processEvents()
+
+    def test_budget_selection_clears_stale_item_index(self) -> None:
+        """Una selección desactualizada no accede fuera de la lista de partidas."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            self.addCleanup(window.close)
+            window.chapter_order = ["01#"]
+            window.budget_items = [ProjectItem("P1", "01#", "ud", "Partida", 1, 10)]
+            window.refresh_budget_tree()
+            row = window.budget_tree.topLevelItem(0).child(0)
+            window.budget_tree.setCurrentItem(row)
+            self.assertEqual(window.selected_budget_index, 0)
+            window.budget_items.clear()
+            window.on_budget_selection()
+            self.assertIsNone(window.selected_budget_index)
+            self.assertFalse(window.description.isEnabled())
+
+    def test_subchapter_context_respects_parent_chapter(self) -> None:
+        """Añade y elimina partidas solo en el subcapítulo y capítulo elegidos."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            try:
+                window.chapter_order = ["01#", "02#"]
+                window.chapter_titles = {"SUB#": "Subcapítulo compartido"}
+                window.budget_items = [
+                    ProjectItem("P1", "01#", "ud", "Primera", 1, 10, subchapter="SUB#"),
+                    ProjectItem("P2", "02#", "ud", "Segunda", 1, 10, subchapter="SUB#"),
+                ]
+                window.refresh_budget_tree()
+                row = window.budget_tree.topLevelItem(0).child(0)
+                window.budget_tree.setCurrentItem(row)
+                values = {
+                    "chapter": "01#", "subchapter": "SUB#", "code": "PN",
+                    "unit": "ud", "summary": "Nueva", "measurement": 1,
+                    "price": 5, "rendimiento": 0,
+                }
+                with patch("budget_qt_window.ItemEditor") as editor:
+                    editor.return_value.exec.return_value = QDialog.DialogCode.Accepted
+                    editor.return_value.values.return_value = values
+                    window._context_add_item()
+                    editor.return_value.subchapter.setText.assert_called_once_with("SUB#")
+                self.assertEqual([item.code for item in window.budget_items], ["PN", "P1", "P2"])
+                row = window.budget_tree.topLevelItem(0).child(0)
+                window.budget_tree.setCurrentItem(row)
+                with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
+                    window._context_delete_subchapter()
+                self.assertEqual([item.code for item in window.budget_items], ["P2"])
+                self.assertEqual(window.chapter_titles["SUB#"], "Subcapítulo compartido")
+            finally:
+                window.is_dirty = False
+                window.close()
                 self.application.processEvents()
 
     def test_budget_level_button_shows_pressed_state_in_both_themes(self) -> None:
@@ -3023,6 +3285,92 @@ class BudgetQtWindowTests(unittest.TestCase):
             finally:
                 release.set()
             self.assertEqual([base.path for base in window.reference_bases], [first, second])
+
+    def test_reference_double_click_and_level_navigation(self) -> None:
+        """Despliega ramas o recorre sus niveles sin copiar capítulos por accidente."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            window = BudgetMainWindow()
+            try:
+                root = Path(directory)
+                first_path, second_path = root / "primera.bc3", root / "segunda.bc3"
+                first_path.touch()
+                second_path.touch()
+                first, second = Bc3Dataset(first_path), Bc3Dataset(second_path)
+                first.root_codes = ["A#"]
+                first.concepts = {
+                    "A#": Concept("A#", summary="Capítulo", children=[("B#", 1)]),
+                    "B#": Concept("B#", summary="Subcapítulo", children=[("P1", 1)]),
+                    "P1": Concept("P1", "ud", "Partida", 12, children=[("MO", 2)]),
+                    "MO": Concept("MO", "h", "Oficial", 5, "1"),
+                }
+                first.chapter_children = {"A#": ["B#"], "B#": ["P1"]}
+                second.root_codes = ["X#"]
+                second.concepts = {"X#": Concept("X#", summary="Otra base")}
+                window.reference_bases = [first, second]
+                window.refresh_reference_tree()
+                window.show()
+                self.application.processEvents()
+
+                def open_row(row) -> None:
+                    """Simula el doble clic sobre el nombre de la referencia."""
+                    rect = window.reference_tree.visualRect(
+                        window.reference_tree.indexFromItem(row, 0)
+                    )
+                    QTest.mouseClick(
+                        window.reference_tree.viewport(), Qt.MouseButton.LeftButton, pos=rect.center()
+                    )
+                    QTest.mouseDClick(
+                        window.reference_tree.viewport(), Qt.MouseButton.LeftButton, pos=rect.center()
+                    )
+                    self.application.processEvents()
+
+                group = window.reference_tree.topLevelItem(0)
+                chapter = group.child(0)
+                with patch.object(window, "add_selected_reference") as add:
+                    open_row(chapter)
+                    self.assertTrue(chapter.isExpanded())
+                    self.assertEqual(chapter.childCount(), 1)
+                    add.assert_not_called()
+                    open_row(chapter)
+                    self.assertFalse(chapter.isExpanded())
+                    add.assert_not_called()
+                    open_row(chapter)
+                    self.assertTrue(chapter.isExpanded())
+
+                window.reference_level_button.click()
+                self.assertFalse(window.reference_level_button.icon().isNull())
+                self.assertEqual(window.reference_tree.topLevelItemCount(), 2)
+                window.reference_search.setText("Oficial")
+                self.assertEqual(window.reference_tree.topLevelItemCount(), 1)
+                open_row(window.reference_tree.topLevelItem(0))
+                self.assertEqual(window.reference_tree.topLevelItem(0).text(0), "A# · Capítulo")
+                open_row(window.reference_tree.topLevelItem(0))
+                self.assertEqual(window.reference_tree.topLevelItem(0).text(0), "B# · Subcapítulo")
+                open_row(window.reference_tree.topLevelItem(0))
+                self.assertEqual(window.reference_tree.topLevelItem(0).text(0), "P1 · Partida")
+                window.reference_search.clear()
+                open_row(window.reference_tree.topLevelItem(0))
+                self.assertEqual(window.reference_tree.topLevelItem(0).text(0), "MO · Oficial")
+                self.assertTrue(window.reference_level_back.isEnabled())
+                window.toggle_reference_resource_filter("1")
+                self.assertFalse(window.reference_level_back.isEnabled())
+                window.toggle_reference_resource_filter("1")
+                self.assertEqual(window.reference_tree.topLevelItem(0).text(0), "MO · Oficial")
+                window.reference_level_back.click()
+                part = window.reference_tree.topLevelItem(0)
+                window.reference_tree.setCurrentItem(part)
+                window.add_selected_reference()
+                self.assertEqual([item.code for item in window.budget_items], ["P1"])
+                window.reference_level_button.click()
+                self.assertTrue(window.reference_tree.topLevelItem(0).child(0).isExpanded())
+            finally:
+                window.is_dirty = False
+                window.close()
+                window.deleteLater()
+                self.application.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                self.application.processEvents()
 
     def test_reference_branches_load_on_expansion_and_allow_copying(self) -> None:
         """Despliega solo la rama solicitada y conserva la selección al copiar."""

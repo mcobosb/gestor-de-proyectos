@@ -244,6 +244,13 @@ def load_ifc(path: Path) -> BimModel:
             f"Hay {orphaned} representaciones geométricas sin asociar a ningún objeto IFC; "
             "revisa la exportación del modelo."
         )
-    meshes = _isolated_meshes(path) if _surface_products(source) else {}
+    surface_products = _surface_products(source)
+    meshes = _isolated_meshes(path) if surface_products else {}
+    missing_meshes = sum(product.id() not in meshes for product in surface_products)
+    if missing_meshes:
+        warnings.append(
+            f"No se ha podido generar geometría para {missing_meshes} producto(s) con superficies. "
+            "Revisa las posiciones, los perfiles y la geometría del archivo IFC."
+        )
     triangle_count = sum(len(mesh.faces) for mesh in meshes.values())
     return BimModel(path, source, spatial_tree, meshes, triangle_count, tuple(warnings))

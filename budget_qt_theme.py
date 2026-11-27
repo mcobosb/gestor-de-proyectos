@@ -290,7 +290,7 @@ def decorate_widget(widget: QWidget) -> None:
     if app is None:
         return
     for button in widget.findChildren(QToolButton):
-        if button.objectName() == "budgetLevelMode":
+        if button.objectName() in {"budgetLevelMode", "referenceLevelMode"}:
             button.setIcon(budget_tree_icon(button))
     for button in widget.findChildren(QPushButton):
         source = button.property("sourceButtonText") or translate(button.text(), "es")
@@ -392,10 +392,10 @@ def _stylesheet(theme: str) -> str:
     QToolButton:hover {{
         background: {blue_tint};
     }}
-    QToolButton#budgetLevelMode {{
+    QToolButton#budgetLevelMode, QToolButton#referenceLevelMode {{
         border: 1px solid transparent;
     }}
-    QToolButton#budgetLevelMode:checked {{
+    QToolButton#budgetLevelMode:checked, QToolButton#referenceLevelMode:checked {{
         background: {blue_hover};
         border: 1px solid {accent};
         color: {blue_text};
@@ -556,6 +556,13 @@ def _stylesheet(theme: str) -> str:
     }}
     QTreeWidget::item, QTableWidget::item, QListWidget::item {{
         padding: 4px;
+    }}
+    QTreeWidget#budgetTree::item {{
+        min-height: 34px;
+        padding: 0 4px;
+    }}
+    QFileDialog QTreeView::item, QFileDialog QListView::item {{
+        min-height: 36px;
     }}
     QTreeWidget::item:selected, QTableWidget::item:selected, QListWidget::item:selected {{
         background: {selection};

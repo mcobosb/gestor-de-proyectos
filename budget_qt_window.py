@@ -13,7 +13,7 @@ import unicodedata
 import webbrowser
 from uuid import uuid4
 
-from PySide6.QtCore import QObject, QRunnable, QSize, Qt, QThreadPool, QTimer, Signal, Slot
+from PySide6.QtCore import QObject, QRunnable, QSignalBlocker, QSize, Qt, QThreadPool, QTimer, Signal, Slot
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QResizeEvent
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
     QSplitter,
     QStatusBar,
     QStyle,
+    QStyledItemDelegate,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -115,6 +116,73 @@ from collaborative_crypto import InvalidProjectPasswordError, ProjectCrypto
 ROW_KIND = Qt.ItemDataRole.UserRole
 ROW_DATA = Qt.ItemDataRole.UserRole + 1
 REFERENCE_PENDING = Qt.ItemDataRole.UserRole + 2
+REFERENCE_GROUP = Qt.ItemDataRole.UserRole + 3
+
+
+class _BudgetTextDelegate(QStyledItemDelegate):
+    """Edita únicamente el texto de capítulos y partidas en la propia fila."""
+
+    def __init__(self, window: BudgetMainWindow) -> None:
+        """Asocia el editor al presupuesto que debe modificar."""
+        super().__init__(window.budget_tree)
+        self.window = window
+        self._editor_locks: dict[int, str] = {}
+        self.closeEditor.connect(self._editor_closed)
+
+    def createEditor(self, parent, option, index):
+        """Adquiere el bloqueo de la partida antes de abrir el editor."""
+        row = self.window.budget_tree.itemFromIndex(index)
+        if (
+            index.column() != 2 or self.window.certification_read_only
+            or row is None or row.data(0, ROW_KIND) not in {"chapter", "subchapter", "item"}
+        ):
+            return None
+        storage_id = None
+        if row.data(0, ROW_KIND) == "item":
+            item_index = row.data(0, ROW_DATA)
+            if not isinstance(item_index, int) or not 0 <= item_index < len(self.window.budget_items):
+                return None
+            item = self.window.budget_items[item_index]
+            if not self.window._acquire_item_lock(item):
+                return None
+            storage_id = item.storage_id
+        editor = super().createEditor(parent, option, index)
+        if editor is None:
+            if storage_id is not None:
+                self.window._release_item_lock(storage_id)
+            return None
+        if storage_id is not None:
+            editor_id = id(editor)
+            self._editor_locks[editor_id] = storage_id
+            editor.destroyed.connect(
+                lambda _object=None, selected=editor_id: self._release_editor_lock(selected)
+            )
+        return editor
+
+    def _editor_closed(self, editor, _hint) -> None:
+        """Libera el bloqueo en cuanto se cierra el editor."""
+        self._release_editor_lock(id(editor))
+
+    def _release_editor_lock(self, editor_id: int) -> None:
+        """Libera como máximo una vez el bloqueo asociado a un editor."""
+        storage_id = self._editor_locks.pop(editor_id, None)
+        if storage_id is not None:
+            self.window._release_item_lock(storage_id)
+
+    def setModelData(self, editor, model, index) -> None:
+        """Valida y actualiza el texto sin cambiar el código."""
+        row = self.window.budget_tree.itemFromIndex(index)
+        if row is None or not isinstance(editor, QLineEdit):
+            return
+        value = editor.text().strip()
+        if not value:
+            self.window._set_status("El texto no puede estar vacío.")
+            return
+        if not self.window._set_budget_row_text(row, value):
+            return
+        editor.setText(value)
+        super().setModelData(editor, model, index)
+        self.window.budget_refreshed.emit()
 
 
 class _ReferenceLoadSignals(QObject):
@@ -228,6 +296,9 @@ class BudgetMainWindow(QMainWindow):
         self._budget_level_session = self.project_session
         self._budget_full_expansion: dict[tuple[str, ...], bool] = {}
         self._budget_full_selection: tuple[str, ...] | None = None
+        self._reference_level_mode = False
+        self._reference_level_path: list[tuple[Path, str | None]] = []
+        self._reference_full_expansion: set[tuple[tuple[Path, str], ...]] = set()
         self.project_title: str | None = None
         self.project_path: Path | None = None
         self.project_store: CollaborativeProjectStore | None = None
@@ -660,6 +731,11 @@ class BudgetMainWindow(QMainWindow):
         self.budget_tree.setHeaderLabels(("Código", "Tipo", "Texto", "Medición", "Importe"))
         self.budget_tree.setAlternatingRowColors(True)
         self.budget_tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.budget_tree.setExpandsOnDoubleClick(False)
+        self.budget_tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.budget_tree.setItemDelegate(_BudgetTextDelegate(self))
+        self.budget_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.budget_tree.customContextMenuRequested.connect(self._budget_context_menu)
         self.budget_tree.itemSelectionChanged.connect(self.on_budget_selection)
         self.budget_tree.itemDoubleClicked.connect(self._budget_item_double_clicked)
         header = self.budget_tree.header()
@@ -727,6 +803,17 @@ class BudgetMainWindow(QMainWindow):
         self.reference_heading = _PanelTitle("Sin cargar")
         titles.addWidget(self.reference_heading)
         heading.addLayout(titles, 1)
+        self.reference_level_button = QToolButton()
+        self.reference_level_button.setObjectName("referenceLevelMode")
+        self.reference_level_button.setCheckable(True)
+        self.reference_level_button.setIcon(budget_tree_icon(self.reference_level_button))
+        self.reference_level_button.setIconSize(QSize(22, 22))
+        self.reference_level_button.setAccessibleName("Navegación por niveles de referencia")
+        self.reference_level_button.setToolTip(
+            "Alternar entre estructura completa y navegación por niveles."
+        )
+        self.reference_level_button.toggled.connect(self._set_reference_level_mode)
+        heading.addWidget(self.reference_level_button)
         for kind in ("2", "1", "3"):
             button = QPushButton(CONCEPT_TYPES[kind].split()[0])
             button.setCheckable(True)
@@ -742,6 +829,21 @@ class BudgetMainWindow(QMainWindow):
             self.reference_filter_buttons[kind] = button
             heading.addWidget(button)
         layout.addLayout(heading)
+        self.reference_level_bar = QWidget()
+        level_layout = QHBoxLayout(self.reference_level_bar)
+        level_layout.setContentsMargins(0, 0, 0, 0)
+        self.reference_level_back = QToolButton()
+        self.reference_level_back.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowBack)
+        )
+        self.reference_level_back.setAccessibleName("Volver al nivel anterior de referencia")
+        self.reference_level_back.setToolTip("Volver al nivel anterior")
+        self.reference_level_back.clicked.connect(self._reference_level_up)
+        level_layout.addWidget(self.reference_level_back)
+        self.reference_level_label = _PanelTitle("Bases de referencia")
+        level_layout.addWidget(self.reference_level_label, 1)
+        self.reference_level_bar.hide()
+        layout.addWidget(self.reference_level_bar)
         self.reference_search = QLineEdit()
         self.reference_search.setPlaceholderText("Buscar código o texto en las bases…")
         self.reference_search.textChanged.connect(self.refresh_reference_tree)
@@ -752,12 +854,16 @@ class BudgetMainWindow(QMainWindow):
         self.reference_tree.setHeaderLabels(("Código / texto", "Ud", "Rendimiento", "Precio", "Base"))
         self.reference_tree.setAlternatingRowColors(True)
         self.reference_tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.reference_tree.itemDoubleClicked.connect(self.add_selected_reference)
+        self.reference_tree.setExpandsOnDoubleClick(False)
+        self.reference_tree.itemDoubleClicked.connect(self._reference_item_double_clicked)
         self.reference_tree.itemExpanded.connect(self._expand_reference_branch)
         header = self.reference_tree.header()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for column in range(1, 5):
-            header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.resizeSection(0, 360)
+        header.resizeSection(1, 70)
+        header.resizeSection(2, 110)
+        header.resizeSection(3, 100)
+        header.resizeSection(4, 120)
         layout.addWidget(self.reference_tree, 3)
         self.reference_details = QPlainTextEdit()
         self.reference_details.setAccessibleName("Detalles de la referencia")
@@ -1225,10 +1331,22 @@ class BudgetMainWindow(QMainWindow):
 
     def refresh_reference_tree(self) -> None:
         """Reconstruye el árbol de referencia respetando el filtro actual."""
+        self.selected_reference = None
+        self.reference_details.clear()
+        blocker = QSignalBlocker(self.reference_tree)
         self.reference_tree.clear()
+        del blocker
         term = self.reference_search.text().strip().lower()
         if self.reference_resource_filter:
             self._refresh_reference_resources(term)
+            if self._reference_level_mode:
+                self.reference_level_label.set_title(
+                    "Filtro de recursos · desactívalo para navegar por niveles"
+                )
+                self.reference_level_back.setEnabled(False)
+            return
+        if self._reference_level_mode:
+            self._refresh_reference_level(term)
             return
         grouped = len(self.reference_bases) > 1
         for base_index, base in enumerate(self.reference_bases):
@@ -1238,8 +1356,9 @@ class BudgetMainWindow(QMainWindow):
                 if base.path in self._cached_reference_paths:
                     title += " (copia local)"
                 parent = QTreeWidgetItem([title, "", "", "", base.path.name])
-                parent.setExpanded(True)
+                parent.setData(0, REFERENCE_GROUP, str(base.path))
                 self.reference_tree.addTopLevelItem(parent)
+                parent.setExpanded(True)
             if term:
                 codes = [
                     code
@@ -1258,6 +1377,181 @@ class BudgetMainWindow(QMainWindow):
             for base in self.reference_bases
         ) or "Sin cargar"
         self.reference_heading.set_title(label)
+
+    def _set_reference_level_mode(self, enabled: bool) -> None:
+        """Alterna entre el árbol completo y la navegación por niveles."""
+        if enabled:
+            self._reference_full_expansion.clear()
+            iterator = QTreeWidgetItemIterator(self.reference_tree)
+            while iterator.value():
+                row = iterator.value()
+                key = self._reference_row_key(row)
+                if key and row.isExpanded():
+                    self._reference_full_expansion.add(key)
+                iterator += 1
+        self._reference_level_mode = enabled
+        self._reference_level_path.clear()
+        self.reference_level_bar.setVisible(enabled)
+        self.reference_tree.setRootIsDecorated(not enabled)
+        self.reference_tree.setItemsExpandable(not enabled)
+        self.refresh_reference_tree()
+        if not enabled:
+            iterator = QTreeWidgetItemIterator(self.reference_tree)
+            while iterator.value():
+                row = iterator.value()
+                if self._reference_row_key(row) in self._reference_full_expansion:
+                    row.setExpanded(True)
+                iterator += 1
+
+    def _reference_row_key(self, row: QTreeWidgetItem) -> tuple[tuple[Path, str], ...]:
+        """Identifica una rama por su base y la secuencia de códigos."""
+        parts = []
+        current = row
+        while current is not None:
+            data = current.data(0, ROW_DATA)
+            if current.data(0, ROW_KIND) == "reference" and data:
+                base_index, code = data
+                if 0 <= base_index < len(self.reference_bases):
+                    parts.append((self.reference_bases[base_index].path, code))
+            current = current.parent()
+        return tuple(reversed(parts))
+
+    def _reference_level_up(self) -> None:
+        """Vuelve al nivel anterior de la base seleccionada."""
+        if self._reference_level_path and not self.reference_resource_filter:
+            self._reference_level_path.pop()
+            self.refresh_reference_tree()
+
+    def _reference_item_double_clicked(self, row: QTreeWidgetItem, _column: int) -> None:
+        """Despliega ramas o navega por niveles sin copiar capítulos."""
+        if self.reference_resource_filter:
+            return
+        group = row.data(0, REFERENCE_GROUP)
+        data = row.data(0, ROW_DATA)
+        if self._reference_level_mode:
+            if group:
+                self._reference_level_path.append((Path(group), None))
+            elif data:
+                if self._reference_level_path:
+                    parent_code = self._reference_level_path[-1][1]
+                    if parent_code is not None and not is_chapter_code(parent_code):
+                        return
+                base_index, code = data
+                base = self.reference_bases[base_index]
+                concept = base.concepts.get(code)
+                if not is_chapter_code(code) and (concept is None or concept.ctype != "0"):
+                    return
+                self._reference_level_path.append((base.path, code))
+            else:
+                return
+            self.refresh_reference_tree()
+        elif group or (data and is_chapter_code(data[1])):
+            row.setExpanded(not row.isExpanded())
+        elif data:
+            self.add_selected_reference()
+
+    def _refresh_reference_level(self, term: str) -> None:
+        """Muestra un nivel de referencia sin construir el árbol completo."""
+        labels = ["Bases de referencia"]
+        parent_code = None
+        base_index = None
+        valid_path: list[tuple[Path, str | None]] = []
+        for path, code in self._reference_level_path:
+            index = next(
+                (i for i, base in enumerate(self.reference_bases) if base.path == path),
+                None,
+            )
+            if index is None or (base_index is not None and index != base_index):
+                break
+            base = self.reference_bases[index]
+            if code is None:
+                if valid_path:
+                    break
+                labels.append(base.path.stem)
+            else:
+                if parent_code is None:
+                    children = base.root_codes
+                elif is_chapter_code(parent_code):
+                    children = base.get_children(parent_code)
+                else:
+                    concept = base.concepts.get(parent_code)
+                    children = [child for child, _ in concept.children] if concept else []
+                if code not in children:
+                    break
+                concept = base.concepts.get(code, Concept(code))
+                labels.append(f"{code} · {concept.summary}".strip(" ·"))
+                parent_code = code
+            base_index = index
+            valid_path.append((path, code))
+        self._reference_level_path = valid_path
+        self.reference_level_label.set_title(" / ".join(labels))
+        self.reference_level_back.setEnabled(bool(valid_path))
+        if base_index is None and len(self.reference_bases) > 1:
+            for base in self.reference_bases:
+                title = base.path.stem
+                if base.path in self._cached_reference_paths:
+                    title += " (copia local)"
+                if term and term not in title.lower():
+                    matches = self._reference_matching_ancestors(base, term)
+                    if not any(code in matches for code in base.root_codes):
+                        continue
+                row = QTreeWidgetItem(self.reference_tree, [title, "", "", "", base.path.name])
+                row.setData(0, REFERENCE_GROUP, str(base.path))
+            self.reference_heading.set_title(", ".join(
+                base.path.stem + (
+                    " (copia local)" if base.path in self._cached_reference_paths else ""
+                ) for base in self.reference_bases
+            ))
+            return
+        if base_index is None:
+            if not self.reference_bases:
+                self.reference_heading.set_title("Sin cargar")
+                return
+            base_index = 0
+        base = self.reference_bases[base_index]
+        self.reference_heading.set_title(
+            base.path.stem + (" (copia local)" if base.path in self._cached_reference_paths else "")
+        )
+        if parent_code is None:
+            children = [(code, None) for code in base.root_codes]
+        elif is_chapter_code(parent_code):
+            children = [
+                (code, None) for code in base.get_children(parent_code)
+                if is_chapter_code(code)
+                or (code in base.concepts and base.concepts[code].ctype == "0")
+            ]
+        else:
+            concept = base.concepts.get(parent_code)
+            children = list(concept.children) if concept else []
+        matches = self._reference_matching_ancestors(base, term) if term else set()
+        ancestor_matches = bool(term) and any(term in label.lower() for label in labels[1:])
+        parent = self.reference_tree.invisibleRootItem()
+        for code, quantity in children:
+            if term and not ancestor_matches and code not in matches:
+                continue
+            self._reference_item(parent, base_index, code, quantity)
+
+    @staticmethod
+    def _reference_matching_ancestors(base: Bc3Dataset, term: str) -> set[str]:
+        """Busca coincidencias y sus ascendientes sin recorrer ciclos."""
+        parents: dict[str, set[str]] = {}
+        matched: set[str] = set()
+        for code, concept in base.concepts.items():
+            if term in f"{code} {concept.summary} {concept.text}".lower():
+                matched.add(code)
+            children = (
+                base.get_children(code) if is_chapter_code(code)
+                else [child for child, _ in concept.children]
+            )
+            for child in children:
+                parents.setdefault(child, set()).add(code)
+        pending = list(matched)
+        while pending:
+            for parent in parents.get(pending.pop(), ()):
+                if parent not in matched:
+                    matched.add(parent)
+                    pending.append(parent)
+        return matched
 
     def _refresh_reference_resources(self, term: str) -> None:
         """Muestra usos de un tipo de recurso con capítulo y unidad de obra."""
@@ -1574,13 +1868,20 @@ class BudgetMainWindow(QMainWindow):
             self.refresh_budget_tree()
 
     def _budget_item_double_clicked(self, row: QTreeWidgetItem, column: int) -> None:
-        """Navega a los hijos o conserva la edición habitual en el modo completo."""
+        """Edita el texto in situ o navega a los hijos en el modo por niveles."""
+        kind = row.data(0, ROW_KIND)
+        if (
+            column == 2 and kind in {"chapter", "subchapter", "item"}
+            and not self.certification_read_only and not self.budget_resource_filter
+        ):
+            row.setFlags(row.flags() | Qt.ItemFlag.ItemIsEditable)
+            self.budget_tree.editItem(row, 2)
+            return
         if not self._budget_level_mode:
             self.edit_selection(row, column)
             return
         if self.budget_resource_filter:
             return
-        kind = row.data(0, ROW_KIND)
         data = row.data(0, ROW_DATA)
         if kind in {"chapter", "subchapter"}:
             key = str(data)
@@ -1591,6 +1892,36 @@ class BudgetMainWindow(QMainWindow):
         self._budget_level_path.append((kind, key))
         self._clear_budget_selection()
         self.refresh_budget_tree()
+
+    def _set_budget_row_text(self, row: QTreeWidgetItem, value: str) -> bool:
+        """Cambia el título o resumen de una fila sin modificar su código."""
+        kind = row.data(0, ROW_KIND)
+        data = row.data(0, ROW_DATA)
+        if kind in {"chapter", "subchapter"}:
+            code = str(data)
+            if self.chapter_titles.get(code, row.text(2)) == value:
+                return False
+            self.chapter_titles[code] = value
+            iterator = QTreeWidgetItemIterator(self.budget_tree)
+            while iterator.value():
+                other = iterator.value()
+                if (
+                    other is not row and other.data(0, ROW_KIND) in {"chapter", "subchapter"}
+                    and other.data(0, ROW_DATA) == code
+                ):
+                    other.setText(2, value)
+                iterator += 1
+        elif kind == "item" and isinstance(data, int) and 0 <= data < len(self.budget_items):
+            item = self.budget_items[data]
+            if item.summary == value:
+                return False
+            item.summary = value
+            if self.selected_budget_index == data and not item.text:
+                self._show_item_details(item)
+        else:
+            return False
+        self._mark_dirty()
+        return True
 
     def _budget_level_matches(self, row: QTreeWidgetItem, term: str) -> bool:
         """Busca en una fila y sus descendientes antes de ocultar la jerarquía."""
@@ -1634,7 +1965,9 @@ class BudgetMainWindow(QMainWindow):
         self._budget_level_path = valid_path
         if parent is not None:
             children = parent.takeChildren()
+            blocker = QSignalBlocker(self.budget_tree)
             self.budget_tree.clear()
+            del blocker
             self.budget_tree.addTopLevelItems(children)
         ancestor_matches = bool(term) and any(term in label.lower() for label in labels[1:])
         for index in range(self.budget_tree.topLevelItemCount()):
@@ -1671,7 +2004,11 @@ class BudgetMainWindow(QMainWindow):
             self._budget_full_expansion.clear()
             self._budget_full_selection = None
             self._budget_level_session = self.project_session
-        self.budget_tree.clear()
+        blocker = QSignalBlocker(self.budget_tree)
+        while self.budget_tree.topLevelItemCount():
+            removed = self.budget_tree.takeTopLevelItem(0)
+            del removed
+        del blocker
         search = self.budget_search.text().strip().lower()
         if self.budget_resource_filter:
             self._refresh_budget_resources(search)
@@ -1878,9 +2215,12 @@ class BudgetMainWindow(QMainWindow):
             self.selected_budget_index = None
             self._show_item_details(None)
         elif kind in {"item", "resource"}:
+            if not isinstance(data, int) or not 0 <= data < len(self.budget_items):
+                self._clear_budget_selection()
+                return
             self.selected_chapter = None
-            self.selected_budget_index = int(data)
-            self._show_item_details(self.budget_items[self.selected_budget_index])
+            self.selected_budget_index = data
+            self._show_item_details(self.budget_items[data])
 
     def _show_item_details(self, item: ProjectItem | None) -> None:
         """Actualiza mediciones, descomposición y descripción."""
@@ -1931,6 +2271,10 @@ class BudgetMainWindow(QMainWindow):
 
     def add_chapter(self) -> None:
         """Solicita el código y nombre de un capítulo nuevo."""
+        self._add_chapter_after(None)
+
+    def _add_chapter_after(self, chapter: str | None) -> None:
+        """Crea un capítulo después del seleccionado o al final."""
         from PySide6.QtWidgets import QInputDialog
 
         code, accepted = QInputDialog.getText(self, "Añadir capítulo", "Código del capítulo:")
@@ -1950,14 +2294,26 @@ class BudgetMainWindow(QMainWindow):
         )
         if not accepted or not title.strip():
             return
-        self.chapter_order.append(code)
+        if chapter in self.chapter_order:
+            self.chapter_order.insert(self.chapter_order.index(chapter) + 1, code)
+        else:
+            self.chapter_order.append(code)
         self.chapter_titles[code] = title.strip()
         self.refresh_budget_tree()
         self._mark_dirty()
 
     def add_manual_item(self) -> None:
         """Abre el formulario para una partida manual."""
+        self._add_manual_item_at(None, None, None)
+
+    def _add_manual_item_at(
+        self, chapter: str | None, subchapter: str | None, position: int | None
+    ) -> None:
+        """Crea una partida junto a la selección si se mantiene su ubicación."""
         editor = ItemEditor(self, chapters=tuple(self.chapter_order))
+        if chapter is not None:
+            editor.chapter.setText(chapter)
+            editor.subchapter.setText(subchapter or "")
         if editor.exec() != QDialog.DialogCode.Accepted:
             return
         values = editor.values()
@@ -1975,7 +2331,109 @@ class BudgetMainWindow(QMainWindow):
             source="manual",
             subchapter=str(values["subchapter"]),
         )
-        self._insert_item(item)
+        if (item.chapter, item.subchapter) != (chapter, subchapter or ""):
+            position = None
+        self._insert_item(item, position)
+        self._mark_dirty()
+
+    def _budget_row_location(self, row: QTreeWidgetItem) -> tuple[str, str] | None:
+        """Obtiene capítulo y subcapítulo de una fila editable."""
+        kind = row.data(0, ROW_KIND)
+        data = row.data(0, ROW_DATA)
+        if kind == "chapter":
+            return str(data), ""
+        if kind == "item" and isinstance(data, int) and 0 <= data < len(self.budget_items):
+            item = self.budget_items[data]
+            return item.chapter, item.subchapter
+        if kind == "subchapter":
+            parent = row.parent()
+            if parent is not None and parent.data(0, ROW_KIND) == "chapter":
+                return str(parent.data(0, ROW_DATA)), str(data)
+            for path_kind, code in reversed(self._budget_level_path):
+                if path_kind == "chapter":
+                    return code, str(data)
+        return None
+
+    def _budget_context_menu(self, position) -> None:
+        """Ofrece acciones para la fila pulsada sin actuar sobre recursos."""
+        if self.certification_read_only:
+            return
+        row = self.budget_tree.itemAt(position)
+        if row is None or self._budget_row_location(row) is None:
+            return
+        self.budget_tree.setCurrentItem(row)
+        kind = row.data(0, ROW_KIND)
+        menu = QMenu(self.budget_tree)
+        add_item = menu.addAction("Añadir partida…")
+        add_chapter = None
+        if kind != "subchapter":
+            add_chapter = menu.addAction("Añadir capítulo…")
+        menu.addSeparator()
+        if kind == "subchapter":
+            remove = menu.addAction("Eliminar subcapítulo…")
+        elif kind == "chapter":
+            remove = menu.addAction("Eliminar capítulo…")
+        else:
+            remove = menu.addAction("Eliminar partida…")
+        selected = menu.exec(self.budget_tree.viewport().mapToGlobal(position))
+        # Reconstruir el árbol tras salir por completo del bucle modal de Qt.
+        if selected is add_item:
+            QTimer.singleShot(0, self._context_add_item)
+        elif selected is not None and selected is add_chapter:
+            QTimer.singleShot(0, self._context_add_chapter)
+        elif selected is remove:
+            if kind == "subchapter":
+                QTimer.singleShot(0, self._context_delete_subchapter)
+            else:
+                QTimer.singleShot(0, self.delete_selection)
+        menu.deleteLater()
+
+    def _context_add_item(self) -> None:
+        """Abre una partida en la posición y el ámbito de la fila seleccionada."""
+        row = self.budget_tree.currentItem()
+        location = self._budget_row_location(row) if row is not None else None
+        if location is None:
+            return
+        chapter, subchapter = location
+        if row.data(0, ROW_KIND) == "item":
+            position = row.data(0, ROW_DATA) + 1
+        else:
+            position = next((
+                index for index, item in enumerate(self.budget_items)
+                if item.chapter == chapter and (not subchapter or item.subchapter == subchapter)
+            ), None)
+        self._add_manual_item_at(chapter, subchapter, position)
+
+    def _context_add_chapter(self) -> None:
+        """Añade un capítulo después del capítulo de la fila seleccionada."""
+        row = self.budget_tree.currentItem()
+        location = self._budget_row_location(row) if row is not None else None
+        if location is not None:
+            self._add_chapter_after(location[0])
+
+    def _context_delete_subchapter(self) -> None:
+        """Elimina un subcapítulo y sus partidas solo en el capítulo elegido."""
+        row = self.budget_tree.currentItem()
+        location = self._budget_row_location(row) if row is not None else None
+        if location is None or row.data(0, ROW_KIND) != "subchapter":
+            return
+        chapter, subchapter = location
+        answer = QMessageBox.question(
+            self, "Eliminar subcapítulo",
+            f"¿Eliminar {format_chapter_code(subchapter)} y todas sus partidas?",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self.budget_items = [
+            item for item in self.budget_items
+            if (item.chapter, item.subchapter) != (chapter, subchapter)
+        ]
+        if subchapter not in self.chapter_order and not any(
+            item.subchapter == subchapter for item in self.budget_items
+        ):
+            self.chapter_titles.pop(subchapter, None)
+        self._clear_budget_selection()
+        self.refresh_budget_tree()
         self._mark_dirty()
 
     def _insert_item(self, item: ProjectItem, position: int | None = None) -> None:

@@ -288,6 +288,8 @@ caso revisa la exportación IFC; un modelo sin mallas aparecerá vacío en 3D.
 Si hay `GlobalId` duplicados, se avisa y los elementos afectados se identifican
 por su id STEP en el visor. No se pueden incorporar sus mediciones hasta corregir
 los identificadores en el IFC, para evitar vínculos ambiguos.
+Si el motor no puede generar mallas para productos con superficies, aparece un
+aviso para revisar sus posiciones, perfiles y geometría IFC.
 
 ## 3. Trabajar con capítulos y partidas
 
@@ -297,12 +299,24 @@ permite consultar bases de precios.
 El botón con icono de árbol **Navegación por niveles**, junto al nombre del
 proyecto, alterna entre la estructura completa y una vista de un solo nivel.
 Permanece pulsado mientras esta última está activa. En ella, haz
-doble clic en un capítulo para ver sus subcapítulos y partidas directas; después,
-en un subcapítulo para ver sus partidas y en una partida para ver sus recursos.
+doble clic en el código de un capítulo para ver sus subcapítulos y partidas directas;
+después, en el código de un subcapítulo para ver sus partidas y en el de una
+partida para ver sus recursos.
 La flecha de regreso vuelve al nivel anterior. Para editar, selecciona una fila
 y utiliza el botón **Editar**. La búsqueda filtra el nivel visible y sus
 descendientes; los filtros de recursos siguen mostrando su listado global.
 Esta navegación también está disponible para certificaciones en solo lectura.
+En un presupuesto editable, haz doble clic en la columna **Texto** de un capítulo,
+subcapítulo o partida para modificar ese texto en la propia tabla sin cambiar su
+código. Confirma con **Intro** o cancela con **Escape**. El botón **Editar** sigue
+abriendo el formulario completo de la partida o del capítulo.
+
+El panel de referencias tiene el mismo botón de navegación por niveles. En la
+vista completa, haz doble clic en una rama para desplegarla o contraerla; el
+doble clic en una partida la añade al presupuesto. En la vista por niveles,
+el doble clic abre el siguiente nivel y la flecha de regreso vuelve al anterior.
+Usa **← Añadir referencia** para copiar una partida o un capítulo seleccionado.
+Los anchos de todas las columnas de referencias se pueden ajustar manualmente.
 
 Al crear, duplicar o incorporar partidas desde una base de referencia o un
 presupuesto BC3, el resumen y la descripción se convierten a mayúsculas.
@@ -326,6 +340,10 @@ existente no cambia sus textos.
 3. Usa **+** para elegir entre añadir un capítulo o una partida manual. La
    partida se añade al capítulo seleccionado; si no hay selección, se utiliza
    el último capítulo. Usa **×** para eliminar la selección.
+   También puedes hacer clic derecho en una fila del presupuesto para añadir
+   una partida junto a ella, añadir un capítulo después del actual o eliminar
+   la selección tras confirmar. En un subcapítulo, la eliminación afecta solo
+   a sus partidas dentro del capítulo seleccionado.
 4. Las flechas **↑** y **↓** cambian el orden.
 5. Selecciona una partida para consultar sus mediciones, descripción y recursos.
 6. Selecciona un capítulo y usa **✎** para cambiar su nombre; selecciona una
