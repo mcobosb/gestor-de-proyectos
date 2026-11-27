@@ -18,6 +18,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QCoreApplication, QEvent, QLockFile, Qt
 from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QMessageBox
 
+from budget_core import ProjectItem
 from budget_qt_window import BudgetMainWindow
 from budget_qt_settings import SettingsDialog
 from budget_reports import ReportSettings
@@ -408,6 +409,15 @@ class DocumentStructureTests(unittest.TestCase):
                     self.assertEqual(
                         style.find(_tag("style:text-properties")).get(_tag("fo:font-size")), size,
                     )
+                self.assertEqual(
+                    number_style.find(_tag("style:text-properties")).get(_tag("fo:font-weight")), "normal",
+                )
+                self.assertEqual(
+                    declared["ProjectAnnexCoverTitle"].find(_tag("style:text-properties")).get(
+                        _tag("fo:font-weight")
+                    ),
+                    "bold",
+                )
                 page = next(
                     node for node in styles.iter(_tag("style:master-page"))
                     if node.get(_tag("style:name")) == f"ProjectDocumentPage{document_index}"
@@ -426,6 +436,29 @@ class DocumentStructureTests(unittest.TestCase):
                     child = ET.fromstring(xml)
                     if child.find(".//" + _tag("text:h")) is not None:
                         self.assertIsNotNone(child.find(".//" + _tag("text:table-of-content")))
+                    paragraph = next(
+                        (node for node in child.iter(_tag("text:p"))
+                         if "".join(node.itertext()).startswith("ANEJO Nº ")),
+                        None,
+                    )
+                    if paragraph is not None:
+                        spans = paragraph.findall(_tag("text:span"))
+                        self.assertEqual(
+                            [span.get(_tag("text:style-name")) for span in spans],
+                            ["ProjectAnnexHeadingNumber", "ProjectAnnexHeadingTitle"],
+                        )
+                        styles_by_name = {
+                            style.get(_tag("style:name")): style
+                            for style in child.iter(_tag("style:style"))
+                        }
+                        self.assertEqual([
+                            styles_by_name[span.get(_tag("text:style-name"))]
+                            .find(_tag("style:text-properties")).get(_tag("fo:font-weight"))
+                            for span in spans
+                        ], ["normal", "bold"])
+                        self.assertTrue(all(
+                            span.get(_tag("text:style-name")) in declared for span in spans
+                        ))
 
             soffice = shutil.which("soffice") or str(
                 Path(os.environ.get("PROGRAMFILES", r"C:\Program Files"))
@@ -461,15 +494,28 @@ class DocumentStructureTests(unittest.TestCase):
                     self.assertIn(title, pages[page_index].extract_text())
                     self.assertIn(f"ANEJO Nº {number}:", pages[page_index + 1].extract_text())
                     runs = []
-                    pages[page_index].extract_text(visitor_text=lambda text, cm, tm, font, size: runs.append((text, size)))
-                    self.assertTrue(any(
-                        text.strip() == f"ANEJO Nº {number}" and abs(size - 26) < 0.1
-                        for text, size in runs
+                    pages[page_index].extract_text(visitor_text=lambda text, cm, tm, font, size: runs.append(
+                        (text, size, str(font.get("/BaseFont", "")) if font else "")
                     ))
                     self.assertTrue(any(
-                        title.split()[0] in text and abs(size - 32) < 0.1
-                        for text, size in runs
+                        text.strip() == f"ANEJO Nº {number}" and abs(size - 26) < 0.1 and "Bold" not in font
+                        for text, size, font in runs
                     ))
+                    self.assertTrue(any(
+                        title.split()[0] in text and abs(size - 32) < 0.1 and "Bold" in font
+                        for text, size, font in runs
+                    ))
+                    body_runs = []
+                    pages[page_index + 1].extract_text(
+                        visitor_text=lambda text, cm, tm, font, size: body_runs.append(
+                            (text, str(font.get("/BaseFont", "")) if font else "")
+                        ),
+                    )
+                    self.assertTrue(any(
+                        f"ANEJO Nº {number}:" in text and "Bold" not in font
+                        for text, font in body_runs
+                    ))
+                    self.assertTrue(any(title.split()[0] in text and "Bold" in font for text, font in body_runs))
 
     def test_external_destination_can_be_changed_and_regenerated(self) -> None:
         """Cada carpeta conserva su propio historial y los enlaces del ODM funcionan."""
@@ -1247,6 +1293,95 @@ class DocumentStructureTests(unittest.TestCase):
                 for span in spans
             ]
             self.assertEqual(weights, ["normal", "bold"])
+
+    def test_photographic_and_technical_annexes_use_current_project_data(self) -> None:
+        """Genera ambos anejos y rellena solo los datos disponibles de la ficha."""
+        QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory),
+        ):
+            window = BudgetMainWindow()
+            checklist = None
+            try:
+                window.project_title = "Proyecto de prueba"
+                settings = window.report_settings
+                settings.organization = "Ayuntamiento de prueba"
+                settings.author = "Autora de prueba"
+                settings.location = "Localidad de prueba"
+                settings.service = "Servicio de obras"
+                settings.expediente = "GEX123"
+                window.pptp_state = {"variables": {"plazo_ejecucion": "6 meses"}}
+                window.budget_items = [ProjectItem("U1", "C1", "ud", "Obra", 1, 100)]
+                window.planning_state = {
+                    "params": {"start": "2026-01-02", "holidays": [
+                        {"date": "2026-01-05", "description": "Festivo ficticio"},
+                    ]},
+                    "activities": [{"chapter": "C1", "code": "U1", "manual_duration": 3}],
+                }
+                project = Path(directory) / "proyecto.json"
+                self.assertTrue(window._write_project_file(project))
+                checklist = DocumentStructureWindow(window)
+                for title in ("Reportaje fotográfico", "Ficha técnica de la obra"):
+                    items = checklist.tree.findItems(
+                        title, Qt.MatchFlag.MatchExactly | Qt.MatchFlag.MatchRecursive, 0,
+                    )
+                    self.assertEqual(len(items), 1)
+                    self.assertFalse(items[0].isDisabled())
+                    items[0].setCheckState(0, Qt.CheckState.Checked)
+                selected = checklist._selected_annexes()
+                self.assertEqual([annex["kind"] for annex in selected], ["template", "technical_sheet"])
+                generate_project_package(project, window, "Maestro.odm", selected, [])
+                folder = Path(directory) / TECHNICAL_DOCUMENTS_FOLDER / DOCUMENT_FOLDERS[0]
+                photo = folder / "ANEJO 01 - Reportaje fotográfico.odt"
+                sheet = folder / "ANEJO 02 - Ficha técnica de la obra.odt"
+                with ZipFile(photo) as document:
+                    content = ET.fromstring(document.read("content.xml"))
+                self.assertFalse(list(content.iter(_tag("table:table"))))
+                self.assertFalse(list(content.iter(_tag("text:h"))))
+
+                def sheet_rows():
+                    """Lee las celdas editables de la ficha generada."""
+                    with ZipFile(sheet) as document:
+                        content = ET.fromstring(document.read("content.xml"))
+                    table = next(
+                        table for table in content.iter(_tag("table:table"))
+                        if "FICHA TÉCNICA" in "".join(table.itertext())
+                    )
+                    return {
+                        "".join(cells[0].itertext()): "".join(cells[1].itertext())
+                        for row in table.findall(_tag("table:table-row"))
+                        for cells in [row.findall(_tag("table:table-cell"))]
+                    }
+
+                rows = sheet_rows()
+                self.assertEqual(rows["PROMOTOR"], "Ayuntamiento de prueba")
+                self.assertEqual(rows["AUTORES DEL PROYECTO"], "Autora de prueba")
+                self.assertEqual(rows["TÍTULO DEL PROYECTO"], "Proyecto de prueba")
+                self.assertEqual(rows["LOCALIZACIÓN"], "Localidad de prueba")
+                self.assertEqual(rows["DURACIÓN ESTIMADA DE LAS OBRAS"], "6 días naturales")
+                self.assertEqual(rows["EXPEDIENTE"], "GEX123")
+                self.assertEqual(rows["SERVICIO"], "Servicio de obras")
+                self.assertEqual(rows["PRESUPUESTO DE EJECUCIÓN MATERIAL"], "100,00 €")
+                self.assertEqual(rows["PRESUPUESTO BASE DE LICITACIÓN (IVA INCLUIDO)"], "143,99 €")
+                self.assertRegex(rows["FECHA DE GENERACIÓN / ACTUALIZACIÓN"], r"^\d{2}/\d{2}/\d{4}$")
+                for label in ("FECHA REDACCIÓN", "ÁMBITO", "CARACTERÍSTICAS", "MOTIVACIÓN"):
+                    self.assertEqual(rows[label], "")
+
+                settings.organization = "Entidad actualizada"
+                settings.show_author = False
+                window.pptp_state["variables"]["plazo_ejecucion"] = "9 meses"
+                window.planning_state = {}
+                window.budget_items = []
+                generate_project_package(project, window, "Maestro.odm", selected, [])
+                rows = sheet_rows()
+                self.assertEqual(rows["PROMOTOR"], "Entidad actualizada")
+                self.assertEqual(rows["AUTORES DEL PROYECTO"], "")
+                self.assertEqual(rows["DURACIÓN ESTIMADA DE LAS OBRAS"], "9 meses")
+                self.assertEqual(rows["PRESUPUESTO DE EJECUCIÓN MATERIAL"], "")
+            finally:
+                if checklist is not None:
+                    checklist.close()
+                window.close()
 
     def test_documentation_procedure_annex_contains_all_fields_in_a_blue_table(self) -> None:
         """Genera un anejo con una fila rellenable por documento o trámite."""

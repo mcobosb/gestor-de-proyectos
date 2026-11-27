@@ -15,6 +15,7 @@ from tools._shared.reference_pill import add_reference_pill
 from . import TOOL_LABEL
 from .catalog import (
     CATALOG, DOCUMENTATION_ANNEX_NUMBER, DOCUMENTATION_PROCEDURE_FIELDS, Entry,
+    PHOTOGRAPHIC_ANNEX_NUMBER, TECHNICAL_SHEET_ANNEX_NUMBER,
 )
 from .generation import (
     generate_project_package, generated_at, default_master_name, suggested_destination,
@@ -189,6 +190,21 @@ class DocumentStructureWindow(QDialog):
             for field in DOCUMENTATION_PROCEDURE_FIELDS:
                 details = self._item(item, field, "Fila de la tabla del anejo")
                 self._disable(details, "El campo se incluirá como fila editable en la tabla del anejo.")
+            return True
+        if annex and entry.key in {PHOTOGRAPHIC_ANNEX_NUMBER, TECHNICAL_SHEET_ANNEX_NUMBER}:
+            technical = entry.key == TECHNICAL_SHEET_ANNEX_NUMBER
+            item = self._item(
+                parent, title,
+                "Anejo con ficha editable y datos actuales del proyecto" if technical
+                else "Anejo editable en blanco",
+            )
+            item.setData(0, ROLE, {
+                "kind": "technical_sheet" if technical else "template",
+                "number": entry.key,
+                "outline": [],
+            })
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEditable)
+            self._annexes.append(item)
             return True
         if entry.outline:
             item = self._item(parent, title, "Documento editable según el catálogo y los estilos del proyecto")

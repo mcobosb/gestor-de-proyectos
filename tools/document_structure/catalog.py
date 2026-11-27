@@ -42,6 +42,8 @@ PRICE_JUSTIFICATION_NUMBER = "15"
 RCD_NUMBER = "18"
 QUALITY_ASSURANCE_NUMBER = "17"
 DOCUMENTATION_ANNEX_NUMBER = "21"
+PHOTOGRAPHIC_ANNEX_NUMBER = "22"
+TECHNICAL_SHEET_ANNEX_NUMBER = "23"
 DOCUMENTATION_PROCEDURE_FIELDS = (
     "Ficheros editables e intercambio (BC3, DWG/DXF/SHP, IFC)",
     "Autorizaciones Sectoriales Previas",
@@ -100,6 +102,8 @@ CATALOG = (
                 DOCUMENTATION_ANNEX_NUMBER,
                 children=tuple(Entry(title) for title in DOCUMENTATION_PROCEDURE_FIELDS),
             ),
+            Entry("Reportaje fotográfico", PHOTOGRAPHIC_ANNEX_NUMBER),
+            Entry("Ficha técnica de la obra", TECHNICAL_SHEET_ANNEX_NUMBER),
         )),
     )),
     Entry("DOCUMENTO N.º 2: PLANOS", external=_PLANS, children=tuple(

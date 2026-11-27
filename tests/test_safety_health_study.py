@@ -245,6 +245,7 @@ class SafetyHealthStudyTests(unittest.TestCase):
             _write_pdf(app, target, content, [], [], "A4")
             text = [" ".join((page.extract_text() or "").split()) for page in PdfReader(target).pages]
         self.assertGreaterEqual(sum("RESUMEN / COMENTARIO" in page for page in text), 2)
+        self.assertTrue(any("UDS LONGITUD ANCHURA ALTURA K PARCIAL" in page for page in text))
         self.assertGreaterEqual(sum("CANTIDAD PRECIO IMPORTE" in page for page in text), 2)
         self.assertIn("SS-059", " ".join(text))
         self.assertNotRegex(" ".join(text), r"(?:Véase la Tabla|Tabla\s+\d+\.)")

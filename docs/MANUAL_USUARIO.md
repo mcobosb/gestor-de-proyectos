@@ -107,7 +107,13 @@ documentos que quieras incluir, y edita los nombres directamente en el árbol.
 En **DOCUMENTACIÓN COMPLEMENTARIA Y TRAMITACIÓN MUNICIPAL** puedes añadir un
 anejo con una tabla rellenable que enumera los ficheros, autorizaciones,
 tramitación ambiental, visado, replanteo y supervisión.
-Los ODT se crean como archivos base vacíos, con sus nombres, cabeceras, estructura
+El **Reportaje fotográfico** se genera en blanco. La **Ficha técnica de la
+obra** incluye una tabla editable: al generarla se completan los datos disponibles
+del proyecto, el plazo, los presupuestos y la fecha de generación; los demás
+campos quedan vacíos. Los datos no se actualizan automáticamente en un ODT ya
+generado: vuelve a generar la entrega para obtener los valores actuales. La
+regeneración reemplaza los documentos generados, incluidas sus ediciones manuales.
+Los demás ODT se crean como archivos base vacíos, con sus nombres, cabeceras, estructura
 y estilos configurados para el proyecto, pero sin importar datos de las
 herramientas. La memoria reúne sus secciones seleccionadas en un único documento;
 cada anejo se genera por separado. Después, completa los campos necesarios desde
@@ -176,7 +182,7 @@ para recalcular las páginas sin incorporar títulos de otros anejos.
 Los archivos antiguos necesitan regenerarse para recibir esta delimitación;
 conserva antes cualquier edición manual.
 
-#### Tipo de proyecto y referencias normativas
+### Tipo de proyecto y referencias normativas
 
 En **Configuración → Tipo de proyecto y normas** puedes combinar obra civil,
 edificación, instalaciones, industrial, sistemas/TI y otros ámbitos. Selecciona
@@ -229,7 +235,9 @@ no se actualizan automáticamente; regenerarlos reemplaza los documentos generad
 por lo que conviene conservar primero las ediciones manuales.
 
 Antes de cada anejo, el maestro incluye una portada independiente con
-«ANEJO Nº X» a 26 pt y el nombre del anejo debajo a 32 pt, alineados a la derecha.
+«ANEJO Nº X» sin negrita a 26 pt y el nombre del anejo en negrita debajo a 32 pt,
+alineados a la derecha. En el título del ODT, el número también aparece sin
+negrita y el nombre en negrita.
 Conserva el encabezado y el pie de la plantilla, con el rótulo del anejo y la
 numeración de página. Estas portadas pertenecen al ODM, no al ODT enlazado:
 se mantienen al actualizar o sustituir los textos de los anejos.
@@ -448,7 +456,7 @@ cambiar estilos o abrir el documento con otras fuentes o procesadores.
 El logo se repite en la cabecera de todas las páginas, incluidas las páginas
 de continuación, con el ancho y alto definidos en la plantilla. La altura de
 la cabecera se adapta al logo. Junto al nombre del proyecto se muestra
-` · dd/mm/aaaa` con la fecha de generación del informe.
+`· dd/mm/aaaa` con la fecha de generación del informe.
 
 En **Mediciones**, la medición total queda alineada bajo la columna
 **Parcial**, con la unidad inmediatamente a su derecha.
@@ -564,7 +572,7 @@ guardados. Conserva los archivos asociados junto al proyecto.
 En el menú **Informes** de la ventana principal están:
 
 | Opción | Contenido |
-|---|---|
+| --- | --- |
 | Mediciones | Capítulos, código, unidad, resumen, descripción, desglose de mediciones y medición total, sin precios ni importes |
 | Cuadro de precios 1 y 2 por capitulos | Precio unitario y cuadro agrupado de costes por capítulo |
 | Descompuestos | Recursos y rendimientos de cada partida |
@@ -1562,7 +1570,7 @@ no se deducen ni se añaden impuestos automáticamente.
 ## 12. Resolver problemas frecuentes
 
 | Problema | Comprobación |
-|---|---|
+| --- | --- |
 | No se abre el programa | Ejecuta desde PowerShell y revisa el mensaje; instala las dependencias con el Python del entorno |
 | No se abre PySide6 | Reinstala dependencias con `pip install -r requirements.txt` |
 | Falla la entrada heredada | Comprueba `python -m tkinter` y repara la instalación de Python |

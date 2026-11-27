@@ -341,7 +341,7 @@ def _master_fields(app) -> dict[str, str]:
 
 def _new_catalog_document(app, title: str, settings, *, annex_number: int | None = None):
     """Prepara el título, las cabeceras y los estilos de un documento base."""
-    from odt_reports import _new_report
+    from odt_reports import _new_report, _tag
 
     heading = f"ANEJO Nº {annex_number}: {title}" if annex_number is not None else title
     heading = heading.strip()
@@ -349,7 +349,22 @@ def _new_catalog_document(app, title: str, settings, *, annex_number: int | None
         heading.upper(), app._project_title(), settings,
         repeat_titles=False, footer_title=heading.upper(), template_title=heading,
     )
-    document.paragraph(heading.upper(), "ReportTitle")
+    if annex_number is None:
+        document.paragraph(heading.upper(), "ReportTitle")
+    else:
+        for name, weight in (("ProjectAnnexHeadingNumber", "normal"), ("ProjectAnnexHeadingTitle", "bold")):
+            style = ET.SubElement(document.automatic_styles, _tag("style:style"), {
+                _tag("style:name"): name, _tag("style:family"): "text",
+            })
+            ET.SubElement(style, _tag("style:text-properties"), {_tag("fo:font-weight"): weight})
+        document.paragraph("", "ReportTitle")
+        for name, text in (
+            ("ProjectAnnexHeadingNumber", f"ANEJO Nº {annex_number}: "),
+            ("ProjectAnnexHeadingTitle", title.upper()),
+        ):
+            ET.SubElement(document.body[-1], _tag("text:span"), {
+                _tag("text:style-name"): name,
+            }).text = text
     return document
 
 
@@ -409,6 +424,51 @@ def _write_documentation_annex(
     add_odt_blue_table_cells(styles, "DocumentationAnnex")
     add_odt_blue_table_headers(styles, "DocumentationAnnex")
     style_odt_blue_table(document.body[-1], "DocumentationAnnex")
+    document.write(target)
+
+
+def _write_technical_sheet_annex(
+    app, target: Path, title: str, settings, *, annex_number: int,
+) -> None:
+    """Genera una ficha editable con los datos actuales y campos pendientes."""
+    from budget_core import format_currency
+    from budget_reports import budget_totals
+    from odt_reports import _tag
+    from tools._shared.document_layout import project_document_variables
+    from tools.pptp.document import planning_duration
+
+    variables = project_document_variables(app._project_title(), settings)
+    duration = planning_duration(app) or app.pptp_state.get("variables", {}).get("plazo_ejecucion", "")
+    amounts = budget_totals(sum(item.import_total for item in app.budget_items), settings)
+    pem = format_currency(float(amounts["pem"]), settings.currency, settings.custom_currency)
+    total = format_currency(float(amounts["total"]), settings.currency, settings.custom_currency)
+    rows = [
+        ("PROMOTOR", variables["entidad"]),
+        ("AUTORES DEL PROYECTO", variables["autor"]),
+        ("TÍTULO DEL PROYECTO", variables["titulo_proyecto"]),
+        ("FECHA REDACCIÓN", ""),
+        ("LOCALIZACIÓN", variables["localidad"] or variables["municipios"]),
+        ("ÁMBITO", ""),
+        ("DURACIÓN ESTIMADA DE LAS OBRAS", duration),
+        ("CARACTERÍSTICAS", ""),
+        ("MOTIVACIÓN", ""),
+        ("EXPEDIENTE", variables["expediente"]),
+        ("SERVICIO", variables["servicio"]),
+        ("PRESUPUESTO DE EJECUCIÓN MATERIAL", pem if app.budget_items else ""),
+        ("PRESUPUESTO BASE DE LICITACIÓN (IVA INCLUIDO)", total if app.budget_items else ""),
+        ("FECHA DE GENERACIÓN / ACTUALIZACIÓN", datetime.now().astimezone().strftime("%d/%m/%Y")),
+    ]
+    document = _new_catalog_document(app, title, settings, annex_number=annex_number)
+    document.table(["FICHA TÉCNICA", ""], rows, ratios=[0.35, 0.65], tinted_rows=True)
+    styles = SimpleNamespace(automatic_styles=document.automatic_styles)
+    add_odt_blue_table_cells(styles, "TechnicalSheet")
+    add_odt_blue_table_headers(styles, "TechnicalSheet")
+    table = document.body[-1]
+    style_odt_blue_table(table, "TechnicalSheet")
+    for row in table.findall(_tag("table:table-row")):
+        paragraph = row.find(f"{_tag('table:table-cell')}/{_tag('text:p')}")
+        if paragraph is not None:
+            paragraph.set(_tag("text:style-name"), "TableTotal")
     document.write(target)
 
 
@@ -543,7 +603,7 @@ def generate_project_package(
                     relative = Path(TECHNICAL_DOCUMENTS_FOLDER) / DOCUMENT_FOLDERS[0] / filename
                     target = stage / relative
                     kind = annex.get("kind", "tool")
-                    if kind not in {"template", "tool", "documentation"}:
+                    if kind not in {"template", "tool", "documentation", "technical_sheet"}:
                         raise ValueError(f"Tipo de anejo desconocido: {annex.get('kind')}")
                     if kind == "tool":
                         tool_key = annex.get("tool")
@@ -557,6 +617,10 @@ def generate_project_package(
                         }
                     if kind == "documentation":
                         _write_documentation_annex(
+                            app, target, title, settings, annex_number=previous,
+                        )
+                    elif kind == "technical_sheet":
+                        _write_technical_sheet_annex(
                             app, target, title, settings, annex_number=previous,
                         )
                     else:

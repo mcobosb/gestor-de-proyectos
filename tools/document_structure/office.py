@@ -120,6 +120,7 @@ def _master_content(xml: bytes, links: list[Path], folder: Path) -> bytes:
             typography = [
                 style for style in source_styles
                 if style.get(_tag("style:name"), "").startswith("ProjectTypography_")
+                or style.get(_tag("style:name")) in {"ProjectAnnexHeadingNumber", "ProjectAnnexHeadingTitle"}
                 or (style.get(_tag("style:family")) in {"paragraph", "table-cell"}
                     and style_role(style.get(_tag("style:name"), ""), odt=True) == "table_header")
             ]
@@ -854,6 +855,7 @@ def _append_index_and_sections(
             typography = [
                 style for style in source_styles
                 if style.get(_tag("style:name"), "").startswith("ProjectTypography_")
+                or style.get(_tag("style:name")) in {"ProjectAnnexHeadingNumber", "ProjectAnnexHeadingTitle"}
                 or (style.get(_tag("style:family")) in {"paragraph", "table-cell"}
                     and style_role(style.get(_tag("style:name"), ""), odt=True) == "table_header")
             ]
@@ -923,7 +925,7 @@ def _add_annex_covers(root, entries: list[dict[str, str]], links: list[Path]) ->
             _tag("fo:margin-bottom"): "0cm", _tag("fo:line-height"): "115%",
         })
         ET.SubElement(number_style, _tag("style:text-properties"), {
-            _tag("fo:font-size"): "26pt", _tag("fo:font-weight"): "bold",
+            _tag("fo:font-size"): "26pt", _tag("fo:font-weight"): "normal",
             _tag("style:font-size-asian"): "26pt", _tag("style:font-size-complex"): "26pt",
         })
         number_paragraph = ET.Element(_tag("text:p"), {
