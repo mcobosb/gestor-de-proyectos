@@ -8,7 +8,7 @@ import numpy as np
 from numpy.typing import NDArray
 from vtkmodules.vtkCommonCore import vtkMath
 
-from .engine import BimModel, TriangleMesh
+from .engine import BimModel, TriangleMesh, _duplicate_global_ids
 
 
 DEFAULT_RGB = (172, 181, 190)
@@ -73,11 +73,13 @@ def prepare_scene(model: BimModel) -> Scene:
         ids.add(node.entity_id)
         ids.update(node.element_ids)
         nodes.extend(node.children)
+    duplicates = _duplicate_global_ids(model.source)
     elements = {}
     for entity_id in ids:
         entity = model.source.by_id(entity_id)
+        global_id = getattr(entity, "GlobalId", None)
         elements[entity_id] = Element(
-            entity_id, getattr(entity, "GlobalId", None) or f"#{entity_id}",
+            entity_id, global_id if global_id and global_id not in duplicates else f"#{entity_id}",
             entity.is_a(), getattr(entity, "Name", None) or entity.is_a(),
         )
 

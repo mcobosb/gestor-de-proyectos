@@ -1,6 +1,7 @@
 """Lectura espacial, propiedades y teselación de modelos IFC."""
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 import os
 from pathlib import Path
@@ -134,6 +135,12 @@ def _surface_products(source: ifcopenshell.file) -> list:
     ]
 
 
+def _duplicate_global_ids(source: ifcopenshell.file) -> set[str]:
+    """Localiza identificadores que no identifican una única entidad IFC."""
+    counts = Counter(entity.GlobalId for entity in source.by_type("IfcRoot") if entity.GlobalId)
+    return {key for key, count in counts.items() if count > 1}
+
+
 def _triangulate(source: ifcopenshell.file) -> dict[int, TriangleMesh]:
     """Triangula en el proceso auxiliar los productos que pueden tener superficies."""
     products = _surface_products(source)
@@ -217,6 +224,13 @@ def load_ifc(path: Path) -> BimModel:
                 for rep in product.Representation.Representations)
     ]
     warnings = []
+    duplicates = _duplicate_global_ids(source)
+    if duplicates:
+        warnings.append(
+            f"El archivo contiene {len(duplicates)} GlobalId duplicados. "
+            "Los elementos afectados se identifican por su id STEP y no se pueden "
+            "incorporar como mediciones hasta corregir el IFC."
+        )
     if curves:
         warnings.append(
             f"El archivo contiene {len(curves)} productos con ejes o curvas que el visor aún no representa."

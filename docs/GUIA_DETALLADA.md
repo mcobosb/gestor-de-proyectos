@@ -643,6 +643,9 @@ independiente con el visor VTK, el árbol espacial y el inspector de propiedades
 
 El visor agrupa geometría y reutiliza mallas repetidas mediante instancias de GPU.
 El modelo y los cambios de visualización no se guardan con el presupuesto.
+Si el IFC contiene `GlobalId` duplicados, se avisa y los elementos afectados se
+distinguen por su id STEP; sus mediciones no se pueden incorporar hasta corregir
+los identificadores en el IFC.
 
 **Mediciones IFC → BCCA.** Carga una base de referencia BC3 en el presupuesto,
 selecciona una pieza o rama en el visor y pulsa **Añadir selección o rama** en

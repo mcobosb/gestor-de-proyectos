@@ -27,6 +27,7 @@ from tools.bim.measurements import incorporate
 from tools.bim.qt import BimController, _LoadIfc
 from tools.bim.scene import prepare_scene
 from tools.bim.viewer import BimViewer
+from tools.bim.viewport import Viewport
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -412,6 +413,54 @@ class BimTests(unittest.TestCase):
             viewer.close()
         window.close()
         application.processEvents()
+
+    def test_duplicate_global_ids_keep_distinct_scene_and_viewport_identities(self) -> None:
+        """Los GlobalId repetidos no colisionan ni permiten vínculos ambiguos."""
+        application = QApplication.instance() or QApplication([])
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "duplicados.ifc"
+            _write_ifc(path, repeats=7)
+            source = ifcopenshell.open(path)
+            walls = source.by_type("IfcWall")
+            walls[1].GlobalId = walls[0].GlobalId
+            source.by_type("IfcProject")[0].GlobalId = walls[2].GlobalId
+            source.write(str(path))
+            model = load_ifc(path)
+            scene = prepare_scene(model)
+
+        affected = [scene.elements[wall.id()] for wall in walls[:3]]
+        self.assertTrue(all(element.key == f"#{element.entity_id}" for element in affected))
+        self.assertEqual(len(scene.elements), len({element.key for element in scene.elements.values()}))
+        self.assertEqual(len(scene.mesh_keys), len(set(scene.mesh_keys)))
+        self.assertTrue(any("GlobalId" in warning and "duplicad" in warning for warning in model.warnings))
+        viewport = Viewport(scene)
+        try:
+            viewport.set_state(frozenset({affected[0].key}), None, False, affected[1].key)
+            for layer in viewport._main:
+                hidden = scene.mesh_keys.index(affected[0].key)
+                self.assertNotIn(hidden, layer.picked_owners)
+            self.assertTrue(any(
+                scene.mesh_keys.index(affected[1].key) in layer.picked_owners
+                for layer in viewport._main
+            ))
+        finally:
+            viewport.close()
+            application.processEvents()
+        parent = QMainWindow()
+        with patch("tools.bim.viewer.Viewport", _HeadlessViewport):
+            viewer = BimViewer(model, scene, parent)
+            try:
+                for element in affected:
+                    viewer.state.select(element.key)
+                    self.assertEqual(viewer.tree.currentItem().text(0), element.name)
+                    self.assertEqual(
+                        viewer.inspector.topLevelItem(1).text(1),
+                        model.source.by_id(element.entity_id).GlobalId,
+                    )
+            finally:
+                viewer.close()
+                parent.close()
+                application.processEvents()
 
     def test_native_picking_visibility_and_sections_share_ifc_identity(self) -> None:
         """Selecciona una instancia real, consulta sus datos y recorta sin picks invisibles."""

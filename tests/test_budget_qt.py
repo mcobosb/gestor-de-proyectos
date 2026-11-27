@@ -8,6 +8,7 @@ import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
+from zipfile import ZipFile
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -1813,6 +1814,54 @@ class BudgetQtWindowTests(unittest.TestCase):
             dialog.reject()
             window.close()
             self.application.processEvents()
+
+    def test_pptp_qt_generates_selected_format_atomically(self) -> None:
+        """Genera PDF y ODT mediante un temporal con la extensión elegida."""
+        from tools.pptp.document import write_document
+
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            window.budget_items = [ProjectItem("01AAB00001", "01#", "m2", "Partida PPTP", 1, 10)]
+            window.chapter_order = ["01#"]
+            window.chapter_titles = {"01#": "Obra"}
+            try:
+                for output_format in ("pdf", "odt"):
+                    with self.subTest(output_format=output_format):
+                        window.report_settings.output_format = "odt" if output_format == "pdf" else "pdf"
+                        target = Path(directory) / f"PPTP.{output_format}"
+                        target.write_bytes(b"contenido anterior")
+                        tool = PptpWindowQt(window)
+                        for field in tool.variables.values():
+                            if not field.text().strip():
+                                field.setText("Dato de prueba")
+                        tool.variables["plazo_ejecucion"].setText("18 meses")
+                        tool.summary.setPlainText("Resumen de obra")
+                        with (
+                            patch("tools.pptp.qt_window.get_document_save_path",
+                                  return_value=(target, output_format)),
+                            patch("tools.pptp.qt_window.write_document", wraps=write_document) as writer,
+                            patch.object(window, "save_project", return_value=True),
+                            patch.object(QMessageBox, "information"),
+                        ):
+                            tool.generate()
+                        temporary = writer.call_args.args[1]
+                        self.assertEqual(temporary.suffix, target.suffix)
+                        self.assertEqual(temporary.parent, target.parent)
+                        self.assertFalse(temporary.exists())
+                        if output_format == "pdf":
+                            self.assertTrue(target.read_bytes().startswith(b"%PDF-"))
+                        else:
+                            with ZipFile(target) as document:
+                                self.assertEqual(
+                                    document.read("mimetype"),
+                                    b"application/vnd.oasis.opendocument.text",
+                                )
+            finally:
+                window.is_dirty = False
+                window.close()
+                self.application.processEvents()
 
     def test_pptp_qt_keeps_three_steps_manual_sheets_and_price_settings(self) -> None:
         """Migra el asistente PPTP sin perder asignaciones ni revisión económica."""

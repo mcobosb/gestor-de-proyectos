@@ -21,7 +21,8 @@ from tools._shared.document_layout import (
     LIST_INDENT, TABLE_HEADER_BACKGROUND, template_paragraph_styles,
 )
 from tools._shared.scheduling import PlanActivity, PlanParams
-from tools.document_structure.office import write_project_master
+from tools.document_structure.generation import _write_catalog_document, _write_memory_document
+from tools.document_structure.office import _master_link, write_project_master
 from tools.planning.document import write_planning_report
 from tools.pptp.document import write_document as write_pptp_document
 from tools.price_justification.document import LISTINGS, _write_odt as write_prices_odt
@@ -37,6 +38,58 @@ from tools.safety_health.document import (
 
 class NarrativeLayoutTests(unittest.TestCase):
     """Verifica configuración y plantilla en varios generadores."""
+
+    def test_catalog_indices_match_master_pages_before_and_after_update(self):
+        """Los índices de memoria y anejos conservan destinos y ámbito propios."""
+        program = Path(os.environ.get("PROGRAMFILES", r"C:\Program Files")) / "LibreOffice" / "program"
+        executable = program / "python.exe"
+        if not executable.is_file():
+            self.skipTest("La prueba UNO requiere el Python incluido en LibreOffice.")
+        expected = [
+            ["MEMORY_ONE", "MEMORY_TWO"],
+            ["ANNEX_ONE", "ANNEX_TWO"],
+            ["OTHER_ONE", "OTHER_TWO"],
+        ]
+        settings = ReportSettings(text_styles={"heading1": {"font": "Courier New", "size": 18}})
+        app = SimpleNamespace(_project_title=lambda: "Proyecto")
+        with TemporaryDirectory() as folder:
+            root = Path(folder)
+            _write_memory_document(app, root / "memoria.odt", [
+                {"title": "MEMORY_ONE", "outline": ["MEMORY_TWO"]},
+            ], settings)
+            _write_catalog_document(app, root / "aneje1.odt", "Primero", expected[1], settings)
+            _write_catalog_document(app, root / "aneje2.odt", "Segundo", expected[2], settings)
+            master = root / "maestro.odm"
+            links = [Path("memoria.odt"), Path("aneje1.odt"), Path("aneje2.odt")]
+            write_project_master(
+                None, master, fields={}, traceability=[], links=links,
+                index_entries=[
+                    {"text": "Memoria", "href": _master_link(links[0])},
+                    {"text": "Anejo 1", "href": _master_link(links[1]),
+                     "annex_number": "1", "annex_title": "Primero"},
+                    {"text": "Anejo 2", "href": _master_link(links[2]),
+                     "annex_number": "2", "annex_title": "Segundo"},
+                ],
+                folder=root, text_styles=settings.text_styles,
+            )
+            expectations = root / "indices.json"
+            expectations.write_text(json.dumps(expected), encoding="utf-8")
+            try:
+                result = subprocess.run(
+                    [str(executable), str(Path(__file__).with_name("_libreoffice_contents_check.py")),
+                     str(master), str(expectations)], capture_output=True, text=True, timeout=120,
+                )
+            finally:
+                pid_file = root / "soffice.pid"
+                if pid_file.is_file():
+                    pid = int(pid_file.read_text().strip())
+                    subprocess.run([
+                        "powershell", "-NoProfile", "-Command",
+                        f"$p = Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}'; "
+                        f"if ($p -and $p.CommandLine.Contains('{root.name}')) "
+                        f"{{ Stop-Process -Id {pid} -Force }}",
+                    ], check=True, capture_output=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_annex_contents_refresh_locally_with_real_pages_in_master(self):
         """Cada índice conserva sus títulos y páginas al actualizar un ODM conjunto."""
@@ -89,13 +142,13 @@ class NarrativeLayoutTests(unittest.TestCase):
                     _Block("paragraph", "Prevención. " * 120),
                     _Block("heading", "SAFETY_TWO", 2),
                 ],
-            ))
+            ), [], [], "A4")
             master = root / "maestro.odm"
             write_project_master(
                 template, master, fields={}, index_entries=[], traceability=[],
                 links=[Path(name) for name in
                        ("rcd.odt", "precios.odt", "calidad.odt", "pptp.odt", "seguridad.odt")],
-                folder=root, logo=Path(__file__).resolve().parents[1] / "iconos" / "Arranque.jpg",
+                folder=root,
             )
             expectations = root / "indices.json"
             expectations.write_text(json.dumps(expected), encoding="utf-8")
@@ -492,10 +545,15 @@ class NarrativeLayoutTests(unittest.TestCase):
                     styles = ET.fromstring(archive.read("styles.xml"))
                 toc = content.find(".//" + _tag("text:table-of-content"))
                 references = list(toc.iter(_tag("text:bookmark-ref")))
-                self.assertEqual(
-                    [ref.get(_tag("text:ref-name")) for ref in references],
-                    ["PPTPHeading0", "PPTPHeading2"],
-                )
+                bookmarks = {
+                    node.get(_tag("text:name"))
+                    for node in content.iter(_tag("text:bookmark"))
+                }
+                for ref, suffix in zip(references, ("_PPTPHeading0", "_PPTPHeading2")):
+                    name = ref.get(_tag("text:ref-name"))
+                    self.assertTrue(name.endswith(suffix))
+                    self.assertIn(name, bookmarks)
+                self.assertEqual(len(references), 2)
                 for level in (1, 2):
                     style = next(
                         node for root in (content, styles) for node in root.iter(_tag("style:style"))

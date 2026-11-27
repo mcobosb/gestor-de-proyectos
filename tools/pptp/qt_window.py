@@ -639,7 +639,7 @@ class PptpWindowQt(QDialog):
         temporary: Path | None = None
         try:
             with tempfile.NamedTemporaryFile(
-                dir=path.parent, suffix=extension, delete=False
+                dir=path.parent, suffix=path.suffix, delete=False
             ) as output:
                 temporary = Path(output.name)
             write_document(

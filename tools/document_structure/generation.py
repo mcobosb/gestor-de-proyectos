@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import BinaryIO
+from xml.etree import ElementTree as ET
 from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile
 
@@ -352,6 +353,28 @@ def _new_catalog_document(app, title: str, settings, *, annex_number: int | None
     return document
 
 
+def _insert_catalog_contents(document, headings: list[tuple[int, str]]) -> None:
+    """Delimita el índice al documento, incluso dentro de un maestro compartido."""
+    from odt_reports import _tag
+
+    if not headings:
+        return
+    prefix = f"Catalog{document._bookmark_namespace}"
+    styles = {level: f"{prefix}Heading{level}" for level in (1, 2)}
+    for level, name in styles.items():
+        ET.SubElement(document.automatic_styles, _tag("style:style"), {
+            _tag("style:name"): name, _tag("style:family"): "paragraph",
+            _tag("style:parent-style-name"): f"Heading{level}",
+        })
+    for heading in document.body.iter(_tag("text:h")):
+        level = int(heading.get(_tag("text:outline-level"), "1"))
+        heading.set(_tag("text:style-name"), styles[level])
+    document.name_text_styles({name: name for name in styles.values()})
+    document.insert_table_of_contents(
+        headings, position=1, name=f"{prefix}Contents", source_styles=styles,
+    )
+
+
 def _write_catalog_document(
     app, target: Path, title: str, outline: object, settings, *,
     annex_number: int | None = None,
@@ -366,7 +389,7 @@ def _write_catalog_document(
     for index, (_, section) in enumerate(headings):
         document.heading(section, level=1, bookmark=f"PPTPHeading{index}")
         document.paragraph("", "ReportBody")
-    document.insert_table_of_contents(headings, position=1)
+    _insert_catalog_contents(document, headings)
     document.write(target)
 
 
@@ -411,7 +434,7 @@ def _write_memory_document(app, target: Path, sections: list[dict[str, object]],
             )
             headings.append((2, subsection.strip()))
             document.paragraph("", "ReportBody")
-    document.insert_table_of_contents(headings, position=1)
+    _insert_catalog_contents(document, headings)
     document.write(target)
 
 

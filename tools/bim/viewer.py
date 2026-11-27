@@ -294,8 +294,9 @@ class BimViewer(QMainWindow):
         if element is None:
             return
         props = self.model.properties(element.entity_id)
+        entity = self.model.source.by_id(element.entity_id)
         for label, value in (
-            ("Nombre", element.name), ("GlobalId", key if not key.startswith("#") else "—"),
+            ("Nombre", element.name), ("GlobalId", getattr(entity, "GlobalId", None) or "—"),
             ("Tipo IFC", element.ifc_class), ("Id STEP", str(element.entity_id)),
             ("Materiales", ", ".join(props.materials) or "—"), ("Fase", props.phase or "—"),
         ):

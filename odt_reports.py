@@ -5,6 +5,8 @@ from copy import deepcopy
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from pathlib import Path
+import re
+from uuid import uuid4
 from xml.etree import ElementTree as ET
 from zipfile import ZIP_STORED, ZIP_DEFLATED, ZipFile
 from tools._shared.document_layout import (
@@ -59,6 +61,7 @@ class _OdtReport:
     ):
         """Prepara el cuerpo editable y los datos de cabecera y pie del informe."""
         self.title = title
+        self._bookmark_namespace = f"D{uuid4().hex}"
         self.project_title = project_title
         self.layout = layout
         self.page_titles = {"Standard": title}
@@ -214,6 +217,7 @@ class _OdtReport:
     def insert_table_of_contents(
         self, headings: list[tuple[int, str]], *, position: int = 0,
         max_level: int = 2, name: str = "ReportContents", use_index_marks: bool = False,
+        source_styles: Mapping[int, str | Sequence[str]] | None = None,
     ) -> None:
         """Incluye un indice antes del contenido ya construido si tiene secciones."""
         if not headings:
@@ -221,6 +225,7 @@ class _OdtReport:
         previous_count = len(self.body)
         self.table_of_contents(
             headings, max_level=max_level, name=name, use_index_marks=use_index_marks,
+            source_styles=source_styles,
         )
         for offset, element in enumerate(list(self.body)[previous_count:]):
             self.body.remove(element)
@@ -455,7 +460,26 @@ class _OdtReport:
         styles = self._styles_xml()
         if self.layout:
             style_odt_tree(self.content_root, self.layout.text_styles, _tag)
-        content = ET.tostring(self.content_root, encoding="utf-8", xml_declaration=True)
+        content_root = self.content_root
+        bookmarks = {
+            name: f"{self._bookmark_namespace}_{name}"
+            for node in content_root.iter(_tag("text:bookmark"))
+            if (name := node.get(_tag("text:name"))) and re.fullmatch(r"PPTPHeading\d+", name)
+        }
+        for node in content_root.iter():
+            if node.tag == _tag("text:bookmark"):
+                name = node.get(_tag("text:name"))
+                if name in bookmarks:
+                    node.set(_tag("text:name"), bookmarks[name])
+            elif node.tag == _tag("text:bookmark-ref"):
+                name = node.get(_tag("text:ref-name"))
+                if name in bookmarks:
+                    node.set(_tag("text:ref-name"), bookmarks[name])
+            elif node.tag == _tag("text:a"):
+                href = node.get(_tag("xlink:href"), "")
+                if href.startswith("#") and href[1:] in bookmarks:
+                    node.set(_tag("xlink:href"), f"#{bookmarks[href[1:]]}")
+        content = ET.tostring(content_root, encoding="utf-8", xml_declaration=True)
         metadata = self._metadata_xml()
         manifest = self._manifest_xml()
         with ZipFile(target, "w") as archive:

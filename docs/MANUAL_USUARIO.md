@@ -162,8 +162,9 @@ los rótulos fijos deben tener otros IDs. Puedes omitir los campos que no uses.
 Los datos generales corresponden al proyecto y los de título, número, escala
 y fecha se concretan por plano.
 
-Los índices internos de RCDs, Justificación de precios, Control de calidad,
-PPTP y Seguridad y Salud se limitan a los estilos propios de cada documento.
+Los índices internos de la memoria, los anejos del catálogo, RCDs, Justificación
+de precios, Control de calidad, PPTP y Seguridad y Salud se limitan a los estilos
+propios de cada documento.
 Después de actualizar los vínculos o editar el contenido, utiliza **Herramientas →
 Actualizar → Todos los índices**, o **Actualizar índice** en su menú contextual,
 para recalcular las páginas sin incorporar títulos de otros anejos.
@@ -265,6 +266,9 @@ El visor representa mallas trianguladas, pero todavía no dibuja ejes ni curvas
 de alineaciones. El árbol permite consultar las alineaciones IFC 4.3; se avisa
 si existen curvas no representadas o geometrías sin asociar a objetos. En ese
 caso revisa la exportación IFC; un modelo sin mallas aparecerá vacío en 3D.
+Si hay `GlobalId` duplicados, se avisa y los elementos afectados se identifican
+por su id STEP en el visor. No se pueden incorporar sus mediciones hasta corregir
+los identificadores en el IFC, para evitar vínculos ambiguos.
 
 ## 3. Trabajar con capítulos y partidas
 

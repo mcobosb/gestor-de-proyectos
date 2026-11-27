@@ -12,6 +12,42 @@ import uno
 from _libreoffice_pending_check import property_value
 
 
+def check_catalog_indices(document, expected):
+    """Compara cada índice de catálogo con sus títulos y sus páginas reales."""
+    indices = list(document.DocumentIndexes)
+    assert len(indices) == len(expected), len(indices)
+    all_titles = {title for titles in expected for title in titles}
+    for index, titles in zip(indices, expected):
+        contents = index.Anchor.String
+        for other in all_titles.difference(titles):
+            assert other not in contents, (other, contents)
+        for title in titles:
+            match = re.search(re.escape(title) + r"\s+(\d+)\b", contents)
+            assert match, (title, contents)
+            search = document.createSearchDescriptor()
+            search.SearchString = title
+            found = document.findAll(search)
+            assert found.Count >= 2, (title, found.Count)
+            cursor = document.CurrentController.ViewCursor
+            cursor.gotoRange(found.getByIndex(found.Count - 1), False)
+            assert int(match[1]) == cursor.Page, (title, match[1], cursor.Page)
+
+
+def check_master_page_references(document, count):
+    """Comprueba las referencias de página del índice general del maestro."""
+    references = {
+        field.SourceName: field
+        for field in document.TextFields
+        if field.supportsService("com.sun.star.text.TextField.GetReference")
+        and field.SourceName.startswith("ProjectDocumentStart")
+    }
+    assert len(references) == count, len(references)
+    for name, field in references.items():
+        cursor = document.CurrentController.ViewCursor
+        cursor.gotoRange(document.Bookmarks.getByName(name).Anchor, False)
+        assert int(field.getPresentation(False)) == cursor.Page, (name, field.getPresentation(False), cursor.Page)
+
+
 def check(target, expected):
     """Actualiza vínculos e índices y contrasta sus páginas con los títulos."""
     pipe = "contents_" + uuid.uuid4().hex
@@ -42,6 +78,9 @@ def check(target, expected):
             property_value("Hidden", True), property_value("MacroExecutionMode", 0),
             property_value("UpdateDocMode", 0),
         ))
+        check_catalog_indices(document, expected if isinstance(expected, list) else list(expected.values()))
+        if isinstance(expected, list):
+            check_master_page_references(document, len(expected))
         for refreshed in (False, True):
             if refreshed:
                 document.updateLinks()
@@ -54,6 +93,10 @@ def check(target, expected):
                 property_value("FilterName", "writer_globaldocument_pdf_Export"),
                 property_value("Overwrite", True),
             ))
+            if isinstance(expected, list):
+                check_catalog_indices(document, expected)
+                check_master_page_references(document, len(expected))
+                continue
             indices = {index.Name: index for index in document.DocumentIndexes}
             assert set(indices) == set(expected), (set(indices), set(expected))
             all_titles = {title for titles in expected.values() for title in titles}
