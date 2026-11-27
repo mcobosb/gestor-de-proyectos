@@ -310,6 +310,9 @@ En un presupuesto editable, haz doble clic en la columna **Texto** de un capítu
 subcapítulo o partida para modificar ese texto en la propia tabla sin cambiar su
 código. Confirma con **Intro** o cancela con **Escape**. El botón **Editar** sigue
 abriendo el formulario completo de la partida o del capítulo.
+En la barra principal, el botón **+** ofrece **Nuevo capítulo** y **Nueva partida**.
+También puedes añadir o eliminar elementos con el botón derecho sobre una fila;
+una partida nueva se inserta después de la partida seleccionada.
 
 El panel de referencias tiene el mismo botón de navegación por niveles. En la
 vista completa, haz doble clic en una rama para desplegarla o contraerla; el

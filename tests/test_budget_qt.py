@@ -17,9 +17,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import (
     QApplication, QDialog, QDialogButtonBox, QFileDialog, QFileSystemModel, QHeaderView,
     QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox,
-    QPushButton, QScrollArea, QSplashScreen, QSplitter, QTreeView, QVBoxLayout,
+    QPushButton, QScrollArea, QSplashScreen, QSplitter, QToolButton, QTreeView, QVBoxLayout,
 )
 from PySide6.QtCore import QCoreApplication, QEvent, Qt, QTimer, QUrl
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QStyle
 from PySide6.QtTest import QTest
 
 import qt_app
@@ -3104,6 +3106,68 @@ class BudgetQtWindowTests(unittest.TestCase):
                     image = button.icon().pixmap(24, 24).toImage()
                     self.assertFalse(image.isNull())
                     self.assertNotEqual(image, save)
+
+    def test_budget_toolbar_separates_creation_from_reference_copy(self) -> None:
+        """El botón más crea capítulos o partidas y la flecha copia referencias."""
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "budget_qt_window.user_data_directory", return_value=Path(directory)
+        ):
+            window = BudgetMainWindow()
+            try:
+                button = window.findChild(QToolButton, "addBudgetButton")
+                self.assertIsNotNone(button)
+                self.assertEqual(button.popupMode(), QToolButton.ToolButtonPopupMode.InstantPopup)
+                self.assertFalse(button.icon().isNull())
+                actions = button.menu().actions()
+                self.assertEqual([action.text() for action in actions], ["Nuevo capítulo", "Nueva partida"])
+                self.assertFalse(actions[0].icon().isNull())
+                self.assertFalse(actions[1].icon().isNull())
+                self.assertNotEqual(
+                    actions[0].icon().pixmap(24, 24).toImage(),
+                    actions[1].icon().pixmap(24, 24).toImage(),
+                )
+                apply_theme(self.application, "light")
+                button.menu().aboutToShow.emit()
+                light = [action.icon().pixmap(24, 24).toImage() for action in actions]
+                apply_theme(self.application, "dark")
+                button.menu().aboutToShow.emit()
+                for action, light_icon in zip(actions, light, strict=True):
+                    self.assertNotEqual(action.icon().pixmap(24, 24).toImage(), light_icon)
+                with patch.object(window, "_add_chapter_after") as chapter, patch.object(
+                    window, "_add_manual_item_at"
+                ) as item:
+                    actions[0].trigger()
+                    actions[1].trigger()
+                    chapter.assert_called_once_with(None)
+                    item.assert_called_once_with(None, None, None)
+                copy_action = next(
+                    action for action in window._budget_toolbar.actions()
+                    if action.text() == "← Añadir referencia"
+                )
+                self.assertFalse(copy_action.icon().isNull())
+                arrow = QIcon.fromTheme(
+                    "go-previous",
+                    window.style().standardIcon(QStyle.StandardPixmap.SP_ArrowLeft),
+                )
+                self.assertEqual(
+                    copy_action.icon().pixmap(24, 24).toImage(),
+                    arrow.pixmap(24, 24).toImage(),
+                )
+                self.assertNotEqual(
+                    button.icon().pixmap(24, 24).toImage(),
+                    copy_action.icon().pixmap(24, 24).toImage(),
+                )
+                with patch.object(QMessageBox, "information") as information:
+                    copy_action.trigger()
+                    self.assertIn("Sin selección", information.call_args.args)
+                window._set_certification_read_only(True)
+                self.assertFalse(button.isEnabled())
+            finally:
+                window.close()
+                window.deleteLater()
+                self.application.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+                self.application.processEvents()
+                apply_theme(self.application, "system")
 
     def test_theme_ignores_destroyed_widget_in_deferred_decoration(self) -> None:
         """No accede al objeto Qt si desaparece antes de ejecutar el temporizador."""

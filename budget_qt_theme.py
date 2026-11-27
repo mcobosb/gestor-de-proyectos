@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import unicodedata
 
-from PySide6.QtCore import QEvent, QLineF, QObject, QRectF, QTimer, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPalette, QPen, QPixmap
+from PySide6.QtCore import QEvent, QLineF, QObject, QPointF, QRectF, QTimer, Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPalette, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import QApplication, QPushButton, QStyle, QToolButton, QWidget
 from shiboken6 import isValid
 from localization import translate
@@ -138,6 +138,29 @@ def budget_insert_icon(app: QApplication) -> QIcon:
         painter.setPen(pen)
         painter.drawLine(QLineF(7, 16, 25, 16))
         painter.drawLine(QLineF(16, 7, 16, 25))
+    return QIcon(pixmap)
+
+
+def budget_concept_icon(widget: QWidget, kind: str) -> QIcon:
+    """Representa el símbolo que identifica el concepto en el presupuesto."""
+    if kind not in {"chapter", "0"}:
+        raise ValueError(f"Tipo de concepto no admitido: {kind}")
+    pixmap = QPixmap(32, 32)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    color = widget.palette().color(QPalette.ColorRole.WindowText)
+    with QPainter(pixmap) as painter:
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if kind == "chapter":
+            painter.setPen(QPen(color, 2))
+            painter.drawRect(QRectF(6, 6, 20, 20))
+            painter.fillRect(QRectF(10, 10, 12, 12), color)
+        else:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(color)
+            painter.drawPolygon(QPolygonF([
+                QPointF(16, 4), QPointF(28, 16),
+                QPointF(16, 28), QPointF(4, 16),
+            ]))
     return QIcon(pixmap)
 
 
@@ -292,6 +315,8 @@ def decorate_widget(widget: QWidget) -> None:
     for button in widget.findChildren(QToolButton):
         if button.objectName() in {"budgetLevelMode", "referenceLevelMode"}:
             button.setIcon(budget_tree_icon(button))
+        elif button.objectName() == "addBudgetButton":
+            button.setIcon(budget_insert_icon(app))
     for button in widget.findChildren(QPushButton):
         source = button.property("sourceButtonText") or translate(button.text(), "es")
         normalized = _key(source)

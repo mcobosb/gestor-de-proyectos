@@ -90,6 +90,8 @@ from tools._shared.budget_sources import matches_tool_chapter
 from budget_qt_theme import (
     THEMES,
     apply_theme,
+    budget_concept_icon,
+    budget_insert_icon,
     budget_tree_icon,
     information_icon,
     search_icon,
@@ -650,10 +652,33 @@ class BudgetMainWindow(QMainWindow):
         for tool in self.tools_by_name.values():
             if tool.install_toolbar_qt is not None:
                 tool.install_toolbar_qt(self, toolbar)
-        toolbar.addAction("Nuevo capítulo", self.add_chapter)
-        toolbar.addAction("Nueva partida", self.add_manual_item)
+        add_button = QToolButton(toolbar)
+        add_button.setObjectName("addBudgetButton")
+        add_button.setText("Añadir")
+        add_button.setToolTip("Añadir capítulo o partida")
+        add_button.setIcon(budget_insert_icon(QApplication.instance()))
+        add_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        add_menu = QMenu(add_button)
+        chapter_action = self._action("Nuevo capítulo", self.add_chapter)
+        item_action = self._action("Nueva partida", self.add_manual_item)
+        add_menu.addAction(chapter_action)
+        add_menu.addAction(item_action)
+
+        def update_concept_icons() -> None:
+            """Adapta los símbolos del presupuesto al color actual del menú."""
+            chapter_action.setIcon(budget_concept_icon(add_menu, "chapter"))
+            item_action.setIcon(budget_concept_icon(add_menu, "0"))
+
+        add_menu.aboutToShow.connect(update_concept_icons)
+        update_concept_icons()
+        add_button.setMenu(add_menu)
+        toolbar.addWidget(add_button)
         toolbar.addAction("Eliminar", self.delete_selection)
-        toolbar.addAction("← Añadir referencia", self.add_selected_reference)
+        reference_action = self._action("← Añadir referencia", self.add_selected_reference)
+        reference_action.setIcon(QIcon.fromTheme(
+            "go-previous", self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowLeft)
+        ))
+        toolbar.addAction(reference_action)
         toolbar.addAction("Editar", self.edit_selection)
         toolbar.addAction("Duplicar", self.duplicate_selection)
         toolbar.addAction("Subir", lambda: self.move_selection(-1))
@@ -2006,7 +2031,7 @@ class BudgetMainWindow(QMainWindow):
             self._budget_level_session = self.project_session
         blocker = QSignalBlocker(self.budget_tree)
         while self.budget_tree.topLevelItemCount():
-            removed = self.budget_tree.takeTopLevelItem(0)
+            removed = self.budget_tree.takeTopLevelItem(self.budget_tree.topLevelItemCount() - 1)
             del removed
         del blocker
         search = self.budget_search.text().strip().lower()
@@ -2376,17 +2401,16 @@ class BudgetMainWindow(QMainWindow):
         else:
             remove = menu.addAction("Eliminar partida…")
         selected = menu.exec(self.budget_tree.viewport().mapToGlobal(position))
-        # Reconstruir el árbol tras salir por completo del bucle modal de Qt.
+        menu.deleteLater()
         if selected is add_item:
-            QTimer.singleShot(0, self._context_add_item)
+            self._context_add_item()
         elif selected is not None and selected is add_chapter:
-            QTimer.singleShot(0, self._context_add_chapter)
+            self._context_add_chapter()
         elif selected is remove:
             if kind == "subchapter":
-                QTimer.singleShot(0, self._context_delete_subchapter)
+                self._context_delete_subchapter()
             else:
-                QTimer.singleShot(0, self.delete_selection)
-        menu.deleteLater()
+                self.delete_selection()
 
     def _context_add_item(self) -> None:
         """Abre una partida en la posición y el ámbito de la fila seleccionada."""
