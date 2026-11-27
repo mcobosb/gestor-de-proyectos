@@ -6,11 +6,12 @@ from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from pathlib import Path
 import re
+from typing import Literal
 from uuid import uuid4
 from xml.etree import ElementTree as ET
 from zipfile import ZIP_STORED, ZIP_DEFLATED, ZipFile
 from tools._shared.document_layout import (
-    TABLE_ALTERNATE_BACKGROUND, TABLE_HEADER_BACKGROUND, table_labels,
+    TABLE_ALTERNATE_BACKGROUND, TABLE_HEADER_BACKGROUND, is_measurement_header, table_labels,
 )
 from document_styles import style_odt_paragraphs, style_odt_tree
 
@@ -370,6 +371,7 @@ class _OdtReport:
             index for index, label in enumerate(headers)
             if infer_right_columns and label in numeric_headers
         }
+        header_style = "MeasurementTableHeader" if is_measurement_header(headers) else "TableHeader"
         centered_styles = set()
 
         def append_row(values, *, header=False, bold=False, highlighted=False, alternate=False):
@@ -395,7 +397,7 @@ class _OdtReport:
                         cell.get(_tag("table:style-name")) + "Last",
                     )
                 text_style = (
-                        "TableHeader" if header else
+                        header_style if header else
                         bold_text_style if bold else
                         body_text_style
                 )
@@ -534,10 +536,21 @@ class _OdtReport:
         self._paragraph_style(styles, "TableHeader", size="8pt", bold=True)
         if self.layout:
             self._pdf_styles(styles)
+        measurement_header = ET.SubElement(styles, _tag("style:style"), {
+            _tag("style:name"): "MeasurementTableHeader", _tag("style:family"): "paragraph",
+            _tag("style:parent-style-name"): "TableHeader",
+        })
+        ET.SubElement(measurement_header, _tag("style:text-properties"), {
+            _tag("fo:font-family"): "Arial Narrow", _tag("fo:font-size"): "10pt",
+            _tag("fo:font-weight"): "bold",
+        })
+        ET.SubElement(measurement_header, _tag("style:paragraph-properties"), {
+            _tag("fo:line-height"): "120%",
+        })
         for style in self.named_styles:
             styles.append(deepcopy(style))
         for name in (
-            "TableHeader", "TableText", "TableTotal", "TableItemTitle",
+            "TableHeader", "MeasurementTableHeader", "TableText", "TableTotal", "TableItemTitle",
             "Signature", "ChapterTitle", "AuxiliaryTitle",
         ):
             style = ET.SubElement(styles, _tag("style:style"), {
@@ -548,7 +561,8 @@ class _OdtReport:
             ET.SubElement(style, _tag("style:paragraph-properties"), {
                 _tag("fo:text-align"): "end",
             })
-        for name in ("TableHeader", "TableHeaderRight", "ChapterTitle", "ChapterTitleRight"):
+        for name in ("TableHeader", "TableHeaderRight", "MeasurementTableHeader",
+                     "MeasurementTableHeaderRight", "ChapterTitle", "ChapterTitleRight"):
             style = ET.SubElement(styles, _tag("style:style"), {
                 _tag("style:name"): "Blue" + name, _tag("style:family"): "paragraph",
                 _tag("style:parent-style-name"): name,
@@ -611,9 +625,15 @@ class _OdtReport:
             _tag("style:name"): "PageLayout",
         })
         landscape = bool(self.layout and self.layout.landscape)
+        page_width, page_height = (
+            ("29.7cm", "42cm") if self.layout and self.layout.paper_size == "A3"
+            else ("21cm", "29.7cm")
+        )
+        if landscape:
+            page_width, page_height = page_height, page_width
         ET.SubElement(page_layout, _tag("style:page-layout-properties"), {
-            _tag("fo:page-width"): "29.7cm" if landscape else "21cm",
-            _tag("fo:page-height"): "21cm" if landscape else "29.7cm",
+            _tag("fo:page-width"): page_width,
+            _tag("fo:page-height"): page_height,
             _tag("style:print-orientation"): "landscape" if landscape else "portrait",
             _tag("fo:margin-left"): f"{LEFT_MARGIN}pt",
             _tag("fo:margin-right"): f"{RIGHT_MARGIN}pt",
@@ -677,7 +697,8 @@ class _OdtReport:
             for child in list(element):
                 element.remove(child)
             font = (
-                "Arial Narrow" if pdf.fontName.startswith("ReportNarrow") else
+                "Arial Narrow" if name in {"TableHeader", "TableText", "TableTotal", "TableItemTitle"}
+                or pdf.fontName.startswith("ReportNarrow") else
                 "Arial" if pdf.fontName.startswith("ReportArial") else "Helvetica"
             )
             size = 6 if name == "FooterText" else (
@@ -877,7 +898,7 @@ class _OdtReport:
 def _new_report(
     title: str, project_title: str, settings: ReportSettings, *, certification=False,
     repeat_titles: bool = True, footer_title: str = "", landscape: bool = False,
-    template_title: str | None = None,
+    template_title: str | None = None, paper_size: Literal["A4", "A3"] = "A4",
 ):
     """Crea un documento y prepara la identidad visual correspondiente al informe."""
     from report_layout import (
@@ -904,7 +925,7 @@ def _new_report(
             repeat_titles=repeat_titles, footer_title=footer_title,
             expediente=settings.expediente,
             template_title=project_title if template_title is None else template_title,
-            landscape=landscape,
+            landscape=landscape, paper_size=paper_size,
         ),
     )
     document.template_borders = _read_report_template_borders(settings.template_path)
@@ -1183,7 +1204,7 @@ def append_report_odt(app, report: str, document, *, embedded: bool = False) -> 
                                 ] + ([""] if report == "Mediciones" else [])
                                  for line in item.measurement_lines],
                                 ratios=MEASUREMENT_COLUMN_RATIOS if report == "Mediciones" else
-                                [4, 1, 1, 1, 1, 0.8, 1.2],
+                                MEASUREMENT_COLUMN_RATIOS[:-1],
                             )
                         if report == "Mediciones":
                             document.table(

@@ -39,6 +39,37 @@ from tools.safety_health.document import (
 class NarrativeLayoutTests(unittest.TestCase):
     """Verifica configuración y plantilla en varios generadores."""
 
+    def test_narrative_table_fonts_do_not_inherit_body_typography(self):
+        """Las tablas de anejos mantienen Arial Narrow salvo ajuste específico."""
+        from tools.pptp.sheet_index import SheetIndexRow, write_odt_index
+        from tools.price_justification.document import _add_odt_table_styles
+        from tools.safety_health.document import _add_odt_blue_table_styles
+
+        for table_font in (None, "Courier New"):
+            with self.subTest(table_font=table_font), TemporaryDirectory() as folder:
+                configured = {"body": {"font": "Times New Roman"}}
+                if table_font:
+                    configured.update({
+                        "table": {"font": table_font},
+                        "table_header": {"font": table_font},
+                    })
+                document = _new_report("Anejo", "Proyecto", ReportSettings(text_styles=configured))
+                _add_odt_table_styles(document)
+                _add_odt_blue_table_styles(document)
+                write_odt_index(document, [SheetIndexRow("Capítulo", "Ficha", "PPTPHeading0")])
+                target = Path(folder) / "tablas.odt"
+                document.write(target)
+                with ZipFile(target) as archive:
+                    roots = [ET.fromstring(archive.read(name)) for name in ("content.xml", "styles.xml")]
+                for name in (
+                    "PricesTableText", "PricesTableHeader", "ESSSummaryText", "ESSSummaryHeader",
+                    "PPTPIndexText", "PPTPIndexHeader",
+                ):
+                    style = next(style for root in roots for style in root.iter(_tag("style:style"))
+                                 if style.get(_tag("style:name")) == name)
+                    props = style.find(_tag("style:text-properties"))
+                    self.assertEqual(props.get(_tag("fo:font-family")), table_font or "Arial Narrow", name)
+
     def test_catalog_indices_match_master_pages_before_and_after_update(self):
         """Los índices de memoria y anejos conservan destinos y ámbito propios."""
         program = Path(os.environ.get("PROGRAMFILES", r"C:\Program Files")) / "LibreOffice" / "program"

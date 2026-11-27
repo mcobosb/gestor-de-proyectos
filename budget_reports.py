@@ -608,7 +608,7 @@ def build_pdf_report(
                                 + ([""] if report == "Mediciones" else []),
                                 [row + [""] for row in rows] if report == "Mediciones" else rows,
                                 MEASUREMENT_COLUMN_RATIOS if report == "Mediciones" else
-                                [4, 1, 1, 1, 1, 0.8, 1.2]))
+                                MEASUREMENT_COLUMN_RATIOS[:-1]))
                         if report == "Mediciones":
                             story.append(table(
                                 [],

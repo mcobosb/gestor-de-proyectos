@@ -131,7 +131,7 @@ inicial de las bibliotecas en v1.6.0 se conservan; no son la versión de la apli
 - En **Herramientas → Planificación**, **Guardar planificación en plantilla**
   permite elegir PDF u ODT al guardar y utiliza la plantilla configurada.
 - Se exporta solo el cronograma central con sus datos y barras tabuladas, no
-  una captura de imagen; el ODT permite editarlo. La página es horizontal para
+  una captura de imagen; el ODT permite editarlo. La página es A3 horizontal para
   mejorar la lectura y después se describe la duración total calculada y la
   actividad de mayor duración.
 - El pie rellena el marcador de capítulo con **Planificación** y el de página

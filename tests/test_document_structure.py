@@ -40,6 +40,31 @@ from project_standards import document_control_text
 class DocumentStructureTests(unittest.TestCase):
     """Comprueba la generación de documentos técnicos y del maestro ODM."""
 
+    def test_traceability_table_uses_narrow_or_configured_table_fonts(self) -> None:
+        """La trazabilidad no hereda la fuente del texto de la plantilla."""
+        for font in (None, "Courier New"):
+            with self.subTest(font=font), TemporaryDirectory() as directory:
+                root = Path(directory)
+                target = root / "master.odm"
+                styles = {"body": {"font": "Times New Roman"}}
+                if font:
+                    styles.update({"table": {"font": font}, "table_header": {"font": font}})
+                write_project_master(
+                    None, target, fields={}, index_entries=[],
+                    traceability=[("DOC", "Documento", "", "", "", "")],
+                    links=[], folder=root, text_styles=styles,
+                )
+                with ZipFile(target) as archive:
+                    content = ET.fromstring(archive.read("content.xml"))
+                table = next(node for node in content.iter(_tag("table:table"))
+                             if node.get(_tag("table:name")) == "ProjectTraceabilityTable")
+                declared = {node.get(_tag("style:name")): node
+                            for node in content.iter(_tag("style:style"))}
+                for paragraph in table.iter(_tag("text:p")):
+                    style = declared[paragraph.get(_tag("text:style-name"))]
+                    self.assertEqual(style.find(_tag("style:text-properties")).get(_tag("fo:font-family")),
+                                     font or "Arial Narrow")
+
     def test_master_replaces_legacy_five_column_traceability_and_punctuated_index(self) -> None:
         """No confunde referencias de portada con el índice ni exige seis columnas antiguas."""
         with TemporaryDirectory() as directory:

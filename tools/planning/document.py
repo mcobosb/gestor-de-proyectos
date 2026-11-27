@@ -287,15 +287,15 @@ def _pdf_chart_table(layout, rows: list[_ChartRow], periods: list[_TimelinePerio
         "planning-axis", parent=header_style, fontSize=6, leading=7, alignment=TA_CENTER,
     )
     data = [[
-        layout.text("ACTIVIDAD / PERIODO", header_style),
-        layout.text("MEDICIÓN / PEM", header_style),
-        *[layout.text(period.start.strftime("%d/%m"), axis_style) for period in periods],
+        layout.text("ACTIVIDAD / PERIODO", header_style, role="table_header"),
+        layout.text("MEDICIÓN / PEM", header_style, role="table_header"),
+        *[layout.text(period.start.strftime("%d/%m"), axis_style, role="table_header") for period in periods],
     ]]
     for row in rows:
         style = layout.bold if row.is_chapter else layout.normal
         data.append([
-            layout.text(f"{row.label}\n{row.details}", style),
-            layout.text(row.measurement, style),
+            layout.text(f"{row.label}\n{row.details}", style, role="emphasis" if row.is_chapter else "table"),
+            layout.text(row.measurement, style, role="emphasis" if row.is_chapter else "table"),
             *["" for _ in periods],
         ])
 
@@ -354,7 +354,7 @@ def write_planning_report(
 
         document = _new_report(
             title, project_title, settings, repeat_titles=False,
-            footer_title="Planificación", landscape=True, template_title="",
+            footer_title="Planificación", landscape=True, template_title="", paper_size="A3",
         )
         add_odt_narrative_styles(document, "Planning", heading_levels=0)
         document.table_caption("Calendario de actividades (diagrama de Gantt)")
@@ -373,7 +373,7 @@ def write_planning_report(
         template_path=settings.template_path,
         logo_path=settings.master_logo_path,
         expediente=settings.expediente, repeat_titles=False,
-        footer_title="Planificación", landscape=True,
+        footer_title="Planificación", landscape=True, paper_size="A3",
     )
     top_margin = layout.top_margin("", "")
     bottom_margin = layout.bottom_margin()

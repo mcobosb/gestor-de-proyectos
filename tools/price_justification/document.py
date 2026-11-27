@@ -346,6 +346,7 @@ def _add_odt_table_styles(document) -> None:
             _tag("fo:text-indent"): "0pt", _tag("fo:line-height"): "115%",
         })
         ET.SubElement(style, _tag("style:text-properties"), {
+            _tag("fo:font-family"): "Arial Narrow",
             _tag("fo:font-weight"): "bold" if bold else "normal",
             _tag("fo:color"): "#FFFFFF" if name.startswith("PricesTableHeader") else "#000000",
             _tag("fo:font-size"): "9.5pt",

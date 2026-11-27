@@ -128,6 +128,60 @@ class ReportCalculationsTests(unittest.TestCase):
             self.assertEqual("#" + header_fill[3].hexval()[2:].upper(), expected)
         self.assertEqual(layout.table([], [["Unidad", "10,00"]], [4, 1])._bkgrndcmds, [])
 
+    def test_measurement_table_headers_use_narrow_bold_ten_by_default(self):
+        """Las cabeceras dimensionales se distinguen sin alterar otras tablas."""
+        from odt_reports import _new_report, _tag
+        from report_layout import ReportLayout
+
+        headers = ["COMENTARIO", "UDS", "LONGITUD", "ANCHURA", "ALTURA", "K", "PARCIAL"]
+        rows = [["Zona", "1", "2", "3", "4", "1", "24"]]
+        layout = ReportLayout()
+        table = layout.table(headers, rows, [4, 1, 1, 1, 1, 1, 1])
+        for paragraph in table._cellvalues[0]:
+            self.assertEqual(paragraph.style.fontName, layout.bold_font)
+            self.assertEqual(paragraph.style.fontSize, 10)
+        other = layout.table(["RESUMEN", "IMPORTE"], [["Dato", "1"]], [4, 1])
+        self.assertEqual(other._cellvalues[0][0].style.fontSize, 8)
+        safety_headers = ["CÓDIGO", "UD", "RESUMEN / COMENTARIO", *headers[1:]]
+        safety = layout.table(safety_headers, [], [1] * len(safety_headers))
+        self.assertTrue(all(cell.style.fontSize == 10 for cell in safety._cellvalues[0]))
+        customized = ReportLayout(text_styles={
+            "table_header": {"font": "Courier New", "size": 12},
+        }).table(headers, rows, [4, 1, 1, 1, 1, 1, 1])
+        self.assertTrue(all(cell.style.fontName == "Courier-Bold" and cell.style.fontSize == 12
+                            for cell in customized._cellvalues[0]))
+
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "mediciones.odt"
+            document = _new_report("Mediciones", "Proyecto", ReportSettings())
+            document.table(headers, rows, ratios=[4, 1, 1, 1, 1, 1, 1])
+            document.write(target)
+            with ZipFile(target) as archive:
+                content = ElementTree.fromstring(archive.read("content.xml"))
+                styles = ElementTree.fromstring(archive.read("styles.xml"))
+            named = {style.get(_tag("style:name")): style for style in styles.iter(_tag("style:style"))}
+            for paragraph in content.find(".//" + _tag("table:table-header-rows")).iter(_tag("text:p")):
+                name = paragraph.get(_tag("text:style-name"))
+                style = named[name]
+                while style.find(_tag("style:text-properties")) is None:
+                    style = named[style.get(_tag("style:parent-style-name"))]
+                props = style.find(_tag("style:text-properties"))
+                self.assertEqual(props.get(_tag("fo:font-size")), "10pt")
+                self.assertEqual(props.get(_tag("fo:font-weight")), "bold")
+                self.assertEqual(props.get(_tag("fo:font-family")), "Arial Narrow")
+
+            settings = ReportSettings(text_styles={"table_header": {"font": "Courier New", "size": 12}})
+            document = _new_report("Mediciones", "Proyecto", settings)
+            document.table(headers, rows, ratios=[4, 1, 1, 1, 1, 1, 1])
+            document.write(target)
+            with ZipFile(target) as archive:
+                styles = ElementTree.fromstring(archive.read("styles.xml"))
+            style = next(style for style in styles.iter(_tag("style:style"))
+                         if style.get(_tag("style:name")) == "MeasurementTableHeader")
+            props = style.find(_tag("style:text-properties"))
+            self.assertEqual(props.get(_tag("fo:font-family")), "Courier New")
+            self.assertEqual(props.get(_tag("fo:font-size")), "12pt")
+
     def test_existing_default_template_is_not_used_implicitly(self):
         """Ignore old bundled templates unless the user explicitly selects one."""
         from report_layout import _read_report_template, _report_template_path
@@ -710,6 +764,26 @@ class ReportLayoutTests(unittest.TestCase):
 
         page.extract_text(visitor_text=visitor)
         return values
+
+    def test_measurement_pdf_headers_are_readable_at_ten_points(self):
+        """Conserva completas las etiquetas dimensionales en los informes reales."""
+        from bc3_gui import MeasurementLine
+        from pypdf import PdfReader
+        from report_layout import ReportLayout
+
+        self.app.budget_items[0].measurement_lines = [
+            MeasurementLine(comment="Zona medida", units=1, length=2),
+        ]
+        for report in ("Mediciones", "Presupuesto mediciones"):
+            with self.subTest(report=report):
+                target = self.folder / "mediciones.pdf"
+                write_pdf(self.app, report, target)
+                spans = [span for page in PdfReader(target).pages for span in self.spans(page)]
+                for label in ("COMENTARIO", "UDS", "LONGITUD", "ANCHURA", "ALTURA", "K", "PARCIAL"):
+                    header = next(span for span in spans if span[0] == label and span[4] == 10)
+                    self.assertIn("Bold", header[3])
+                    if ReportLayout().bold_font == "ReportNarrowBold":
+                        self.assertIn("ArialNarrow", header[3])
 
     def test_all_models_repeat_the_original_logo_and_use_real_bold_fonts(self):
         """Verify all models repeat the original logo and use real bold fonts."""

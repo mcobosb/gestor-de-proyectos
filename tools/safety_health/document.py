@@ -1209,7 +1209,7 @@ def _column_ratios(headers: tuple[str, ...]) -> tuple[float, ...]:
     if headers == _NTP_HEADERS:
         return (0.30, 0.70)
     if headers == _MEASUREMENT_HEADERS:
-        return (52, 18, 188, 35, 40, 40, 35, 27, 45)
+        return (52, 18, 175, 35, 50, 50, 40, 27, 45)
     if headers == _BUDGET_HEADERS:
         return (50, 20, 220, 55, 55, 60)
     if len(headers) == 2:
@@ -1482,6 +1482,7 @@ def _add_odt_blue_table_styles(document) -> None:
             _tag("fo:keep-with-next"): "auto", _tag("fo:line-height"): "115%",
         })
         ET.SubElement(style, _tag("style:text-properties"), {
+            _tag("fo:font-family"): "Arial Narrow",
             _tag("fo:font-weight"): "bold" if bold else "normal",
             _tag("fo:color"): "#FFFFFF" if bold else "#000000",
             _tag("fo:font-size"): "9.5pt",

@@ -43,6 +43,11 @@ para cada función. Las tablas y otros elementos propios de cada informe
 conservan sus formatos específicos. El texto descriptivo de planificación usa
 el mismo estilo de cuerpo, sin alterar el diagrama de Gantt.
 
+Las tablas de datos usan **Arial Narrow** por defecto; los ajustes específicos
+de tabla del proyecto prevalecen. Las cabeceras de mediciones con comentario,
+unidades y dimensiones usan además **10 pt y negrita** por defecto. En PDF se
+utiliza Helvetica si Arial Narrow no está instalada.
+
 Los títulos de las tablas (captions) usan como base **Arial Narrow, 8 pt y
 negrita**, tanto en PDF como en ODT. Los ajustes explícitos de **Títulos de
 tabla** del proyecto tienen prioridad. En PDF se conserva la alternativa
@@ -428,8 +433,9 @@ Si el logo está anclado al título pero desplazado sobre otra celda vacía,
 se coloca dentro de esa celda para evitar que estreche el título o se salga
 de la tabla. La plantilla ODT original no se modifica.
 
-Los informes PDF y ODT se generan en A4 con márgenes exteriores de **2,5 cm
-en los cuatro lados**. La cabecera y el pie quedan dentro de esos límites;
+Los informes PDF y ODT se generan en A4, salvo el informe de planificación,
+que utiliza A3 horizontal, con márgenes exteriores de **2,5 cm en los cuatro
+lados**. La cabecera y el pie quedan dentro de esos límites;
 el cuerpo reserva espacio adicional para no invadirlos. Las columnas se
 ajustan al ancho disponible.
 

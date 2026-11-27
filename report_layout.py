@@ -13,12 +13,13 @@ from datetime import date
 from io import BytesIO
 from html import escape
 from pathlib import Path
+from typing import Literal
 from xml.etree import ElementTree
 from zipfile import BadZipFile, ZipFile
 
 from app_paths import application_directory
 from document_styles import CAPTION_SIZE, StyleTable, pdf_typography, style_role
-from tools._shared.document_layout import table_labels
+from tools._shared.document_layout import is_measurement_header, table_labels
 
 DEFAULT_TEMPLATE_PATH = application_directory(__file__) / "plantillas" / "plantilla.odt"
 PAGE_MARGIN = 25 * 72 / 25.4
@@ -32,7 +33,7 @@ CERTIFICATION_COLUMN_RATIOS = (50, 90, 22, 45, 44, 35, 60, 48, 59)
 CERTIFICATION_SUMMARY_RATIOS = (65, 295, 75, COLUMN_REFERENCE_WIDTH - 435)
 DEVIATION_COLUMN_RATIOS = (35, 40, 100, 60, 60, 60, 98)
 DEVIATION_HEADERS = ("CAPÍTULO", "CÓDIGO", "RESUMEN", "PLAN", "CERTIFICADO", "DESVIACIÓN", "JUSTIFICACIÓN")
-MEASUREMENT_COLUMN_RATIOS = (4, 1, 1, 1, 1, 0.8, 1.2, 0.5)
+MEASUREMENT_COLUMN_RATIOS = (3.8, 1, 1.1, 1.1, 1, 0.7, 1.2, 0.5)
 
 
 def _report_template_path(template_path: str) -> Path | None:
@@ -1113,11 +1114,11 @@ class ReportLayout:
         self, *, certification: bool = False, template_path: str = "",
         repeat_titles: bool = True, footer_title: str = "", expediente: str = "",
         template_title: str = "", landscape: bool = False, text_styles: StyleTable | None = None,
-        logo_path: str = "",
+        logo_path: str = "", paper_size: Literal["A4", "A3"] = "A4",
     ):
         """Carga el logo y configura fuentes, sangrías y estilos del modelo elegido."""
         from reportlab.lib.enums import TA_CENTER, TA_RIGHT
-        from reportlab.lib.pagesizes import A4, landscape as landscape_page
+        from reportlab.lib.pagesizes import A3, A4, landscape as landscape_page
         from reportlab.lib.styles import ParagraphStyle
         from reportlab.pdfbase import pdfmetrics
         from reportlab.pdfbase.ttfonts import TTFont
@@ -1178,7 +1179,11 @@ class ReportLayout:
         self.table_references = True
         self.table_caption_suffix = ""
         self.landscape = landscape
-        self.page_size = landscape_page(A4) if landscape else A4
+        sizes = {"A4": A4, "A3": A3}
+        if paper_size not in sizes:
+            raise ValueError(f"Tamaño de papel no admitido: {paper_size}")
+        self.paper_size = paper_size
+        self.page_size = landscape_page(sizes[paper_size]) if landscape else sizes[paper_size]
         self.page_width, self.page_height = self.page_size
         self.content_width = self.page_width - LEFT_MARGIN - RIGHT_MARGIN
         self.template_fields = {
@@ -1438,6 +1443,11 @@ class ReportLayout:
         else:
             normal_center, bold_center = self.normal, self.bold
         header_styles = (self.bold, self.bold_right, bold_center)
+        if is_measurement_header(headers):
+            header_styles = tuple(
+                ParagraphStyle(f"MeasurementHeader{index}", parent=style, fontSize=10, leading=12)
+                for index, style in enumerate(header_styles)
+            )
         if blue_header:
             header_styles = tuple(
                 ParagraphStyle(f"BlueTableHeader{index}", parent=style, textColor=colors.white)

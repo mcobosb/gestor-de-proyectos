@@ -323,7 +323,7 @@ def _fill_traceability(
     body.insert(position + 3, table)
 
 
-def _style_traceability(root) -> None:
+def _style_traceability(root, text_styles=None) -> None:
     """Aplica a la tabla de trazabilidad el estilo azul compartido de los anejos."""
     table = next((
         candidate for candidate in root.iter(_tag("table:table"))
@@ -342,6 +342,10 @@ def _style_traceability(root) -> None:
     add_odt_blue_table_cells(styles, "Traceability")
     add_odt_blue_table_headers(styles, "Traceability")
     style_odt_blue_table(table, "Traceability")
+    for row in table.iter(_tag("table:table-row")):
+        role = "table_header" if _is_traceability_header(row) else "table"
+        fields = {"font": "Arial Narrow", **(text_styles or {}).get(role, {})}
+        style_odt_paragraphs(row, automatic, {role: fields}, _tag, lambda _element: role)
 
 
 def _prepare_master_sections(root, styles) -> tuple[str, str, str]:
@@ -1022,7 +1026,7 @@ def write_project_master(
                             ET.tostring(root, encoding="utf-8"), text_styles,
                         )
                         root = ET.fromstring(data)
-                    _style_traceability(root)
+                    _style_traceability(root, text_styles)
                     _style_document_page_breaks(root, master_page_names)
                     _add_annex_covers(root, index_entries, links)
                     data = ET.tostring(root, encoding="utf-8", xml_declaration=True)

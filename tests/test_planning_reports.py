@@ -1,4 +1,5 @@
 from datetime import date
+from dataclasses import replace
 from pathlib import Path
 import tempfile
 import unittest
@@ -90,7 +91,8 @@ class PlanningReportTests(unittest.TestCase):
             header_properties.get(f"{{{namespaces['fo']}}}background-color"),
             TABLE_HEADER_BACKGROUND,
         )
-        self.assertEqual(page_layout.attrib[f"{{{namespaces['fo']}}}page-width"], "29.7cm")
+        self.assertEqual(page_layout.attrib[f"{{{namespaces['fo']}}}page-width"], "42cm")
+        self.assertEqual(page_layout.attrib[f"{{{namespaces['fo']}}}page-height"], "29.7cm")
         self.assertEqual(
             page_layout.attrib[f"{{{namespaces['style']}}}print-orientation"], "landscape",
         )
@@ -115,7 +117,10 @@ class PlanningReportTests(unittest.TestCase):
         self.assertEqual(len(reader.pages), 1)
         page = reader.pages[0]
         text = page.extract_text()
-        self.assertGreater(float(page.mediabox.width), float(page.mediabox.height))
+        from reportlab.lib.pagesizes import A3, landscape
+
+        self.assertAlmostEqual(float(page.mediabox.width), landscape(A3)[0], places=2)
+        self.assertAlmostEqual(float(page.mediabox.height), landscape(A3)[1], places=2)
         self.assertNotIn("Proyecto de prueba", text)
         self.assertNotIn("PLAN DE TRABAJO", text)
         self.assertIn("Actividad más larga", text)
@@ -175,6 +180,28 @@ class PlanningReportTests(unittest.TestCase):
                 self.assertEqual(writer.call_args.args[0:2], (self.activities, self.params))
                 self.assertEqual(writer.call_args.args[3:5], (settings, "Proyecto de prueba"))
                 self.assertEqual(writer.call_args.args[2].suffix, f".{output_format}")
+
+    def test_long_pdf_schedule_preserves_all_rows_on_a3_pages(self):
+        """Pagina el programa extenso sin reducirlo ni perder actividades."""
+        from pypdf import PdfReader
+        from reportlab.lib.pagesizes import A3, landscape
+
+        activities = [
+            replace(self.activities[0], id=index, code=f"ACT{index:03}", summary=f"Trabajo {index:03}")
+            for index in range(1, 81)
+        ]
+        target = self.folder / "long.pdf"
+        write_planning_report(
+            activities, self.params, target, ReportSettings(), "Proyecto", lambda value: str(value),
+        )
+        pages = PdfReader(target).pages
+        self.assertGreater(len(pages), 1)
+        text = "\n".join(page.extract_text() for page in pages)
+        for index in range(1, 81):
+            self.assertIn(f"ACT{index:03}", text)
+        for page in pages:
+            self.assertAlmostEqual(float(page.mediabox.width), landscape(A3)[0], places=2)
+            self.assertAlmostEqual(float(page.mediabox.height), landscape(A3)[1], places=2)
 
 
 if __name__ == "__main__":

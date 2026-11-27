@@ -109,6 +109,7 @@ def write_odt_index(document: _OdtReport, rows: list[SheetIndexRow]) -> None:
         }
         ET.SubElement(style, _tag("style:paragraph-properties"), properties)
         ET.SubElement(style, _tag("style:text-properties"), {
+            _tag("fo:font-family"): "Arial Narrow",
             _tag("fo:font-weight"): "bold" if bold else "normal",
             _tag("style:font-weight-asian"): "bold" if bold else "normal",
             _tag("style:font-weight-complex"): "bold" if bold else "normal",

@@ -8,6 +8,15 @@ LIST_INDENT = 24
 LIST_DEPTH_STEP = 12
 
 
+def is_measurement_header(headers) -> bool:
+    """Reconoce las tablas de medición por sus columnas dimensionales."""
+    labels = set(headers)
+    return (
+        {"UDS", "LONGITUD", "ANCHURA", "ALTURA", "K", "PARCIAL"} <= labels
+        and any("COMENTARIO" in label for label in labels)
+    )
+
+
 def table_labels(number: int | str, title: str) -> tuple[str, str]:
     """Genera la llamada en el cuerpo y el rótulo inmediatamente antes de la tabla."""
     title = title.strip().rstrip(".")
